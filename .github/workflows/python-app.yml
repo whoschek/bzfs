@@ -1,0 +1,332 @@
+#
+# Copyright 2024 Wolfgang Hoschek AT mac DOT com
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This workflow will run unit test
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+name: Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "Name of job to run"
+        type: choice
+        options:
+        - test_ubuntu_24_04
+        - test_ubuntu_24_04_zfs_latest
+        - test_ubuntu_22_04
+        - test_ubuntu_20_04
+        - test_freebsd_14_1
+        - test_freebsd_13_3
+        - test_solaris_11_4
+        default: "test_ubuntu_24_04"
+      want_sushi:
+        description: True or False
+        type: boolean
+        default: True
+  schedule:
+    - cron: '0 7 * * *'  # Runs daily at 7am UTC
+#    - cron: '0 8 * * 0'  # Runs weekly at 8am UTC on Sundays
+
+permissions:
+  contents: read
+
+jobs:
+  test_ubuntu_24_04:
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.name == 'test_ubuntu_24_04'
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run common preparation steps
+      uses: ./.github/workflows/common
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Display ZFS version and Python version
+      run: |
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+        whoami
+    - name: Test with unittest
+      run: |
+        test/test_wbackup_zfs.sh
+
+  test_ubuntu_24_04_zfs_latest:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      run: |
+        # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
+        sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt update 
+        # sudo apt-get -y apt install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+        sudo apt-get -y install zfs-dkms zfsutils-linux
+        zfs --version
+    - name: Run common preparation steps
+      uses: ./.github/workflows/common
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Display ZFS version and Python version
+      run: |
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+        whoami
+    - name: Test with unittest
+      run: |
+        test/test_wbackup_zfs.sh
+
+
+  test_ubuntu_22_04:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_ubuntu_22_04')
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run common preparation steps
+      uses: ./.github/workflows/common
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Display ZFS version and Python version
+      run: | 
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+        whoami
+    - name: Test with unittest
+      run: |
+        test/test_wbackup_zfs.sh || exit 1
+
+        echo Now testing as root user:
+        sudo mkdir -p /root/.ssh
+        sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
+        cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
+        sudo test/test_wbackup_zfs.sh
+
+
+  test_ubuntu_20_04:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_ubuntu_20_04')
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.7"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run common preparation steps
+      uses: ./.github/workflows/common
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Display ZFS version and Python version
+      run: | 
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+        whoami
+    - name: Test with unittest
+      run: |
+        test/test_wbackup_zfs.sh
+
+
+  test_freebsd_14_1:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_freebsd_14_1')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test with unittest
+      id: test
+      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
+      with:
+        release: "14.1"
+        prepare: |
+          pkg install -y python3 sudo zstd pv mbuffer
+        run: |
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version | head -n 1
+          command -v sh | xargs ls -l
+          sudo command -v sh | xargs ls -l
+          whoami
+          
+          mkdir -p $HOME/.ssh
+          rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
+          ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
+          cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+          ls -al $HOME $HOME/.ssh/id_rsa
+
+          test/test_wbackup_zfs.py || exit 1
+
+          echo Now testing as root user:
+          sudo mkdir -p /root/.ssh
+          sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
+          cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
+          sudo test/test_wbackup_zfs.py
+
+
+  test_freebsd_13_3:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_freebsd_13_3')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test with unittest
+      id: test
+      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
+      with:
+        release: "13.3"
+        prepare: |
+          pkg install -y python3 sudo zstd pv mbuffer
+        run: |
+          uname -a
+          zfs --version
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version | head -n 1
+          command -v sh | xargs ls -l
+          sudo command -v sh | xargs ls -l
+          whoami
+          
+          mkdir -p $HOME/.ssh
+          rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
+          ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
+          cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+          ls -al $HOME
+          chsh -s /bin/sh
+          test/test_wbackup_zfs.py || exit 1
+
+          echo Now testing as root user:
+          sudo mkdir -p /root/.ssh
+          sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
+          cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null          
+          sudo chsh -s /bin/sh
+          sudo test/test_wbackup_zfs.py
+
+
+  test_solaris_11_4:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_solaris_11_4')
+#    if: false  # job currently disabled
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test with unittest
+      id: test
+      uses: vmactions/solaris-vm@v1  # see https://github.com/vmactions/solaris-vm
+      with:
+        release: "11.4"
+#          usesh: true
+#          pkg update --accept; reboot # FIXME: reboot disconnects
+#          pkg exact-install runtime/python-37  # FIXME: install fails
+#          pkg install runtime/python-39  # FIXME: install fails
+#          pkg search python
+        prepare: |
+          # To better debug these steps run a tmp solaris VM like so: https://github.com/vmactions/shell-solaris
+          whoami
+          pkg install sudo pv 
+          pkgutil -y -i zstd mbuffer
+          pyversion=3.7.17
+          # pyversion=3.10.14; export ax_cv_c_float_words_bigendian=no # works fine too
+          wget https://www.python.org/ftp/python/$pyversion/Python-$pyversion.tgz
+          tar -zxf Python-$pyversion.tgz
+          cd Python-$pyversion
+          pkg install gcc
+          ./configure --prefix=/python3  # --enable-optimizations
+          make
+          rm -fr /python3
+          make install
+        run: |          
+          uname -a
+          zfs help
+          zfs help list
+          python3 --version
+          export PATH=/python3/bin:$PATH
+          python3 --version
+          ssh -V
+          zstd --version
+          pv --version | head -n 1
+          mbuffer --version |& head -n 1
+          command -v sh | xargs ls -l
+          whoami
+
+          mkdir -p $HOME/.ssh
+          rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
+          ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
+          cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+          ls -al $HOME
+
+          echo Now testing as root user:
+          test/test_wbackup_zfs.py || exit 1
+
+          echo Now testing as non-root user:
+          export THOME=/home/test
+          userdel -r test || true
+          useradd -d $THOME -m test
+          echo "test ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /etc/sudoers
+          supath=$(grep "^SUPATH=" /etc/default/login | cut -d'=' -f2)
+          echo "PATH=$supath" >> /etc/default/login  # ensure zstd, mbuffer, etc are on the PATH via ssh
+
+          mkdir -p $THOME/.ssh
+          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $THOME/.ssh/
+          chown -R test $THOME/.ssh
+          cat $HOME/.ssh/id_rsa.pub | sudo -u test tee -a $THOME/.ssh/authorized_keys > /dev/null          
+          chmod go-rwx $THOME/.ssh/authorized_keys
+          
+          cp -rp . $THOME/wbackup-zfs # if running with Github Action
+          # cp -rp wbackup-zfs $THOME/ # if running with https://github.com/vmactions/shell-solaris
+          chown -R test $THOME/wbackup-zfs
+          sudo -u test /python3/bin/python3 $THOME/wbackup-zfs/test/test_wbackup_zfs.py
