@@ -54,7 +54,7 @@ def argument_parser() -> argparse.ArgumentParser:
         prog=prog_name,
         allow_abbrev=False,
         description=f'''
-{prog_name} is a simple backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
+{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
 source ZFS dataset (aka ZFS filesystem) and its descendant datasets to a (local or remote) destination ZFS dataset 
 to make the destination dataset a recursively synchronized copy of the source dataset, using 
 zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {prog_name} can be used to incrementally 
