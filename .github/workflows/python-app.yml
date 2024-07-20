@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This workflow will run unit test
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# This workflow will run automated unit tests and integration tests on a matrix
+# of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris.
 name: Tests
 
 on:

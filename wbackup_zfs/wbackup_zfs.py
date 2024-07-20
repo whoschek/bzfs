@@ -88,6 +88,10 @@ or executed on either source or destination host. Only the underlying 'zfs' CLI 
 and destination host. {prog_name} can run as root or non-root user, in the latter case via a) sudo or b) when 
 granted corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
+{prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure 
+coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python 
+versions >= 3.7.
+
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
 data compression (via 'zstd -1' CLI) and efficient data buffering (via 'mbuffer' CLI) into the pipeline
