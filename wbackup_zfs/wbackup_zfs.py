@@ -229,7 +229,7 @@ Example with further options:
               "if they do not yet exist and source dataset has at least one descendant with a snapshot."))
     parser.add_argument(
         '--skip-replication', action='store_true',
-        help="Skip replication step (see above) and proceed to to the optional --delete-missing-snapshots step "
+        help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
              "immediately (see below).")
     parser.add_argument(
         '--delete-missing-snapshots', action='store_true',
@@ -326,7 +326,7 @@ Example with further options:
         '--quiet', '-q', action='store_true',
         help='Suppress non-error, info, debug, and trace output.')
     parser.add_argument(
-        '--version', action='store_true',
+        '--version', action='version', version=f"{prog_name}-{prog_version}, by {prog_author}",
         help='Display version information and exit.')
     parser.add_argument('--is-test-mode', action='store_true', help=argparse.SUPPRESS)
     return parser
@@ -498,9 +498,6 @@ class Params:
 #############################################################################
 def main():
     """API for command line clients """
-    if '--version' in sys.argv:
-        print(f"{prog_name}-{prog_version}, by {prog_author}")
-        sys.exit(0)
     try:
         run_main(argument_parser().parse_args(), sys.argv)
     except subprocess.CalledProcessError as e:

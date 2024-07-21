@@ -1095,20 +1095,17 @@ class TestCLI(unittest.TestCase):
         parser = wbackup_zfs.argument_parser()
         try:
             args = parser.parse_args(['--help'])
+            self.fail("should be unreachable")
         except SystemExit as e:
-            if e.code != 0:
-                raise e
+            self.assertEqual(0, e.code)
 
     def test_version(self):
-        old_sys_argv = sys.argv
-        sys.argv = ['--version']
+        parser = wbackup_zfs.argument_parser()
         try:
-            wbackup_zfs.main()
+            args = parser.parse_args(['--version'])
+            self.fail("should be unreachable")
         except SystemExit as e:
-            if e.code != 0:
-                raise e
-        finally:
-            sys.argv = old_sys_argv
+            self.assertEqual(0, e.code)
 
 
 #############################################################################
