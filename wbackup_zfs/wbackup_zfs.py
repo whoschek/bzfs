@@ -396,7 +396,7 @@ class Params:
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
         self.mbuffer_program = self.program_name('mbuffer')
-        self.mbuffer_program_opts = self.split_args(self.getenv('mbuffer_program_opts', '-q -Q -m 256M'))
+        self.mbuffer_program_opts = self.split_args(self.getenv('mbuffer_program_opts', '-q -Q -m 128M'))
         self.compression_program = self.program_name('zstd')
         self.compression_program_opts = self.split_args(self.getenv('compression_program_opts', '-1'))
         # no point trying to be fancy for smaller data transfers:
