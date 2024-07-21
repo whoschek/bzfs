@@ -54,12 +54,12 @@ def argument_parser() -> argparse.ArgumentParser:
         prog=prog_name,
         allow_abbrev=False,
         description=f'''
-{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
+*{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
 source ZFS dataset (aka ZFS filesystem) and its descendant datasets to a (local or remote) destination ZFS dataset 
 to make the destination dataset a recursively synchronized copy of the source dataset, using 
 zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {prog_name} can be used to incrementally 
 replicate all ZFS snapshots since the most recent common snapshot from source to destination, in order to help 
-protect against data loss or ransomware.
+protect against data loss or ransomware.*
 
 When run for the first time, {prog_name} replicates the dataset and all its snapshots from the source to the
 destination. On subsequent runs, {prog_name} transfers only the data that has changed since the previous run,
@@ -90,7 +90,7 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure 
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python 
-versions >= 3.7.
+versions >= 3.7 (including latest stable which is currently python-3.12).
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
@@ -189,7 +189,7 @@ Example with further options:
     parser.add_argument(
         '--exclude-dataset-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
         help=("Same syntax as --include-dataset-regex (see above) except that the default "
-              f"is {exclude_dataset_regexes_default}"))
+              f"is `{exclude_dataset_regexes_default}`"))
     parser.add_argument(
         '--include-snapshot-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
         help=("During replication, include any ZFS snapshot that has a name (i.e. the part after the '@') that matches "
@@ -293,7 +293,7 @@ Example with further options:
               f'(default: {max_retries_default}).'))
     parser.add_argument(
         '--bwlimit', type=str, metavar='STRING',
-        help=("'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
+        help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
               "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv"))
     parser.add_argument(
         '--no-privilege-elevation', '-p', action='store_true',
@@ -328,6 +328,9 @@ Example with further options:
     parser.add_argument(
         '--version', action='version', version=f"{prog_name}-{prog_version}, by {prog_author}",
         help='Display version information and exit.')
+    parser.add_argument(
+        '--help, -h', action='help',
+        help='show this help message and exit.')
     parser.add_argument('--is-test-mode', action='store_true', help=argparse.SUPPRESS)
     return parser
 
