@@ -194,7 +194,7 @@ class WBackupTestCase(ParametrizedTestCase):
             if not is_solaris_zfs():
                 src_permissions += ',bookmark'
             optional_dst_permissions = ',canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
-            optional_dst_permissions = ',keylocation' if not is_solaris_zfs() else ',keysource,encryption,salt,compression,checksum'
+            optional_dst_permissions = ',keylocation,compression' if not is_solaris_zfs() else ',keysource,encryption,salt,compression,checksum'
             dst_permissions = 'mount,create,receive,rollback,destroy' + optional_dst_permissions
             cmd = f"sudo zfs allow -u {getpass.getuser()} {src_permissions}".split(' ') + [src_pool_name]
             if dataset_exists(src_pool_name):
@@ -351,6 +351,8 @@ class LocalTestCase(WBackupTestCase):
                 self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))  # b/c src has no snapshots
 
+                compression_prop = dataset_property(dst_root_dataset + "/foo", 'compression')
+                self.assertEqual(compression_prop, 'on')
                 encryption_prop = dataset_property(dst_root_dataset, 'encryption')
                 self.assertEqual(encryption_prop, 'off')
                 encryption_prop = dataset_property(dst_root_dataset + "/foo", 'encryption')
