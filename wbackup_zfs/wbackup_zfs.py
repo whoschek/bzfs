@@ -373,7 +373,7 @@ class Params:
         self.exclude_snapshot_regexes = None
         self.include_snapshot_regexes = None
         self.zfs_create_program_opts = self.split_args(self.getenv('zfs_create_program_opts', ''))
-        self.zfs_send_program_opts = self.split_args(self.getenv('zfs_send_program_opts', '-p'))
+        self.zfs_send_program_opts = self.split_args(self.getenv('zfs_send_program_opts', '--props --raw --compressed'))
         self.zfs_recv_program_opts = self.split_args(self.getenv('zfs_recv_program_opts', '-u'))
         self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
         if self.verbose_zfs:
@@ -607,17 +607,16 @@ class Job:
         self.detect_zpool_features('src', p.src_pool)
         self.detect_zpool_features('dst', p.dst_pool)
 
-        if self.is_zpool_feature_enabled_or_active('src', 'feature@large_blocks'):
+        if self.is_zpool_feature_enabled_or_active('dst', 'feature@large_blocks'):
             append_if_absent(p.zfs_send_program_opts, '--large-block')  # solaris-11.4.0 does not have this feature
 
-        append_if_absent(p.zfs_send_program_opts, '-w')  # aka --raw
         if self.is_solaris_zfs('dst'):
             self.params.dry_run_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -n' flag
             self.params.verbose_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -v' flag
-        if self.is_solaris_zfs('src'):
-            append_if_absent(p.zfs_send_program_opts, 'compress')  # solaris-11.4.0 only knows -w compress
-        else:
-            append_if_absent(p.zfs_send_program_opts, '--compressed')
+        if self.is_solaris_zfs('src'):  # solaris-11.4.0 only knows -w compress
+            p.zfs_send_program_opts = ['-w' if opt == '--raw' else opt for opt in p.zfs_send_program_opts]
+            p.zfs_send_program_opts = ['compress' if opt == '--compressed' else opt for opt in p.zfs_send_program_opts]
+            p.zfs_send_program_opts = ['-p' if opt == '--props' else opt for opt in p.zfs_send_program_opts]
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> str:
         params = self.params
