@@ -82,7 +82,7 @@ and executed on the 'coordinator' host which can be either the host that contain
 or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required), 
 or any third-party (even non-ZFS) host as long as that host is able to SSH (via standard 'ssh' CLI) into 
 both the source and destination host (pull-push mode). In Pull-push mode the source 'zfs send's the data stream  
-to the coordinator which immediately pipes the stream (without storing it locally) to the destination 
+to the coordinator which immediately pipes the stream (without storing anything locally) to the destination 
 host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed 
 or executed on either source or destination host. Only the underlying 'zfs' CLI must be installed on both source 
 and destination host. {prog_name} can run as root or non-root user, in the latter case via a) sudo or b) when 
