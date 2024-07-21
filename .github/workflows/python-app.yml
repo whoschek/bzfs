@@ -19,7 +19,7 @@ name: Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "centos-stream" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
@@ -35,6 +35,7 @@ on:
         - test_freebsd_14_1
         - test_freebsd_13_3
         - test_solaris_11_4
+        - test_centos_stream_9
         default: "test_ubuntu_24_04"
       want_sushi:
         description: True or False
@@ -49,7 +50,8 @@ permissions:
 
 jobs:
   test_ubuntu_24_04:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: false  # job currently disabled
+#    if: github.event_name != 'workflow_dispatch' || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -331,3 +333,239 @@ jobs:
           # cp -rp wbackup-zfs $THOME/ # if running with https://github.com/vmactions/shell-solaris
           chown -R $tuser $THOME/wbackup-zfs
           sudo -u $tuser /python3/bin/python3 $THOME/wbackup-zfs/test/test_wbackup_zfs.py
+
+
+  test_centos_stream_9x2:
+    if: false  # job currently disabled
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install zfs
+      run: |
+         sudo apt-get -y install zfs-dkms zfsutils-linux
+         cat <<EOF > Dockerfile
+         FROM quay.io/centos/centos:stream9
+         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3.el9.noarch.rpm
+         RUN dnf install -y 'dnf-command(config-manager)'
+         RUN dnf config-manager --disable zfs
+         RUN dnf config-manager --enable zfs-kmod
+         RUN dnf install -y zfs
+         EOF
+         docker build -t centos-stream-zfs .
+         docker run -it --privileged --device /dev/zfs --device /dev/sdb1 centos-stream-zfs /bin/bash <<EOF
+         zfs version
+         zpool list
+         echo done.
+         EOF
+#         RUN dnf install -y wget
+#         RUN wget https://zfsonlinux.org/epel/zfs-release-2-3.el9.noarch.rpm
+
+
+  test_centos_stream_9:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install zfs
+      run: |
+         sudo apt-get -y install zfsutils-linux
+         cat <<EOF > Dockerfile
+         FROM quay.io/centos/centos:stream9
+         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3.el9.noarch.rpm
+         RUN dnf install -y epel-release
+         RUN dnf install -y kernel-devel
+         RUN yum install -y "kernel-headers-uname-r == $(uname -r)" 
+         RUN dnf install -y zfs
+         EOF
+         docker build -t centos-stream-zfs .
+         docker run -it --privileged --device /dev/zfs --device /dev/sdb1 centos-stream-zfs /bin/bash <<EOF
+         zfs version
+         zpool list
+         echo done.
+         EOF
+#         RUN dnf install -y kernel-devel-$(uname -r) kernel-headers-$(uname -r) linux-headers-6.8.0-1009-azure
+#         sudo apt-get -y install zfs-dkms zfsutils-linux linux-headers-$(uname -r)
+#         RUN dnf install -y kernel-devel
+#         RUN dnf install -y wget
+#         RUN wget https://zfsonlinux.org/epel/zfs-release-2-3.el9.noarch.rpm
+# Building for 6.8.0-1009-azure
+
+  test_centos_stream_9old0:
+    if: false  # job currently disabled
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install zfs
+      run: |
+         sudo apt-get -y install zfsutils-linux
+         cat <<EOF > Dockerfile
+         FROM quay.io/centos/centos:stream9
+         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm
+         RUN dnf install -y epel-release && dnf install -y kernel-devel && dnf install -y zfs
+         EOF
+         docker build -t centos-stream-zfs .
+         docker run -it --privileged --device /dev/zfs --device /dev/sdb1 centos-stream-zfs /bin/bash <<EOF
+         zfs version
+         zpool list
+         echo done.
+         EOF
+
+  #         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-2$(rpm --eval "%{dist}").noarch.rpm || true
+#         RUN rm -f /var/lib/rpm/__db* && dnf update
+#         RUN rm -fr /var/cache/dnf
+#         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm && rm -f /var/lib/rpm/__db* && dnf update && dnf install -y zfs
+#         RUN dnf install -y epel-release && dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm && dnf install -y zfs
+#    - name: Run the build process with Docker
+#      uses: addnab/docker-run-action@v3
+#      with:
+#          image: quay.io/centos/centos:stream9
+#          options: -v ${{ github.workspace }}:/var/www
+#          run: |
+#              echo hello world1
+#              yum install sudo -y
+#              echo hello world2
+#              dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm
+#              echo hello world3
+#              dnf install -y zfs
+#
+#              echo hello world4
+#              whoami
+#              uname -a
+#              zfs --version
+#              python3 --version
+#              ssh -V
+#              zstd --version
+#              pv --version | head -n 1
+#              mbuffer --version |& head -n 1
+#              command -v sh | xargs ls -l
+#              whoami
+
+
+  test_centos_stream_9old1:
+    if: false  # job currently disabled
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install zfs
+      run: |
+         sudo apt-get -y install zfsutils-linux
+         cat <<EOF > Dockerfile
+         FROM quay.io/centos/centos:stream9
+         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm
+         RUN dnf install -y epel-release && dnf install -y kernel-devel && dnf install -y zfs
+         EOF
+         docker build -t centos-stream-zfs .
+         docker run -it --privileged --device /dev/zfs --device /dev/sdb1 centos-stream-zfs /bin/bash <<EOF
+         # Verify access to ZFS CLI within the container
+         zfs version
+         zpool list
+         echo hello1
+         EOF
+#         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-2$(rpm --eval "%{dist}").noarch.rpm || true
+#         RUN rm -f /var/lib/rpm/__db* && dnf update
+#         RUN rm -fr /var/cache/dnf
+#         RUN dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm && rm -f /var/lib/rpm/__db* && dnf update && dnf install -y zfs
+#         RUN dnf install -y epel-release && dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm && dnf install -y zfs
+#    - name: Run the build process with Docker
+#      uses: addnab/docker-run-action@v3
+#      with:
+#          image: quay.io/centos/centos:stream9
+#          options: -v ${{ github.workspace }}:/var/www
+#          run: |
+#              echo hello world1
+#              yum install sudo -y
+#              echo hello world2
+#              dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm
+#              echo hello world3
+#              dnf install -y zfs
+#
+#              echo hello world4
+#              whoami
+#              uname -a
+#              zfs --version
+#              python3 --version
+#              ssh -V
+#              zstd --version
+#              pv --version | head -n 1
+#              mbuffer --version |& head -n 1
+#              command -v sh | xargs ls -l
+#              whoami
+
+
+  test_centos_stream_9old2:
+    if: false  # job currently disabled
+#    if: github.event_name != 'workflow_dispatch' || github.event.inputs.name == 'test_centos_stream_9'
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+    timeout-minutes: 40
+    container:
+      image: quay.io/centos/centos:stream9
+    steps:
+    - uses: actions/checkout@v4
+#    - name: Run common preparation steps
+#      uses: ./.github/workflows/common
+#      with:
+#        python-version: ${{ matrix.python-version }}
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install test dependencies
+      shell: bash
+      run: |
+#        python -m pip install --upgrade pip
+#        pip install flake8 pytest
+#        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: Install zfs + ssh + other dependencies
+      shell: bash
+      run: |
+        whoami
+        echo hello world
+        yum install sudo -y
+        dnf install -y https://zfsonlinux.org/epel/zfs-release-2-3$(rpm --eval "%{dist}").noarch.rpm
+        dnf install -y --skip-broken zfs
+#        dnf install -y epel-release
+#        dnf install -y kernel-devel
+#        lsmod | grep zfs
+#        modprobe zfs
+#        reboot
+#        sudo apt-get -y install zfsutils-linux zstd pv mbuffer
+#        mkdir -p $HOME/.ssh
+#        rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
+#        ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key
+#        cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+        
+
+    - name: Display ZFS version and Python version
+      run: |
+        whoami
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+        whoami
+    - name: Test with unittest
+      run: |
+        test/test_wbackup_zfs.sh
+
