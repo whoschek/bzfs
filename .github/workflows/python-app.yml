@@ -49,7 +49,7 @@ permissions:
 
 jobs:
   test_ubuntu_24_04:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: (!contains(github.event.head_commit.message, 'skip ci') && github.event_name != 'workflow_dispatch') || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
