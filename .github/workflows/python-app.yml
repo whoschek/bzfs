@@ -314,20 +314,20 @@ jobs:
 
           echo Now testing as non-root user:
           tuser=test
-          export THOME=/home/$tuser
+          thome=/home/$tuser
           userdel -r $tuser || true
-          useradd -d $THOME -m $tuser
+          useradd -d $thome -m $tuser
           echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /etc/sudoers
           supath=$(grep "^SUPATH=" /etc/default/login | cut -d'=' -f2)
           echo "PATH=$supath" >> /etc/default/login  # ensure zstd, mbuffer, etc are on the PATH via ssh
 
-          mkdir -p $THOME/.ssh
-          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $THOME/.ssh/
-          chown -R $tuser $THOME/.ssh
-          cat $HOME/.ssh/id_rsa.pub | sudo -u $tuser tee -a $THOME/.ssh/authorized_keys > /dev/null          
-          chmod go-rwx $THOME/.ssh/authorized_keys
+          mkdir -p $thome/.ssh
+          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $thome/.ssh/
+          chown -R $tuser $thome/.ssh
+          cat $HOME/.ssh/id_rsa.pub | sudo -u $tuser tee -a $thome/.ssh/authorized_keys > /dev/null          
+          chmod go-rwx $thome/.ssh/authorized_keys
           
-          cp -rp . $THOME/wbackup-zfs # if running with Github Action
-          # cp -rp wbackup-zfs $THOME/ # if running with https://github.com/vmactions/shell-solaris
-          chown -R $tuser $THOME/wbackup-zfs
-          sudo -u $tuser /python3/bin/python3 $THOME/wbackup-zfs/test/test_wbackup_zfs.py
+          cp -rp . $thome/wbackup-zfs # if running with Github Action
+          # cp -rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-solaris
+          chown -R $tuser $thome/wbackup-zfs
+          sudo -u $tuser /python3/bin/python3 $thome/wbackup-zfs/test/test_wbackup_zfs.py
