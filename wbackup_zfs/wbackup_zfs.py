@@ -749,24 +749,30 @@ class Job:
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         params = self.params
         p = params
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o creation,guid,name", dst_dataset)
         dst_snapshots_with_guids = self.run_ssh_command('dst', self.trace, check=None, cmd=cmd)
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
 
-        oldest_dst_snapshot_createtxg = None
-        latest_dst_snapshot_createtxg = None
+        oldest_dst_snapshot_creation = None
+        latest_dst_snapshot_creation = None
         if len(dst_snapshots_with_guids) > 0 and params.use_bookmark:
             if self.is_zpool_bookmarks_feature_enabled_or_active('src'):
-                oldest_dst_snapshot_createtxg = dst_snapshots_with_guids[0].split('\t', 1)[0]
-                latest_dst_snapshot_createtxg = dst_snapshots_with_guids[-1].split('\t', 1)[0]
+                oldest_dst_snapshot_creation = dst_snapshots_with_guids[0].split('\t', 1)[0]
+                latest_dst_snapshot_creation = dst_snapshots_with_guids[-1].split('\t', 1)[0]
+        dst_snapshots_with_guids = [line[line.index('\t') + 1:] for line in dst_snapshots_with_guids]  # cut -f2-
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear before bookmarks for the same GUID.
-        # Note: A snapshot and its ZFS bookmarks always have the same GUID as well as the same transaction group.
-        props = "guid,name"
+        # Note: A snapshot and its ZFS bookmarks always have the same GUID, creation time and transaction group.
+        # A snapshot changes its transaction group but retains its creation time and GUID on 'zfs receive' on another
+        # pool, i.e. comparing createtxg is only meaningful within a single pool, not across pools from src to dst.
+        # Comparing creation time remains meaningful across pools from src to dst. Creation time is a UTC Unix time
+        # in integer seconds.
+        props = "creation,guid,name"
         types = "snapshot,bookmark"
-        if oldest_dst_snapshot_createtxg is None:
+        if oldest_dst_snapshot_creation is None:
+            props = "guid,name"
             types = "snapshot"
         cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -S type -d 1 -Hp -o {props}", src_dataset)
         src_snapshots_and_bookmarks = self.run_ssh_command('src', self.trace, check=None, cmd=cmd)
@@ -775,10 +781,11 @@ class Job:
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
 
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
-        if oldest_dst_snapshot_createtxg is not None:
+        if oldest_dst_snapshot_creation is not None:
             src_snapshots_and_bookmarks = self.filter_bookmarks(src_snapshots_and_bookmarks,
-                                                                oldest_dst_snapshot_createtxg,
-                                                                latest_dst_snapshot_createtxg)
+                                                                oldest_dst_snapshot_creation,
+                                                                latest_dst_snapshot_creation)
+            src_snapshots_and_bookmarks = [line[line.index('\t') + 1:] for line in src_snapshots_and_bookmarks]  # cut -f2-
         origin_src_snapshots_and_bookmarks = src_snapshots_and_bookmarks
         src_snapshots_and_bookmarks = self.filter_snapshots(src_snapshots_and_bookmarks)
 
@@ -1142,14 +1149,12 @@ class Job:
         return True
 
     def filter_bookmarks(self, snapshots_and_bookmarks: List[str],
-                         oldest_dst_snapshot_createtxg: Optional[int],
-                         newest_dst_snapshot_createtxg: Optional[int]) -> List[str]:
-        return snapshots_and_bookmarks  # TODO find correct optimization
-
-        if oldest_dst_snapshot_createtxg is not None:
-            oldest_dst_snapshot_createtxg = int(oldest_dst_snapshot_createtxg)
-        if newest_dst_snapshot_createtxg is not None:
-            newest_dst_snapshot_createtxg = int(newest_dst_snapshot_createtxg)
+                         oldest_dst_snapshot_creation: Optional[int],
+                         newest_dst_snapshot_creation: Optional[int]) -> List[str]:
+        if oldest_dst_snapshot_creation is not None:
+            oldest_dst_snapshot_creation = int(oldest_dst_snapshot_creation)
+        if newest_dst_snapshot_creation is not None:
+            newest_dst_snapshot_creation = int(newest_dst_snapshot_creation)
 
         results = []
         for snapshot in snapshots_and_bookmarks:
@@ -1160,12 +1165,12 @@ class Job:
                 # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
-                if oldest_dst_snapshot_createtxg is not None:
-                    createtxg = int(snapshot[0:snapshot.index('\t')])
-                    if oldest_dst_snapshot_createtxg <= createtxg <= newest_dst_snapshot_createtxg:
+                if oldest_dst_snapshot_creation is not None:
+                    creation = int(snapshot[0:snapshot.index('\t')])
+                    if oldest_dst_snapshot_creation <= creation <= newest_dst_snapshot_creation:
                         results.append(snapshot)
                     else:
-                        self.debug("Excluding b/c bookmark createtxg:", snapshot)
+                        self.debug("Excluding b/c bookmark creation time:", snapshot)
         return results
 
     def filter_lines(self, input_list: Iterable[str], input_set: Set[str]) -> List[str]:
