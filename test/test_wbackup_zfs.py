@@ -28,6 +28,7 @@ from unittest.mock import patch, mock_open
 from zfs_util import *
 sys.path.append(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'wbackup_zfs')))
 import wbackup_zfs
+from wbackup_zfs import CheckRange
 
 src_pool_name = 'wb_src'
 dst_pool_name = 'wb_dst'
@@ -1277,6 +1278,132 @@ class TestFileOrLiteralAction(unittest.TestCase):
 
 
 #############################################################################
+class TestCheckRange(unittest.TestCase):
+
+    def test_valid_range_min_max(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange, min=0, max=100)
+        args = parser.parse_args(['--age', '50'])
+        self.assertEqual(args.age, 50)
+
+    def test_valid_range_inf_sup(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange, inf=0, sup=100)
+        args = parser.parse_args(['--age', '50'])
+        self.assertEqual(args.age, 50)
+
+    def test_invalid_range_min_max(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange, min=0, max=100)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(['--age', '-1'])
+
+    def test_invalid_range_inf_sup(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange, inf=0, sup=100)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(['--age', '101'])
+
+    def test_invalid_combination_min_inf(self):
+        with self.assertRaises(ValueError):
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--age', type=int, action=CheckRange, min=0, inf=100)
+
+    def test_invalid_combination_max_sup(self):
+        with self.assertRaises(ValueError):
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--age', type=int, action=CheckRange, max=0, sup=100)
+
+    def test_valid_float_range_min_max(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=float, action=CheckRange, min=0.0, max=100.0)
+        args = parser.parse_args(['--age', '50.5'])
+        self.assertEqual(args.age, 50.5)
+
+    def test_invalid_float_range_min_max(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=float, action=CheckRange, min=0.0, max=100.0)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(['--age', '-0.1'])
+
+    def test_valid_edge_case_min(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=float, action=CheckRange, min=0.0, max=100.0)
+        args = parser.parse_args(['--age', '0.0'])
+        self.assertEqual(args.age, 0.0)
+
+    def test_valid_edge_case_max(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=float, action=CheckRange, min=0.0, max=100.0)
+        args = parser.parse_args(['--age', '100.0'])
+        self.assertEqual(args.age, 100.0)
+
+    def test_invalid_edge_case_sup(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=float, action=CheckRange, inf=0.0, sup=100.0)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(['--age', '100.0'])
+
+    def test_invalid_edge_case_inf(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=float, action=CheckRange, inf=0.0, sup=100.0)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(['--age', '0.0'])
+
+    def test_no_range_constraints(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange)
+        args = parser.parse_args(['--age', '150'])
+        self.assertEqual(args.age, 150)
+
+    def test_no_range_constraints_float(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=float, action=CheckRange)
+        args = parser.parse_args(['--age', '150.5'])
+        self.assertEqual(args.age, 150.5)
+
+    def test_very_large_value(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange, max=10**18)
+        args = parser.parse_args(['--age', '999999999999999999'])
+        self.assertEqual(args.age, 999999999999999999)
+
+    def test_very_small_value(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange, min=-10**18)
+        args = parser.parse_args(['--age', '-999999999999999999'])
+        self.assertEqual(args.age, -999999999999999999)
+
+    def test_default_interval(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange)
+        action = CheckRange(option_strings=['--age'], dest='age')
+        self.assertEqual(action.interval(), 'valid range: (-infinity, +infinity)')
+
+    def test_interval_with_inf_sup(self):
+        action = CheckRange(option_strings=['--age'], dest='age', inf=0, sup=100)
+        self.assertEqual(action.interval(), 'valid range: (0, 100)')
+
+    def test_interval_with_min_max(self):
+        action = CheckRange(option_strings=['--age'], dest='age', min=0, max=100)
+        self.assertEqual(action.interval(), 'valid range: [0, 100]')
+
+    def test_interval_with_min(self):
+        action = CheckRange(option_strings=['--age'], dest='age', min=0)
+        self.assertEqual(action.interval(), 'valid range: [0, +infinity)')
+
+    def test_interval_with_max(self):
+        action = CheckRange(option_strings=['--age'], dest='age', max=100)
+        self.assertEqual(action.interval(), 'valid range: (-infinity, 100]')
+
+    def test_call_without_range_constraints(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--age', type=int, action=CheckRange)
+        args = parser.parse_args(['--age', '50'])
+        self.assertEqual(args.age, 50)
+
+
+#############################################################################
 def create_datasets(path, props=None):
     create_dataset(src_root_dataset, path, props=props)
     return create_dataset(dst_root_dataset, path, props=props)
@@ -1337,6 +1464,7 @@ if __name__ == '__main__':
     suite.addTest(TestParseDatasetLocator())
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
 
     # for ssh_mode in []:
