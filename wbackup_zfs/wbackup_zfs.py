@@ -1160,6 +1160,9 @@ class Job:
         for snapshot in snapshots_and_bookmarks:
             if snapshot.find('@') >= 0:
                 results.append(snapshot)  # it's a real snapshot
+                # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' enforce that snapshot names must not
+                # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
+                # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
             else:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
