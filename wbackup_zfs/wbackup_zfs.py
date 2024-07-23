@@ -758,8 +758,8 @@ class Job:
         latest_dst_snapshot_creation = None
         if len(dst_snapshots_with_guids) > 0 and params.use_bookmark:
             if self.is_zpool_bookmarks_feature_enabled_or_active('src'):
-                oldest_dst_snapshot_creation = dst_snapshots_with_guids[0].split('\t', 1)[0]
-                latest_dst_snapshot_creation = dst_snapshots_with_guids[-1].split('\t', 1)[0]
+                oldest_dst_snapshot_creation = int(dst_snapshots_with_guids[0].split('\t', 1)[0])
+                latest_dst_snapshot_creation = int(dst_snapshots_with_guids[-1].split('\t', 1)[0])
         dst_snapshots_with_guids = [line[line.index('\t') + 1:] for line in dst_snapshots_with_guids]  # cut -f2-
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
@@ -1149,13 +1149,8 @@ class Job:
         return True
 
     def filter_bookmarks(self, snapshots_and_bookmarks: List[str],
-                         oldest_dst_snapshot_creation: Optional[int],
-                         newest_dst_snapshot_creation: Optional[int]) -> List[str]:
-        if oldest_dst_snapshot_creation is not None:
-            oldest_dst_snapshot_creation = int(oldest_dst_snapshot_creation)
-        if newest_dst_snapshot_creation is not None:
-            newest_dst_snapshot_creation = int(newest_dst_snapshot_creation)
-
+                         oldest_dst_snapshot_creation: int,
+                         newest_dst_snapshot_creation: int) -> List[str]:
         results = []
         for snapshot in snapshots_and_bookmarks:
             if snapshot.find('@') >= 0:
@@ -1168,12 +1163,11 @@ class Job:
                 # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
-                if oldest_dst_snapshot_creation is not None:
-                    creation = int(snapshot[0:snapshot.index('\t')])
-                    if oldest_dst_snapshot_creation <= creation <= newest_dst_snapshot_creation:
-                        results.append(snapshot)
-                    else:
-                        self.debug("Excluding b/c bookmark creation time:", snapshot)
+                creation = int(snapshot[0:snapshot.index('\t')])
+                if oldest_dst_snapshot_creation <= creation <= newest_dst_snapshot_creation:
+                    results.append(snapshot)
+                else:
+                    self.debug("Excluding b/c bookmark creation time:", snapshot)
         return results
 
     def filter_lines(self, input_list: Iterable[str], input_set: Set[str]) -> List[str]:
