@@ -160,7 +160,7 @@ cat /tmp/manpage.md
     `user@127.0.0.1:tank1/foo/bar:baz:boo`. The first component of the
     ZFS dataset name is the ZFS pool name, here `tank1`.
 
-
+<!-- -->
 
 **DST_DATASET**
 
@@ -177,7 +177,7 @@ cat /tmp/manpage.md
     within the dataset tree, including children, and children of
     children, etc.
 
-
+<!-- -->
 
 **--include-dataset** *DATASET [DATASET ...]*
 
@@ -195,7 +195,7 @@ cat /tmp/manpage.md
     `baz/tmp` (relative), `@dataset_names.txt`,
     `@/path/to/dataset_names.txt`
 
-
+<!-- -->
 
 **--exclude-dataset** *DATASET [DATASET ...]*
 
@@ -203,7 +203,7 @@ cat /tmp/manpage.md
     is automatically translated to an --exclude-dataset-regex (see
     below).
 
-
+<!-- -->
 
 **--include-dataset-regex** *REGEX [REGEX ...]*
 
@@ -218,20 +218,20 @@ cat /tmp/manpage.md
     `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`,
     `!public`
 
-
+<!-- -->
 
 **--exclude-dataset-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-dataset-regex (see above) except that the
     default is `(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*`
 
-
+<!-- -->
 
 **--include-snapshot-regex** *REGEX [REGEX ...]*
 
-*  During replication, include any ZFS snapshot that has a name (i.e.
-    the part after the '@') that matches at least one of the given
-    include regular expressions but none of the exclude regular
+*  During replication, include any source ZFS snapshot that has a name
+    (i.e. the part after the '@') that matches at least one of the
+    given include regular expressions but none of the exclude regular
     expressions. This option can be specified multiple times. A leading
     `!` character indicates logical negation, i.e. the regex matches
     if the regex with the leading `!` character removed does not
@@ -239,28 +239,28 @@ cat /tmp/manpage.md
     `test_.*`, `!prod_.*`, `.*_(hourly|frequent)`,
     `!.*_(weekly|daily)`
 
-
+<!-- -->
 
 **--exclude-snapshot-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-snapshot-regex (see above) except that the
     default is to exclude no snapshots.
 
-
+<!-- -->
 
 **--force**
 
 *  Before replication, delete destination ZFS snapshots that are more
-    recent than the most recent common snapshot found on the source
+    recent than the most recent common snapshot included on the source
     ('conflicting snapshots') and rollback the destination dataset
     correspondingly before starting replication. Also, if no common
-    snapshot is found then delete all destination snapshots before
+    snapshot is included then delete all destination snapshots before
     starting replication. Without the --force flag, the destination
     dataset is treated as append-only, hence no destination snapshot
     that already exists is deleted, and instead the operation is aborted
     with an error when encountering a conflicting snapshot.
 
-
+<!-- -->
 
 **--force-once**, **-f1**
 
@@ -268,27 +268,28 @@ cat /tmp/manpage.md
     abort with an error on any subsequent conflict. This helps to
     interactively resolve conflicts, one conflict at a time.
 
-
+<!-- -->
 
 **--skip-missing-snapshots** *[{true,false,error}]*
 
 *  Default is 'true'. During replication, handle source datasets that
-    have no snapshots as follows: a) 'error': Abort with an error if
-    --recursive. b) 'true': Skip the source dataset and its
-    descendants with a warning if --recursive. c) otherwise (regardless
-    of --recursive flag): If destination snapshots exist, delete them
-    (with --force) or abort with an error (without --force). Create
-    empty destination dataset and ancestors if they do not yet exist and
-    source dataset has at least one descendant with a snapshot.
+    include no snapshots as follows: a) 'error': Abort with an
+    error.b) 'true': Skip the source dataset with a warning. Skip
+    descendant datasets if --recursive and destination dataset does not
+    exist. c) otherwise (regardless of --recursive flag): If
+    destination snapshots exist, delete them (with --force) or abort
+    with an error (without --force). Create empty destination dataset
+    and ancestors if they do not yet exist and source dataset has at
+    least one descendant that includes a snapshot.
 
-
+<!-- -->
 
 **--skip-replication**
 
 *  Skip replication step (see above) and proceed to the optional
     --delete-missing-snapshots step immediately (see below).
 
-
+<!-- -->
 
 **--delete-missing-snapshots**
 
@@ -299,7 +300,7 @@ cat /tmp/manpage.md
     via --{include|exclude}-dataset-regex
     --{include|exclude}-dataset policy.
 
-
+<!-- -->
 
 **--delete-missing-datasets**
 
@@ -314,21 +315,21 @@ cat /tmp/manpage.md
     --{include|exclude}-dataset-regex --{include|exclude}-dataset
     policy). Does not recurse without --recursive.
 
-
+<!-- -->
 
 **--ssh-config-file** *FILE*
 
 *  Path to SSH ssh_config(5) file (optional); will be passed into ssh
     -F CLI.
 
-
+<!-- -->
 
 **--ssh-private-key** *FILE*
 
 *  Path to SSH private key file on local host (optional); will be
     passed into ssh -i CLI. default: $HOME/.ssh/id_rsa
 
-
+<!-- -->
 
 **--ssh-cipher** *STRING*
 
@@ -336,21 +337,21 @@ cat /tmp/manpage.md
     (optional); will be passed into ssh -c CLI. (default:
     aes256-gcm@openssh.com)
 
-
+<!-- -->
 
 **--ssh-src-user** *STRING*
 
 *  Remote SSH username of source host to connect to (optional).
     Overrides username given in SRC_DATASET.
 
-
+<!-- -->
 
 **--ssh-dst-user** *STRING*
 
 *  Remote SSH username of destination host to connect to (optional).
     Overrides username given in DST_DATASET.
 
-
+<!-- -->
 
 **--ssh-src-host** *STRING*
 
@@ -358,7 +359,7 @@ cat /tmp/manpage.md
     also be an IPv4 or IPv6 address. Overrides hostname given in
     SRC_DATASET.
 
-
+<!-- -->
 
 **--ssh-dst-host** *STRING*
 
@@ -366,19 +367,19 @@ cat /tmp/manpage.md
     Can also be an IPv4 or IPv6 address. Overrides hostname given in
     DST_DATASET.
 
-
+<!-- -->
 
 **--ssh-src-port** *INT*
 
 *  Remote SSH port of source host to connect to (optional).
 
-
+<!-- -->
 
 **--ssh-dst-port** *INT*
 
 *  Remote SSH port of destination host to connect to (optional).
 
-
+<!-- -->
 
 **--ssh-src-extra-opt** *STRING*
 
@@ -387,7 +388,7 @@ cat /tmp/manpage.md
     Example: `-v -v --ssh-src-extra-opt '-v -v'` to debug ssh
     config issues.
 
-
+<!-- -->
 
 **--ssh-dst-extra-opt** *STRING*
 
@@ -396,14 +397,14 @@ cat /tmp/manpage.md
     times. Example: `-v -v --ssh-dst-extra-opt '-v -v'` to debug
     ssh config issues.
 
-
+<!-- -->
 
 **--max-retries** *INT*
 
 *  The number of times a zfs send/receive data transfer shall be
     retried if it fails across the network (default: 0).
 
-
+<!-- -->
 
 **--bwlimit** *STRING*
 
@@ -411,7 +412,7 @@ cat /tmp/manpage.md
     (optional). Example: `100m` to cap throughput at 100 MB/sec.
     Default is unlimited. Also see https://linux.die.net/man/1/pv
 
-
+<!-- -->
 
 **--no-privilege-elevation**, **-p**
 
@@ -435,7 +436,7 @@ cat /tmp/manpage.md
     https://tinyurl.com/9h97kh8n and
     https://github.com/openzfs/zfs/issues/13024
 
-
+<!-- -->
 
 **--dry-run**, **-n**
 
@@ -443,7 +444,7 @@ cat /tmp/manpage.md
     if the command were to be executed for real. This option treats both
     the ZFS source and destination as read-only.
 
-
+<!-- -->
 
 **--verbose**, **-v**
 
@@ -454,19 +455,19 @@ cat /tmp/manpage.md
     output lines are identified by [E], [W], [I], [D], [T]
     prefixes, respectively.
 
-
+<!-- -->
 
 **--quiet**, **-q**
 
 *  Suppress non-error, info, debug, and trace output.
 
-
+<!-- -->
 
 **--version**
 
 *  Display version information and exit.
 
-
+<!-- -->
 
 **--help, -h**
 
