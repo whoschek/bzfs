@@ -1818,7 +1818,7 @@ def validate_dataset_name(dataset, input_text):
     ds = dataset
     if (ds in ['', '.', '..'] or '//' in ds or ds.startswith('/') or ds.endswith('/') or ds.startswith('./')
             or ds.startswith('../') or ds.endswith('/.') or ds.endswith('/..') or '@' in ds or '#' in ds
-            or '"' in ds or "'" in ds or '%' in ds or (len(ds) > 0 and not ds[0].isalpha())):
+            or '"' in ds or "'" in ds or '%' in ds or not ds[0].isalpha()):
         raise ValueError(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
