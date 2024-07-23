@@ -192,8 +192,9 @@ Example with further options:
               f"is `{exclude_dataset_regexes_default}`"))
     parser.add_argument(
         '--include-snapshot-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
-        help=("During replication, include any ZFS snapshot that has a name (i.e. the part after the '@') that matches "
-              "at least one of the given include regular expressions but none of the exclude regular expressions. "
+        help=("During replication, include any source ZFS snapshot that has a name (i.e. the part after the '@') "
+              "that matches at least one of the given include regular expressions but none of the exclude regular "
+              "expressions. "
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
               "leading `!` character removed does not match. "
@@ -205,8 +206,8 @@ Example with further options:
     parser.add_argument(
         '--force', action='store_true',
         help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
-              "snapshot found on the source ('conflicting snapshots') and rollback the destination dataset "
-              "correspondingly before starting replication. Also, if no common snapshot is found then delete all "
+              "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
+              "correspondingly before starting replication. Also, if no common snapshot is included then delete all "
               "destination snapshots before starting replication. Without the --force flag, the destination dataset is "
               "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
               "operation is aborted with an error when encountering a conflicting snapshot."))
@@ -692,7 +693,6 @@ class Job:
                 dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids.splitlines())
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
                 src_snapshots_with_guids = self.run_ssh_command('src', self.trace, cmd=cmd).splitlines()
-                src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
 
                 missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                     set(cut(1, lines=src_snapshots_with_guids)))
@@ -810,8 +810,7 @@ class Job:
                 snapshot = snapshot.replace('#', '@', 1)
                 if bookmarks.get(snapshot) is None:  # not yet seen?
                     bookmarks[snapshot] = bookmark
-                    tab = '\t'
-                    src_snapshots_with_guids.append(f"{guid}{tab}{snapshot}")
+                    src_snapshots_with_guids.append(f"{guid}\t{snapshot}")
         src_snapshots_and_bookmarks = None
         has_snapshot = None
         if not latest_src_snapshot and params.recursive:
@@ -826,10 +825,8 @@ class Job:
         latest_dst_snapshot = ""
         latest_common_src_snapshot = ""
         latest_common_dst_snapshot = ""
-        origin_dst_snapshots_with_guids = dst_snapshots_with_guids
 
         if self.dst_dataset_exists[dst_dataset]:
-            dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)
             dst_snapshots = [line[line.index('\t') + 1:] for line in dst_snapshots_with_guids]  # cut -f2-
             latest_dst_snapshot = dst_snapshots[-1] if len(dst_snapshots) > 0 else ""
             if latest_dst_snapshot != "" and params.force:
@@ -891,7 +888,7 @@ class Job:
                 if self.is_solaris_zfs('dst'):
                     # solaris-11.4.0 has no wildcard syntax to delete all snapshots in a single CLI invocation
                     self.delete_snapshots(
-                        dst_dataset, snapshot_tags=cut(2, separator='@', lines=origin_dst_snapshots_with_guids))
+                        dst_dataset, snapshot_tags=cut(2, separator='@', lines=dst_snapshots_with_guids))
                 else:
                     cmd = p.split_args(
                         f"{p.dst_sudo} {p.zfs_program} destroy {p.force_hard} {p.verbose_destroy} {p.dry_run_destroy}",
