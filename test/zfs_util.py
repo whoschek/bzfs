@@ -39,7 +39,7 @@ def destroy(name, recursive=False, force=False):
     run_cmd(cmd)
 
 
-def create_dataset_simple(dataset, path=None, mk_parents=True, no_mount=True, props=None):
+def create_dataset_simple(dataset, path=None, mk_parents=True, no_mount=True, props=[]):
     path = "" if path is None else '/' + path
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ['zfs', 'create']
@@ -57,7 +57,7 @@ def create_dataset_simple(dataset, path=None, mk_parents=True, no_mount=True, pr
 zfs_version_is_at_least_2_1_0 = None
 
 
-def create_dataset(dataset, path=None, no_mount=True, props=None):
+def create_dataset(dataset, path=None, no_mount=True, props=[]):
     """ implies mk_parents=True
     if no_mount=True:
     To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
