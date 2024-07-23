@@ -41,15 +41,15 @@ on:
         type: boolean
         default: True
   schedule:
-    - cron: '0 7 * * *'  # Runs daily at 7am UTC
-#    - cron: '0 8 * * 0'  # Runs weekly at 8am UTC on Sundays
+    - cron: '0 6 * * *'  # Runs daily at 6am UTC
+#    - cron: '0 7 * * 0'  # Runs weekly at 7am UTC on Sundays
 
 permissions:
   contents: read
 
 jobs:
   test_ubuntu_24_04:
-    if: (!contains(github.event.head_commit.message, 'skip ci') && github.event_name != 'workflow_dispatch') || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: (!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch') || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
