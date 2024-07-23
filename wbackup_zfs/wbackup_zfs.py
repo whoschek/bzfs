@@ -222,12 +222,13 @@ Example with further options:
         help=argparse.SUPPRESS)
     parser.add_argument(
         '--skip-missing-snapshots', choices=['true', 'false', 'error'], default='true', nargs='?',
-        help=("Default is 'true'. During replication, handle source datasets that have no snapshots as follows: "
-              "a) 'error': Abort with an error if --recursive. "
-              "b) 'true': Skip the source dataset and its descendants with a warning if --recursive. "
+        help=("Default is 'true'. During replication, handle source datasets that include no snapshots as follows: "
+              "a) 'error': Abort with an error."
+              "b) 'true': Skip the source dataset with a warning. Skip descendant datasets if --recursive and "
+              "destination dataset does not exist. "
               "c) otherwise (regardless of --recursive flag): If destination snapshots exist, delete them (with "
               "--force) or abort with an error (without --force). Create empty destination dataset and ancestors "
-              "if they do not yet exist and source dataset has at least one descendant with a snapshot."))
+              "if they do not yet exist and source dataset has at least one descendant that includes a snapshot."))
     parser.add_argument(
         '--skip-replication', action='store_true',
         help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
@@ -813,13 +814,15 @@ class Job:
                     src_snapshots_with_guids.append(f"{guid}\t{snapshot}")
         src_snapshots_and_bookmarks = None
         has_snapshot = None
-        if not latest_src_snapshot and params.recursive:
+        if not latest_src_snapshot:
             if params.skip_missing_snapshots is None:
-                die(f"Found source dataset that has no snapshot: {src_dataset}. Consider "
+                die(f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
                     f"using --skip-missing-snapshots=true")
             elif params.skip_missing_snapshots:
-                self.warn("Skipping source dataset and its descendants because it has no snapshot:", src_dataset)
-                return False
+                self.warn("Skipping source dataset because it includes no snapshot:", src_dataset)
+                if not self.dst_dataset_exists[dst_dataset] and params.recursive:
+                    self.warn("Skipping descendant datasets because destination dataset does not exist:", src_dataset)
+                return self.dst_dataset_exists[dst_dataset]
 
         self.debug("latest_src_snapshot:", latest_src_snapshot)
         latest_dst_snapshot = ""
