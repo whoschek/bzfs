@@ -127,6 +127,7 @@ def bookmark_name(bookmark):
 
 def dataset_property(dataset=None, prop=None):
     return zfs_list([dataset], props=[prop], types=['filesystem'], max_depth=0)[0]
+    # return zfs_get([dataset], props=[prop], types=['filesystem'], max_depth=0, fields=['value'])[0]
 
 
 def snapshot_property(snapshot, prop):
@@ -161,6 +162,39 @@ def zfs_list(names=[], props=['name'], types=[], max_depth=None,
     if types:
         cmd.append('-t')
         cmd.append(','.join(types))
+
+    if names:
+        cmd += names
+
+    return run_cmd(cmd)
+
+
+def zfs_get(names=[], props=['all'], types=[], max_depth=None, parsable=True, fields=[], sources=[]):
+    cmd = ['zfs', 'get']
+    if max_depth is None:
+        cmd.append('-r')
+    else:
+        cmd.append('-d')
+        cmd.append(str(max_depth))
+
+    cmd.append('-H')
+    if parsable:
+        cmd.append('-p')
+
+    if fields:  # defaults to name,property,value,source
+        cmd.append('-o')
+        cmd.append(','.join(fields))
+
+    if sources:  # 'local', 'default', 'inherited', 'temporary', 'received', 'none'. default is all sources
+        cmd.append('-s')
+        cmd.append(','.join(sources))
+
+    if types:  # filesystem, snapshot, volume, bookmark, or all. default is all
+        cmd.append('-t')
+        cmd.append(','.join(types))
+
+    assert len(props) > 0
+    cmd.append(','.join(props))
 
     if names:
         cmd += names
