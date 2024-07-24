@@ -656,7 +656,7 @@ class Job:
             self.recordsizes[src_dataset] = int(recordsize)
 
         src_datasets = {line[line.index('\t') + 1:] for line in src_datasets_with_record_sizes}
-        origin_src_datasets = src_datasets
+        origin_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src_datasets, p.src_root_dataset))
 
         # Optionally, replicate src_root_dataset (optionally including its descendants) to dst_root_dataset
@@ -687,19 +687,30 @@ class Job:
         if params.delete_missing_snapshots:
             self.info("--delete-missing-snapshots:",
                       f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
+            skip_src_dataset = ""
             for src_dataset in src_datasets:
-                dst_dataset = p.dst_root_dataset + relativize_dataset(src_dataset, p.src_root_dataset)
-                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", dst_dataset)
-                dst_snapshots_with_guids = self.run_ssh_command('dst', self.trace, check=False, cmd=cmd)
-                dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids.splitlines())
+                if f"{src_dataset}/".startswith(f"{skip_src_dataset}/"):
+                    # skip_src_dataset has been deleted by some third party while we're running
+                    origin_src_datasets.remove(src_dataset)
+                    continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
+                skip_src_dataset = ""
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
-                src_snapshots_with_guids = self.run_ssh_command('src', self.trace, cmd=cmd).splitlines()
-
-                missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
-                    set(cut(1, lines=src_snapshots_with_guids)))
-                missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
-                missing_snapshot_tags = cut(2, separator='@', lines=missing_snapshot_tags)
-                self.delete_snapshots(dst_dataset, snapshot_tags=missing_snapshot_tags)
+                try:
+                    src_snapshots_with_guids = self.run_ssh_command('src', self.trace, cmd=cmd).splitlines()
+                except subprocess.CalledProcessError as e:
+                    self.warn("Third party deleted source:", src_dataset)
+                    skip_src_dataset = src_dataset
+                    origin_src_datasets.remove(src_dataset)
+                else:
+                    dst_dataset = p.dst_root_dataset + relativize_dataset(src_dataset, p.src_root_dataset)
+                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", dst_dataset)
+                    dst_snapshots_with_guids = self.run_ssh_command('dst', self.trace, check=False, cmd=cmd)
+                    dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids.splitlines())
+                    missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
+                        set(cut(1, lines=src_snapshots_with_guids)))
+                    missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
+                    missing_snapshot_tags = cut(2, separator='@', lines=missing_snapshot_tags)
+                    self.delete_snapshots(dst_dataset, snapshot_tags=missing_snapshot_tags)
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset policy.
@@ -776,12 +787,12 @@ class Job:
             props = "guid,name"
             types = "snapshot"
         cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -S type -d 1 -Hp -o {props}", src_dataset)
-        src_snapshots_and_bookmarks = self.run_ssh_command('src', self.trace, check=None, cmd=cmd)
-        if src_snapshots_and_bookmarks is None:
+        try:
+            src_snapshots_and_bookmarks = self.run_ssh_command('src', self.trace, cmd=cmd).splitlines()
+        except subprocess.CalledProcessError as e:
             self.warn("Third party deleted source:", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
 
-        src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
         if oldest_dst_snapshot_creation is not None:
             src_snapshots_and_bookmarks = self.filter_bookmarks(src_snapshots_and_bookmarks,
                                                                 oldest_dst_snapshot_creation,
