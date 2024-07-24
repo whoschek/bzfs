@@ -832,7 +832,8 @@ class Job:
             elif params.skip_missing_snapshots:
                 self.warn("Skipping source dataset because it includes no snapshot:", src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and params.recursive:
-                    self.warn("Skipping descendant datasets because destination dataset does not exist:", src_dataset)
+                    self.warn("Also skipping descendant datasets because destination dataset does not exist:",
+                              src_dataset)
                 return self.dst_dataset_exists[dst_dataset]
 
         self.debug("latest_src_snapshot:", latest_src_snapshot)
