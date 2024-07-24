@@ -857,8 +857,9 @@ class LocalTestCase(WBackupTestCase):
         create_datasets('foo/b/d')
         take_snapshot(create_datasets('foo/c'), fix('c1'))
         create_datasets('zoo')
+        create_datasets('boo')
         self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-datasets')
+                         '--skip-replication', '--delete-missing-datasets', '--exclude-dataset', 'boo')
         self.assertFalse(dataset_exists(dst_root_dataset + '/axe'))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo/a'))
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/a/b'))
@@ -866,6 +867,7 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo/c'))
         self.assertFalse(dataset_exists(dst_root_dataset + '/zoo'))
+        self.assertTrue(dataset_exists(dst_root_dataset + '/boo'))
 
     def test_delete_missing_snapshots_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
