@@ -340,6 +340,7 @@ Example with further options:
 #############################################################################
 class Params:
     def __init__(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
+        self.one_or_more_whitespace_regex = re.compile(r'\s+')
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
         if not args.src_root_dataset or not args.dst_root_dataset:
@@ -472,7 +473,7 @@ class Params:
 
     def split_args(self, text: str, *items) -> List[str]:
         """ split option string on runs of one or more whitespace into an option list """
-        opts = xappend(re.split(r'\s+', text.strip()), items)
+        opts = xappend(self.one_or_more_whitespace_regex.split(text.strip()), items)
         for opt in opts:
             self.validate_quoting(opt)
         return opts
