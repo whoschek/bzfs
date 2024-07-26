@@ -804,7 +804,7 @@ class Job:
         origin_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
 
-        # find oldest and latest true snapshot, as well as guids of all snapshots or bookmarks
+        # find oldest and latest true snapshot, as well as GUIDs of all snapshots and bookmarks
         oldest_src_snapshot = ""
         latest_src_snapshot = ""
         src_snapshots_guids = set()
@@ -1025,15 +1025,15 @@ class Job:
                                       included_guids: Set[str], has_snapshot: Set[str]):
         """ Computes steps to incrementally replicate the given src snapshots with the given guids such that we include
         intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
-        (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skips
+        (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
         excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists.
         Example: skip hourly snapshots and only include daily shapshots for replication
         Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
         -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
-        -I d2-d4 (i.e. also include d3, '-I' and '-' indicate 'include intermediate snapshots')
+        -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
         The has_snapshot param is necessary because 'zfs send' CLI with a bookmark as starting snapshot does not
         (yet) support including intermediate src_snapshots via -I flag. Thus, if the replication source is a bookmark
-        we translate a -I step to one or more -i steps.
+        we convert a -I step to one or more -i steps.
         """
         assert len(guids) == len(src_snapshots)
         assert len(included_guids) >= 0
@@ -1077,7 +1077,7 @@ class Job:
                                 steps.append(('-i', src_snapshots[j], src_snapshots[j+1]))
                     i -= 1
             else:
-                # finish up trailing dailies
+                # finish up run of trailing dailies
                 i -= 1
                 if start != i:
                     step = ('-I', src_snapshots[start], src_snapshots[i])
@@ -1656,7 +1656,6 @@ class Job:
         p = self.params
         available_programs_minimum = {'zpool': None, 'sudo': None}
         available_programs[location] = {}
-        lines = None
         try:
             lines = self.run_ssh_command(location, self.debug, stderr=PIPE, cmd=[p.zfs_program, '--version'])
         except FileNotFoundError as e:  # location is local and program file was not found
@@ -1667,8 +1666,7 @@ class Job:
             else:
                 print(e.stderr, sys.stderr, end='')
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
-
-        if lines is not None:
+        else:
             line = lines.splitlines()[0]
             assert line.startswith('zfs-')
             # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5

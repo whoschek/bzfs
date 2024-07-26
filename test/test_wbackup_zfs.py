@@ -968,7 +968,7 @@ class LocalTestCase(WBackupTestCase):
 
 
 #############################################################################
-class MultiModeTestCase(WBackupTestCase):
+class RemoteTestCase(WBackupTestCase):
 
     def test_basic_replication_flat_nothing_todo(self):
         LocalTestCase(param=self.param).test_basic_replication_flat_nothing_todo()
@@ -1095,7 +1095,7 @@ class IsolatedTestCase(WBackupTestCase):
 
 
 #############################################################################
-class ExcludesTestCase(WBackupTestCase):
+class ExcludeSnapshotRegexTestCase(WBackupTestCase):
 
     def test_snapshot_series_excluding_hourlies(self):
         testcase = {}
@@ -1168,7 +1168,7 @@ class ExcludesTestCase(WBackupTestCase):
         self.assertSnapshotNames(dst_foo, [])
 
     def test_snapshot_series_excluding_hourlies_with_permutations(self):
-        for testcase in ExcludesValidationCase().permute_snapshot_series(5):
+        for testcase in ExcludeSnapshotRegexValidationCase().permute_snapshot_series(5):
             self.tearDownAndSetup()
             src_foo = create_dataset(src_root_dataset, 'foo')
             dst_foo = dst_root_dataset + '/foo'
@@ -1191,7 +1191,7 @@ class ExcludesTestCase(WBackupTestCase):
 
 
 #############################################################################
-class ExcludesValidationCase(unittest.TestCase):
+class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
 
     def test_basic1(self):
         input_snapshots = ['d1', 'h1', 'd2', 'd3', 'd4']
@@ -1684,8 +1684,8 @@ if __name__ == '__main__':
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludesValidationCase))
-    suite.addTest(ParametrizedTestCase.parametrize(ExcludesTestCase, {'verbose': True}))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
+    suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {'verbose': True}))
 
 
     # for ssh_mode in []:
@@ -1744,7 +1744,7 @@ if __name__ == '__main__':
                             'no_privilege_elevation': no_privilege_elevation,
                             'encrypted_dataset': encrypted_dataset,
                         }
-                        suite.addTest(ParametrizedTestCase.parametrize(MultiModeTestCase, params))
+                        suite.addTest(ParametrizedTestCase.parametrize(RemoteTestCase, params))
 
     failfast = False if os.getenv('CI') else True  # no need to fail fast when run within GitHub Action
     print(f"Running in failfast mode: {failfast} ...")
