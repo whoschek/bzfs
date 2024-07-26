@@ -81,7 +81,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.13-dev", "3.11"]
     timeout-minutes: 40
     steps:
     - uses: actions/checkout@v4
