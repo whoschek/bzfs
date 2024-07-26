@@ -452,7 +452,6 @@ class Params:
         self.max_elapsed_nanos = int(self.max_elapsed_secs * 1000_000_000)
         self.min_sleep_nanos = max(1, self.min_sleep_nanos)
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
-        self.debug_retries = self.getenv_bool('debug_retries', False)
         self.is_test_mode = args.is_test_mode
 
         self.available_programs = {}
@@ -575,9 +574,6 @@ class Job:
                         or f"{p.dst_root_dataset}/".startswith(f"{p.src_root_dataset}/")):
                     die(f"Source and destination dataset trees must not overlap! "
                         f"src: {p.origin_src_root_dataset}, dst: {p.origin_dst_root_dataset}")
-
-        if params.ssh_src_user_host == "" and params.ssh_dst_user_host == "" and params.debug_retries is False:
-            params.max_retries = 0  # no need to retry transfer from local disk to local disk
 
         re_suffix = r'(?:/.*)?'  # also match descendants of a matching dataset
         exclude_regexes = self.dataset_regexes(p.args.exclude_dataset or []) + (p.args.exclude_dataset_regex or [])
