@@ -1742,6 +1742,8 @@ class Job:
                     continue  # ignore datasets that make no difference
                 if dataset.startswith('/'):
                     dataset = dataset[1:]
+            if dataset.endswith('/'):
+                dataset = dataset[0:-1]
             if dataset:
                 regex = re.escape(dataset)
             else:

@@ -362,6 +362,36 @@ class LocalTestCase(WBackupTestCase):
                 encryption_prop = dataset_property(dst_root_dataset + "/foo/a", 'encryption')
                 self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else 'off')
 
+    def test_basic_replication_recursive_with_exclude_dataset(self):
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
+        self.setup_basic()
+        boo = create_dataset(src_root_dataset, 'goo')
+        take_snapshot(boo, fix('g1'))
+        boo = create_dataset(src_root_dataset, 'boo')
+        take_snapshot(boo, fix('b1'))
+        zoo = create_dataset(src_root_dataset, 'zoo')
+        take_snapshot(zoo, fix('z1'))
+        for i in range(0, 3):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
+                             '--include-dataset=',
+                             '--exclude-dataset=/' + src_root_dataset + '/foo',
+                             '--include-dataset=/' + src_root_dataset + '/foo',
+                             '--exclude-dataset=/' + dst_root_dataset + '/goo/',
+                             '--include-dataset=/' + dst_root_dataset + '/goo',
+                             '--include-dataset=/xxxxxxxxx',
+                             '--exclude-dataset=boo/',
+                             '--include-dataset=boo',
+                             dry_run=(i == 0))
+            self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
+            self.assertFalse(dataset_exists(dst_root_dataset + '/goo'))
+            self.assertFalse(dataset_exists(dst_root_dataset + '/boo'))
+            if i == 0:
+                self.assertSnapshots(dst_root_dataset, 0)
+            else:
+                self.assertSnapshots(dst_root_dataset, 3, 's')
+                self.assertSnapshots(dst_root_dataset + "/zoo", 1, 'z')
+
     def test_complex_replication_flat_with_no_create_bookmark(self):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
         self.setup_basic()
