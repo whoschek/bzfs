@@ -16,14 +16,15 @@
 
 import argparse
 import getpass
+import itertools
 import logging
 import platform
 import traceback
 import unittest
 import os
-import re
 import sys
 import tempfile
+from collections import defaultdict
 from unittest.mock import patch, mock_open
 from zfs_util import *
 sys.path.append(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'wbackup_zfs')))
@@ -626,14 +627,14 @@ class LocalTestCase(WBackupTestCase):
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])
             else:
                 self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                     ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't11'])
+                                     ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7', 't11'])
 
         # no change on src means replication is a noop:
         for i in range(0, 2):
             self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force', dry_run=(i == 0))
             self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                     ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't11'])
+                                     ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])
             self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7', 't11'])
 
         # on src delete the most recent snapshot and its bookmark, which is trouble as now src has nothing
@@ -645,7 +646,7 @@ class LocalTestCase(WBackupTestCase):
         for i in range(0, 2):
             self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), expected_status=die_status)
             self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                     ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't11'])  # nothing has changed
+                                     ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])  # nothing has changed
             self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])  # nothing has changed
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
@@ -655,12 +656,12 @@ class LocalTestCase(WBackupTestCase):
             self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
             if i == 0:
                 self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                         ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't11'])  # nothing has changed
+                                         ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])  # nothing has changed
                 self.assertBookmarkNames(src_root_dataset + '/foo',
                                          ['t1', 't3', 't5', 't6', 't7'])  # nothing has changed
             else:
                 self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                         ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't12'])
+                                         ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't12'])  # nothing has changed
                 self.assertBookmarkNames(src_root_dataset + '/foo',
                                          ['t1', 't3', 't5', 't6', 't7', 't12'])
 
@@ -1094,6 +1095,221 @@ class IsolatedTestCase(WBackupTestCase):
 
 
 #############################################################################
+class ExcludesTestCase(WBackupTestCase):
+
+    def test_snapshot_series_excluding_hourlies(self):
+        testcase = {}
+        testcase[None] = ['d1', 'h1', 'd2', 'd3', 'd4']
+        expected_results = ['d1', 'd2', 'd3', 'd4']
+        dst_foo = dst_root_dataset + '/foo'
+
+        src_foo = create_dataset(src_root_dataset, 'foo')
+        for snapshot in testcase[None]:
+            take_snapshot(src_foo, snapshot)
+        self.run_wbackup(src_foo, dst_foo,
+                         '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+        self.assertSnapshotNames(dst_foo, expected_results)
+
+        self.tearDownAndSetup()
+        src_foo = create_dataset(src_root_dataset, 'foo')
+        for snapshot in testcase[None]:
+            take_snapshot(src_foo, snapshot)
+        src_snapshot = f"{src_foo}@{expected_results[0]}"
+        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        subprocess.run(cmd, text=True, check=True, shell=True)
+        self.assertSnapshotNames(dst_foo, [expected_results[0]])
+        self.run_wbackup(src_foo, dst_foo,
+                         '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+        self.assertSnapshotNames(dst_foo, expected_results)
+
+        self.tearDownAndSetup()
+        src_foo = create_dataset(src_root_dataset, 'foo')
+        for snapshot in testcase[None]:
+            take_snapshot(src_foo, snapshot)
+        src_snapshot = f"{src_foo}@{expected_results[0]}"
+        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        subprocess.run(cmd, text=True, check=True, shell=True)
+        self.assertSnapshotNames(dst_foo, [expected_results[0]])
+        if is_zpool_bookmarks_feature_enabled_or_active('src'):
+            create_bookmark(src_foo, expected_results[0], expected_results[0])
+            destroy(src_snapshot)
+            self.run_wbackup(src_foo, dst_foo,
+                             '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+            self.assertSnapshotNames(dst_foo, expected_results)
+            src_snapshot2 = f"{src_foo}@{expected_results[-1]}"
+            destroy(src_snapshot2)  # no problem because bookmark still exists
+            take_snapshot(src_foo, 'd99')
+            self.run_wbackup(src_foo, dst_foo,
+                             '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+            self.assertSnapshotNames(dst_foo, expected_results + ['d99'])
+
+        self.tearDownAndSetup()
+        src_foo = create_dataset(src_root_dataset, 'foo')
+        for snapshot in testcase[None]:
+            take_snapshot(src_foo, snapshot)
+        src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
+        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        subprocess.run(cmd, text=True, check=True, shell=True)
+        self.assertSnapshotNames(dst_foo, [expected_results[1]])
+        self.run_wbackup(src_foo, dst_foo, '--skip-missing-snapshots=false',
+                         '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+        self.assertSnapshotNames(dst_foo, expected_results[1:])
+
+        self.tearDownAndSetup()
+        src_foo = create_dataset(src_root_dataset, 'foo')
+        for snapshot in testcase[None]:
+            take_snapshot(src_foo, snapshot)
+        src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
+        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        subprocess.run(cmd, text=True, check=True, shell=True)
+        self.assertSnapshotNames(dst_foo, [expected_results[1]])
+        self.run_wbackup(src_foo, dst_foo, '--force', '--skip-missing-snapshots=false',
+                         '--exclude-snapshot-regex', '.*')
+        self.assertSnapshotNames(dst_foo, [])
+
+    def test_snapshot_series_excluding_hourlies_with_permutations(self):
+        for testcase in ExcludesValidationCase().permute_snapshot_series(5):
+            self.tearDownAndSetup()
+            src_foo = create_dataset(src_root_dataset, 'foo')
+            dst_foo = dst_root_dataset + '/foo'
+            for snapshot in testcase[None]:
+                take_snapshot(src_foo, snapshot)
+            expected_results = testcase['d']
+            # logging.info(f"input   : {','.join(testcase[None])}")
+            # logging.info(f"expected: {','.join(expected_results)}")
+            for i in range(0, 2):
+                self.run_wbackup(src_foo, dst_foo, '--skip-missing-snapshots=false',
+                                 '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*',
+                                 dry_run=(i == 0))
+                if i == 0:
+                    self.assertFalse(dataset_exists(dst_foo))
+                else:
+                    if len(expected_results) > 0:
+                        self.assertSnapshotNames(dst_foo, expected_results)
+                    else:
+                        self.assertFalse(dataset_exists(dst_foo))
+
+
+#############################################################################
+class ExcludesValidationCase(unittest.TestCase):
+
+    def test_basic1(self):
+        input_snapshots = ['d1', 'h1', 'd2', 'd3', 'd4']
+        expected_results = ['d1', 'd2', 'd3', 'd4']
+        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+
+    def test_basic2(self):
+        input_snapshots = ['d1', 'd2', 'h1', 'd3', 'd4']
+        expected_results = ['d1', 'd2', 'd3', 'd4']
+        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+
+    def test_basic3(self):
+        input_snapshots = ['h0', 'h1', 'd1', 'd2', 'h2', 'd3', 'd4']
+        expected_results = ['d1', 'd2', 'd3', 'd4']
+        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+
+    def test_basic4(self):
+        input_snapshots = ['d1']
+        expected_results = ['d1']
+        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+
+    def test_basic5(self):
+        input_snapshots = []
+        expected_results = []
+        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+
+    def test_validate_snapshot_series_excluding_hourlies_with_permutations(self):
+        for testcase in self.permute_snapshot_series():
+            self.validate_incremental_replication_steps(testcase[None], testcase['d'])
+
+    def permute_snapshot_series(self, max_length=9):
+        """
+        Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly
+        snapshots from replication. The expectation is that after repliction dst contains all daily snapshots
+        and no hourly snapshots.
+        Example snapshot series: d1, h1, d2, d3, d4 --> expected dst output: d1, d2, d3, d4
+        where
+        d1 = first daily snapshot,  dN = n-th daily snapshot
+        h1 = first hourly snapshot, hN = n-th hourly snapshot
+
+        We test all possible permutations of series of length L=[0...max_length] snapshots
+        """
+        assert max_length >= 0
+        testcases = []
+        for L in range(0, max_length+1):
+            for N in range(0, L+1):
+                steps = 'd' * N + 'h' * (L-N)
+                # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
+                for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
+                    snaps = defaultdict(list)
+                    count = defaultdict(int)
+                    for char in permutation:
+                        count[char] += 1  # tag snapshots with a monotonically increasing number within each category
+                        char_count = f"{count[char]:01}" if max_length < 10 else f"{count[char]:02}"  # zero pad number
+                        snapshot = f"{char}{char_count}"
+                        snaps[None].append(snapshot)
+                        snaps[char].append(snapshot)  # represents expected results for test verification
+                    testcases.append(snaps)
+        return testcases
+
+    def validate_incremental_replication_steps(self, input_snapshots, expected_results):
+        # src_dataset = "s@"
+        src_dataset = ""
+        for is_bookmark_start in [False, True]:
+            steps = self.incremental_replication_steps1(
+                input_snapshots, src_dataset, is_bookmark_start=is_bookmark_start)
+            # print(f"input_snapshots:" + ','.join(input_snapshots))
+            # print("steps: " + ','.join([self.replication_step_to_str(step) for step in steps]))
+            output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
+            output_snapshots += self.apply_incremental_replication_steps(steps, input_snapshots)
+            # print(f"output_snapshots:" + ','.join(output_snapshots))
+            self.assertListEqual(expected_results, output_snapshots)
+
+    def replication_step_to_str(self, step):
+        # return str(step)
+        return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
+
+    def apply_incremental_replication_steps(self, steps, input_snapshots):
+        output_snapshots = []
+        for i, (incr_flag, start_snapshot, end_snapshot) in enumerate(steps):
+            start = input_snapshots.index(start_snapshot)
+            end = input_snapshots.index(end_snapshot)
+            if incr_flag == '-I':
+                for j in range(start+1, end+1):
+                    output_snapshots.append(input_snapshots[j])
+            else:
+                output_snapshots.append(input_snapshots[end])
+        return output_snapshots
+
+    def incremental_replication_steps1(self, input_snapshots, src_dataset, is_bookmark_start=False):
+        origin_src_snapshots_with_guids = []
+        has_snapshot = set()
+        guid = 1
+        for i, snapshot in enumerate(input_snapshots):
+            origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
+            if i > 0 or not is_bookmark_start:
+                has_snapshot.add(guid)
+            guid += 1
+        return self.incremental_replication_steps2(origin_src_snapshots_with_guids, has_snapshot)
+
+    def incremental_replication_steps2(self, origin_src_snapshots_with_guids, has_snapshot):
+        guids = []
+        input_snapshots = []
+        permutation = []
+        included_guids = set()
+        for line in origin_src_snapshots_with_guids:
+            guid, snapshot = line.split('\t', 1)
+            guids.append(guid)
+            input_snapshots.append(snapshot)
+            i = snapshot.find('@')
+            snapshot = snapshot[i+1:]
+            permutation.append(snapshot[0:1])
+            if snapshot[0:1] == 'd':
+                included_guids.add(guid)
+        return wbackup_zfs.Job().incremental_replication_steps(input_snapshots, guids, included_guids, has_snapshot)
+
+
+#############################################################################
 class TestCLI(unittest.TestCase):
 
     def test_help(self):
@@ -1468,6 +1684,9 @@ if __name__ == '__main__':
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludesValidationCase))
+    suite.addTest(ParametrizedTestCase.parametrize(ExcludesTestCase, {'verbose': True}))
+
 
     # for ssh_mode in []:
     for ssh_mode in ['local']:

@@ -103,14 +103,21 @@ def datasets(dataset):
     return zfs_list([dataset], types=['filesystem'], max_depth=1)[1:]
 
 
-def take_snapshot(name, snapshot_tag):
-    name = name + '@' + snapshot_tag
-    run_cmd(sudo_cmd + ['zfs', 'snapshot', name])
-    return name
+def take_snapshot(dataset, snapshot_tag):
+    snapshot = dataset + '@' + snapshot_tag
+    run_cmd(sudo_cmd + ['zfs', 'snapshot', snapshot])
+    return snapshot
 
 
 def snapshots(dataset):
     return zfs_list([dataset], types=['snapshot'], max_depth=1)
+
+
+def create_bookmark(dataset, snapshot_tag, bookmark_tag):
+    snapshot = dataset + '@' + snapshot_tag
+    bookmark = dataset + '#' + bookmark_tag
+    run_cmd(sudo_cmd + ['zfs', 'bookmark', snapshot, bookmark])
+    return bookmark
 
 
 def bookmarks(dataset):
