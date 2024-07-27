@@ -585,7 +585,8 @@ class Job:
         re_suffix = r'(?:/.*)?'  # also match descendants of a matching dataset
         exclude_regexes = self.dataset_regexes(p.args.exclude_dataset or []) + (p.args.exclude_dataset_regex or [])
         include_regexes = self.dataset_regexes(p.args.include_dataset or []) + (p.args.include_dataset_regex or [])
-        p.exclude_dataset_regexes = compile_regexes(exclude_regexes or [exclude_dataset_regexes_default], suffix=re_suffix)
+        p.exclude_dataset_regexes = compile_regexes(exclude_regexes or [exclude_dataset_regexes_default],
+                                                    suffix=re_suffix)
         p.include_dataset_regexes = compile_regexes(include_regexes or ['.*'], suffix=re_suffix)
         p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or ['.*'])
@@ -658,7 +659,7 @@ class Job:
             recordsize, src_dataset = line.split('\t', 1)
             self.recordsizes[src_dataset] = int(recordsize)
 
-        src_datasets = {line[line.index('\t') + 1:] for line in src_datasets_with_record_sizes}
+        src_datasets = cut(field=2, lines=src_datasets_with_record_sizes)
         origin_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src_datasets, p.src_root_dataset))
 
@@ -730,12 +731,12 @@ class Job:
             to_delete = dst_datasets.difference(origins)
             self.delete_datasets(to_delete)
 
-            # Optionally, delete any existing destination dataset that has no snapshot if all descendants of that dataset do
-            # not have a snapshot either. To do so, we walk the dataset list (conceptually, a tree) depth-first (i.e. sorted
-            # descending). If a dst dataset has zero snapshots and all its children are already marked as orphans, then it
-            # is itself an orphan, and we mark it as such. Walking in a reverse sorted way means that we efficiently check
-            # for zero snapshots not just over the direct children but the entire tree. Finally, delete all orphan datasets
-            # in an efficient batched way.
+            # Optionally, delete any existing destination dataset that has no snapshot if all descendants of that
+            # dataset do not have a snapshot either. To do so, we walk the dataset list (conceptually, a tree)
+            # depth-first (i.e. sorted descending). If a dst dataset has zero snapshots and all its children are
+            # already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in a reverse
+            # sorted way means that we efficiently check for zero snapshots not just over the direct children but
+            # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
             if p.delete_empty_datasets:
                 self.info("--delete-empty-datasets:",
                           f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
@@ -776,7 +777,7 @@ class Job:
             if self.is_zpool_bookmarks_feature_enabled_or_active('src'):
                 oldest_dst_snapshot_creation = int(dst_snapshots_with_guids[0].split('\t', 1)[0])
                 latest_dst_snapshot_creation = int(dst_snapshots_with_guids[-1].split('\t', 1)[0])
-        dst_snapshots_with_guids = [line[line.index('\t') + 1:] for line in dst_snapshots_with_guids]  # cut -f2-
+        dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear before bookmarks for the same GUID.
@@ -801,12 +802,15 @@ class Job:
             src_snapshots_and_bookmarks = self.filter_bookmarks(src_snapshots_and_bookmarks,
                                                                 oldest_dst_snapshot_creation,
                                                                 latest_dst_snapshot_creation)
-            src_snapshots_and_bookmarks = [line[line.index('\t') + 1:] for line in src_snapshots_and_bookmarks]  # cut -f2-
+            src_snapshots_and_bookmarks = cut(field=2, lines=src_snapshots_and_bookmarks)
 
+        # ignore src bookmarks for which a src snapshot exists (where snapshot and its bookmarks have the same GUID).
+        # ignore src bookmarks for which another bookmark with the same GUID already exists.
         src_snapshots_with_guids, has_snapshot, bookmarks_dict = self.dedupe_snapshot_guids(src_snapshots_and_bookmarks)
+
         src_snapshots_and_bookmarks = None
         origin_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
+        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)  # apply include/exclude regexes
 
         # find oldest and latest true snapshot, as well as GUIDs of all snapshots and bookmarks
         oldest_src_snapshot = ""
@@ -836,7 +840,7 @@ class Job:
         latest_common_dst_snapshot = ""
 
         if self.dst_dataset_exists[dst_dataset]:
-            dst_snapshots = [line[line.index('\t') + 1:] for line in dst_snapshots_with_guids]  # cut -f2-
+            dst_snapshots = cut(field=2, lines=dst_snapshots_with_guids)
             latest_dst_snapshot = dst_snapshots[-1] if len(dst_snapshots) > 0 else ""
             if latest_dst_snapshot != "" and params.force:
                 self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
@@ -944,7 +948,6 @@ class Job:
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
             def replication_candidates(origin_src_snapshots_with_guids, latest_common_src_snapshot):
-                # self.debug("origin_src_snapshots_with_guids1:", '\n'.join(origin_src_snapshots_with_guids))
                 results = []
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
                     guid, snapshot = snapshot_with_guid.split('\t', 1)
@@ -954,7 +957,6 @@ class Job:
                     if guid in has_snapshot:
                         results.append(snapshot_with_guid)
                 results.reverse()
-                # self.debug("origin_src_snapshots_with_guids2:", '\n'.join(results))
                 assert len(results) > 0
                 assert results[0].split('\t', 1)[1] == latest_common_src_snapshot
                 return results
@@ -1097,15 +1099,12 @@ class Job:
         return steps
 
     def replication_step_to_str(self, step):
-        # return str(step)
-        return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
+        # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
+        return str(step)
 
     def snapshot_or_bookmark(self, snapshot: str, bookmarks_dict: Dict[str, str]):
         bookmark = bookmarks_dict.get(snapshot)
-        if bookmark:
-            return bookmark
-        else:
-            return snapshot
+        return bookmark if bookmark else snapshot
 
     def run_zfs_send_receive(self, send_cmd: List[str], recv_cmd: List[str],
                              size_estimate_bytes: int, size_estimate_human: str, is_dry_send_receive: bool,
@@ -1336,8 +1335,8 @@ class Job:
             if not f"{dataset}/".startswith(f"{last_deleted_dataset}/"):
                 self.info("Delete missing dataset tree:", f"{dataset} ...")
                 p = self.params
-                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy -r", p.force_hard, p.verbose_destroy, p.dry_run_destroy,
-                                   dataset)
+                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy -r", p.force_hard, p.verbose_destroy,
+                                   p.dry_run_destroy, dataset)
                 is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
                 self.run_ssh_command('dst', self.debug, is_dry=is_dry, cmd=cmd)
                 last_deleted_dataset = dataset
