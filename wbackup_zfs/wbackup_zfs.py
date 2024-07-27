@@ -1201,7 +1201,7 @@ class Job:
         self.debug(msg, ' '.join(cmd))
         if not is_dry_send_receive:
             try:
-                subprocess.run(cmd, stdout=PIPE, check=True)
+                subprocess_run(cmd, stdout=PIPE, check=True)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 # op isn't idempotent so retries regather current state from the start of replicate_flat_dataset()
                 raise RetryableError("Subprocess failed") from e
@@ -1483,13 +1483,13 @@ class Job:
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
                 ssh_cmd_trimmed = ssh_cmd[0:-1]  # remove trailing $ssh_user_host
                 ssh_socket_cmd = xappend(ssh_cmd_trimmed.copy(), '-O', 'check', ssh_user_host)
-                if subprocess.run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:  # &> /dev/null
+                if subprocess_run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:  # &> /dev/null
                     self.trace("ssh socket is alive:", ' '.join(ssh_socket_cmd))
                 else:
                     self.trace("ssh socket is not yet alive:", ' '.join(ssh_socket_cmd))
                     ssh_socket_cmd = xappend(ssh_cmd[0:-1], '-M', '-o', 'ControlPersist=60s', ssh_user_host, 'exit')
                     self.debug("Executing:", ' '.join(ssh_socket_cmd))
-                    if subprocess.run(ssh_socket_cmd, stdout=PIPE, text=True).returncode != 0:
+                    if subprocess_run(ssh_socket_cmd, stdout=PIPE, text=True).returncode != 0:
                         die(f"Cannot ssh into remote host via {ssh_socket_cmd}. "
                             f"Fix ssh configuration first, considering diagnostic output from running {prog_name} with: " 
                             f"-v -v --ssh-src-extra-opt '-v -v' --ssh-dst-extra-opt '-v -v'")
@@ -1499,12 +1499,12 @@ class Job:
         if not is_dry:
             std_check = False if check is None else check
             if stderr != PIPE:
-                stderr = None if check else PIPE
+                stderr = sys.stderr if check else PIPE
             process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=stderr, text=True, check=std_check)
             if check is not None:
                 return process.stdout
             else:
-                # The value of subprocess.run(stdout=subprocess.PIPE, ...).stdout is an empty string if the process
+                # The value of subprocess_run(stdout=subprocess.PIPE, ...).stdout is an empty string if the process
                 # exits with a nonzero return code. Here we turn that empty string into None to indicate to the caller
                 # a nonzero return code vs a process success with empty string result, e.g. to differentiate between
                 # 'zfs list' on an empty dataset vs a non-existing dataset.
@@ -1571,10 +1571,10 @@ class Job:
         params = self.params
         p = params
         available_programs = params.available_programs
-        available_programs['local'] = dict.fromkeys(subprocess.run(
+        available_programs['local'] = dict.fromkeys(subprocess_run(
             [p.shell_program_local, '-c', self.find_available_programs()],
             stdout=PIPE, text=True, check=False).stdout.splitlines())
-        if subprocess.run([params.shell_program_local, '-c', 'exit'], stdout=PIPE, text=True).returncode != 0:
+        if subprocess_run([params.shell_program_local, '-c', 'exit'], stdout=PIPE, text=True).returncode != 0:
             self.disable_program_internal('sh', 'local')
 
         # check if we can ssh into the remote hosts at all
@@ -1753,6 +1753,13 @@ class Job:
 
 
 #############################################################################
+def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
+    if (('stderr' not in kwargs or kwargs['stderr'] is not subprocess.PIPE)
+            and ('capture_output' not in kwargs or kwargs['capture_output'] is False)):
+        kwargs['stderr'] = sys.stderr  # redirect stderr of subprocess to log file unless directed otherwise
+    return subprocess.run(*args, **kwargs)
+
+
 def error(*items):
     print(f"{current_time()} [E] ERROR: {' '.join(items)}", file=sys.stderr)
 
@@ -1972,6 +1979,9 @@ class Tee:
     def flush(self):
         for file in self.files:
             file.flush()
+
+    def fileno(self):
+        return self.files[0].fileno()
 
 
 #############################################################################
