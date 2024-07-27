@@ -24,7 +24,7 @@ import unittest
 import os
 import sys
 import tempfile
-from collections import defaultdict
+from collections import defaultdict, Counter
 from unittest.mock import patch, mock_open
 from zfs_util import *
 sys.path.append(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'wbackup_zfs')))
@@ -49,6 +49,7 @@ logging.basicConfig(level=logging.INFO,
                     # datefmt='%Y-%m-%d %H:%M:%S',
                     datefmt='%H:%M:%S:',
                     )
+error_injection_triggers = 'error_injection_triggers'
 
 
 def getenv_any(key, default=None):
@@ -225,6 +226,9 @@ class WBackupTestCase(ParametrizedTestCase):
         args = args + ['--is-test-mode']
 
         job = wbackup_zfs.Job()
+        if params and error_injection_triggers in params:
+            job.error_injection_triggers = params[error_injection_triggers]
+
         returncode = 0
         try:
             # returncode = subprocess.run([prog_exe] + args).returncode
@@ -391,6 +395,30 @@ class LocalTestCase(WBackupTestCase):
             else:
                 self.assertSnapshots(dst_root_dataset, 3, 's')
                 self.assertSnapshots(dst_root_dataset + "/zoo", 1, 'z')
+
+    def test_basic_replication_flat_simple_with_retries_on_error_injection(self):
+        self.setup_basic()
+        create_dataset(dst_root_dataset)
+        params = self.param
+        if params:
+            old_triggers = params.get(error_injection_triggers)
+
+            # inject failures for this many tries. only after that finally succeed the operation
+            counter = Counter(zfs_list_snapshot_dst=2, full_zfs_send=2, incremental_zfs_send=2)
+
+            params[error_injection_triggers] = counter
+            try:
+                self.run_wbackup(src_root_dataset, dst_root_dataset, '--max-retries=6')
+                self.assertEqual(0, counter['zfs_list_snapshot_dst'])  # i.e, it took 2-0=2 retries to succeed
+                self.assertEqual(0, counter['full_zfs_send'])
+                self.assertEqual(0, counter['incremental_zfs_send'])
+                self.assertSnapshots(dst_root_dataset, 3, 's')
+            finally:
+                if params:
+                    if old_triggers:
+                        params[error_injection_triggers] = old_triggers
+                    else:
+                        params.pop(error_injection_triggers, None)
 
     def test_complex_replication_flat_with_no_create_bookmark(self):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
