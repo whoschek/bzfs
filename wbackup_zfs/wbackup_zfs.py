@@ -212,7 +212,7 @@ Example with further options:
               "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
               "operation is aborted with an error when encountering a conflicting snapshot."))
     parser.add_argument(
-        '--force-once', '-f1', action='store_true',
+        '--force-once', '--f1', action='store_true',
         help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
               "conflict. This helps to interactively resolve conflicts, one conflict at a time."))
     parser.add_argument(

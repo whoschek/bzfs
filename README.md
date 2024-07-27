@@ -262,7 +262,7 @@ cat /tmp/manpage.md
 
 <!-- -->
 
-**--force-once**, **-f1**
+**--force-once**, **--f1**
 
 *  Use the --force option at most once to resolve a conflict, then
     abort with an error on any subsequent conflict. This helps to

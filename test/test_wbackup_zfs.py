@@ -530,7 +530,7 @@ class LocalTestCase(WBackupTestCase):
             if i > 0 and self.is_encryption_mode():
                 # potential workaround?: rerun once with -R --skip-missing added to zfs_send_program_opts
                 self.skipTest("zfs receive -F cannot be used to destroy an encrypted filesystem - https://github.com/openzfs/zfs/issues/6793")
-            self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '-f1', dry_run=(i == 0), no_create_bookmark=True)
+            self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--f1', dry_run=(i == 0), no_create_bookmark=True)
             self.assertSnapshots(dst_root_dataset, 0)
             self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
             if i == 0:
