@@ -42,6 +42,8 @@ die_status = 3
 if sys.version_info < (3, 7):
     print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
     sys.exit(die_status)
+zfs_send_program_opts_default = '--props --raw --compressed'
+zfs_recv_program_opts_default = '-u'
 exclude_dataset_regexes_default = r'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*'  # skip tmp datasets by default
 max_retries_default = 0
 ssh_private_key_file_default = ".ssh/id_rsa"
@@ -147,50 +149,6 @@ Example with further options:
               "destination datasets that do not yet exist are created as necessary, along with their parent and "
               "ancestors."))
     parser.add_argument(
-        '--no-stream', action='store_true',
-        help=("During replication, only replicate the most recent source snapshot of a dataset, hence skip all "
-              "intermediate source snapshots that may exist between that and the most recent common snapshot. "
-              "If there is no common snapshot also skip all other source snapshots for the dataset, except for "
-              "the most recent source snapshot. This option helps for the destination to 'catch up' with the "
-              "source ASAP, consuming a minimum of disk space, at the expense of reducing reliable options for "
-              "rolling back to intermediate snapshots."))
-    parser.add_argument(
-        '--no-create-bookmark', action='store_true',
-        help=(f"For increased safety, in normal operation {prog_name} creates a ZFS bookmark in the source dataset "
-              "whenever it has successfully completed replication of the most recent snapshot. "
-              "The --no-create-bookmark option disables this safety feature but is discouraged, because bookmarks "
-              "are tiny and relatively cheap and help to ensure that ZFS replication can continue even if source "
-              "and destination dataset somehow have no common snapshot anymore. "
-              "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
-              "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
-              "the info in the bookmark (which must still exist in the source dataset) instead of the info in the "
-              "metadata of the (now missing) source snapshot. Note that a ZFS bookmark does not contain user data; "
-              "instead a ZFS bookmark is essentially a pointer in the form of a GUID and single 64-bit transaction "
-              "group id that tells the destination ZFS pool how to find the destination snapshot corresponding to "
-              "the source bookmark. Note that while a bookmark allows for its snapshot to be deleted on the source, "
-              "it still requires that its snapshot is not somehow deleted prematurely on the destination dataset, "
-              "so be mindful of that. "
-              f"By convention a bookmark created by {prog_name} has the same name as its corresponding "
-              "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
-              f"{prog_name} itself never deletes any bookmark. "
-              "You can list bookmarks, like so: `zfs list -t bookmark -o name,guid,creation -d 1 $SRC_DATASET`, and "
-              "you can (and should) periodically prune obsolete bookmarks just like snapshots, like so: "
-              "`zfs destroy $SRC_DATASET#$BOOKMARK`. Bookmarks should be pruned less agressively than snapshots. "))
-    parser.add_argument(
-        '--no-use-bookmark', action='store_true',
-        help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
-              "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
-              "destination dataset. "
-              "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
-              "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
-              "common snapshot anymore. "
-              f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
-              "or whatever the name of a bookmark is, as only the GUID of the bookmark and the GUID of the snapshot "
-              "is considered for comparison, and ZFS guarantees that any bookmark of a given snapshot automatically "
-              "has the same GUID as its snapshot. Also note that you can create, name, delete and prune bookmarks "
-              f"any way you like, as {prog_name} (without --no-use-bookmark) will happily use whatever bookmarks "
-              f"currently exist, if any."))
-    parser.add_argument(
         '--recursive', '-r', action='store_true',
         help=("During replication, also consider descendant datasets, i.e. datasets within the dataset tree, "
               "including children, and children of children, etc."))
@@ -265,6 +223,24 @@ Example with further options:
               "--force) or abort with an error (without --force). Create empty destination dataset and ancestors "
               "if they do not yet exist and source dataset has at least one descendant that includes a snapshot."))
     parser.add_argument(
+        '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
+        help=(f"The number of times a replication step shall be retried if it fails, for example because of network "
+              f"hiccups (default: {max_retries_default}). "
+              "Also consider this option if a periodic pruning script may simultaneously "
+              f"delete a dataset or snapshot or bookmark while {prog_name} is running and attempting to access it."))
+    parser.add_argument(
+        '--zfs-send-program-opts', type=str, default=zfs_send_program_opts_default, metavar='STRING',
+        help=("Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
+              f"Default is '{zfs_send_program_opts_default}'. "
+              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
+              "and https://github.com/openzfs/zfs/issues/13024"))
+    parser.add_argument(
+        '--zfs-receive-program-opts', type=str, default=zfs_recv_program_opts_default, metavar='STRING',
+        help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
+              f"Default is '{zfs_recv_program_opts_default}'. "
+              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
+              "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html"))
+    parser.add_argument(
         '--skip-replication', action='store_true',
         help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
              "immediately (see below).")
@@ -283,6 +259,107 @@ Example with further options:
               "not have a snapshot either (again, only if the existing destination dataset is included via "
               "--{include|exclude}-dataset-regex --{include|exclude}-dataset policy). "
               "Does not recurse without --recursive."))
+    parser.add_argument(
+        '--no-privilege-elevation', '-p', action='store_true',
+        help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
+              "(via 'sudo -u root' elevation granted by appending this to /etc/sudoers: "
+              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`). "
+              "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
+              "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
+              "sudo zfs allow -u $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
+              "sudo zfs allow -u $NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
+              "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL; "
+              "If you do not plan to use the --force flag or --delete-missing-snapshots or --delete-missing-dataset "
+              "then ZFS permissions 'rollback,destroy' can be omitted. "
+              "If you do not plan to customize the respective ZFS dataset property then "
+              "ZFS permissions 'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be "
+              "omitted, arriving at the absolutely minimal set of required destination permissions: "
+              "`mount,create,receive`. Also see "
+              "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
+              "https://tinyurl.com/9h97kh8n"))
+    parser.add_argument(
+        '--no-stream', action='store_true',
+        help=("During replication, only replicate the most recent source snapshot of a dataset, hence skip all "
+              "intermediate source snapshots that may exist between that and the most recent common snapshot. "
+              "If there is no common snapshot also skip all other source snapshots for the dataset, except for "
+              "the most recent source snapshot. This option helps the destination to 'catch up' with the "
+              "source ASAP, consuming a minimum of disk space, at the expense of reducing reliable options for "
+              "rolling back to intermediate snapshots."))
+    parser.add_argument(
+        '--no-create-bookmark', action='store_true',
+        help=(f"For increased safety, in normal operation {prog_name} behaves as follows wrt. bookmark creation, "
+              "if it is autodetected that the source ZFS pool support bookmarks: "
+              f"Whenever it has successfully completed replication of the most recent source snapshot, {prog_name} "
+              "creates a ZFS bookmark of that snapshot and attaches it to the source dataset. "
+              "Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having "
+              "to keep the already replicated snapshot around on the source dataset until the next upcoming snapshot "
+              "has been successfully replicated. This way you can send the snapshot to another host, then bookmark the "
+              "snapshot on the source dataset, then delete the snapshot from the source dataset to save disk space, "
+              "and then still incrementally send the next upcoming snapshot to the other host by referring to the "
+              "bookmark. The --no-create-bookmark option disables this safety feature but is discouraged, because "
+              "bookmarks are tiny and relatively cheap and help to ensure that ZFS replication can continue even if "
+              "source and destination dataset somehow have no common snapshot anymore. "
+              "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
+              "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
+              "the info in the bookmark (the bookmark must still exist in the source dataset) instead of the info in "
+              "the metadata of the (now missing) source snapshot. A ZFS bookmark is a tiny bit of metadata extracted "
+              "from a ZFS snapshot by the 'zfs bookmark' CLI, and attached to a dataset, much like a ZFS snapshot. "
+              "Note that a ZFS bookmark does not contain user data; "
+              "instead a ZFS bookmark is essentially a tiny pointer in the form of the GUID of the snapshot and 64-bit "
+              "transaction group id of the snapshot and creation time of the snapshot, which is sufficient to tell "
+              "the destination ZFS pool how to find the destination snapshot corresponding to the source bookmark "
+              "and (potentially already deleted) source snapshot. A bookmark can be fed into 'zfs send' as the "
+              "source of an incremental 'zfs send'. Note that while a bookmark allows for its snapshot "
+              "to be deleted on the source after successful replication, it still requires that its snapshot is not "
+              "somehow deleted prematurely on the destination dataset, so be mindful of that. "
+              f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
+              "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
+              f"{prog_name} itself never deletes any bookmark. "
+              "You can list bookmarks, like so: "
+              "`zfs list -t bookmark -o name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and should) "
+              "periodically prune obsolete bookmarks just like snapshots, like so: "
+              "`zfs destroy $SRC_DATASET#$BOOKMARK`. Typically, bookmarks should be pruned less aggressively "
+              "than snapshots, and destination snapshots should be pruned less aggressively than source snapshots. "
+              "As an example starting point, here is a script that deletes all bookmarks older than X days in a "
+              "given dataset and its descendants: "
+              "`days=90; dataset=tank/foo/bar; zfs list -t bookmark -o name,creation -Hp -r $dataset | "
+              "while read -r BOOKMARK CREATION_TIME; do "
+              "  [ $CREATION_TIME -le $(($(date +%%s) - days * 86400)) ] && echo $BOOKMARK; "
+              "done | xargs -I {} sudo zfs destroy {}` "
+              "A better example starting point can be found in third party tools or this script: "
+              "https://github.com/whoschek/wbackup-zfs/blob/main/test/prune_bookmarks.py"))
+    parser.add_argument(
+        '--no-use-bookmark', action='store_true',
+        help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
+              "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
+              "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks."
+              "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
+              "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
+              "common snapshot anymore. "
+              f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
+              "or whatever the name of a bookmark is, as only the GUID of the bookmark and the GUID of the snapshot "
+              "is considered for comparison, and ZFS guarantees that any bookmark of a given snapshot automatically "
+              "has the same GUID, transaction group id and creation time as the snapshot. Also note that you can "
+              f"create, name, delete and prune bookmarks any way you like, as {prog_name} (without --no-use-bookmark) "
+              "will happily work with whatever bookmarks currently exist, if any."))
+    parser.add_argument(
+        '--bwlimit', type=str, metavar='STRING',
+        help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
+              "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv"))
+    parser.add_argument(
+        '--dry-run', '-n', action='store_true',
+        help=("Do a dry-run (aka 'no-op') to print what operations would happen if the command were to be executed "
+              "for real. This option treats both the ZFS source and destination as read-only."))
+    parser.add_argument(
+        '--verbose', '-v', action='count', default=0,
+        help=("Print verbose information. This option can be specified multiple times to increase the level of "
+              "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
+              "flag, maybe along with --dry-run. "
+              "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
+              "respectively."))
+    parser.add_argument(
+        '--quiet', '-q', action='store_true',
+        help='Suppress non-error, info, debug, and trace output.')
     parser.add_argument(
         '--ssh-config-file', type=str, metavar='FILE',
         help='Path to SSH ssh_config(5) file (optional); will be passed into ssh -F CLI.')
@@ -324,47 +401,6 @@ Example with further options:
         help=("Additional option to be passed to ssh CLI when connecting to destination host (optional). This option "
               "can be specified multiple times. Example: `-v -v --ssh-dst-extra-opt '-v -v'` to "
               "debug ssh config issues."))
-    parser.add_argument(
-        '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
-        help=(f"The number of times a replication step shall be retried if it fails, for example because of network "
-              f"hiccups (default: {max_retries_default}). "
-              "Also consider this option if a periodic pruning script may simultaneously "
-              f"delete a dataset or snapshot or bookmark while {prog_name} is running and attempting to use it."))
-    parser.add_argument(
-        '--bwlimit', type=str, metavar='STRING',
-        help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
-              "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv"))
-    parser.add_argument(
-        '--no-privilege-elevation', '-p', action='store_true',
-        help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
-              "(via 'sudo -u root' elevation granted by appending this to /etc/sudoers: "
-              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`). "
-              "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
-              "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
-              "sudo zfs allow -u $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
-              "sudo zfs allow -u $NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
-              "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL; "
-              "If you do not plan to use the --force flag or --delete-missing-snapshots or --delete-missing-dataset "
-              "then ZFS permissions 'rollback,destroy' can be omitted. "
-              "If you do not plan to customize the respective ZFS dataset property then "
-              "ZFS permissions 'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be "
-              "omitted, arriving at the absolutely minimal set of required destination permissions: "
-              "`mount,create,receive`. Also see https://tinyurl.com/yuyj23pz and https://tinyurl.com/9h97kh8n and "
-              "https://github.com/openzfs/zfs/issues/13024"))
-    parser.add_argument(
-        '--dry-run', '-n', action='store_true',
-        help=("Do a dry-run (aka 'no-op') to print what operations would happen if the command were to be executed "
-              "for real. This option treats both the ZFS source and destination as read-only."))
-    parser.add_argument(
-        '--verbose', '-v', action='count', default=0,
-        help=("Print verbose information. This option can be specified multiple times to increase the level of "
-              "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
-              "flag, maybe along with --dry-run. "
-              "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
-              "respectively."))
-    parser.add_argument(
-        '--quiet', '-q', action='store_true',
-        help='Suppress non-error, info, debug, and trace output.')
     parser.add_argument(
         '--version', action='version', version=f"{prog_name}-{prog_version}, by {prog_author}",
         help='Display version information and exit.')
@@ -416,8 +452,8 @@ class Params:
         self.include_dataset_regexes = None
         self.exclude_snapshot_regexes = None
         self.include_snapshot_regexes = None
-        self.zfs_send_program_opts = self.split_args(self.getenv('zfs_send_program_opts', '--props --raw --compressed'))
-        self.zfs_recv_program_opts = self.split_args(self.getenv('zfs_recv_program_opts', '-u'))
+        self.zfs_send_program_opts = self.split_args(args.zfs_send_program_opts)
+        self.zfs_recv_program_opts = self.split_args(args.zfs_receive_program_opts)
         self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
         if self.verbose_zfs:
             self.zfs_send_program_opts += ['-v']
