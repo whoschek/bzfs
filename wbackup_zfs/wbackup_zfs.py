@@ -158,29 +158,38 @@ Example with further options:
         '--no-create-bookmark', action='store_true',
         help=(f"For increased safety, in normal operation {prog_name} creates a ZFS bookmark in the source dataset "
               "whenever it has successfully completed replication of the most recent snapshot. "
-              "This option disables this safety feature but is discouraged, because bookmarks are tiny and relatively "
-              "cheap and help to ensure that ZFS replication can continue even if source and destination dataset "
-              "somehow have no common snapshot anymore. "
-              "For example, if a pruning policy has accidentally deleted too many (or even all) snapshots on the "
+              "The --no-create-bookmark option disables this safety feature but is discouraged, because bookmarks "
+              "are tiny and relatively cheap and help to ensure that ZFS replication can continue even if source "
+              "and destination dataset somehow have no common snapshot anymore. "
+              "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
               "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
               "the info in the bookmark (which must still exist in the source dataset) instead of the info in the "
-              "metadata of a (now missing) source snapshot. Note that a ZFS bookmark does not contain user data; "
-              "instead a ZFS bookmark is essentially a pointer in the form of a single 64-bit transaction group id "
-              "and GUID that tells the destination ZFS pool how to find the destination snapshot corresponding to "
+              "metadata of the (now missing) source snapshot. Note that a ZFS bookmark does not contain user data; "
+              "instead a ZFS bookmark is essentially a pointer in the form of a GUID and single 64-bit transaction "
+              "group id that tells the destination ZFS pool how to find the destination snapshot corresponding to "
               "the source bookmark. Note that while a bookmark allows for its snapshot to be deleted on the source, "
-              "it still requires that its snapshot is not somehow deleted prematurely on the destination, "
+              "it still requires that its snapshot is not somehow deleted prematurely on the destination dataset, "
               "so be mindful of that. "
-              "You can list bookmarks like so: `zfs list -t bookmark $SRC_DATASET`, and you can delete "
-              "or prune bookmarks just like snapshots, like so: `zfs destroy $SRC_DATASET#$BOOKMARK`. "
-              f"Note that by convention a bookmark created by {prog_name} has the same name as its corresponding "
-              "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator."))
+              f"By convention a bookmark created by {prog_name} has the same name as its corresponding "
+              "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
+              f"{prog_name} itself never deletes any bookmark. "
+              "You can list bookmarks, like so: `zfs list -t bookmark -o name,guid,creation -d 1 $SRC_DATASET`, and "
+              "you can (and should) periodically prune obsolete bookmarks just like snapshots, like so: "
+              "`zfs destroy $SRC_DATASET#$BOOKMARK`. Bookmarks should be pruned less agressively than snapshots. "))
     parser.add_argument(
         '--no-use-bookmark', action='store_true',
         help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
-              f"snapshots) on the source dataset in order to find the most recent common snapshot "
-              f"wrt. the destination dataset. This option disables this safety feature but is "
-              f"discouraged, because bookmarks help to ensure that ZFS replication can continue even if source "
-              f"and destination dataset somehow have no common snapshot anymore."))
+              "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
+              "destination dataset. "
+              "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
+              "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
+              "common snapshot anymore. "
+              f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
+              "or whatever the name of a bookmark is, as only the GUID of the bookmark and the GUID of the snapshot "
+              "is considered for comparison, and ZFS guarantees that any bookmark of a given snapshot automatically "
+              "has the same GUID as its snapshot. Also note that you can create, name, delete and prune bookmarks "
+              f"any way you like, as {prog_name} (without --no-use-bookmark) will happily use whatever bookmarks "
+              f"currently exist, if any."))
     parser.add_argument(
         '--recursive', '-r', action='store_true',
         help=("During replication, also consider descendant datasets, i.e. datasets within the dataset tree, "
@@ -218,9 +227,9 @@ Example with further options:
               f"is `{exclude_dataset_regexes_default}`"))
     parser.add_argument(
         '--include-snapshot-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
-        help=("During replication, include any source ZFS snapshot that has a name (i.e. the part after the '@') "
-              "that matches at least one of the given include regular expressions but none of the exclude regular "
-              "expressions. "
+        help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
+              "the '@' and '#') that matches at least one of the given include regular expressions but none of the "
+              "exclude regular expressions. "
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
               "leading `!` character removed does not match. "
@@ -249,7 +258,7 @@ Example with further options:
     parser.add_argument(
         '--skip-missing-snapshots', choices=['true', 'false', 'error'], default='true', nargs='?',
         help=("Default is 'true'. During replication, handle source datasets that include no snapshots as follows: "
-              "a) 'error': Abort with an error."
+              "a) 'error': Abort with an error. "
               "b) 'true': Skip the source dataset with a warning. Skip descendant datasets if --recursive and "
               "destination dataset does not exist. "
               "c) otherwise (regardless of --recursive flag): If destination snapshots exist, delete them (with "
@@ -264,7 +273,7 @@ Example with further options:
         help=("After successful replication, delete existing destination snapshots that do not exist within the source "
               "dataset if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex "
               "and the destination dataset is included via --{include|exclude}-dataset-regex "
-              "--{include|exclude}-dataset policy."))
+              "--{include|exclude}-dataset policy. Does not recurse without --recursive."))
     parser.add_argument(
         '--delete-missing-datasets', action='store_true',
         help=("After successful replication step and successful --delete-missing-snapshots step, if any, delete "
@@ -317,8 +326,10 @@ Example with further options:
               "debug ssh config issues."))
     parser.add_argument(
         '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
-        help=(f'The number of times a zfs send/receive data transfer shall be retried if it fails across the network '
-              f'(default: {max_retries_default}).'))
+        help=(f"The number of times a replication step shall be retried if it fails, for example because of network "
+              f"hiccups (default: {max_retries_default}). "
+              "Also consider this option if a periodic pruning script may simultaneously "
+              f"delete a dataset or snapshot or bookmark while {prog_name} is running and attempting to use it."))
     parser.add_argument(
         '--bwlimit', type=str, metavar='STRING',
         help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "

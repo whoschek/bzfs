@@ -177,10 +177,10 @@ cat /tmp/manpage.md
     of a dataset, hence skip all intermediate source snapshots that may
     exist between that and the most recent common snapshot. If there is
     no common snapshot also skip all other source snapshots for the
-    dataset, except for the most recent source snapshot. This option helps for the destination to 'catch up' with
-    the source ASAP, consuming a minimum of disk space, at the expense
-    of reducing reliable options for rolling back to intermediate
-    snapshots.
+    dataset, except for the most recent source snapshot. This option
+    helps for the destination to 'catch up' with the source ASAP,
+    consuming a minimum of disk space, at the expense of reducing
+    reliable options for rolling back to intermediate snapshots.
 
 <!-- -->
 
@@ -188,29 +188,32 @@ cat /tmp/manpage.md
 
 *  For increased safety, in normal operation wbackup-zfs creates a ZFS
     bookmark in the source dataset whenever it has successfully
-    completed replication of the most recent snapshot. This option
-    disables this safety feature but is discouraged, because bookmarks
-    are tiny and relatively cheap and help to ensure that ZFS
-    replication can continue even if source and destination dataset
-    somehow have no common snapshot anymore. For example, if a pruning
-    policy has accidentally deleted too many (or even all) snapshots on
-    the source dataset in an effort to reclaim disk space, replication
-    can still proceed because it can use the info in the bookmark (which
-    must still exist in the source dataset) instead of the info in the
-    metadata of a (now missing) source snapshot. Note that a ZFS
-    bookmark does not contain user data; instead a ZFS bookmark is
-    essentially a pointer in the form of a single 64-bit transaction
-    group id and GUID that tells the destination ZFS pool how to find
-    the destination snapshot corresponding to the source bookmark. Note
-    that while a bookmark allows for its snapshot to be deleted on the
-    source, it still requires that its snapshot is not somehow deleted
-    prematurely on the destination, so be mindful of that. You can list
-    bookmarks like so: `zfs list -t bookmark $SRC_DATASET`, and you
-    can delete or prune bookmarks just like snapshots, like so: `zfs
-    destroy $SRC_DATASET#$BOOKMARK`. Note that by convention a
-    bookmark created by wbackup-zfs has the same name as its
-    corresponding snapshot, the only difference being the leading '#'
-    separator instead of the leading '@' separator.
+    completed replication of the most recent snapshot. The
+    --no-create-bookmark option disables this safety feature but is
+    discouraged, because bookmarks are tiny and relatively cheap and
+    help to ensure that ZFS replication can continue even if source and
+    destination dataset somehow have no common snapshot anymore. For
+    example, if a pruning script has accidentally deleted too many (or
+    even all) snapshots on the source dataset in an effort to reclaim
+    disk space, replication can still proceed because it can use the
+    info in the bookmark (which must still exist in the source dataset)
+    instead of the info in the metadata of the (now missing) source
+    snapshot. Note that a ZFS bookmark does not contain user data;
+    instead a ZFS bookmark is essentially a pointer in the form of a
+    GUID and single 64-bit transaction group id that tells the
+    destination ZFS pool how to find the destination snapshot
+    corresponding to the source bookmark. Note that while a bookmark
+    allows for its snapshot to be deleted on the source, it still
+    requires that its snapshot is not somehow deleted prematurely on the
+    destination dataset, so be mindful of that. By convention a bookmark created
+    by wbackup-zfs has the same name as its corresponding snapshot, the
+    only difference being the leading '#' separator instead of the
+    leading '@' separator. wbackup-zfs itself never deletes any
+    bookmark. You can list bookmarks, like so: `zfs list -t bookmark -o
+    name,guid,creation -d 1 $SRC_DATASET`, and you can (and should)
+    periodically prune obsolete bookmarks just like snapshots, like so:
+    `zfs destroy $SRC_DATASET#$BOOKMARK`. Bookmarks should be pruned
+    less agressively than snapshots.
 
 <!-- -->
 
@@ -218,11 +221,19 @@ cat /tmp/manpage.md
 
 *  For increased safety, in normal operation wbackup-zfs also looks for
     bookmarks (in addition to snapshots) on the source dataset in order
-    to find the most recent common snapshot wrt. the destination dataset.
-    This option disables this safety feature but is discouraged, because
-    bookmarks help to ensure that ZFS replication can continue even if
-    source and destination dataset somehow have no common snapshot
-    anymore.
+    to find the most recent common snapshot wrt. the destination
+    dataset. The --no-use-bookmark option disables this safety feature
+    but is discouraged, because bookmarks help to ensure that ZFS
+    replication can continue even if source and destination dataset
+    somehow have no common snapshot anymore. Note that it does not
+    matter whether a bookmark was created by wbackup-zfs or a third
+    party script, or whatever the name of a bookmark is, as only the
+    GUID of the bookmark and the GUID of the snapshot is considered for
+    comparison, and ZFS guarantees that any bookmark of a given snapshot
+    automatically has the same GUID as its snapshot. Also note that you
+    can create, name, delete and prune bookmarks any way you like, as
+    wbackup-zfs (without --no-use-bookmark) will happily use whatever
+    bookmarks currently exist, if any.
 
 <!-- -->
 
@@ -284,15 +295,15 @@ cat /tmp/manpage.md
 
 **--include-snapshot-regex** *REGEX [REGEX ...]*
 
-*  During replication, include any source ZFS snapshot that has a name
-    (i.e. the part after the '@') that matches at least one of the
-    given include regular expressions but none of the exclude regular
-    expressions. This option can be specified multiple times. A leading
-    `!` character indicates logical negation, i.e. the regex matches
-    if the regex with the leading `!` character removed does not
-    match. Default: `.*` (include all snapshots). Examples:
-    `test_.*`, `!prod_.*`, `.*_(hourly|frequent)`,
-    `!.*_(weekly|daily)`
+*  During replication, include any source ZFS snapshot or bookmark that
+    has a name (i.e. the part after the '@' and '#') that matches at
+    least one of the given include regular expressions but none of the
+    exclude regular expressions. This option can be specified multiple
+    times. A leading `!` character indicates logical negation, i.e.
+    the regex matches if the regex with the leading `!` character
+    removed does not match. Default: `.*` (include all snapshots).
+    Examples: `test_.*`, `!prod_.*`,
+    `.*_(hourly|frequent)`, `!.*_(weekly|daily)`
 
 <!-- -->
 
@@ -329,7 +340,7 @@ cat /tmp/manpage.md
 
 *  Default is 'true'. During replication, handle source datasets that
     include no snapshots as follows: a) 'error': Abort with an
-    error.b) 'true': Skip the source dataset with a warning. Skip
+    error. b) 'true': Skip the source dataset with a warning. Skip
     descendant datasets if --recursive and destination dataset does not
     exist. c) otherwise (regardless of --recursive flag): If
     destination snapshots exist, delete them (with --force) or abort
@@ -353,7 +364,7 @@ cat /tmp/manpage.md
     one of --include-snapshot-regex but none of
     --exclude-snapshot-regex and the destination dataset is included
     via --{include|exclude}-dataset-regex
-    --{include|exclude}-dataset policy.
+    --{include|exclude}-dataset policy. Does not recurse without --recursive.
 
 <!-- -->
 
@@ -456,8 +467,11 @@ cat /tmp/manpage.md
 
 **--max-retries** *INT*
 
-*  The number of times a zfs send/receive data transfer shall be
-    retried if it fails across the network (default: 0).
+*  The number of times a replication step shall be retried if it fails,
+    for example because of network hiccups (default: 0). Also consider
+    this option if a periodic pruning script may simultaneously delete a
+    dataset or snapshot or bookmark while wbackup-zfs is running and
+    attempting to use it.
 
 <!-- -->
 
