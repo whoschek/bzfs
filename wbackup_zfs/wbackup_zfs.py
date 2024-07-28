@@ -128,7 +128,7 @@ Example that makes destination identical to source even if the two have drastica
 
 Example with further options:
 
-`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '!(.*/)?public' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key /root/.ssh/id_rsa`
+`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key /root/.ssh/id_rsa`
 ''', formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
@@ -148,16 +148,42 @@ Example with further options:
               "ancestors."))
     parser.add_argument(
         '--no-stream', action='store_true',
-        help=argparse.SUPPRESS)
+        help=("During replication, only replicate the most recent source snapshot of a dataset, hence skip all "
+              "intermediate source snapshots that may exist between that and the most recent common snapshot. "
+              "If there is no common snapshot also skip all other source snapshots for the dataset, except for "
+              "the most recent source snapshot. This option helps for the destination to 'catch up' with the "
+              "source ASAP, consuming a minimum of disk space, at the expense of reducing reliable options for "
+              "rolling back to intermediate snapshots."))
     parser.add_argument(
         '--no-create-bookmark', action='store_true',
-        help=argparse.SUPPRESS)
+        help=(f"For increased safety, in normal operation {prog_name} creates a ZFS bookmark in the source dataset "
+              "whenever it has successfully completed replication of the most recent snapshot. "
+              "This option disables this safety feature but is discouraged, because bookmarks are tiny and relatively "
+              "cheap and help to ensure that ZFS replication can continue even if source and destination dataset "
+              "somehow have no common snapshot anymore. "
+              "For example, if a pruning policy has accidentally deleted too many (or even all) snapshots on the "
+              "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
+              "the info in the bookmark (which must still exist in the source dataset) instead of the info in the "
+              "metadata of a (now missing) source snapshot. Note that a ZFS bookmark does not contain user data; "
+              "instead a ZFS bookmark is essentially a pointer in the form of a single 64-bit transaction group id "
+              "and GUID that tells the destination ZFS pool how to find the destination snapshot corresponding to "
+              "the source bookmark. Note that while a bookmark allows for its snapshot to be deleted on the source, "
+              "it still requires that its snapshot is not somehow deleted prematurely on the destination, "
+              "so be mindful of that. "
+              "You can list bookmarks like so: `zfs list -t bookmark $SRC_DATASET`, and you can delete "
+              "or prune bookmarks just like snapshots, like so: `zfs destroy $SRC_DATASET#$BOOKMARK`. "
+              f"Note that by convention a bookmark created by {prog_name} has the same name as its corresponding "
+              "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator."))
     parser.add_argument(
         '--no-use-bookmark', action='store_true',
-        help=argparse.SUPPRESS)
+        help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
+              f"snapshots) on the source dataset in order to find the most recent common snapshot "
+              f"wrt. the destination dataset. This option disables this safety feature but is "
+              f"discouraged, because bookmarks help to ensure that ZFS replication can continue even if source "
+              f"and destination dataset somehow have no common snapshot anymore."))
     parser.add_argument(
         '--recursive', '-r', action='store_true',
-        help=("During replication, also include descendant datasets, i.e. datasets within the dataset tree, "
+        help=("During replication, also consider descendant datasets, i.e. datasets within the dataset tree, "
               "including children, and children of children, etc."))
     parser.add_argument(
         '--include-dataset', action=FileOrLiteralAction, nargs='+', default=[], metavar='DATASET',
@@ -1023,7 +1049,7 @@ class Job:
         return src_snapshots_with_guids, has_snapshot, bookmarks_dict
 
     def incremental_replication_steps_wrapper(self, origin_src_snapshots_with_guids: List[str],
-                                              included_guids: Set[str], has_snapshot: Set[str]):
+                                              included_guids: Set[str], has_snapshot: Set[str]) -> List[Tuple[str]]:
         guids = []
         input_snapshots = []
         for line in origin_src_snapshots_with_guids:
@@ -1037,7 +1063,7 @@ class Job:
         return self.incremental_replication_steps(input_snapshots, guids, included_guids, has_snapshot)
 
     def incremental_replication_steps(self, src_snapshots: List[str], guids: List[str],
-                                      included_guids: Set[str], has_snapshot: Set[str]):
+                                      included_guids: Set[str], has_snapshot: Set[str]) -> List[Tuple[str]]:
         """ Computes steps to incrementally replicate the given src snapshots with the given guids such that we include
         intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
@@ -1109,7 +1135,7 @@ class Job:
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
 
-    def snapshot_or_bookmark(self, snapshot: str, bookmarks_dict: Dict[str, str]):
+    def snapshot_or_bookmark(self, snapshot: str, bookmarks_dict: Dict[str, str]) -> str:
         bookmark = bookmarks_dict.get(snapshot)
         return bookmark if bookmark else snapshot
 

@@ -74,7 +74,7 @@ Example that makes destination identical to source even if the two have drastica
 
 Example with further options:
 
-`   wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '!(.*/)?public' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key /root/.ssh/id_rsa`
+`   wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key /root/.ssh/id_rsa`
 
 How To Install, Run and Test
 ==========
@@ -113,7 +113,8 @@ only needed on the coordinator host.
 Usage
 ==========
 ```
-usage: wbackup-zfs [-h] [--recursive]
+usage: wbackup-zfs [-h] [--no-stream] [--no-create-bookmark]
+                   [--no-use-bookmark] [--recursive]
                    [--include-dataset DATASET [DATASET ...]]
                    [--exclude-dataset DATASET [DATASET ...]]
                    [--include-dataset-regex REGEX [REGEX ...]]
@@ -144,7 +145,6 @@ sed -i.bak -e 's/\\\([`#-_|>\[\*]\)/\1/g' -e "s/\\\'/'/g" -e "s/\\\]/\]/g" -e 's
 cat /tmp/manpage.md
 -->
 
-
 **SRC_DATASET**
 
 *  Source ZFS dataset (and its descendants) that will be replicated.
@@ -171,9 +171,64 @@ cat /tmp/manpage.md
 
 
 
+**--no-stream**
+
+*  During replication, only replicate the most recent source snapshot
+    of a dataset, hence skip all intermediate source snapshots that may
+    exist between that and the most recent common snapshot. If there is
+    no common snapshot also skip all other source snapshots for the
+    dataset, except for the most recent source snapshot. This option helps for the destination to 'catch up' with
+    the source ASAP, consuming a minimum of disk space, at the expense
+    of reducing reliable options for rolling back to intermediate
+    snapshots.
+
+<!-- -->
+
+**--no-create-bookmark**
+
+*  For increased safety, in normal operation wbackup-zfs creates a ZFS
+    bookmark in the source dataset whenever it has successfully
+    completed replication of the most recent snapshot. This option
+    disables this safety feature but is discouraged, because bookmarks
+    are tiny and relatively cheap and help to ensure that ZFS
+    replication can continue even if source and destination dataset
+    somehow have no common snapshot anymore. For example, if a pruning
+    policy has accidentally deleted too many (or even all) snapshots on
+    the source dataset in an effort to reclaim disk space, replication
+    can still proceed because it can use the info in the bookmark (which
+    must still exist in the source dataset) instead of the info in the
+    metadata of a (now missing) source snapshot. Note that a ZFS
+    bookmark does not contain user data; instead a ZFS bookmark is
+    essentially a pointer in the form of a single 64-bit transaction
+    group id and GUID that tells the destination ZFS pool how to find
+    the destination snapshot corresponding to the source bookmark. Note
+    that while a bookmark allows for its snapshot to be deleted on the
+    source, it still requires that its snapshot is not somehow deleted
+    prematurely on the destination, so be mindful of that. You can list
+    bookmarks like so: `zfs list -t bookmark $SRC_DATASET`, and you
+    can delete or prune bookmarks just like snapshots, like so: `zfs
+    destroy $SRC_DATASET#$BOOKMARK`. Note that by convention a
+    bookmark created by wbackup-zfs has the same name as its
+    corresponding snapshot, the only difference being the leading '#'
+    separator instead of the leading '@' separator.
+
+<!-- -->
+
+**--no-use-bookmark**
+
+*  For increased safety, in normal operation wbackup-zfs also looks for
+    bookmarks (in addition to snapshots) on the source dataset in order
+    to find the most recent common snapshot wrt. the destination dataset.
+    This option disables this safety feature but is discouraged, because
+    bookmarks help to ensure that ZFS replication can continue even if
+    source and destination dataset somehow have no common snapshot
+    anymore.
+
+<!-- -->
+
 **--recursive**, **-r**
 
-*  During replication, also include descendant datasets, i.e. datasets
+*  During replication, also consider descendant datasets, i.e. datasets
     within the dataset tree, including children, and children of
     children, etc.
 
