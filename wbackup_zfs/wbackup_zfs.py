@@ -1056,7 +1056,10 @@ class Job:
             guid, snapshot = line.split('\t', 1)
             guids.append(guid)
             input_snapshots.append(snapshot)
-        if not self.params.src_sudo and os.geteuid() != 0 and platform.system() == 'Linux':
+
+        if (not self.params.src_sudo and os.geteuid() != 0
+                and self.params.available_programs['src'].get('os', 'Linux') == 'Linux'
+                and not self.params.getenv_bool('no_force_convert_I_to_i', False)):
             # If using 'zfs allow' delegation mechanism on Linux, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs bug https://github.com/openzfs/zfs/issues/16394
             has_snapshot = None
