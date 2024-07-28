@@ -223,9 +223,9 @@ class WBackupTestCase(ParametrizedTestCase):
             args = args + ['--no-use-bookmark']
 
         args = args + ['--bwlimit=10000m']
-        args = args + ['--is-test-mode']
 
         job = wbackup_zfs.Job()
+        job.is_test_mode = True
         if params and error_injection_triggers in params:
             job.error_injection_triggers = params[error_injection_triggers]
 

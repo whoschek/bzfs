@@ -371,7 +371,6 @@ Example with further options:
     parser.add_argument(
         '--help, -h', action='help',
         help='show this help message and exit.')
-    parser.add_argument('--is-test-mode', action='store_true', help=argparse.SUPPRESS)
     return parser
 
 
@@ -417,7 +416,6 @@ class Params:
         self.include_dataset_regexes = None
         self.exclude_snapshot_regexes = None
         self.include_snapshot_regexes = None
-        self.zfs_create_program_opts = self.split_args(self.getenv('zfs_create_program_opts', ''))
         self.zfs_send_program_opts = self.split_args(self.getenv('zfs_send_program_opts', '--props --raw --compressed'))
         self.zfs_recv_program_opts = self.split_args(self.getenv('zfs_recv_program_opts', '-u'))
         self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
@@ -492,7 +490,6 @@ class Params:
         self.max_elapsed_nanos = int(self.max_elapsed_secs * 1000_000_000)
         self.min_sleep_nanos = max(1, self.min_sleep_nanos)
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
-        self.is_test_mode = args.is_test_mode
 
         self.available_programs = {}
         self.zpool_features = {}
@@ -560,6 +557,7 @@ class Job:
         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
         self.recordsizes = None
         self.mbuffer_current_opts = None
+        self.is_test_mode = False
         self.error_injection_triggers = Counter()
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
@@ -1519,7 +1517,7 @@ class Job:
                     return name
 
                 unique = f"{time.time_ns()}@{random.randint(0, 999_999)}"
-                if params.is_test_mode:
+                if self.is_test_mode:
                     unique = 'x$#^&*(x'  # faster for running large numbers of short unit tests, also tests quoting
                 socket_name = f"{os.getpid()}@{unique}@{sanitize(ssh_host)[:45]}@{sanitize(ssh_user)}"
                 socket_file = os.path.join(socket_dir, socket_name)[:max(100, len(socket_dir)+10)]
