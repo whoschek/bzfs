@@ -796,23 +796,28 @@ class Job:
         if src_snapshots_and_bookmarks is None:
             self.warn("Third party deleted source:", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
-
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
+
+        # ignore irrelevant bookmarks: ignore src bookmarks if the destination dataset has no snapshot. Ignore any src
+        # bookmark that is older than the oldest destination snapshot or newer than the newest destination snapshot.
         if oldest_dst_snapshot_creation is not None:
             src_snapshots_and_bookmarks = self.filter_bookmarks(src_snapshots_and_bookmarks,
                                                                 oldest_dst_snapshot_creation,
                                                                 latest_dst_snapshot_creation)
             src_snapshots_and_bookmarks = cut(field=2, lines=src_snapshots_and_bookmarks)
 
+        # ignore more irrelevant bookmarks:
         # ignore src bookmarks for which a src snapshot exists (where snapshot and its bookmarks have the same GUID).
         # ignore src bookmarks for which another bookmark with the same GUID already exists.
         src_snapshots_with_guids, has_snapshot, bookmarks_dict = self.dedupe_snapshot_guids(src_snapshots_and_bookmarks)
 
+        # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
         src_snapshots_and_bookmarks = None
         origin_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)  # apply include/exclude regexes
+        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
 
-        # find oldest and latest true snapshot, as well as GUIDs of all snapshots and bookmarks
+        # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
+        # a snapshot is "true" if it is not a bookmark.
         oldest_src_snapshot = ""
         latest_src_snapshot = ""
         src_snapshots_guids = set()
@@ -861,10 +866,8 @@ class Job:
             common_dst_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, common_snapshot_guids)
             common_dst_snapshot_tags = cut(2, separator='@', lines=common_dst_snapshot_tags)
             if len(common_snapshot_guids) > 0:
-                # debug("common_src_snapshot_tags:", str(common_src_snapshot_tags))
                 latest_common_src_snapshot = f"{src_dataset}@{common_src_snapshot_tags[-1]}"
                 latest_common_dst_snapshot = f"{dst_dataset}@{common_dst_snapshot_tags[-1]}"
-
             self.debug("latest_dst_snapshot:", latest_dst_snapshot)
             self.debug("latest_common_src_snapshot:", self.snapshot_or_bookmark(latest_common_src_snapshot,
                                                                                 bookmarks_dict))
@@ -966,7 +969,7 @@ class Job:
             origin_src_snapshots_with_guids = replication_candidates(origin_src_snapshots_with_guids,
                                                                      latest_common_src_snapshot)
             if len(origin_src_snapshots_with_guids) == 1:
-                # latest_src_snapshot is a (real) snapshot that is equal to latest_common_src_snapshot or LESS recent
+                # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
                 # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
                 # bookmark whose snapshot has been deleted on src.
                 return True  # nothing more tbd
@@ -978,7 +981,7 @@ class Job:
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
                 steps_todo = self.incremental_replication_steps_wrapper(
                     origin_src_snapshots_with_guids, src_snapshots_guids, has_snapshot)
-                self.trace("steps_todo:", ', '.join([self.replication_step_to_str(step) for step in steps_todo]))
+                self.trace("steps_todo:", '; '.join([self.replication_step_to_str(step) for step in steps_todo]))
             for i, (incr_flag, start_snapshot, end_snapshot) in enumerate(steps_todo):
                 start_snapshot = self.snapshot_or_bookmark(start_snapshot, bookmarks_dict)
                 size_estimate_bytes = self.estimate_zfs_send_size(incr_flag, start_snapshot, end_snapshot)
@@ -995,7 +998,6 @@ class Job:
                                           is_dry_send_receive, error_trigger='incremental_zfs_send')
                 if i == len(steps_todo)-1:
                     self.create_zfs_bookmark(end_snapshot, bookmarks_dict, src_dataset)
-
         return True
 
     def dedupe_snapshot_guids(self, src_snapshots_and_bookmarks):
@@ -1283,7 +1285,7 @@ class Job:
         results = []
         for snapshot in snapshots_and_bookmarks:
             if snapshot.find('@') >= 0:
-                results.append(snapshot)  # it's a real snapshot
+                results.append(snapshot)  # it's a true snapshot
                 # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' enforce that snapshot names must not
                 # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
                 # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
@@ -1804,7 +1806,8 @@ def die(*items):
     exit(die_status)
 
 
-def cut(field, separator='\t', lines=None) -> List[str]:
+def cut(field: int = None, separator='\t', lines: List[str] = None) -> List[str]:
+    """Retain only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command"""
     if field == 1:
         return [line[0:line.index(separator)] for line in lines]
     elif field == 2:
@@ -1855,15 +1858,15 @@ def isorted(iterable, reverse=False) -> List:
     return sorted(iterable, key=str.casefold, reverse=reverse)
 
 
-def xappend(_list, *items) -> List[str]:
+def xappend(lst, *items) -> List[str]:
     """Append each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
        If an item is an iterable do so recursively, flattening the output."""
     for item in items:
         if isinstance(item, collections.abc.Iterable) and not isinstance(item, str):
-            xappend(_list, *item)
+            xappend(lst, *item)
         elif item:
-            _list.append(item)
-    return _list
+            lst.append(item)
+    return lst
 
 
 def current_time() -> str:
