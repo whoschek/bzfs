@@ -423,7 +423,7 @@ cat /tmp/manpage.md
     --no-privilege-elevation flag is for non-root users that have been
     granted corresponding ZFS permissions by administrators via 'zfs
     allow' delegation mechanism, like so: sudo zfs allow -u
-    $NON_ROOT_USER_NAME send,hold,bookmark $SRC_DATASET; sudo zfs
+    $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; sudo zfs
     allow -u $NON_ROOT_USER_NAME
     mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
     $DST_DATASET_OR_POOL; If you do not plan to use the --force flag

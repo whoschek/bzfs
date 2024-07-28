@@ -304,7 +304,7 @@ Example with further options:
               "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`). "
               "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
               "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
-              "sudo zfs allow -u $NON_ROOT_USER_NAME send,hold,bookmark $SRC_DATASET; "
+              "sudo zfs allow -u $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
               "sudo zfs allow -u $NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
               "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL; "
               "If you do not plan to use the --force flag or --delete-missing-snapshots or --delete-missing-dataset "
@@ -1029,6 +1029,10 @@ class Job:
             guid, snapshot = line.split('\t', 1)
             guids.append(guid)
             input_snapshots.append(snapshot)
+        if not self.params.src_sudo and os.geteuid() != 0 and platform.system() == 'Linux':
+            # If using 'zfs allow' delegation mechanism on Linux, force convert 'zfs send -I' to a series of
+            # 'zfs send -i' as a workaround for zfs bug https://github.com/openzfs/zfs/issues/16394
+            has_snapshot = None
         return self.incremental_replication_steps(input_snapshots, guids, included_guids, has_snapshot)
 
     def incremental_replication_steps(self, src_snapshots: List[str], guids: List[str],
@@ -1044,10 +1048,10 @@ class Job:
         The has_snapshot param is necessary because 'zfs send' CLI with a bookmark as starting snapshot does not
         (yet) support including intermediate src_snapshots via -I flag. Thus, if the replication source is a bookmark
         we convert a -I step to one or more -i steps.
+        has_snapshot is None case is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
         """
         assert len(guids) == len(src_snapshots)
         assert len(included_guids) >= 0
-        assert len(has_snapshot) >= 0
         steps = []
         n = len(guids)
         i = 0
@@ -1080,7 +1084,7 @@ class Job:
                     if start != i:
                         step = ('-I', src_snapshots[start], src_snapshots[i])
                         # print(f"r2 {self.replication_step_to_str(step)}")
-                        if guids[start] in has_snapshot:
+                        if has_snapshot is not None and guids[start] in has_snapshot:
                             steps.append(step)
                         else:  # convert to -i steps
                             for j in range(start, i):
@@ -1092,7 +1096,7 @@ class Job:
                 if start != i:
                     step = ('-I', src_snapshots[start], src_snapshots[i])
                     # print(f"r3 {self.replication_step_to_str(step)}")
-                    if guids[start] in has_snapshot:
+                    if has_snapshot is not None and guids[start] in has_snapshot:
                         steps.append(step)
                     else:   # convert to -i steps
                         for j in range(start, i):

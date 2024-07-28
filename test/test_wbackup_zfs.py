@@ -193,7 +193,7 @@ class WBackupTestCase(ParametrizedTestCase):
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
             args = args + ['--no-privilege-elevation']
-            src_permissions = 'send,hold'
+            src_permissions = 'send'
             if not is_solaris_zfs():
                 src_permissions += ',bookmark'
             optional_dst_permissions = ',canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
@@ -1320,9 +1320,9 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
     def validate_incremental_replication_steps(self, input_snapshots, expected_results):
         # src_dataset = "s@"
         src_dataset = ""
-        for is_bookmark_start in [False, True]:
+        for force_convert_I_to_i in [False, True]:
             steps = self.incremental_replication_steps1(
-                input_snapshots, src_dataset, is_bookmark_start=is_bookmark_start)
+                input_snapshots, src_dataset, force_convert_I_to_i=force_convert_I_to_i)
             # print(f"input_snapshots:" + ','.join(input_snapshots))
             # print("steps: " + ','.join([self.replication_step_to_str(step) for step in steps]))
             output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
@@ -1346,13 +1346,13 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
                 output_snapshots.append(input_snapshots[end])
         return output_snapshots
 
-    def incremental_replication_steps1(self, input_snapshots, src_dataset, is_bookmark_start=False):
+    def incremental_replication_steps1(self, input_snapshots, src_dataset, force_convert_I_to_i=False):
         origin_src_snapshots_with_guids = []
-        has_snapshot = set()
+        has_snapshot = None if force_convert_I_to_i else set()
         guid = 1
         for i, snapshot in enumerate(input_snapshots):
             origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
-            if i > 0 or not is_bookmark_start:
+            if has_snapshot is not None:
                 has_snapshot.add(guid)
             guid += 1
         return self.incremental_replication_steps2(origin_src_snapshots_with_guids, has_snapshot)
