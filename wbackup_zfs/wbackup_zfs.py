@@ -311,7 +311,8 @@ Example with further options:
               "then ZFS permissions 'rollback,destroy' can be omitted. "
               "If you do not plan to customize the respective ZFS dataset property then "
               "ZFS permissions 'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be "
-              "omitted. Also see https://tinyurl.com/yuyj23pz and https://tinyurl.com/9h97kh8n and "
+              "omitted, arriving at the absolutely minimal set of required destination permissions: "
+              "`mount,create,receive`. Also see https://tinyurl.com/yuyj23pz and https://tinyurl.com/9h97kh8n and "
               "https://github.com/openzfs/zfs/issues/13024"))
     parser.add_argument(
         '--dry-run', '-n', action='store_true',

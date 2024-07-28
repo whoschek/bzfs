@@ -423,8 +423,8 @@ cat /tmp/manpage.md
     --no-privilege-elevation flag is for non-root users that have been
     granted corresponding ZFS permissions by administrators via 'zfs
     allow' delegation mechanism, like so: sudo zfs allow -u
-    $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; sudo zfs
-    allow -u $NON_ROOT_USER_NAME
+    $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; sudo zfs allow -u
+    $NON_ROOT_USER_NAME
     mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
     $DST_DATASET_OR_POOL; If you do not plan to use the --force flag
     or --delete-missing-snapshots or --delete-missing-dataset then ZFS
@@ -432,8 +432,9 @@ cat /tmp/manpage.md
     to customize the respective ZFS dataset property then ZFS
     permissions
     'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
-    can be omitted. Also see https://tinyurl.com/yuyj23pz and
-    https://tinyurl.com/9h97kh8n and
+    can be omitted, arriving at the absolutely minimal set of required
+    destination permissions: `mount,create,receive`. Also see
+    https://tinyurl.com/yuyj23pz and https://tinyurl.com/9h97kh8n and
     https://github.com/openzfs/zfs/issues/13024
 
 <!-- -->
