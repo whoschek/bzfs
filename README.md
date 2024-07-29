@@ -1,83 +1,111 @@
 [![Build](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml)
 wbackup-zfs
 ==========
-*wbackup-zfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
-source ZFS dataset (aka ZFS filesystem) and its descendant datasets to a (local or remote) destination ZFS dataset
-to make the destination dataset a recursively synchronized copy of the source dataset, using
-zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, wbackup-zfs can be used to incrementally
-replicate all ZFS snapshots since the most recent common snapshot from source to destination, in order to help
-protect against data loss or ransomware.*
+*wbackup-zfs is a backup command line tool that reliably replicates ZFS
+snapshots from a (local or remote) source ZFS dataset (aka ZFS
+filesystem) and its descendant datasets to a (local or remote)
+destination ZFS dataset to make the destination dataset a recursively
+synchronized copy of the source dataset, using zfs
+send/receive/rollback/destroy and ssh tunnel as directed. For example,
+wbackup-zfs can be used to incrementally replicate all ZFS snapshots
+since the most recent common snapshot from source to destination, in
+order to help protect against data loss or ransomware.*
 
-When run for the first time, wbackup-zfs replicates the dataset and all its snapshots from the source to the
-destination. On subsequent runs, wbackup-zfs transfers only the data that has changed since the previous run,
-i.e. it incrementally replicates to the destination all intermediate snapshots that have been created on
-the source since the last run. Source ZFS snapshots older than the most recent common snapshot found on the
-destination are auto-skipped.
+When run for the first time, wbackup-zfs replicates the dataset and all
+its snapshots from the source to the destination. On subsequent runs,
+wbackup-zfs transfers only the data that has changed since the previous
+run, i.e. it incrementally replicates to the destination all
+intermediate snapshots that have been created on the source since the
+last run. Source ZFS snapshots older than the most recent common
+snapshot found on the destination are auto-skipped.
 
-wbackup-zfs does not create or delete ZFS snapshots on the source - it assumes you have a ZFS snapshot
-management tool to do so, for example policy-driven Sanoid, pyznap, zrepl, zfs-auto-snapshot, manual zfs
-snapshot/destroy, etc. wbackup-zfs treats the source as read-only, thus the source remains unmodified.
-With the --dry-run flag, wbackup-zfs also treats the destination as read-only.
-In normal operation, wbackup-zfs treats the destination as append-only. Optional CLI flags are available to
-delete destination snapshots and destination datasets as directed, for example to make the destination
-identical to the source if the two have somehow diverged in unforeseen ways. This easily enables
-(re)synchronizing the backup from the production state, as well as restoring the production state from
-backup.
+wbackup-zfs does not create or delete ZFS snapshots on the source - it
+assumes you have a ZFS snapshot management tool to do so, for example
+policy-driven Sanoid, pyznap, zrepl, zfs-auto-snapshot, manual zfs
+snapshot/destroy, etc. wbackup-zfs treats the source as read-only, thus
+the source remains unmodified. With the --dry-run flag, wbackup-zfs
+also treats the destination as read-only. In normal operation,
+wbackup-zfs treats the destination as append-only. Optional CLI flags
+are available to delete destination snapshots and destination datasets
+as directed, for example to make the destination identical to the source
+if the two have somehow diverged in unforeseen ways. This easily enables
+(re)synchronizing the backup from the production state, as well as
+restoring the production state from backup.
 
-The source 'pushes to' the destination whereas the destination 'pulls from' the source. wbackup-zfs is installed
-and executed on the 'coordinator' host which can be either the host that contains the source dataset (push mode),
-or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required),
-or any third-party (even non-ZFS) host as long as that host is able to SSH (via standard 'ssh' CLI) into
-both the source and destination host (pull-push mode). In Pull-push mode the source 'zfs send's the data stream
-to the coordinator which immediately pipes the stream (without storing anything locally) to the destination
-host that 'zfs receive's it. Pull-push mode means that wbackup-zfs need not be installed
-or executed on either source or destination host. Only the underlying 'zfs' CLI must be installed on both source
-and destination host. wbackup-zfs can run as root or non-root user, in the latter case via a) sudo or b) when
-granted corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism.
+The source 'pushes to' the destination whereas the destination 'pulls
+from' the source. wbackup-zfs is installed and executed on the
+'coordinator' host which can be either the host that contains the
+source dataset (push mode), or the destination dataset (pull mode), or
+both datasets (local mode, no network required, no ssh required), or any
+third-party (even non-ZFS) host as long as that host is able to SSH (via
+standard 'ssh' CLI) into both the source and destination host
+(pull-push mode). In Pull-push mode the source 'zfs send's the data
+stream to the coordinator which immediately pipes the stream (without
+storing anything locally) to the destination host that 'zfs receive's
+it. Pull-push mode means that wbackup-zfs need not be installed or
+executed on either source or destination host. Only the underlying
+'zfs' CLI must be installed on both source and destination host.
+wbackup-zfs can run as root or non-root user, in the latter case via a)
+sudo or b) when granted corresponding ZFS permissions by administrators
+via 'zfs allow' delegation mechanism.
 
-wbackup-zfs is written in Python and continously runs a wide set of unit tests and integration tests to ensure
-coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
-versions >= 3.7 (including latest stable which is currently python-3.12). No additional python packages are required.
+wbackup-zfs is written in Python and continously runs a wide set of unit
+tests and integration tests to ensure coverage and compatibility with
+old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
+versions >= 3.7 (including latest stable which is currently
+python-3.12). No additional python packages are required.
 
-Optionally, wbackup-zfs applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
-send/receive' data transfers. When run across the network, wbackup-zfs also transparently inserts lightweight
-data compression (via 'zstd -1' CLI) and efficient data buffering (via 'mbuffer' CLI) into the pipeline
-between network endpoints during 'zfs send/receive' network transfers. If one of these utilities is not
-installed this is auto-detected, and the operation continues reliably without the corresponding auxiliary
-feature.
+Optionally, wbackup-zfs applies bandwidth rate-limiting and progress
+monitoring (via 'pv' CLI) during 'zfs send/receive' data transfers.
+When run across the network, wbackup-zfs also transparently inserts
+lightweight data compression (via 'zstd -1' CLI) and efficient data
+buffering (via 'mbuffer' CLI) into the pipeline between network
+endpoints during 'zfs send/receive' network transfers. If one of these
+utilities is not installed this is auto-detected, and the operation
+continues reliably without the corresponding auxiliary feature.
 
-Example Usage
-==========
-Example in local mode (no network, no ssh) to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
+# Example Usage
 
-`   wbackup-zfs tank1/foo/bar tank2/boo/bar`
+Example in local mode (no network, no ssh) to replicate ZFS dataset
+tank1/foo/bar to tank2/boo/bar:
+
+` wbackup-zfs tank1/foo/bar tank2/boo/bar`
 
 Same example in pull mode:
 
-`   wbackup-zfs root@host1.example.com:tank1/foo/bar tank2/boo/bar`
+` wbackup-zfs root@host1.example.com:tank1/foo/bar tank2/boo/bar`
 
 Same example in push mode:
 
-`   wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar`
+` wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar`
 
 Same example in pull-push mode:
 
-`   wbackup-zfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
+` wbackup-zfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
 
-Example in local mode (no network, no ssh) to recursively replicate ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
+Example in local mode (no network, no ssh) to recursively replicate ZFS
+dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
 
-`   wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive`
+` wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive`
 
-Example that makes destination identical to source even if the two have drastically diverged:
+Example that makes destination identical to source even if the two have
+drastically diverged:
 
-`   wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive --force --delete-missing-snapshots --delete-missing-datasets`
+` wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive --force
+--delete-missing-snapshots --delete-missing-datasets`
 
 Example with further options:
 
-`   wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key /root/.ssh/id_rsa`
+` wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar
+--recursive --exclude-snapshot-regex '.*_(hourly|frequent)'
+--exclude-snapshot-regex 'test_.*' --exclude-dataset
+/tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash
+--exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex
+'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key
+/root/.ssh/id_rsa`
 
-How To Install, Run and Test
-==========
+# How To Install, Run and Test
+
 Here is how to install and run the program as well as Unit tests:
 ```
     # Ubuntu / Debian:
@@ -99,8 +127,8 @@ Here is how to install and run the program as well as Unit tests:
 ```
 
 
-Automated Test Runs
-==========
+# Automated Test Runs
+
 Results of automated test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
 [here](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml), as generated by
 [this script](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml).
@@ -110,8 +138,9 @@ The gist is that it should work on any flavor, with python (3.7 or higher, no ad
 only needed on the coordinator host.
 
 
-Usage
-==========
+# Usage
+
+<!-- Docs: The blurb below is copied from the output of wbackup_zfs/wbackup_zfs.py --help -->
 ```
 usage: wbackup-zfs [-h] [--recursive]
                    [--include-dataset DATASET [DATASET ...]]
@@ -138,12 +167,8 @@ usage: wbackup-zfs [-h] [--recursive]
 ```
 
 <!--
-Docs: Generate pretty GitHub Markdown for ArgumentParser options for pasting into README.md below, like so:
-brew install pandoc; pip install argparse-manpage
-argparse-manpage --pyfile wbackup_zfs/wbackup_zfs.py --function argument_parser > /tmp/manpage.1
-pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
-sed -i.bak -e 's/\\\([`#-_|>\[\*]\)/\1/g' -e "s/\\\'/'/g" -e "s/\\\]/\]/g" -e 's/# OPTIONS//g' -e 's/:   /*  /g' /tmp/manpage.md
-cat /tmp/manpage.md
+Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-update README.md below, like so:
+./test/update-readme.py wbackup_zfs/wbackup_zfs.py README.md
 -->
 
 **SRC_DATASET**
@@ -390,7 +415,7 @@ cat /tmp/manpage.md
 **--no-create-bookmark**
 
 *  For increased safety, in normal operation wbackup-zfs behaves as
-    follows wrt. bookmark creation, if it is auto-detected that the
+    follows wrt. bookmark creation, if it is autodetected that the
     source ZFS pool support bookmarks: Whenever it has successfully
     completed replication of the most recent source snapshot,
     wbackup-zfs creates a ZFS bookmark of that snapshot and attaches it
@@ -421,10 +446,10 @@ cat /tmp/manpage.md
     destination ZFS pool how to find the destination snapshot
     corresponding to the source bookmark and (potentially already
     deleted) source snapshot. A bookmark can be fed into 'zfs send' as
-    the source of an incremental 'zfs send'. Note that
-    while a bookmark allows for its snapshot to be deleted on the source
-    after successful replication, it still requires that its snapshot is
-    not somehow deleted prematurely on the destination dataset, so be
+    the source of an incremental 'zfs send'. Note that while a
+    bookmark allows for its snapshot to be deleted on the source after
+    successful replication, it still requires that its snapshot is not
+    somehow deleted prematurely on the destination dataset, so be
     mindful of that. By convention, a bookmark created by wbackup-zfs
     has the same name as its corresponding snapshot, the only difference
     being the leading '#' separator instead of the leading '@'
@@ -452,7 +477,7 @@ cat /tmp/manpage.md
 *  For increased safety, in normal operation wbackup-zfs also looks for
     bookmarks (in addition to snapshots) on the source dataset in order
     to find the most recent common snapshot wrt. the destination
-    dataset, if it is autodetected that the source ZFS pool support
+    dataset, if it is auto-detected that the source ZFS pool support
     bookmarks.The --no-use-bookmark option disables this safety feature
     but is discouraged, because bookmarks help to ensure that ZFS
     replication can continue even if source and destination dataset

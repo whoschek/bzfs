@@ -102,8 +102,8 @@ installed this is auto-detected, and the operation continues reliably without th
 feature.
 
 
-Example Usage
-==========
+# Example Usage
+
 Example in local mode (no network, no ssh) to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar`
