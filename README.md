@@ -66,35 +66,35 @@ continues reliably without the corresponding auxiliary feature.
 
 # Example Usage
 
-Example in local mode (no network, no ssh) to replicate ZFS dataset
+* Example in local mode (no network, no ssh) to replicate ZFS dataset
 tank1/foo/bar to tank2/boo/bar:
 
 ` wbackup-zfs tank1/foo/bar tank2/boo/bar`
 
-Same example in pull mode:
+* Same example in pull mode:
 
 ` wbackup-zfs root@host1.example.com:tank1/foo/bar tank2/boo/bar`
 
-Same example in push mode:
+* Same example in push mode:
 
 ` wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar`
 
-Same example in pull-push mode:
+* Same example in pull-push mode:
 
 ` wbackup-zfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
 
-Example in local mode (no network, no ssh) to recursively replicate ZFS
-dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
+* Example in local mode (no network, no ssh) to recursively replicate
+ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
 
 ` wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive`
 
-Example that makes destination identical to source even if the two have
-drastically diverged:
+* Example that makes destination identical to source even if the two
+have drastically diverged:
 
 ` wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive --force
 --delete-missing-snapshots --delete-missing-datasets`
 
-Example with further options:
+* Example with further options:
 
 ` wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar
 --recursive --exclude-snapshot-regex '.*_(hourly|frequent)'
@@ -441,20 +441,20 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
     bookmark' CLI, and attached to a dataset, much like a ZFS snapshot.
     Note that a ZFS bookmark does not contain user data; instead a ZFS
     bookmark is essentially a tiny pointer in the form of the GUID of
-    the snapshot and 64-bit transaction group id of the snapshot and
+    the snapshot and 64-bit transaction group number of the snapshot and
     creation time of the snapshot, which is sufficient to tell the
     destination ZFS pool how to find the destination snapshot
     corresponding to the source bookmark and (potentially already
     deleted) source snapshot. A bookmark can be fed into 'zfs send' as
-    the source of an incremental 'zfs send'. Note that while a
-    bookmark allows for its snapshot to be deleted on the source after
-    successful replication, it still requires that its snapshot is not
-    somehow deleted prematurely on the destination dataset, so be
-    mindful of that. By convention, a bookmark created by wbackup-zfs
-    has the same name as its corresponding snapshot, the only difference
-    being the leading '#' separator instead of the leading '@'
-    separator. wbackup-zfs itself never deletes any bookmark. You can
-    list bookmarks, like so: `zfs list -t bookmark -o
+    the source of an incremental send. Note that while a bookmark allows
+    for its snapshot to be deleted on the source after successful
+    replication, it still requires that its snapshot is not somehow
+    deleted prematurely on the destination dataset, so be mindful of
+    that. By convention, a bookmark created by wbackup-zfs has the same
+    name as its corresponding snapshot, the only difference being the
+    leading '#' separator instead of the leading '@' separator.
+    wbackup-zfs itself never deletes any bookmark. You can list
+    bookmarks, like so: `zfs list -t bookmark -o
     name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and
     should) periodically prune obsolete bookmarks just like snapshots,
     like so: `zfs destroy $SRC_DATASET#$BOOKMARK`. Typically,
@@ -486,9 +486,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
     party script, or whatever the name of a bookmark is, as only the
     GUID of the bookmark and the GUID of the snapshot is considered for
     comparison, and ZFS guarantees that any bookmark of a given snapshot
-    automatically has the same GUID, transaction group id and creation
-    time as the snapshot. Also note that you can create, name, delete
-    and prune bookmarks any way you like, as wbackup-zfs (without
+    automatically has the same GUID, transaction group number and
+    creation time as the snapshot. Also note that you can create, name,
+    delete and prune bookmarks any way you like, as wbackup-zfs (without
     --no-use-bookmark) will happily work with whatever bookmarks
     currently exist, if any.
 

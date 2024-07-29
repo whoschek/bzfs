@@ -104,31 +104,31 @@ feature.
 
 # Example Usage
 
-Example in local mode (no network, no ssh) to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
+* Example in local mode (no network, no ssh) to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar`
 
-Same example in pull mode:
+* Same example in pull mode:
 
 `   {prog_name} root@host1.example.com:tank1/foo/bar tank2/boo/bar`
 
-Same example in push mode:
+* Same example in push mode:
 
 `   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar`
 
-Same example in pull-push mode:
+* Same example in pull-push mode:
 
 `   {prog_name} root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
 
-Example in local mode (no network, no ssh) to recursively replicate ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
+* Example in local mode (no network, no ssh) to recursively replicate ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive`
 
-Example that makes destination identical to source even if the two have drastically diverged:
+* Example that makes destination identical to source even if the two have drastically diverged:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-missing-snapshots --delete-missing-datasets`
 
-Example with further options:
+* Example with further options:
 
 `   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key /root/.ssh/id_rsa`
 ''', formatter_class=argparse.RawTextHelpFormatter)
@@ -306,10 +306,10 @@ Example with further options:
               "from a ZFS snapshot by the 'zfs bookmark' CLI, and attached to a dataset, much like a ZFS snapshot. "
               "Note that a ZFS bookmark does not contain user data; "
               "instead a ZFS bookmark is essentially a tiny pointer in the form of the GUID of the snapshot and 64-bit "
-              "transaction group id of the snapshot and creation time of the snapshot, which is sufficient to tell "
+              "transaction group number of the snapshot and creation time of the snapshot, which is sufficient to tell "
               "the destination ZFS pool how to find the destination snapshot corresponding to the source bookmark "
               "and (potentially already deleted) source snapshot. A bookmark can be fed into 'zfs send' as the "
-              "source of an incremental 'zfs send'. Note that while a bookmark allows for its snapshot "
+              "source of an incremental send. Note that while a bookmark allows for its snapshot "
               "to be deleted on the source after successful replication, it still requires that its snapshot is not "
               "somehow deleted prematurely on the destination dataset, so be mindful of that. "
               f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
@@ -339,7 +339,7 @@ Example with further options:
               f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
               "or whatever the name of a bookmark is, as only the GUID of the bookmark and the GUID of the snapshot "
               "is considered for comparison, and ZFS guarantees that any bookmark of a given snapshot automatically "
-              "has the same GUID, transaction group id and creation time as the snapshot. Also note that you can "
+              "has the same GUID, transaction group number and creation time as the snapshot. Also note that you can "
               f"create, name, delete and prune bookmarks any way you like, as {prog_name} (without --no-use-bookmark) "
               "will happily work with whatever bookmarks currently exist, if any."))
     parser.add_argument(
