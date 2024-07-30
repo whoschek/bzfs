@@ -1495,7 +1495,13 @@ class Job:
                 bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
                 if params.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src'):
                     cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
-                    self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=False, cmd=cmd)
+                    try:
+                        self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE, cmd=cmd)
+                    except subprocess.CalledProcessError as e:
+                        # ignore harmless zfs error caused by bookmark with that name already existing
+                        if ': bookmark exists' not in e.stderr:
+                            print(e.stderr, sys.stderr, end='')
+                            raise e
 
     def warn(self, *items):
         self.log("[W]", *items)
