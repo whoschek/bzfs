@@ -142,7 +142,7 @@ def snapshot_property(snapshot, prop):
 
 
 def zfs_list(names=[], props=['name'], types=[], max_depth=None,
-             parsable=True, sort_ascending_props=[], sort_descending_props=[]):
+             parsable=True, sort_props=[]):
     cmd = ['zfs', 'list']
     if max_depth is None:
         cmd.append('-r')
@@ -158,13 +158,8 @@ def zfs_list(names=[], props=['name'], types=[], max_depth=None,
         cmd.append('-o')
         cmd.append(','.join(props))
 
-    if sort_ascending_props:
-        cmd.append('-s')
-        cmd.append(','.join(sort_ascending_props))
-
-    if sort_descending_props:
-        cmd.append('-S')
-        cmd.append(','.join(sort_descending_props))
+    if sort_props:
+        cmd += sort_props
 
     if types:
         cmd.append('-t')
