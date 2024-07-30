@@ -970,8 +970,9 @@ class Job:
             # no common snapshot was found. delete all dst snapshots, if any
             if latest_dst_snapshot:
                 if not params.force:
-                    die(f"Conflict: No common snapshot found between {src_dataset} and {dst_dataset}. "
-                        f"Consider using --force option.")
+                    die(f"Conflict: No common snapshot found between {src_dataset} and {dst_dataset} even though "
+                        "destination has at least one snapshot. Aborting. Consider using --force option to first "
+                        "delete all existing destination snapshots in order to be able to proceed with replication.")
                 if params.force_once:
                     params.force = False
                 if self.is_solaris_zfs('dst'):
