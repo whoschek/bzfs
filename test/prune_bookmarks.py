@@ -40,7 +40,7 @@ def main():
 
     args = parser.parse_args()
     kind = 'snapshot' if args.snapshot else 'bookmark'
-    cmd = ['zfs', 'list', '-t', kind, '-Hp', '-o', 'creation,name', '-s', 'name']
+    cmd = ['zfs', 'list', '-t', kind, '-Hp', '-o', 'creation,name']
     if args.recursive:
         cmd.append('-r')
     cmd.append(args.dataset)
