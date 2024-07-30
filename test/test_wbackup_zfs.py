@@ -427,6 +427,110 @@ class LocalTestCase(WBackupTestCase):
                 else:
                     params.pop(error_injection_triggers, None)
 
+    def test_basic_replication_flat_with_bookmarks1(self):
+        if not is_zpool_bookmarks_feature_enabled_or_active('src'):
+            self.skipTest("ZFS has no bookmark feature")
+        take_snapshot(src_root_dataset, fix('d1'))
+        for i in range(0, 2):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
+            if i == 0:
+                self.assertSnapshotNames(src_root_dataset, ['d1'])
+                self.assertBookmarkNames(src_root_dataset, [])
+            else:
+                self.assertSnapshotNames(dst_root_dataset, ['d1'])
+                self.assertBookmarkNames(src_root_dataset, ['d1'])
+
+        # delete snapshot, which will cause no problem as we still have its bookmark
+        destroy(snapshots(src_root_dataset)[0])
+        self.assertSnapshotNames(src_root_dataset, [])
+        for i in range(0, 2):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-missing-snapshots=error', dry_run=(i == 0))
+            self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
+            self.assertBookmarkNames(src_root_dataset, ['d1'])  # nothing has changed
+
+        # take another snapshot and replicate it without problems as we still have the bookmark
+        take_snapshot(src_root_dataset, fix('d2'))
+        for i in range(0, 2):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-missing-snapshots=error', dry_run=(i == 0))
+            if i == 0:
+                self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
+                self.assertBookmarkNames(src_root_dataset, ['d1'])  # nothing has changed
+            else:
+                self.assertSnapshotNames(dst_root_dataset, ['d1', 'd2'])
+                self.assertBookmarkNames(src_root_dataset, ['d1', 'd2'])
+
+    def test_basic_replication_flat_with_bookmarks2(self):
+        if not is_zpool_bookmarks_feature_enabled_or_active('src'):
+            self.skipTest("ZFS has no bookmark feature")
+        take_snapshot(src_root_dataset, fix('d1'))
+        for i in range(0, 2):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
+            if i == 0:
+                self.assertSnapshotNames(src_root_dataset, ['d1'])
+                self.assertBookmarkNames(src_root_dataset, [])
+            else:
+                self.assertSnapshotNames(dst_root_dataset, ['d1'])
+                self.assertBookmarkNames(src_root_dataset, ['d1'])
+
+        # rename snapshot, which will cause no problem as we still have its bookmark
+        cmd = sudo_cmd + ['zfs', 'rename', snapshots(src_root_dataset)[0], snapshots(src_root_dataset)[0]+'h']
+        run_cmd(cmd)
+
+        for i in range(0, 2):
+            # replicate while excluding the rename snapshot
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=error', dry_run=(i == 0))
+            self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
+            self.assertBookmarkNames(src_root_dataset, ['d1'])  # nothing has changed
+
+        # take another snapshot and replicate it without problems as we still have the bookmark
+        take_snapshot(src_root_dataset, fix('d2'))
+        for i in range(0, 2):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=error', dry_run=(i == 0))
+            if i == 0:
+                self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
+                self.assertBookmarkNames(src_root_dataset, ['d1'])  # nothing has changed
+            else:
+                self.assertSnapshotNames(dst_root_dataset, ['d1', 'd2'])
+                self.assertBookmarkNames(src_root_dataset, ['d1', 'd2'])
+
+    def test_basic_replication_flat_with_bookmarks3(self):
+        if not is_zpool_bookmarks_feature_enabled_or_active('src'):
+            self.skipTest("ZFS has no bookmark feature")
+        take_snapshot(src_root_dataset, fix('d1'))
+        for i in range(0, 2):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--no-create-bookmark', dry_run=(i == 0))
+            if i == 0:
+                self.assertSnapshotNames(src_root_dataset, ['d1'])
+                self.assertBookmarkNames(src_root_dataset, [])
+            else:
+                self.assertSnapshotNames(dst_root_dataset, ['d1'])
+                self.assertBookmarkNames(src_root_dataset, [])
+        snapshot_tag = snapshots(src_root_dataset)[0].split('@', 1)[1]
+        create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag+'h')
+        create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag)
+        self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h'])
+
+        # delete snapshot, which will cause no problem as we still have its bookmark
+        destroy(snapshots(src_root_dataset)[0])
+        self.assertSnapshotNames(src_root_dataset, [])
+
+        for i in range(1, 2):
+            # replicate while excluding hourly snapshots
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=error', dry_run=(i == 0))
+            self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
+            self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h'])  # nothing has changed
+
+        # take another snapshot and replicate it without problems as we still have the bookmark
+        take_snapshot(src_root_dataset, fix('d2'))
+        for i in range(0, 2):
+            self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=error', dry_run=(i == 0))
+            if i == 0:
+                self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
+                self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h'])  # nothing has changed
+            else:
+                self.assertSnapshotNames(dst_root_dataset, ['d1', 'd2'])
+                self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h', 'd2'])
+
     def test_complex_replication_flat_with_no_create_bookmark(self):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
         self.setup_basic()
@@ -1322,7 +1426,7 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
         src_dataset = ""
         for force_convert_I_to_i in [False, True]:
             steps = self.incremental_replication_steps1(
-                input_snapshots, src_dataset, force_convert_I_to_i=force_convert_I_to_i)
+                input_snapshots, src_dataset=src_dataset, force_convert_I_to_i=force_convert_I_to_i)
             # print(f"input_snapshots:" + ','.join(input_snapshots))
             # print("steps: " + ','.join([self.replication_step_to_str(step) for step in steps]))
             output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
@@ -1346,18 +1450,16 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
                 output_snapshots.append(input_snapshots[end])
         return output_snapshots
 
-    def incremental_replication_steps1(self, input_snapshots, src_dataset, force_convert_I_to_i=False):
+    def incremental_replication_steps1(self, input_snapshots, src_dataset=None, force_convert_I_to_i=False):
         origin_src_snapshots_with_guids = []
-        has_snapshot = None if force_convert_I_to_i else set()
         guid = 1
         for i, snapshot in enumerate(input_snapshots):
             origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
-            if has_snapshot is not None:
-                has_snapshot.add(guid)
             guid += 1
-        return self.incremental_replication_steps2(origin_src_snapshots_with_guids, has_snapshot)
+        return self.incremental_replication_steps2(origin_src_snapshots_with_guids,
+                                                   force_convert_I_to_i=force_convert_I_to_i)
 
-    def incremental_replication_steps2(self, origin_src_snapshots_with_guids, has_snapshot):
+    def incremental_replication_steps2(self, origin_src_snapshots_with_guids, force_convert_I_to_i=False):
         guids = []
         input_snapshots = []
         permutation = []
@@ -1371,7 +1473,8 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
             permutation.append(snapshot[0:1])
             if snapshot[0:1] == 'd':
                 included_guids.add(guid)
-        return wbackup_zfs.Job().incremental_replication_steps(input_snapshots, guids, included_guids, has_snapshot)
+        return wbackup_zfs.Job().incremental_replication_steps(input_snapshots, guids, included_guids=included_guids,
+                                                               force_convert_I_to_i=force_convert_I_to_i)
 
 
 #############################################################################

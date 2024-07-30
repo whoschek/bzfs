@@ -852,18 +852,21 @@ class Job:
         dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
-        # precise than creation time), secondarily sort such that snapshots appear before bookmarks for the same GUID.
+        # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
         # Note: A snapshot and its ZFS bookmarks always have the same GUID, creation time and transaction group.
         # A snapshot changes its transaction group but retains its creation time and GUID on 'zfs receive' on another
         # pool, i.e. comparing createtxg is only meaningful within a single pool, not across pools from src to dst.
         # Comparing creation time remains meaningful across pools from src to dst. Creation time is a UTC Unix time
         # in integer seconds.
+        # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' enforce that snapshot names must not
+        # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
+        # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
         props = "creation,guid,name"
         types = "snapshot,bookmark"
         if oldest_dst_snapshot_creation is None:
             props = "guid,name"
             types = "snapshot"
-        cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -S type -d 1 -Hp -o {props}", src_dataset)
+        cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         src_snapshots_and_bookmarks = self.try_ssh_command('src', self.trace, cmd=cmd)
         if src_snapshots_and_bookmarks is None:
             self.warn("Third party deleted source:", src_dataset)
@@ -878,13 +881,10 @@ class Job:
                                                                 latest_dst_snapshot_creation)
             src_snapshots_and_bookmarks = cut(field=2, lines=src_snapshots_and_bookmarks)
 
-        # ignore more irrelevant bookmarks:
-        # ignore src bookmarks for which a src snapshot exists (where snapshot and its bookmarks have the same GUID).
-        # ignore src bookmarks for which another bookmark with the same GUID already exists.
-        src_snapshots_with_guids, has_snapshot, bookmarks_dict = self.dedupe_snapshot_guids(src_snapshots_and_bookmarks)
+        src_snapshots_with_guids = src_snapshots_and_bookmarks
+        src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
-        src_snapshots_and_bookmarks = None
         origin_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
 
@@ -896,7 +896,7 @@ class Job:
         for line in src_snapshots_with_guids:
             guid, snapshot = line.split('\t', 1)
             src_snapshots_guids.add(guid)
-            if guid in has_snapshot:
+            if '@' in snapshot:
                 latest_src_snapshot = snapshot
                 if oldest_src_snapshot == "":
                     oldest_src_snapshot = snapshot
@@ -917,8 +917,8 @@ class Job:
         latest_common_dst_snapshot = ""
 
         if self.dst_dataset_exists[dst_dataset]:
-            dst_snapshots = cut(field=2, lines=dst_snapshots_with_guids)
-            latest_dst_snapshot = dst_snapshots[-1] if len(dst_snapshots) > 0 else ""
+            if len(dst_snapshots_with_guids) > 0:
+                latest_dst_snapshot = dst_snapshots_with_guids[-1].split('\t')[1]
             if latest_dst_snapshot != "" and params.force:
                 self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
                 # rollback just in case the dst dataset was modified since its most recent snapshot
@@ -933,16 +933,22 @@ class Job:
             # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
             common_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).intersection(
                 set(cut(1, lines=src_snapshots_with_guids)))
-            common_src_snapshot_tags = self.filter_lines(src_snapshots_with_guids, common_snapshot_guids)
-            common_src_snapshot_tags = cut(2, separator='@', lines=common_src_snapshot_tags)
-            common_dst_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, common_snapshot_guids)
-            common_dst_snapshot_tags = cut(2, separator='@', lines=common_dst_snapshot_tags)
-            if len(common_snapshot_guids) > 0:
-                latest_common_src_snapshot = f"{src_dataset}@{common_src_snapshot_tags[-1]}"
-                latest_common_dst_snapshot = f"{dst_dataset}@{common_dst_snapshot_tags[-1]}"
-            self.debug("latest_dst_snapshot:", latest_dst_snapshot)
-            self.debug("latest_common_src_snapshot:", self.snapshot_or_bookmark(latest_common_src_snapshot,
-                                                                                bookmarks_dict))
+
+            def latest_common_snapshot(snapshots_with_guids: List[str], common_guids: Set[str]) -> str:
+                """Returns a true snapshot instead of its bookmark with the same GUID, per the sorting order
+                previously used for 'zfs list -s ...'"""
+                for _line in reversed(snapshots_with_guids):
+                    _guid, _snapshot = _line.split('\t', 1)
+                    if _guid in common_guids:
+                        return _snapshot
+                return ""
+
+            latest_common_src_snapshot = latest_common_snapshot(src_snapshots_with_guids, common_snapshot_guids)
+            latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, common_snapshot_guids)
+            self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)
+            # self.debug("latest_common_dst_snapshot:", latest_common_dst_snapshot)
+            # self.debug("latest_dst_snapshot:", latest_dst_snapshot)
+
             if latest_common_src_snapshot:
                 # common snapshot was found. rollback dst to that common snapshot
                 if latest_common_dst_snapshot != latest_dst_snapshot:
@@ -961,9 +967,10 @@ class Job:
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
                 self.info("Already up-to-date:", dst_dataset)
                 return True
-        self.debug("latest_dst_snapshot:", latest_dst_snapshot)
-        self.debug("latest_common_src_snapshot:", self.snapshot_or_bookmark(latest_common_src_snapshot,
-                                                                            bookmarks_dict))
+
+        self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)
+        # self.debug("latest_common_dst_snapshot:", latest_common_dst_snapshot)
+        # self.debug("latest_dst_snapshot:", latest_dst_snapshot)
 
         is_dry_send_receive = False
         if not latest_common_src_snapshot:
@@ -1019,28 +1026,33 @@ class Job:
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not is_dry_send_receive and not params.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
-                self.create_zfs_bookmark(oldest_src_snapshot, bookmarks_dict, src_dataset)
+                self.create_zfs_bookmark(oldest_src_snapshot, src_dataset)
 
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
             def replication_candidates(origin_src_snapshots_with_guids, latest_common_src_snapshot):
                 results = []
+                last_appended_guid = ""
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
                     guid, snapshot = snapshot_with_guid.split('\t', 1)
+                    if '@' in snapshot:
+                        results.append(snapshot_with_guid)
+                        last_appended_guid = guid
                     if snapshot == latest_common_src_snapshot:
-                        results.append(snapshot_with_guid)
+                        if '@' not in snapshot and guid != last_appended_guid:
+                            # we won't incrementally replicate from a bookmark to its own snapshot
+                            results.append(snapshot_with_guid)
                         break
-                    if guid in has_snapshot:
-                        results.append(snapshot_with_guid)
                 results.reverse()
                 assert len(results) > 0
-                assert results[0].split('\t', 1)[1] == latest_common_src_snapshot
                 return results
 
             # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
             # (that are not a bookmark) that are more recent than that.
             origin_src_snapshots_with_guids = replication_candidates(origin_src_snapshots_with_guids,
                                                                      latest_common_src_snapshot)
+            latest_common_src_snapshot = origin_src_snapshots_with_guids[0].split('\t', 1)[1]
+
             if len(origin_src_snapshots_with_guids) == 1:
                 # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
                 # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
@@ -1053,10 +1065,9 @@ class Job:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
                 steps_todo = self.incremental_replication_steps_wrapper(
-                    origin_src_snapshots_with_guids, src_snapshots_guids, has_snapshot)
+                    origin_src_snapshots_with_guids, src_snapshots_guids)
                 self.trace("steps_todo:", '; '.join([self.replication_step_to_str(step) for step in steps_todo]))
             for i, (incr_flag, start_snapshot, end_snapshot) in enumerate(steps_todo):
-                start_snapshot = self.snapshot_or_bookmark(start_snapshot, bookmarks_dict)
                 size_estimate_bytes = self.estimate_zfs_send_size(incr_flag, start_snapshot, end_snapshot)
                 size_estimate_human = human_readable_bytes(size_estimate_bytes)
                 send_cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send",
@@ -1070,32 +1081,11 @@ class Job:
                 self.run_zfs_send_receive(send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human,
                                           is_dry_send_receive, error_trigger='incremental_zfs_send')
                 if i == len(steps_todo)-1:
-                    self.create_zfs_bookmark(end_snapshot, bookmarks_dict, src_dataset)
+                    self.create_zfs_bookmark(end_snapshot, src_dataset)
         return True
 
-    def dedupe_snapshot_guids(self, src_snapshots_and_bookmarks):
-        """Dedupe bookmark GUIDs: ignore src bookmarks for which a src snapshot exists (where snapshot and its bookmarks
-        have the same GUID). ignore src bookmarks for which another bookmark with the same GUID already exists.
-        otherwise treat bookmarks as snapshots without loosing track of what's really a snapshot or a bookmark"""
-        src_snapshots_with_guids = []
-        bookmarks_dict = {}  # replace with set of guid?
-        has_snapshot = set()
-        for line in src_snapshots_and_bookmarks:
-            guid, snapshot = line.split('\t', 1)
-            if '@' in snapshot:
-                src_snapshots_with_guids.append(line)
-                has_snapshot.add(guid)
-            elif guid not in has_snapshot:
-                # it's a bookmark - and the snapshot corresponding to this bookmark is missing aka snap has been deleted
-                bookmark = snapshot
-                snapshot = snapshot.replace('#', '@', 1)
-                if snapshot not in bookmarks_dict:  # not yet seen?
-                    bookmarks_dict[snapshot] = bookmark
-                    src_snapshots_with_guids.append(f"{guid}\t{snapshot}")
-        return src_snapshots_with_guids, has_snapshot, bookmarks_dict
-
     def incremental_replication_steps_wrapper(self, origin_src_snapshots_with_guids: List[str],
-                                              included_guids: Set[str], has_snapshot: Set[str]) -> List[Tuple[str]]:
+                                              included_guids: Set[str]) -> List[Tuple[str]]:
         guids = []
         input_snapshots = []
         for line in origin_src_snapshots_with_guids:
@@ -1103,16 +1093,17 @@ class Job:
             guids.append(guid)
             input_snapshots.append(snapshot)
 
+        force_convert_I_to_i = False
         if (not self.params.src_sudo and os.geteuid() != 0
                 and self.params.available_programs['src'].get('os', 'Linux') == 'Linux'
                 and not self.params.getenv_bool('no_force_convert_I_to_i', False)):
             # If using 'zfs allow' delegation mechanism on Linux, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs bug https://github.com/openzfs/zfs/issues/16394
-            has_snapshot = None
-        return self.incremental_replication_steps(input_snapshots, guids, included_guids, has_snapshot)
+            force_convert_I_to_i = True
+        return self.incremental_replication_steps(input_snapshots, guids, included_guids, force_convert_I_to_i)
 
     def incremental_replication_steps(self, src_snapshots: List[str], guids: List[str],
-                                      included_guids: Set[str], has_snapshot: Set[str]) -> List[Tuple[str]]:
+                                      included_guids: Set[str], force_convert_I_to_i: bool) -> List[Tuple[str]]:
         """ Computes steps to incrementally replicate the given src snapshots with the given guids such that we include
         intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
@@ -1121,10 +1112,10 @@ class Job:
         Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
         -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
         -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
-        The has_snapshot param is necessary because 'zfs send' CLI with a bookmark as starting snapshot does not
-        (yet) support including intermediate src_snapshots via -I flag. Thus, if the replication source is a bookmark
-        we convert a -I step to one or more -i steps.
-        has_snapshot is None case is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
+        The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
+        Also: 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
+        src_snapshots via -I flag. Thus, if the replication source is a bookmarkwe convert a -I step to one or
+        more -i steps.
         """
         assert len(guids) == len(src_snapshots)
         assert len(included_guids) >= 0
@@ -1160,7 +1151,7 @@ class Job:
                     if start != i:
                         step = ('-I', src_snapshots[start], src_snapshots[i])
                         # print(f"r2 {self.replication_step_to_str(step)}")
-                        if has_snapshot is not None and guids[start] in has_snapshot:
+                        if not force_convert_I_to_i and '@' in src_snapshots[start]:
                             steps.append(step)
                         else:  # convert to -i steps
                             for j in range(start, i):
@@ -1172,7 +1163,7 @@ class Job:
                 if start != i:
                     step = ('-I', src_snapshots[start], src_snapshots[i])
                     # print(f"r3 {self.replication_step_to_str(step)}")
-                    if has_snapshot is not None and guids[start] in has_snapshot:
+                    if not force_convert_I_to_i and '@' in src_snapshots[start]:
                         steps.append(step)
                     else:   # convert to -i steps
                         for j in range(start, i):
@@ -1183,10 +1174,6 @@ class Job:
     def replication_step_to_str(self, step):
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
-
-    def snapshot_or_bookmark(self, snapshot: str, bookmarks_dict: Dict[str, str]) -> str:
-        bookmark = bookmarks_dict.get(snapshot)
-        return bookmark if bookmark else snapshot
 
     def run_zfs_send_receive(self, send_cmd: List[str], recv_cmd: List[str],
                              size_estimate_bytes: int, size_estimate_human: str, is_dry_send_receive: bool,
@@ -1364,11 +1351,8 @@ class Job:
                          newest_dst_snapshot_creation: int) -> List[str]:
         results = []
         for snapshot in snapshots_and_bookmarks:
-            if snapshot.find('@') >= 0:
+            if '@' in snapshot:
                 results.append(snapshot)  # it's a true snapshot
-                # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' enforce that snapshot names must not
-                # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
-                # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
             else:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
@@ -1475,8 +1459,7 @@ class Job:
         """estimate num bytes to transfer via 'zfs send'"""
         if self.is_solaris_zfs('src'):
             return 0  # solaris-11.4.0 does not have a --parsable equivalent
-        params = self.params
-        p = params
+        p = self.params
         cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send -n -v --parsable",
                            p.zfs_send_program_opts, items)
         lines = self.try_ssh_command('src', self.trace, cmd=cmd)
@@ -1488,21 +1471,19 @@ class Job:
                 size = line
         return int(size[size.index('\t')+1:])
 
-    def create_zfs_bookmark(self, src_snapshot: str, bookmarks_dict: Dict[str, str], src_dataset: str) -> None:
-        params = self.params
-        p = params
+    def create_zfs_bookmark(self, src_snapshot: str, src_dataset: str) -> None:
+        p = self.params
         if '@' in src_snapshot:
-            if src_snapshot not in bookmarks_dict:  # not yet seen?
-                bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
-                if params.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src'):
-                    cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
-                    try:
-                        self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE, cmd=cmd)
-                    except subprocess.CalledProcessError as e:
-                        # ignore harmless zfs error caused by bookmark with that name already existing
-                        if ': bookmark exists' not in e.stderr:
-                            print(e.stderr, sys.stderr, end='')
-                            raise e
+            bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
+            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src'):
+                cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
+                try:
+                    self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE, cmd=cmd)
+                except subprocess.CalledProcessError as e:
+                    # ignore harmless zfs error caused by bookmark with the same name already existing
+                    if ': bookmark exists' not in e.stderr:
+                        print(e.stderr, sys.stderr, end='')
+                        raise e
 
     def warn(self, *items):
         self.log("[W]", *items)
