@@ -45,7 +45,7 @@ def main():
         cmd.append('-r')
     cmd.append(args.dataset)
     datasets = defaultdict(list)
-    for line in subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.splitlines():
+    for line in subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True).stdout.splitlines():
         creation_time, bookmark = line.split('\t', 1)
         dataset = bookmark.split('@' if args.snapshot else '#', 1)[0]
         datasets[dataset].append((int(creation_time), bookmark))
@@ -56,7 +56,7 @@ def main():
             msg = "Would delete" if args.dry_run else "Deleting"
             print(f"{msg} {kind}: {bookmark} ...")
             if not args.dry_run:
-                subprocess.run(['sudo', 'zfs', 'destroy', bookmark], capture_output=True, text=True, check=True)
+                subprocess.run(['sudo', 'zfs', 'destroy', bookmark], check=True)
 
 
 if __name__ == "__main__":
