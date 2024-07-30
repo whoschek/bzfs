@@ -1145,7 +1145,7 @@ class Job:
                             steps.append(step)
                         i -= 1
                 else:
-                    # it's a run of more than one dailies
+                    # it's a run of more than one daily
                     i -= 1
                     # assert start != i
                     if start != i:
@@ -1305,21 +1305,19 @@ class Job:
 
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
         """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
+        include_snapshot_regexes = self.params.include_snapshot_regexes
+        exclude_snapshot_regexes = self.params.exclude_snapshot_regexes
         results = []
         for snapshot in snapshots:
-            if self.is_included_snapshot(snapshot):
+            i = snapshot.find('#')  # bookmark separator
+            if i < 0:
+                i = snapshot.find('@')  # snapshot separator
+            assert i >= 0
+            if self.is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
             else:
                 self.debug("Excluding b/c snaphot regex:", snapshot)
         return results
-
-    def is_included_snapshot(self, snapshot: str) -> bool:
-        params = self.params
-        p = snapshot.find('@')  # snapshot separator
-        q = snapshot.find('#')  # bookmark separator
-        i = min(p, q) + 1 if p >= 0 and q >= 0 else max(p, q) + 1
-        snapshot_tag = snapshot[i:]  # substring after the first '@' or '#' char, whichever comes first
-        return self.is_included(snapshot_tag, params.include_snapshot_regexes, params.exclude_snapshot_regexes)
 
     def is_included(self, name: str,
                     include_regexes: List[Tuple[re.Pattern, bool]],
