@@ -16,6 +16,7 @@
 
 import argparse
 import subprocess
+import sys
 import time
 from collections import defaultdict
 
@@ -39,6 +40,10 @@ def main():
                         help="Include this flag to print what would happen if the command were to be run for real.")
 
     args = parser.parse_args()
+    if args.min_bookmarks_to_retain <= 0:
+        print(f"--min-bookmarks-to-retain must be greater than zero: {args.min_bookmarks_to_retain}", file=sys.stderr)
+        sys.exit(1)
+
     kind = 'snapshot' if args.snapshot else 'bookmark'
     cmd = ['zfs', 'list', '-t', kind, '-Hp', '-o', 'creation,name']
     if args.recursive:
