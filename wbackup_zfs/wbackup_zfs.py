@@ -557,7 +557,8 @@ class Params:
             die(f"Option must not contain a whitespace character: {opt}")
         return self.validate_quoting(opt)
 
-    def validate_quoting(self, opt: str):
+    @staticmethod
+    def validate_quoting(opt: str):
         if any(c in opt for c in ["'", '"']):
             die(f"Option must not contain a single quote or a double quote character: {opt}")
         return opt
@@ -1086,12 +1087,12 @@ class Job:
 
     def incremental_replication_steps_wrapper(self, origin_src_snapshots_with_guids: List[str],
                                               included_guids: Set[str]) -> List[Tuple[str]]:
-        guids = []
-        input_snapshots = []
+        src_guids = []
+        src_snapshots = []
         for line in origin_src_snapshots_with_guids:
             guid, snapshot = line.split('\t', 1)
-            guids.append(guid)
-            input_snapshots.append(snapshot)
+            src_guids.append(guid)
+            src_snapshots.append(snapshot)
 
         force_convert_I_to_i = False
         if (not self.params.src_sudo and os.geteuid() != 0
@@ -1100,7 +1101,7 @@ class Job:
             # If using 'zfs allow' delegation mechanism on Linux, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs bug https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
-        return self.incremental_replication_steps(input_snapshots, guids, included_guids, force_convert_I_to_i)
+        return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
 
     def incremental_replication_steps(self, src_snapshots: List[str], guids: List[str],
                                       included_guids: Set[str], force_convert_I_to_i: bool) -> List[Tuple[str]]:
@@ -1114,8 +1115,8 @@ class Job:
         -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
         The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
         Also: 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
-        src_snapshots via -I flag. Thus, if the replication source is a bookmarkwe convert a -I step to one or
-        more -i steps.
+        src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
+        is a bookmark we convert a -I step to one or more -i steps.
         """
         assert len(guids) == len(src_snapshots)
         assert len(included_guids) >= 0
@@ -1171,7 +1172,8 @@ class Job:
             i += 1
         return steps
 
-    def replication_step_to_str(self, step):
+    @staticmethod
+    def replication_step_to_str(step):
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
 
@@ -1307,6 +1309,7 @@ class Job:
         """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
         include_snapshot_regexes = self.params.include_snapshot_regexes
         exclude_snapshot_regexes = self.params.exclude_snapshot_regexes
+        is_debug = self.is_debug_enabled()
         results = []
         for snapshot in snapshots:
             i = snapshot.find('#')  # bookmark separator
@@ -1315,11 +1318,12 @@ class Job:
             assert i >= 0
             if self.is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
-            else:
+            elif is_debug:
                 self.debug("Excluding b/c snaphot regex:", snapshot)
         return results
 
-    def is_included(self, name: str,
+    @staticmethod
+    def is_included(name: str,
                     include_regexes: List[Tuple[re.Pattern, bool]],
                     exclude_regexes: List[Tuple[re.Pattern, bool]]) -> bool:
         """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
@@ -1347,6 +1351,7 @@ class Job:
     def filter_bookmarks(self, snapshots_and_bookmarks: List[str],
                          oldest_dst_snapshot_creation: int,
                          newest_dst_snapshot_creation: int) -> List[str]:
+        is_debug = self.is_debug_enabled()
         results = []
         for snapshot in snapshots_and_bookmarks:
             if '@' in snapshot:
@@ -1359,11 +1364,12 @@ class Job:
                 creation = int(snapshot[0:snapshot.index('\t')])
                 if oldest_dst_snapshot_creation <= creation <= newest_dst_snapshot_creation:
                     results.append(snapshot)
-                else:
+                elif is_debug:
                     self.debug("Excluding b/c bookmark creation time:", snapshot)
         return results
 
-    def filter_lines(self, input_list: Iterable[str], input_set: Set[str]) -> List[str]:
+    @staticmethod
+    def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
         """For each line in input_list, print the line if input_set contains the first column field of that line."""
         results = []
         if len(input_set) == 0:
@@ -1492,6 +1498,9 @@ class Job:
 
     def info(self, *items):
         self.log("[I]", *items)
+
+    def is_debug_enabled(self) -> bool:
+        return self.params.verbose != ""
 
     def debug(self, *items):
         if self.params.verbose != "":
