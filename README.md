@@ -125,7 +125,7 @@ Here is how to install and run the program as well as Unit tests:
     zfs --version # verify zfs is installed
     python3 --version # verify python 3.7 or higher is installed
     sudo ls # verify sudo is working
-    test/test_wbackup_zfs.py # Run Unit tests
+    ./test.sh # Run Unit tests
 ```
 
 

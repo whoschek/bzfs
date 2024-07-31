@@ -74,7 +74,7 @@ jobs:
         whoami
     - name: Test with unittest
       run: |
-        test/test_wbackup_zfs.sh
+        ./test.sh
 
   test_ubuntu_24_04_zfs_latest:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest')
@@ -109,7 +109,7 @@ jobs:
         whoami
     - name: Test with unittest
       run: |
-        test/test_wbackup_zfs.sh
+        ./test.sh
 
 
   test_ubuntu_22_04:
@@ -138,13 +138,13 @@ jobs:
         whoami
     - name: Test with unittest
       run: |
-        test/test_wbackup_zfs.sh || exit 1
+        ./test.sh || exit 1
 
         echo Now testing as root user:
         sudo mkdir -p /root/.ssh
         sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
         cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
-        sudo test/test_wbackup_zfs.sh
+        sudo ./test.sh
 
 
   test_ubuntu_20_04:
@@ -173,7 +173,7 @@ jobs:
         whoami
     - name: Test with unittest
       run: |
-        test/test_wbackup_zfs.sh
+        ./test.sh
 
 
   test_freebsd_14_1:
@@ -207,13 +207,13 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
           ls -al $HOME $HOME/.ssh/id_rsa
 
-          test/test_wbackup_zfs.py || exit 1
+          ./test.sh || exit 1
 
           echo Now testing as root user:
           sudo mkdir -p /root/.ssh
           sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
           cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
-          sudo test/test_wbackup_zfs.py
+          sudo ./test.sh
 
 
   test_freebsd_13_3:
@@ -247,14 +247,14 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
           ls -al $HOME
           chsh -s /bin/sh
-          test/test_wbackup_zfs.py || exit 1
+          ./test.sh || exit 1
 
           echo Now testing as root user:
           sudo mkdir -p /root/.ssh
           sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
           cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null          
           sudo chsh -s /bin/sh
-          sudo test/test_wbackup_zfs.py
+          sudo ./test.sh
 
 
   test_solaris_11_4:
@@ -310,7 +310,7 @@ jobs:
           ls -al $HOME
 
           echo Now testing as root user:
-          test/test_wbackup_zfs.py || exit 1
+          ./test.sh || exit 1
 
           echo Now testing as non-root user:
           tuser=test
@@ -330,4 +330,4 @@ jobs:
           cp -rp . $thome/wbackup-zfs # if running with Github Action
           # cp -rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-solaris
           chown -R $tuser $thome/wbackup-zfs
-          sudo -u $tuser /python3/bin/python3 $thome/wbackup-zfs/test/test_wbackup_zfs.py
+          sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"$thome/wbackup-zfs/test.sh"

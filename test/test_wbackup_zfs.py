@@ -26,10 +26,9 @@ import sys
 import tempfile
 from collections import defaultdict, Counter
 from unittest.mock import patch, mock_open
-from zfs_util import *
-sys.path.append(os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'wbackup_zfs')))
-import wbackup_zfs
-from wbackup_zfs import CheckRange
+from .zfs_util import *
+from wbackup_zfs.wbackup_zfs import CheckRange
+from wbackup_zfs import wbackup_zfs
 
 src_pool_name = 'wb_src'
 dst_pool_name = 'wb_dst'
@@ -1845,7 +1844,7 @@ def is_solaris_zfs():
     return platform.system() == 'SunOS'
 
 
-if __name__ == '__main__':
+def main():
     suite = unittest.TestSuite()
     suite.addTest(TestParseDatasetLocator())
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
@@ -1918,3 +1917,7 @@ if __name__ == '__main__':
     print(f"Running in failfast mode: {failfast} ...")
     result = unittest.TextTestRunner(failfast=failfast, verbosity=2).run(suite)
     sys.exit(not result.wasSuccessful())
+
+
+if __name__ == '__main__':
+    main()
