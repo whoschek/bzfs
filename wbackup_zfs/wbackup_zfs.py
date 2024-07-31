@@ -725,7 +725,6 @@ class Job:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o recordsize,name",
                            p.recursive_flag, p.src_root_dataset)
         src_datasets_with_record_sizes = self.try_ssh_command('src', self.info, cmd=cmd) or ""
-        # debug("src_datasets_with_record_sizes:" + src_datasets_with_record_sizes)
         src_datasets_with_record_sizes = src_datasets_with_record_sizes.splitlines()
         self.recordsizes = {}
         for line in src_datasets_with_record_sizes:
@@ -901,7 +900,7 @@ class Job:
                 latest_src_snapshot = snapshot
                 if oldest_src_snapshot == "":
                     oldest_src_snapshot = snapshot
-        if not latest_src_snapshot:
+        if len(src_snapshots_with_guids) == 0:
             if params.skip_missing_snapshots is None:
                 die(f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
                     f"using --skip-missing-snapshots=true")
