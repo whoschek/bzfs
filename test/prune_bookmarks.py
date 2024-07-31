@@ -57,7 +57,7 @@ def main():
 
     for dataset, bookmarks in sorted(datasets.items()):
         n = max(0, len(bookmarks) - args.min_bookmarks_to_retain)
-        for bookmark in [bmark for ts, bmark in sorted(bookmarks) if ts < int(time.time()) - args.days * 86400][0:n]:
+        for bookmark in [bmark for ts, bmark in sorted(bookmarks) if ts <= int(time.time()) - args.days * 86400][0:n]:
             msg = "Would delete" if args.dry_run else "Deleting"
             print(f"{msg} {kind}: {bookmark} ...")
             if not args.dry_run:
