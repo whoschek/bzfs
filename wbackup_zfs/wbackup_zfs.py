@@ -92,7 +92,8 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure 
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python 
-versions >= 3.7 (including latest stable which is currently python-3.12). No additional python packages are required.
+versions >= 3.7 (including latest stable which is currently python-3.12). {prog_name} is a single-file stand-alone 
+Python program, akin to a single-file stand-alone shell script, and no additional Python packages are required.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
@@ -284,21 +285,22 @@ feature.
               "If there is no common snapshot also skip all other source snapshots for the dataset, except for "
               "the most recent source snapshot. This option helps the destination to 'catch up' with the "
               "source ASAP, consuming a minimum of disk space, at the expense of reducing reliable options for "
-              "rolling back to intermediate snapshots."))
+              "rolling back to intermediate snapshots in the future."))
     parser.add_argument(
         '--no-create-bookmark', action='store_true',
-        help=(f"For increased safety, in normal operation {prog_name} behaves as follows wrt. bookmark creation, "
+        help=(f"For increased safety, in normal operation {prog_name} behaves as follows wrt. ZFS bookmark creation, "
               "if it is autodetected that the source ZFS pool support bookmarks: "
               f"Whenever it has successfully completed replication of the most recent source snapshot, {prog_name} "
               "creates a ZFS bookmark of that snapshot and attaches it to the source dataset. "
               "Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having "
               "to keep the already replicated snapshot around on the source dataset until the next upcoming snapshot "
-              "has been successfully replicated. This way you can send the snapshot to another host, then bookmark the "
-              "snapshot on the source dataset, then delete the snapshot from the source dataset to save disk space, "
-              "and then still incrementally send the next upcoming snapshot to the other host by referring to the "
-              "bookmark. The --no-create-bookmark option disables this safety feature but is discouraged, because "
-              "bookmarks are tiny and relatively cheap and help to ensure that ZFS replication can continue even if "
-              "source and destination dataset somehow have no common snapshot anymore. "
+              "has been successfully replicated. This way you can send the snapshot from the source dataset to another "
+              "host, then bookmark the snapshot on the source dataset, then delete the snapshot from the source "
+              "dataset to save disk space, and then still incrementally send the next upcoming snapshot from the "
+              "source dataset to the other host by referring to the bookmark. The --no-create-bookmark option "
+              "disables this safety feature but is discouraged, because bookmarks are tiny and relatively cheap and "
+              "help to ensure that ZFS replication can continue even if source and destination dataset somehow have "
+              "no common snapshot anymore. "
               "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
               "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
               "the info in the bookmark (the bookmark must still exist in the source dataset) instead of the info in "
@@ -332,16 +334,16 @@ feature.
         '--no-use-bookmark', action='store_true',
         help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
               "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
-              "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks."
+              "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks. "
               "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
               "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
               "common snapshot anymore. "
               f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
-              "or whatever the name of a bookmark is, as only the GUID of the bookmark and the GUID of the snapshot "
-              "is considered for comparison, and ZFS guarantees that any bookmark of a given snapshot automatically "
-              "has the same GUID, transaction group number and creation time as the snapshot. Also note that you can "
-              f"create, name, delete and prune bookmarks any way you like, as {prog_name} (without --no-use-bookmark) "
-              "will happily work with whatever bookmarks currently exist, if any."))
+              "as only the GUID of the bookmark and the GUID of the snapshot is considered for comparison, and ZFS "
+              "guarantees that any bookmark of a given snapshot automatically has the same GUID, transaction group "
+              "number and creation time as the snapshot. Also note that you can create, delete and prune bookmarks "
+              f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
+              "bookmarks currently exist, if any."))
     parser.add_argument(
         '--bwlimit', type=str, metavar='STRING',
         help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
