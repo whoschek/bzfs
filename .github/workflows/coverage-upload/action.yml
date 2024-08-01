@@ -1,0 +1,14 @@
+name: Common Steps
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Upload coverage report
+    uses: actions/upload-artifact@v4  # see https://github.com/actions/upload-artifact
+    with:
+      name: coverage-${{ github.job }}
+      overwrite: true
+      path: |
+        htmlcov
+        coverage_report.txt
+        .coverage

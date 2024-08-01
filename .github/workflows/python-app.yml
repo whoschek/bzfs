@@ -49,12 +49,12 @@ permissions:
 
 jobs:
   test_ubuntu_24_04:
-    if: (!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch') || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.12"]
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps
@@ -75,14 +75,19 @@ jobs:
     - name: Test with unittest
       run: |
         ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+    - name: Upload code coverage report
+      uses: ./.github/workflows/coverage-upload
 
   test_ubuntu_24_04_zfs_latest:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest')
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.13-dev", "3.11"]
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -110,15 +115,20 @@ jobs:
     - name: Test with unittest
       run: |
         ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+    - name: Upload code coverage report
+      uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_22_04:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_ubuntu_22_04')
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_22_04'
     runs-on: ubuntu-22.04
     strategy:
       matrix:
         python-version: ["3.10"]
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps
@@ -145,15 +155,20 @@ jobs:
         sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
         cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
         sudo ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+    - name: Upload code coverage report
+      uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_20_04:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_ubuntu_20_04')
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_20_04'
     runs-on: ubuntu-20.04
     strategy:
       matrix:
         python-version: ["3.8", "3.7"]
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps
@@ -174,12 +189,17 @@ jobs:
     - name: Test with unittest
       run: |
         ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+    - name: Upload code coverage report
+      uses: ./.github/workflows/coverage-upload
 
 
   test_freebsd_14_1:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_freebsd_14_1')
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_freebsd_14_1'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest
@@ -188,7 +208,7 @@ jobs:
       with:
         release: "14.1"
         prepare: |
-          pkg install -y python3 sudo zstd pv mbuffer
+          pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
           uname -a
           zfs --version
@@ -208,18 +228,21 @@ jobs:
           ls -al $HOME $HOME/.ssh/id_rsa
 
           ./test.sh || exit 1
+          ./coverage.sh || exit 1
 
           echo Now testing as root user:
           sudo mkdir -p /root/.ssh
           sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
           cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
           sudo ./test.sh
+    - name: Upload code coverage report
+      uses: ./.github/workflows/coverage-upload
 
 
   test_freebsd_13_3:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_freebsd_13_3')
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest
@@ -228,7 +251,7 @@ jobs:
       with:
         release: "13.3"
         prepare: |
-          pkg install -y python3 sudo zstd pv mbuffer
+          pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
           uname -a
           zfs --version
@@ -248,6 +271,7 @@ jobs:
           ls -al $HOME
           chsh -s /bin/sh
           ./test.sh || exit 1
+          ./coverage.sh || exit 1
 
           echo Now testing as root user:
           sudo mkdir -p /root/.ssh
@@ -255,13 +279,15 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null          
           sudo chsh -s /bin/sh
           sudo ./test.sh
+    - name: Upload code coverage report
+      uses: ./.github/workflows/coverage-upload
 
 
   test_solaris_11_4:
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.name == 'test_solaris_11_4')
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_solaris_11_4'
 #    if: false  # job currently disabled
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest
@@ -279,7 +305,8 @@ jobs:
           whoami
           pkg install sudo pv 
           pkgutil -y -i zstd mbuffer
-          pyversion=3.7.17
+          pyversion=3.8.19; export ax_cv_c_float_words_bigendian=no
+          # pyversion=3.7.17 # works fine too
           # pyversion=3.10.14; export ax_cv_c_float_words_bigendian=no # works fine too
           wget https://www.python.org/ftp/python/$pyversion/Python-$pyversion.tgz
           tar -zxf Python-$pyversion.tgz
@@ -311,6 +338,7 @@ jobs:
 
           echo Now testing as root user:
           ./test.sh || exit 1
+          ./coverage.sh || exit 1
 
           echo Now testing as non-root user:
           tuser=test
@@ -330,4 +358,72 @@ jobs:
           cp -rp . $thome/wbackup-zfs # if running with Github Action
           # cp -rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-solaris
           chown -R $tuser $thome/wbackup-zfs
-          sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"$thome/wbackup-zfs/test.sh"
+          sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/wbackup-zfs; ./test.sh"
+    - name: Prepare upload of coverage report
+      run: |
+        find .
+    - name: Upload code coverage report
+      uses: ./.github/workflows/coverage-upload
+#        cp -r wbackup-zfs/htmlcov wbackup-zfs/coverage_report.txt wbackup-zfs/.coverage ./
+#        cp -r htmlcov coverage_report.txt .coverage wbackup-zfs/
+
+  combined-coverage:
+    if: false  # job currently disabled
+#    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch'))
+    runs-on: ubuntu-24.04
+    needs:
+      - test_ubuntu_24_04
+      - test_ubuntu_24_04_zfs_latest
+      - test_ubuntu_22_04
+      - test_ubuntu_20_04
+      - test_freebsd_14_1
+      - test_freebsd_13_3
+      - test_solaris_11_4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_ubuntu_24_04
+          path: coverage-test_ubuntu_24_04
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_ubuntu_24_04_zfs_latest
+          path: coverage-test_ubuntu_24_04_zfs_latest
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_ubuntu_22_04
+          path: coverage-test_ubuntu_22_04
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_ubuntu_20_04
+          path: coverage-test_ubuntu_20_04
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_freebsd_14_1
+          path: coverage-test_freebsd_14_1
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_freebsd_13_3
+          path: coverage-test_freebsd_13_3
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_solaris_11_4
+          path: coverage-test_solaris_11_4
+      - name: Run common preparation steps
+        uses: ./.github/workflows/common
+        with:
+          python-version: "3.12"
+      - name: Merge coverage reports
+        run: |
+          coverage combine $(find . -name '.coverage*')
+          coverage report | tee coverage_report.txt
+          coverage html
+      - name: Upload code coverage report
+        uses: ./.github/workflows/coverage-upload

@@ -112,7 +112,7 @@ class WBackupTestCase(ParametrizedTestCase):
 
         src_pool = build(src_pool_name)
         dst_pool = build(dst_pool_name)
-        afix = self.param.get('affix', '')
+        afix = self.param.get('affix', '') if self.param is not None else ''
         src_root_dataset = recreate_dataset(src_pool_name + '/tmp/' + fix('src'))
         dst_root_dataset = recreate_dataset(dst_pool_name + '/tmp/' + fix('dst'))
 
