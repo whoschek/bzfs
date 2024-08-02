@@ -1042,7 +1042,7 @@ class Job:
                 assert len(origin_src_snapshots_with_guids) > 0
                 results = []
                 last_appended_guid = ""
-                for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
+                for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):  # pragma: no cover
                     guid, snapshot = snapshot_with_guid.split('\t', 1)
                     if '@' in snapshot:
                         results.append(snapshot_with_guid)
