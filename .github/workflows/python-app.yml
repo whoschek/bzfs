@@ -366,9 +366,9 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
           ls -al $HOME
 
+          echo Now running coverage; ./coverage.sh || exit 1
           echo Now running tests as root user:
           ./test.sh || exit 1
-          echo Now running coverage; ./coverage.sh || exit 1
 
           echo Now running tests as non-root user:
           tuser=test
