@@ -512,7 +512,7 @@ class Params:
             self.ssh_dst_extra_opts += self.split_args(extra_opt)
         self.ssh_socket_enabled = self.getenv_bool('ssh_socket_enabled', True)
         self.ssh_cipher = self.validate_arg(args.ssh_cipher)  # for speed with confidentiality and integrity
-        # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 localhost "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done
+        # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done
         # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
         # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
 
@@ -1038,6 +1038,7 @@ class Job:
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
             def replication_candidates(origin_src_snapshots_with_guids, latest_common_src_snapshot):
+                assert len(origin_src_snapshots_with_guids) > 0
                 results = []
                 last_appended_guid = ""
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):

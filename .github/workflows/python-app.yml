@@ -392,7 +392,7 @@ jobs:
     - name: Upload code coverage report
       uses: ./.github/workflows/coverage-upload
 
-  combined-coverage:
+  combine_coverage_reports:
     if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch'))
     runs-on: ubuntu-24.04
     needs:
