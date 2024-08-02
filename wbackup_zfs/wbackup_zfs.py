@@ -844,7 +844,9 @@ class Job:
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         params = self.params
         p = params
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o creation,guid,name", dst_dataset)
+        use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src')
+        props = "creation,guid,name" if use_bookmark else "guid,name"
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
         dst_snapshots_with_guids = self.try_ssh_command('dst', self.trace, cmd=cmd,
                                                         error_trigger='zfs_list_snapshot_dst')
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
@@ -852,11 +854,10 @@ class Job:
 
         oldest_dst_snapshot_creation = None
         latest_dst_snapshot_creation = None
-        if len(dst_snapshots_with_guids) > 0 and params.use_bookmark:
-            if self.is_zpool_bookmarks_feature_enabled_or_active('src'):
-                oldest_dst_snapshot_creation = int(dst_snapshots_with_guids[0].split('\t', 1)[0])
-                latest_dst_snapshot_creation = int(dst_snapshots_with_guids[-1].split('\t', 1)[0])
-        dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
+        if len(dst_snapshots_with_guids) > 0 and use_bookmark:
+            oldest_dst_snapshot_creation = int(dst_snapshots_with_guids[0].split('\t', 1)[0])
+            latest_dst_snapshot_creation = int(dst_snapshots_with_guids[-1].split('\t', 1)[0])
+            dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
