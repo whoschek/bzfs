@@ -1039,7 +1039,6 @@ class Job:
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
             def replication_candidates(origin_src_snapshots_with_guids, latest_common_src_snapshot):
-                assert len(origin_src_snapshots_with_guids) > 0
                 results = []
                 last_appended_guid = ""
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):  # pragma: no cover
