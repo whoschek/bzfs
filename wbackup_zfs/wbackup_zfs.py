@@ -92,8 +92,8 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure 
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python 
-versions >= 3.7 (including latest stable which is currently python-3.12). {prog_name} is a single-file stand-alone 
-Python program, akin to a single-file stand-alone shell script, and no additional Python packages are required.
+versions >= 3.7 (including latest stable which is currently python-3.12). {prog_name} is a stand-alone 
+Python program, akin to a stand-alone shell script, and no additional Python packages are required.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight

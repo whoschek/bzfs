@@ -53,9 +53,9 @@ wbackup-zfs is written in Python and continously runs a wide set of unit
 tests and integration tests to ensure coverage and compatibility with
 old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
 versions >= 3.7 (including latest stable which is currently
-python-3.12). wbackup-zfs is a single-file stand-alone Python program,
-akin to a single-file stand-alone shell script, and no additional Python
-packages are required.
+python-3.12). wbackup-zfs is a stand-alone Python program, akin to a
+stand-alone shell script, and no additional Python packages are
+required.
 
 Optionally, wbackup-zfs applies bandwidth rate-limiting and progress
 monitoring (via 'pv' CLI) during 'zfs send/receive' data transfers.
