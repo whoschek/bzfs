@@ -28,6 +28,7 @@ on:
         description: "Name of job to run"
         type: choice
         options:
+        - test_ubuntu_24_04_fast
         - test_ubuntu_24_04
         - test_ubuntu_24_04_zfs_latest
         - test_ubuntu_22_04
@@ -35,19 +36,47 @@ on:
         - test_freebsd_14_1
         - test_freebsd_13_3
         - test_solaris_11_4
-        default: "test_ubuntu_24_04"
+        default: "test_ubuntu_24_04_fast"
       want_sushi:
         description: True or False
         type: boolean
         default: True
   schedule:
-    - cron: '0 6 * * *'  # Runs daily at 6am UTC
-#    - cron: '0 7 * * 0'  # Runs weekly at 7am UTC on Sundays
+    - cron: '0 5 * * *'  # Runs daily at 5am UTC
+#    - cron: '0 6 * * 0'  # Runs weekly at 6am UTC on Sundays
 
 permissions:
   contents: read
 
 jobs:
+  test_ubuntu_24_04_fast:
+    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04_fast'
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    timeout-minutes: 80
+    steps:
+    - uses: actions/checkout@v4
+    - name: Run common preparation steps
+      uses: ./.github/workflows/common
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Display ZFS version and Python version
+      run: |
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+        whoami
+    - name: Test with unittest
+      run: |
+        ./test.sh
+
   test_ubuntu_24_04:
     if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
