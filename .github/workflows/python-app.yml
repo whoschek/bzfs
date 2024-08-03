@@ -51,7 +51,7 @@ permissions:
 
 jobs:
   test_ubuntu_24_04_fast:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04_fast'
+    if: ((!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04_fast'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -80,7 +80,7 @@ jobs:
 
 
   test_ubuntu_24_04:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -114,7 +114,7 @@ jobs:
 
 
   test_ubuntu_24_04_zfs_latest:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -155,7 +155,7 @@ jobs:
 
 
   test_ubuntu_22_04:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_22_04'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04'
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -195,7 +195,7 @@ jobs:
 
 
   test_ubuntu_20_04:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_20_04'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04'
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -229,7 +229,7 @@ jobs:
 
 
   test_freebsd_14_1:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_freebsd_14_1'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
@@ -272,7 +272,7 @@ jobs:
 
 
   test_freebsd_13_3:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_freebsd_13_3'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
@@ -316,7 +316,7 @@ jobs:
 
 
   test_solaris_11_4:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_solaris_11_4'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
 #    if: false  # job currently disabled
     runs-on: ubuntu-latest
     timeout-minutes: 80
@@ -479,7 +479,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
         with:
-          path: 'htmlcov'
+          path: coverage-combine_coverage_reports/htmlcov
       - name: Upload combined coverage report to workflow to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
