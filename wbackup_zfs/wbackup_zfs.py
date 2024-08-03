@@ -423,9 +423,6 @@ class Params:
         self.one_or_more_whitespace_regex = re.compile(r'\s+')
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
-        if not args.src_root_dataset or not args.dst_root_dataset:
-            argument_parser().print_help()
-            sys.exit(die_status)
         self.src_root_dataset = args.src_root_dataset
         self.dst_root_dataset = args.dst_root_dataset
         self.origin_src_root_dataset = self.src_root_dataset
@@ -603,6 +600,7 @@ class Job:
         self.mbuffer_current_opts = None
         self.is_test_mode = False
         self.error_injection_triggers = Counter()
+        self.delete_injection_triggers = Counter()
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
         self.params = Params(args, sys_argv)
@@ -631,6 +629,7 @@ class Job:
                 for line in tail(params.pv_log_file, 10):
                     print(line, end='')
                 self.info_raw("Success. Goodbye!")
+                sys.stderr.flush()
         self.info_raw("Log file was: " + params.log_file)
 
     def validate(self):
@@ -778,6 +777,8 @@ class Job:
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
+                self.maybe_inject_delete('src', dataset=src_dataset,
+                                         delete_trigger='zfs_list_snapshot_src_for_delete_missing_snapshots')
                 try:
                     src_snapshots_with_guids = self.run_ssh_command('src', self.trace, cmd=cmd).splitlines()
                 except subprocess.CalledProcessError as e:
@@ -874,6 +875,7 @@ class Job:
         if oldest_dst_snapshot_creation is None:
             props = "guid,name"
             types = "snapshot"
+        self.maybe_inject_delete('src', dataset=src_dataset, delete_trigger='zfs_list_snapshot_src')
         cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         src_snapshots_and_bookmarks = self.try_ssh_command('src', self.trace, cmd=cmd)
         if src_snapshots_and_bookmarks is None:
@@ -1041,7 +1043,7 @@ class Job:
             def replication_candidates(origin_src_snapshots_with_guids, latest_common_src_snapshot):
                 results = []
                 last_appended_guid = ""
-                for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):  # pragma: no cover
+                for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
                     guid, snapshot = snapshot_with_guid.split('\t', 1)
                     if '@' in snapshot:
                         results.append(snapshot_with_guid)
@@ -1628,6 +1630,14 @@ class Job:
             raise subprocess.CalledProcessError(returncode=1, cmd=' '.join(cmd),
                                                 stderr=error_trigger + ': dataset is busy')
 
+    def maybe_inject_delete(self, location=None, dataset=None, delete_trigger=None):
+        if delete_trigger and self.delete_injection_triggers[delete_trigger] > 0:
+            self.delete_injection_triggers[delete_trigger] -= 1
+            p = self.params
+            sudo = p.src_sudo if location == 'src' else p.dst_sudo
+            cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", dataset)
+            self.run_ssh_command(location, self.debug, cmd=cmd)
+
     def cquote(self, arg: str):
         return shlex.quote(arg)
 
@@ -1957,11 +1967,6 @@ def current_time() -> str:
 def replace_prefix(line, s1, s2):
     """In a line, replace a leading s1 string with s2. Assumes the leading string is present. """
     return s2 + line.rstrip()[len(s1):]
-
-
-def replace_suffix(line, s1, s2):
-    """In a line, replace a trailing s1 string with s2. Assumes the trailing string is present."""
-    return line.rstrip()[-len(s1):] + s2
 
 
 def human_readable_bytes(size) -> str:

@@ -23,6 +23,7 @@ import pwd
 import traceback
 import unittest
 import os
+import stat
 import sys
 import tempfile
 from collections import defaultdict, Counter
@@ -45,8 +46,8 @@ zfs_encryption_key_fd, zfs_encryption_key = tempfile.mkstemp(prefix='test_wbacku
 os.write(zfs_encryption_key_fd, 'mypasswd'.encode())
 os.close(zfs_encryption_key_fd)
 ssh_config_file_fd, ssh_config_file = tempfile.mkstemp(prefix='ssh_config_file_')
+os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
 os.write(ssh_config_file_fd, '# Empty ssh_config file'.encode())
-os.close(ssh_config_file_fd)
 
 keylocation = f"file://{zfs_encryption_key}"
 logging.basicConfig(level=logging.INFO,
@@ -54,7 +55,6 @@ logging.basicConfig(level=logging.INFO,
                     # datefmt='%Y-%m-%d %H:%M:%S',
                     datefmt='%H:%M:%S:',
                     )
-error_injection_triggers = 'error_injection_triggers'
 
 
 def getenv_any(key, default=None):
@@ -171,7 +171,8 @@ class WBackupTestCase(ParametrizedTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))  # b/c src has no snapshots
 
-    def run_wbackup(self, *args, dry_run=None, no_create_bookmark=False, no_use_bookmark=False, expected_status=0):
+    def run_wbackup(self, *args, dry_run=None, no_create_bookmark=False, no_use_bookmark=False, expected_status=0,
+                    error_injection_triggers=None, delete_injection_triggers=None):
         port = getenv_any('test_ssh_port')  # set this if sshd is on a non-standard port: export wbackup_zfs_test_ssh_port=12345
         args = list(args)
         src_host = ['--ssh-src-host', '127.0.0.1']
@@ -188,6 +189,7 @@ class WBackupTestCase(ParametrizedTestCase):
             args = args + src_host + src_port
         elif params and params.get('ssh_mode') == 'pull-push':
             args = args + src_user + src_host + dst_host + src_port + dst_port + src_private_key + src_ssh_config_file
+            args = args + ['--bwlimit=10000m']
         elif params and params.get('ssh_mode', 'local') != 'local':
             raise ValueError("Unknown ssh_mode: " + params['ssh_mode'])
 
@@ -196,7 +198,7 @@ class WBackupTestCase(ParametrizedTestCase):
                            '--ssh-dst-extra-opt', '-o StrictHostKeyChecking=no']
 
         if params and 'skip_missing_snapshots' in params:
-            args = args + ['--skip-missing-snapshots=' + str(params['skip_missing_snapshots'])]
+            args = ['--skip-missing-snapshots=' + str(params['skip_missing_snapshots'])] + args
 
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
@@ -204,6 +206,8 @@ class WBackupTestCase(ParametrizedTestCase):
             src_permissions = 'send'
             if not is_solaris_zfs():
                 src_permissions += ',bookmark'
+            if delete_injection_triggers is not None:
+                src_permissions += ',destroy,mount'
             optional_dst_permissions = ',canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
             optional_dst_permissions = ',keylocation,compression' if not is_solaris_zfs() else ',keysource,encryption,salt,compression,checksum'
             dst_permissions = 'mount,create,receive,rollback,destroy' + optional_dst_permissions
@@ -231,12 +235,13 @@ class WBackupTestCase(ParametrizedTestCase):
         if no_use_bookmark:
             args = args + ['--no-use-bookmark']
 
-        args = args + ['--bwlimit=10000m']
-
         job = wbackup_zfs.Job()
         job.is_test_mode = True
-        if params and error_injection_triggers in params:
-            job.error_injection_triggers = params[error_injection_triggers]
+        if error_injection_triggers is not None:
+            job.error_injection_triggers = error_injection_triggers
+
+        if delete_injection_triggers is not None:
+            job.delete_injection_triggers = delete_injection_triggers
 
         returncode = 0
         try:
@@ -346,7 +351,7 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a', dry_run=(i == 0))
+                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a', '-v', '-v', dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + '/foo/a'))
@@ -400,6 +405,7 @@ class LocalTestCase(WBackupTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
                                  '--include-dataset=',
+                                 '--include-dataset=/' + src_root_dataset,
                                  '--exclude-dataset=/' + src_root_dataset + '/foo',
                                  '--include-dataset=/' + src_root_dataset + '/foo',
                                  '--exclude-dataset=/' + dst_root_dataset + '/goo/',
@@ -417,6 +423,16 @@ class LocalTestCase(WBackupTestCase):
                     self.assertSnapshots(dst_root_dataset, 3, 's')
                     self.assertSnapshots(dst_root_dataset + "/zoo", 1, 'z')
 
+    def test_basic_replication_with_no_datasets_1(self):
+        self.setup_basic()
+        self.run_wbackup(expected_status=2)
+
+    @patch('sys.argv', ['wbackup_zfs.py'])
+    def test_basic_replication_with_no_datasets_2(self):
+        with self.assertRaises(SystemExit) as e:
+            wbackup_zfs.main()
+        self.assertEqual(e.exception.code, 2)
+
     def test_basic_replication_with_overlapping_datasets(self):
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset))
@@ -428,6 +444,52 @@ class LocalTestCase(WBackupTestCase):
         self.run_wbackup(dst_root_dataset, dst_root_dataset + '/tmp', '--recursive', expected_status=die_status)
         self.run_wbackup(dst_root_dataset + '/tmp', dst_root_dataset, '--recursive', expected_status=die_status)
 
+    def test_basic_replication_skip_missing_snapshots(self):
+        self.assertTrue(dataset_exists(src_root_dataset))
+        destroy(dst_root_dataset)
+        self.run_wbackup(src_root_dataset, dst_root_dataset,
+                         '--skip-missing-snapshots=error', expected_status=die_status)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.run_wbackup(src_root_dataset, dst_root_dataset,
+                         '--skip-missing-snapshots=true')
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.run_wbackup(src_root_dataset, dst_root_dataset,
+                         '--skip-missing-snapshots=true',
+                         '--include-snapshot-regex=', '--recursive')
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.run_wbackup(src_root_dataset, dst_root_dataset,
+                         '--skip-missing-snapshots=false')
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        self.setup_basic()
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.run_wbackup(src_root_dataset, dst_root_dataset,
+                         '--skip-missing-snapshots=error',
+                         '--include-snapshot-regex=', '--recursive', expected_status=die_status)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.run_wbackup(src_root_dataset, dst_root_dataset,
+                         '--skip-missing-snapshots=true',
+                         '--include-snapshot-regex=!.*', '--recursive')
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.run_wbackup(src_root_dataset, dst_root_dataset,
+                         '--skip-missing-snapshots=false',
+                         '--include-snapshot-regex=', '--recursive')
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+    def test_basic_replication_with_injected_dataset_deletes(self):
+        destroy(dst_root_dataset)
+        self.setup_basic()
+        self.assertTrue(dataset_exists(src_root_dataset))
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        # inject deletes for this many times. only after that stop deleting datasets
+        counter = Counter(zfs_list_snapshot_src=1)
+
+        self.run_wbackup(src_root_dataset, dst_root_dataset, '-v', '-v', delete_injection_triggers=counter)
+        self.assertFalse(dataset_exists(src_root_dataset))
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.assertEqual(0, counter['zfs_list_snapshot_dst'])
+
     def test_basic_replication_flat_simple_with_sufficiently_many_retries_on_error_injection(self):
         self.basic_replication_flat_simple_with_retries_on_error_injection(max_retries=6, expected_status=0)
 
@@ -437,27 +499,17 @@ class LocalTestCase(WBackupTestCase):
     def basic_replication_flat_simple_with_retries_on_error_injection(self, max_retries=0, expected_status=0):
         self.setup_basic()
         create_dataset(dst_root_dataset)
-        params = self.param
-        old_triggers = params.get(error_injection_triggers)
 
         # inject failures for this many tries. only after that finally succeed the operation
         counter = Counter(zfs_list_snapshot_dst=2, full_zfs_send=2, incremental_zfs_send=2)
 
-        params[error_injection_triggers] = counter
-        try:
-            self.run_wbackup(src_root_dataset, dst_root_dataset, f"--max-retries={max_retries}",
-                             expected_status=expected_status)
-            self.assertEqual(0, counter['zfs_list_snapshot_dst'])  # i.e, it took 2-0=2 retries to succeed
-            self.assertEqual(0, counter['full_zfs_send'])
-            self.assertEqual(0, counter['incremental_zfs_send'])
-            if expected_status == 0:
-                self.assertSnapshots(dst_root_dataset, 3, 's')
-        finally:
-            if params:
-                if old_triggers:
-                    params[error_injection_triggers] = old_triggers
-                else:
-                    params.pop(error_injection_triggers, None)
+        self.run_wbackup(src_root_dataset, dst_root_dataset, f"--max-retries={max_retries}",
+                         expected_status=expected_status, error_injection_triggers=counter)
+        self.assertEqual(0, counter['zfs_list_snapshot_dst'])  # i.e, it took 2-0=2 retries to succeed
+        self.assertEqual(0, counter['full_zfs_send'])
+        self.assertEqual(0, counter['incremental_zfs_send'])
+        if expected_status == 0:
+            self.assertSnapshots(dst_root_dataset, 3, 's')
 
     def test_basic_replication_flat_with_bookmarks1(self):
         if not is_zpool_bookmarks_feature_enabled_or_active('src'):
@@ -571,6 +623,28 @@ class LocalTestCase(WBackupTestCase):
                 else:
                     self.assertSnapshotNames(dst_root_dataset, ['d1', 'd2'])
                     self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h', 'd2'])
+
+    def test_basic_replication_flat_with_bookmarks_already_exists(self):
+        """check that run_wbackup works as usual even if the bookmark already exists"""
+        if not is_zpool_bookmarks_feature_enabled_or_active('src'):
+            self.skipTest("ZFS has no bookmark feature")
+        take_snapshot(src_root_dataset, fix('d1'))
+        snapshot_tag = snapshots(src_root_dataset)[0].split('@', 1)[1]
+
+        create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag)
+
+        self.assertBookmarkNames(src_root_dataset, ['d1'])
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_wbackup(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
+                if i == 0:
+                    self.assertSnapshotNames(src_root_dataset, ['d1'])
+                    self.assertBookmarkNames(src_root_dataset, ['d1'])
+                    self.assertSnapshotNames(dst_root_dataset, [])
+                else:
+                    self.assertSnapshotNames(src_root_dataset, ['d1'])
+                    self.assertBookmarkNames(src_root_dataset, ['d1'])
+                    self.assertSnapshotNames(dst_root_dataset, ['d1'])
 
     def test_complex_replication_flat_with_no_create_bookmark(self):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
@@ -865,7 +939,7 @@ class LocalTestCase(WBackupTestCase):
         # no change on src means replication is a noop:
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force', dry_run=(i == 0))
+                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0))
                 self.assertSnapshotNames(dst_root_dataset + '/foo',
                                          ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7', 't11'])
@@ -887,7 +961,7 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(src_foo, fix('t12'))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force-once', dry_run=(i == 0))
+                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force', dry_run=(i == 0))
                 self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
                 if i == 0:
                     self.assertSnapshotNames(dst_root_dataset + '/foo',
@@ -1211,21 +1285,43 @@ class LocalTestCase(WBackupTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
 
+    def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
+        self.setup_basic_with_recursive_replication_done()
+        take_snapshot(create_dataset(dst_root_dataset, 'bar'), fix('b1'))
+        take_snapshot(create_dataset(dst_root_dataset, 'zoo'), fix('z1'))
+
+        # inject deletes for this many times. only after that stop deleting datasets
+        counter = Counter(zfs_list_snapshot_src_for_delete_missing_snapshots=1)
+        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
+                         '--skip-replication', '--delete-missing-snapshots',
+                         delete_injection_triggers=counter)
+
+        # nothing has changed for the simultaneously deleted datasets:
+        self.assertSnapshots(dst_root_dataset, 3, 's')
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
+        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
+        self.assertSnapshots(dst_root_dataset + "/bar", 1, 'b')
+        self.assertSnapshots(dst_root_dataset + "/zoo", 1, 'z')
+        self.assertEqual(0, counter['zfs_list_snapshot_src_for_delete_missing_snapshots'])
+
 
 #############################################################################
-class RemoteTestCase(WBackupTestCase):
+class MinimalRemoteTestCase(WBackupTestCase):
+    def test_basic_replication_flat_simple(self):
+        LocalTestCase(param=self.param).test_basic_replication_flat_simple()
+
+    def test_basic_replication_recursive1(self):
+        LocalTestCase(param=self.param).test_basic_replication_recursive1()
+
+
+#############################################################################
+class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_basic_replication_flat_nothing_todo(self):
         LocalTestCase(param=self.param).test_basic_replication_flat_nothing_todo()
 
     def test_basic_replication_without_source(self):
         LocalTestCase(param=self.param).test_basic_replication_without_source()
-
-    def test_basic_replication_flat_simple(self):
-        LocalTestCase(param=self.param).test_basic_replication_flat_simple()
-
-    def test_basic_replication_recursive1(self):
-        LocalTestCase(param=self.param).test_basic_replication_recursive1()
 
     def test_complex_replication_flat_use_bookmarks(self):
         LocalTestCase(param=self.param).test_complex_replication_flat_use_bookmarks()
@@ -1327,17 +1423,20 @@ class RemoteTestCase(WBackupTestCase):
 #############################################################################
 class IsolatedTestCase(WBackupTestCase):
 
+    # def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
+    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_with_injected_dataset_deletes()
+
+    def test_basic_replication_with_injected_dataset_deletes(self):
+        LocalTestCase(param=self.param).test_basic_replication_with_injected_dataset_deletes()
+
+    # def basic_replication_flat_simple_with_retries_on_error_injection(self):
+    #     LocalTestCase(param=self.param).basic_replication_flat_simple_with_retries_on_error_injection()
+    #
     # def test_complex_replication_flat_use_bookmarks(self):
     #     LocalTestCase(param=self.param).test_complex_replication_flat_use_bookmarks()
     #
-    # def test_complex_replication_flat_with_no_create_bookmark(self):
-    #     LocalTestCase(param=self.param).test_complex_replication_flat_with_no_create_bookmark()
-
-    def test_basic_replication_flat_nonzero_snapshots_create_parents(self):
-        LocalTestCase(param=self.param).test_basic_replication_flat_nonzero_snapshots_create_parents()
-
-    def test_basic_replication_flat_nonzero_snapshots_create_parents(self):
-        LocalTestCase(param=self.param).test_basic_replication_flat_nonzero_snapshots_create_parents()
+    # def test_basic_replication_skip_missing_snapshots(self):
+    #     LocalTestCase(param=self.param).test_basic_replication_skip_missing_snapshots()
 
 
 #############################################################################
@@ -1411,6 +1510,18 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
         self.run_wbackup(src_foo, dst_foo, '--force', '--skip-missing-snapshots=false',
                          '--exclude-snapshot-regex', '.*')
+        self.assertSnapshotNames(dst_foo, [])
+
+        self.tearDownAndSetup()
+        src_foo = create_dataset(src_root_dataset, 'foo')
+        for snapshot in testcase[None]:
+            take_snapshot(src_foo, snapshot)
+        src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
+        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        subprocess.run(cmd, text=True, check=True, shell=True)
+        self.assertSnapshotNames(dst_foo, [expected_results[1]])
+        self.run_wbackup(src_foo, dst_foo, '--force', '--skip-missing-snapshots=false',
+                         '--include-snapshot-regex', '!.*')
         self.assertSnapshotNames(dst_foo, [])
 
     def test_snapshot_series_excluding_hourlies_with_permutations(self):
@@ -2027,7 +2138,25 @@ def main():
                             'no_privilege_elevation': no_privilege_elevation,
                             'encrypted_dataset': encrypted_dataset,
                         }
-                        suite.addTest(ParametrizedTestCase.parametrize(RemoteTestCase, params))
+                        suite.addTest(ParametrizedTestCase.parametrize(FullRemoteTestCase, params))
+
+    if os.geteuid() != 0:
+        for ssh_mode in ['pull-push']:
+            for min_transfer_size in [0]:
+                for affix in [""]:
+                    for no_privilege_elevation in [True]:
+                        for encrypted_dataset in [False]:
+                        # for encrypted_dataset in []:
+                            params = {
+                                'ssh_mode': ssh_mode,
+                                'verbose': False,
+                                'min_transfer_size': min_transfer_size,
+                                'affix': affix,
+                                'skip_missing_snapshots': 'false',
+                                'no_privilege_elevation': no_privilege_elevation,
+                                'encrypted_dataset': encrypted_dataset,
+                            }
+                            suite.addTest(ParametrizedTestCase.parametrize(MinimalRemoteTestCase, params))
 
     failfast = False if os.getenv('CI') else True  # no need to fail fast when run within GitHub Action
     print(f"Running in failfast mode: {failfast} ...")
