@@ -396,16 +396,6 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
   combine_coverage_reports:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs
-
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
-    permissions:
-      pages: write      # to deploy to Pages
-      id-token: write   # to verify the deployment originates from an appropriate source
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-24.04
     needs:
       - test_ubuntu_24_04
@@ -464,13 +454,35 @@ jobs:
       - name: Upload coverage report to workflow run page
         uses: ./.github/workflows/coverage-upload
 
-      # Upload combined HTML coverage report to gh-pages
+
+  upload_combined_coverage_report_to_github_pages:
+    runs-on: ubuntu-24.04
+    needs:
+      - combine_coverage_reports
+
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download combined coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-combine_coverage_reports
+          path: coverage-combine_coverage_reports
       - name: Setup Pages
         uses: actions/configure-pages@v5  # https://github.com/actions/configure-pages
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
         with:
           path: 'htmlcov'
-      - name: Upload coverage report to workflow to GitHub Pages at https://whoschek.github.io/wbackup-zfs/
+      - name: Upload combined coverage report to workflow to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
+      - name: Merge coverage reports
+        run: |
+          echo "Uploaded combined coverage report to workflow to GitHub Pages at https://whoschek.github.io/wbackup-zfs/"
