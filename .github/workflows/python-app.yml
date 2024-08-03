@@ -15,6 +15,7 @@
 
 # This workflow will run automated unit tests and integration tests on a matrix
 # of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris.
+# It will also generate code coverage reports.
 name: Tests
 
 on:
@@ -37,16 +38,18 @@ on:
         - test_freebsd_13_3
         - test_solaris_11_4
         default: "test_ubuntu_24_04_fast"
-      want_sushi:
-        description: True or False
+      run_all_jobs:
+        description: Run all jobs
         type: boolean
-        default: True
+        default: False
   schedule:
     - cron: '0 5 * * *'  # Runs daily at 5am UTC
 #    - cron: '0 6 * * 0'  # Runs weekly at 6am UTC on Sundays
 
 permissions:
   contents: read
+  pages: write  # allows deployment to GitHub Pages
+  id-token: write  # allows deployment to GitHub Pages
 
 jobs:
   test_ubuntu_24_04_fast:
@@ -77,8 +80,9 @@ jobs:
       run: |
         ./test.sh
 
+
   test_ubuntu_24_04:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -107,11 +111,12 @@ jobs:
     - name: Run tests and generate code coverage
       run: |
         echo Now running coverage; ./coverage.sh
-    - name: Upload code coverage report
+    - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
+
   test_ubuntu_24_04_zfs_latest:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -147,12 +152,12 @@ jobs:
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
-    - name: Upload code coverage report
+    - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_22_04:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_22_04'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_22_04'
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -187,12 +192,12 @@ jobs:
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
-    - name: Upload code coverage report
+    - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_20_04:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_ubuntu_20_04'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_ubuntu_20_04'
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -221,12 +226,12 @@ jobs:
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
-    - name: Upload code coverage report
+    - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
 
   test_freebsd_14_1:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_freebsd_14_1'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_freebsd_14_1'
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
@@ -264,12 +269,12 @@ jobs:
           sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
           cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
           sudo ./test.sh
-    - name: Upload code coverage report
+    - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
 
   test_freebsd_13_3:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_freebsd_13_3'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-latest
     timeout-minutes: 80
     steps:
@@ -308,12 +313,12 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null          
           sudo chsh -s /bin/sh
           sudo ./test.sh
-    - name: Upload code coverage report
+    - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
 
   test_solaris_11_4:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch')) || github.event.inputs.name == 'test_solaris_11_4'
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs || github.event.inputs.name == 'test_solaris_11_4'
 #    if: false  # job currently disabled
     runs-on: ubuntu-latest
     timeout-minutes: 80
@@ -389,11 +394,14 @@ jobs:
           # cp -rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-solaris
           chown -R $tuser $thome/wbackup-zfs
           sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/wbackup-zfs; ./test.sh"
-    - name: Upload code coverage report
+    - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
   combine_coverage_reports:
-    if: (!contains(github.event.head_commit.message, 'ci skip' && github.event_name != 'workflow_dispatch'))
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-24.04
     needs:
       - test_ubuntu_24_04
@@ -449,5 +457,16 @@ jobs:
           coverage combine $(find . -name '.coverage*')
           coverage report | tee coverage_report.txt
           coverage html
-      - name: Upload code coverage report
+      - name: Upload coverage report to workflow run page
         uses: ./.github/workflows/coverage-upload
+
+      # Upload combined HTML coverage report to gh-pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v5  # https://github.com/actions/configure-pages
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
+        with:
+          path: 'htmlcov'
+      - name: Upload coverage report to workflow to GitHub Pages at https://whoschek.github.io/wbackup-zfs/
+        id: deployment
+        uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
