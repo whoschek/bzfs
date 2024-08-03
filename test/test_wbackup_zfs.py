@@ -19,6 +19,7 @@ import getpass
 import itertools
 import logging
 import platform
+import pwd
 import traceback
 import unittest
 import os
@@ -26,7 +27,7 @@ import sys
 import tempfile
 from collections import defaultdict, Counter
 from contextlib import contextmanager
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 from .zfs_util import *
 from wbackup_zfs.wbackup_zfs import CheckRange
 from wbackup_zfs import wbackup_zfs
@@ -43,6 +44,10 @@ qq = "wbackup_zfs_"
 zfs_encryption_key_fd, zfs_encryption_key = tempfile.mkstemp(prefix='test_wbackup_zfs.key_')
 os.write(zfs_encryption_key_fd, 'mypasswd'.encode())
 os.close(zfs_encryption_key_fd)
+ssh_config_file_fd, ssh_config_file = tempfile.mkstemp(prefix='ssh_config_file_')
+os.write(ssh_config_file_fd, '# Empty ssh_config file'.encode())
+os.close(ssh_config_file_fd)
+
 keylocation = f"file://{zfs_encryption_key}"
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(message)s',
@@ -171,15 +176,18 @@ class WBackupTestCase(ParametrizedTestCase):
         args = list(args)
         src_host = ['--ssh-src-host', '127.0.0.1']
         dst_host = ['--ssh-dst-host', '127.0.0.1']
-        src_port = [] if port is None else ['--ssh-src-port', str(port)]
+        src_port = ['--ssh-src-port', '22' if port is None else str(port)]
         dst_port = [] if port is None else ['--ssh-dst-port', str(port)]
+        src_user = ['--ssh-src-user', pwd.getpwuid(os.getuid()).pw_name]
+        src_private_key = ['--ssh-private-key', pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"]
+        src_ssh_config_file = ['--ssh-config-file', ssh_config_file]
         params = self.param
         if params and params.get('ssh_mode') == 'push':
             args = args + dst_host + dst_port
         elif params and params.get('ssh_mode') == 'pull':
             args = args + src_host + src_port
         elif params and params.get('ssh_mode') == 'pull-push':
-            args = args + src_host + dst_host + src_port + dst_port
+            args = args + src_user + src_host + dst_host + src_port + dst_port + src_private_key + src_ssh_config_file
         elif params and params.get('ssh_mode', 'local') != 'local':
             raise ValueError("Unknown ssh_mode: " + params['ssh_mode'])
 
@@ -212,6 +220,7 @@ class WBackupTestCase(ParametrizedTestCase):
         if params and 'min_transfer_size' in params:
             old_min_transfer_size = os.environ.get(qq + 'min_transfer_size')
             os.environ[qq + 'min_transfer_size'] = str(int(params['min_transfer_size']))
+            old_home = os.environ.get("HOME")
 
         if dry_run:
             args = args + ['--dry-run']
@@ -256,6 +265,11 @@ class WBackupTestCase(ParametrizedTestCase):
                     os.environ.pop(qq + 'min_transfer_size')
                 else:
                     os.environ[qq + 'min_transfer_size'] = old_min_transfer_size
+
+                if old_home is None:
+                    os.environ.pop('HOME')
+                else:
+                    os.environ['HOME'] = old_home
 
         self.assertEqual(expected_status, returncode)
         return job
@@ -402,6 +416,17 @@ class LocalTestCase(WBackupTestCase):
                 else:
                     self.assertSnapshots(dst_root_dataset, 3, 's')
                     self.assertSnapshots(dst_root_dataset + "/zoo", 1, 'z')
+
+    def test_basic_replication_with_overlapping_datasets(self):
+        self.assertTrue(dataset_exists(src_root_dataset))
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        self.setup_basic()
+        self.run_wbackup(src_root_dataset, src_root_dataset, expected_status=die_status)
+        self.run_wbackup(dst_root_dataset, dst_root_dataset, expected_status=die_status)
+        self.run_wbackup(src_root_dataset, src_root_dataset + '/tmp', '--recursive', expected_status=die_status)
+        self.run_wbackup(src_root_dataset + '/tmp', src_root_dataset, '--recursive', expected_status=die_status)
+        self.run_wbackup(dst_root_dataset, dst_root_dataset + '/tmp', '--recursive', expected_status=die_status)
+        self.run_wbackup(dst_root_dataset + '/tmp', dst_root_dataset, '--recursive', expected_status=die_status)
 
     def test_basic_replication_flat_simple_with_sufficiently_many_retries_on_error_injection(self):
         self.basic_replication_flat_simple_with_retries_on_error_injection(max_retries=6, expected_status=0)
@@ -1548,6 +1573,32 @@ class TestCLI(unittest.TestCase):
 
 
 #############################################################################
+class TestPythonVersionCheck(unittest.TestCase):
+    """Test version check near top of program:
+    if sys.version_info < (3, 7):
+        print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
+        sys.exit(die_status)
+    """
+
+    @patch('sys.exit')
+    @patch('sys.version_info', new=(3, 6))
+    def test_version_below_3_7(self, mock_exit):
+        with patch('sys.stderr') as mock_stderr:
+            import importlib
+            from wbackup_zfs import wbackup_zfs
+            importlib.reload(wbackup_zfs)  # Reload module to apply version patch
+            mock_exit.assert_called_with(wbackup_zfs.die_status)
+
+    @patch('sys.exit')
+    @patch('sys.version_info', new=(3, 7))
+    def test_version_3_7_or_higher(self, mock_exit):
+        import importlib
+        from wbackup_zfs import wbackup_zfs
+        importlib.reload(wbackup_zfs)  # Reload module to apply version patch
+        mock_exit.assert_not_called()
+
+
+#############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
     def run_test(self, input, expected_user, expected_host, expected_dataset, expected_user_host,
                  expected_error):
@@ -1915,6 +1966,7 @@ def main():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
     suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {'verbose': True}))
 
