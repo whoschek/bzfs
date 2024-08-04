@@ -1,9 +1,8 @@
 #!/usr/bin/env sh
 set -e
 # Use tmpfs (RAM disk) as fast backing storage where available
-if [ -d "/run/user/$UID" ] && [ -w "/run/user/$UID" ]; then
-  TMPDIR="/run/user/$UID/wbackup-zfs" # for Github Action on Linux, etc
-  export TMPDIR
+if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
+  export TMPDIR="/run/user/$(id -u)/wbackup-zfs" # for Github Action on Linux, etc
   mkdir -p "$TMPDIR"
 fi
 echo "TMPDIR: $TMPDIR"
