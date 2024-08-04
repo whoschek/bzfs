@@ -372,7 +372,8 @@ class LocalTestCase(WBackupTestCase):
                 extra_opt = ""
                 if is_zpool_feature_enabled_or_active('src', 'feature@large_blocks'):
                     extra_opt = ' --large-block'
-                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a', '-v', '-v',
+                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a',
+                                 '-v', '-v',
                                  '--zfs-send-program-opts=-v --dryrun' + extra_opt,
                                  '--zfs-receive-program-opts=--verbose -n -u', dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
