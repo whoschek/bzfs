@@ -188,7 +188,9 @@ class WBackupTestCase(ParametrizedTestCase):
         elif params and params.get('ssh_mode') == 'pull':
             args = args + src_host + src_port
         elif params and params.get('ssh_mode') == 'pull-push':
-            args = args + src_user + src_host + dst_host + src_port + dst_port + src_private_key + src_ssh_config_file
+            args = args + src_host + dst_host + dst_port
+            if params and 'min_transfer_size' in params and int(params['min_transfer_size']) == 0:
+                args = args + src_user + src_port + src_private_key + src_ssh_config_file
             args = args + ['--bwlimit=10000m']
         elif params and params.get('ssh_mode', 'local') != 'local':
             raise ValueError("Unknown ssh_mode: " + params['ssh_mode'])
@@ -225,6 +227,8 @@ class WBackupTestCase(ParametrizedTestCase):
             old_min_transfer_size = os.environ.get(qq + 'min_transfer_size')
             os.environ[qq + 'min_transfer_size'] = str(int(params['min_transfer_size']))
             old_home = os.environ.get("HOME")
+            if old_home is not None and int(params['min_transfer_size']) == 0:
+                os.environ.pop("HOME")
 
         if dry_run:
             args = args + ['--dry-run']
@@ -272,7 +276,8 @@ class WBackupTestCase(ParametrizedTestCase):
                     os.environ[qq + 'min_transfer_size'] = old_min_transfer_size
 
                 if old_home is None:
-                    os.environ.pop('HOME')
+                    if 'HOME' in os.environ:
+                        os.environ.pop('HOME')
                 else:
                     os.environ['HOME'] = old_home
 
@@ -351,8 +356,24 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
+                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a', dry_run=(i == 0))
+                self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
+                if i == 0:
+                    self.assertFalse(dataset_exists(dst_root_dataset + '/foo/a'))
+                else:
+                    self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
+
+    def test_basic_replication_flat_send_recv_flags(self):
+        self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
+        self.assertFalse(dataset_exists(dst_root_dataset + '/foo/a'))
+        self.setup_basic()
+        for i in range(0, 3):
+            with stop_on_failure_subtest(i=i):
+                extra_opt = ""
+                if is_zpool_feature_enabled_or_active('src', 'feature@large_blocks'):
+                    extra_opt = ' --large-block'
                 self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a', '-v', '-v',
-                                 '--zfs-send-program-opts=-v --dryrun',
+                                 '--zfs-send-program-opts=-v --dryrun' + extra_opt,
                                  '--zfs-receive-program-opts=--verbose -n -u', dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
                 if i == 0:
@@ -434,6 +455,17 @@ class LocalTestCase(WBackupTestCase):
         with self.assertRaises(SystemExit) as e:
             wbackup_zfs.main()
         self.assertEqual(e.exception.code, 2)
+
+    def test_basic_replication_flat_simple_using_main(self):
+        self.setup_basic()
+        with patch('sys.argv', ['wbackup_zfs.py', src_root_dataset, dst_root_dataset]):
+            wbackup_zfs.main()
+        self.assertSnapshots(dst_root_dataset, 3, 's')
+
+        with self.assertRaises(SystemExit) as e:
+            with patch('sys.argv', ['wbackup_zfs.py', "nonexisting_dataset", dst_root_dataset]):
+                wbackup_zfs.main()
+            self.assertEqual(e.exception.code, die_status)
 
     def test_basic_replication_with_overlapping_datasets(self):
         self.assertTrue(dataset_exists(src_root_dataset))
