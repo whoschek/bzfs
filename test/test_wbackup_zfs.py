@@ -351,7 +351,9 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a', '-v', '-v', dry_run=(i == 0))
+                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a', '-v', '-v',
+                                 '--zfs-send-program-opts=-v --dryrun',
+                                 '--zfs-receive-program-opts=--verbose -n -u', dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + '/foo/a'))

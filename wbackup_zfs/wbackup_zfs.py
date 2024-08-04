@@ -456,12 +456,12 @@ class Params:
         self.include_dataset_regexes = None
         self.exclude_snapshot_regexes = None
         self.include_snapshot_regexes = None
-        self.zfs_send_program_opts = self.split_args(args.zfs_send_program_opts)
-        self.zfs_recv_program_opts = self.split_args(args.zfs_receive_program_opts)
-        self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
+        self.zfs_send_program_opts = self.sanitize_send_recv_opts(self.split_args(args.zfs_send_program_opts))
+        self.zfs_recv_program_opts = self.sanitize_send_recv_opts(self.split_args(args.zfs_receive_program_opts))
         if self.verbose_zfs:
-            self.zfs_send_program_opts += ['-v']
-            self.zfs_recv_program_opts += ['-v']
+            append_if_absent(self.zfs_send_program_opts, '-v')
+            append_if_absent(self.zfs_recv_program_opts, '-v')
+        self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
         self.timestamp = datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
         self.home_dir = get_home_directory()
         self.log_dir = self.validate_arg(self.getenv('log_dir', f"{self.home_dir}/{prog_name}-logs"))
@@ -566,6 +566,10 @@ class Params:
         if any(c in opt for c in ["'", '"']):
             die(f"Option must not contain a single quote or a double quote character: {opt}")
         return opt
+
+    def sanitize_send_recv_opts(self, opts: List[str]):
+        """These opts are instead managed via wbackup CLI args --dry-run and --verbose"""
+        return [opt for opt in opts if opt not in ['--dryrun', '-n', '--verbose', '-v']]
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
@@ -1473,8 +1477,9 @@ class Job:
         if self.is_solaris_zfs('src'):
             return 0  # solaris-11.4.0 does not have a --parsable equivalent
         p = self.params
-        cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send -n -v --parsable",
-                           p.zfs_send_program_opts, items)
+        zfs_send_program_opts = ['--parsable' if opt == '-P' else opt for opt in p.zfs_send_program_opts.copy()]
+        zfs_send_program_opts = append_if_absent(zfs_send_program_opts, '-v', '-n', '--parsable')
+        cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", zfs_send_program_opts, items)
         lines = self.try_ssh_command('src', self.trace, cmd=cmd)
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
@@ -2009,9 +2014,10 @@ def tail(file, n: int):
         return collections.deque(fd, maxlen=n)
 
 
-def append_if_absent(lst: List, item):
-    if item not in lst:
-        lst.append(item)
+def append_if_absent(lst: List, *items):
+    for item in items:
+        if item not in lst:
+            lst.append(item)
     return lst
 
 
