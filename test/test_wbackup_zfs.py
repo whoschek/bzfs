@@ -34,7 +34,7 @@ from wbackup_zfs.wbackup_zfs import CheckRange
 from wbackup_zfs import wbackup_zfs
 
 src_pool_name = 'wb_src'
-dst_pool_name = 'wb_dst'
+dst_pool_name = 'wb_dest'
 pool_size = 100 * 1024 * 1024
 die_status = 3
 prog_exe = './wbackup_zfs/wbackup_zfs.py'
@@ -200,7 +200,7 @@ class WBackupTestCase(ParametrizedTestCase):
                            '--ssh-dst-extra-opt', '-o StrictHostKeyChecking=no']
 
         if params and 'skip_missing_snapshots' in params:
-            args = ['--skip-missing-snapshots=' + str(params['skip_missing_snapshots'])] + args
+            args = args[0:2] + ['--skip-missing-snapshots=' + str(params['skip_missing_snapshots'])] + args[2:]
 
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
