@@ -226,9 +226,6 @@ class WBackupTestCase(ParametrizedTestCase):
         if params and 'min_transfer_size' in params:
             old_min_transfer_size = os.environ.get(qq + 'min_transfer_size')
             os.environ[qq + 'min_transfer_size'] = str(int(params['min_transfer_size']))
-            old_home = os.environ.get("HOME")
-            if old_home is not None and int(params['min_transfer_size']) == 0:
-                os.environ.pop("HOME")
 
         if dry_run:
             args = args + ['--dry-run']
@@ -274,12 +271,6 @@ class WBackupTestCase(ParametrizedTestCase):
                     os.environ.pop(qq + 'min_transfer_size')
                 else:
                     os.environ[qq + 'min_transfer_size'] = old_min_transfer_size
-
-                if old_home is None:
-                    if 'HOME' in os.environ:
-                        os.environ.pop('HOME')
-                else:
-                    os.environ['HOME'] = old_home
 
         self.assertEqual(expected_status, returncode)
         return job
@@ -1703,6 +1694,58 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
 
 
 #############################################################################
+class TestHelperFunctions(unittest.TestCase):
+
+    def test_append_if_absent(self):
+        self.assertListEqual([], wbackup_zfs.append_if_absent([]))
+        self.assertListEqual(['a'], wbackup_zfs.append_if_absent([], 'a'))
+        self.assertListEqual(['a'], wbackup_zfs.append_if_absent([], 'a', 'a'))
+
+    def test_get_home_directory(self):
+        old_home = os.environ.get('HOME')
+        if old_home is not None:
+            self.assertEqual(old_home, wbackup_zfs.get_home_directory())
+            os.environ.pop('HOME')
+            try:
+                self.assertEqual(old_home, wbackup_zfs.get_home_directory())
+            finally:
+                os.environ['HOME'] = old_home
+
+    def test_tail(self):
+        fd, file = tempfile.mkstemp(prefix='test_wbackup_zfs.tail_')
+        os.write(fd, 'line1\nline2\n'.encode())
+        os.close(fd)
+        self.assertEqual(['line1\n', 'line2\n'], list(wbackup_zfs.tail(file, n=10)))
+        self.assertEqual(['line1\n', 'line2\n'], list(wbackup_zfs.tail(file, n=2)))
+        self.assertEqual(['line2\n'], list(wbackup_zfs.tail(file, n=1)))
+        self.assertEqual([], list(wbackup_zfs.tail(file, n=0)))
+        os.remove(file)
+        self.assertEqual([], list(wbackup_zfs.tail(file, n=2)))
+
+    def test_validate_port(self):
+        wbackup_zfs.validate_port(47, 'msg')
+        wbackup_zfs.validate_port('47', 'msg')
+        wbackup_zfs.validate_port(0, 'msg')
+        wbackup_zfs.validate_port('', 'msg')
+        with self.assertRaises(ValueError):
+            wbackup_zfs.validate_port('xxx47', 'msg')
+
+    def test_validate_quoting(self):
+        params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=['src', 'dst']))
+        params.validate_quoting('foo')
+        with self.assertRaises(SystemExit):
+            params.validate_quoting('foo"')
+        with self.assertRaises(SystemExit):
+            params.validate_quoting("foo'")
+
+        params.validate_arg('foo')
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo ")
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo" + '\t')
+
+
+#############################################################################
 class TestCLI(unittest.TestCase):
 
     def test_help(self):
@@ -2111,6 +2154,7 @@ def main():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
