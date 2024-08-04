@@ -43,7 +43,8 @@ if sys.version_info < (3, 7):
     print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
     sys.exit(die_status)
 zfs_send_program_opts_default = '--props --raw --compressed'
-zfs_recv_program_opts_default = '-u'
+# zfs_recv_program_opts_default = '-u'
+zfs_recv_program_opts_default = ''
 exclude_dataset_regexes_default = r'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*'  # skip tmp datasets by default
 max_retries_default = 0
 ssh_private_key_file_default = ".ssh/id_rsa"
@@ -436,7 +437,8 @@ class Params:
         self.force_once = args.force_once
         if self.force_once:
             self.force = True
-        self.force_hard = "-R" if args.force_hard else ""
+        # self.force_hard = "-Rf" if args.force_hard else ""
+        self.force_hard = "-Rf"
         self.skip_missing_snapshots = {'true': True, 'false': False, 'error': None}[args.skip_missing_snapshots]
         self.create_bookmark = not args.no_create_bookmark
         self.use_bookmark = not args.no_use_bookmark
@@ -935,10 +937,11 @@ class Job:
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_snapshot = dst_snapshots_with_guids[-1].split('\t')[1]
-            if latest_dst_snapshot != "" and params.force:
+            # if latest_dst_snapshot != "" and params.force:
+            if latest_dst_snapshot:
                 self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
                 # rollback just in case the dst dataset was modified since its most recent snapshot
-                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback", latest_dst_snapshot)
+                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback -f", latest_dst_snapshot)
                 self.run_ssh_command('dst', self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             if latest_src_snapshot == "" and latest_dst_snapshot == "":
                 self.info("Already-up-to-date:", dst_dataset)
@@ -986,7 +989,7 @@ class Job:
 
         self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)
         # self.debug("latest_common_dst_snapshot:", latest_common_dst_snapshot)
-        # self.debug("latest_dst_snapshot:", latest_dst_snapshot)
+        self.debug("latest_dst_snapshot2:", latest_dst_snapshot)
 
         is_dry_send_receive = False
         if not latest_common_src_snapshot:
@@ -998,7 +1001,7 @@ class Job:
                         "delete all existing destination snapshots in order to be able to proceed with replication.")
                 if params.force_once:
                     params.force = False
-                if self.is_solaris_zfs('dst'):
+                if True or self.is_solaris_zfs('dst'):
                     # solaris-11.4.0 has no wildcard syntax to delete all snapshots in a single CLI invocation
                     self.delete_snapshots(
                         dst_dataset, snapshot_tags=cut(2, separator='@', lines=dst_snapshots_with_guids))
@@ -1043,6 +1046,13 @@ class Job:
                 if not is_dry_send_receive and not params.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
                 self.create_zfs_bookmark(oldest_src_snapshot, src_dataset)
+
+                if self.dst_dataset_exists[dst_dataset]:
+                    latest_common_dst_snapshot = replace_prefix(latest_common_src_snapshot, src_dataset, dst_dataset)
+                    self.info("Rolling back dst to most recent full snapshot:", latest_common_dst_snapshot)
+                    # rollback just in case the dst dataset was modified since its most recent snapshot
+                    cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback -f", latest_common_dst_snapshot)
+                    self.run_ssh_command('dst', self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
@@ -1297,7 +1307,17 @@ class Job:
         if not is_dry_send_receive:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-                subprocess_run(cmd, stdout=PIPE, stderr=PIPE, check=True)
+                start_time_nanos = time.time_ns()
+                while True:
+                    try:
+                        # print(subprocess_run(cmd, stdout=PIPE, stderr=PIPE, check=True).stdout, end='')
+                        subprocess_run(cmd, stdout=PIPE, stderr=PIPE, check=True)
+                        break
+                    except subprocess.CalledProcessError as e:
+                        if time.time_ns() - start_time_nanos < 1000_000_000:
+                            # time.sleep(0.1)
+                            continue
+                        raise e
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 # op isn't idempotent so retries regather current state from the start of replicate_flat_dataset()
                 self.warn(stderr_to_str(e.stderr))
@@ -1402,6 +1422,7 @@ class Job:
                     self.delete_snapshot(f"{dataset}@{snapshot_tag}")
             else:
                 self.delete_snapshot(dataset + '@' + ','.join(reversed(snapshot_tags)))
+                # self.delete_snapshot(dataset + '@' + ','.join(snapshot_tags))
 
     def delete_snapshot(self, snaps_to_delete: str) -> None:
         p = self.params
@@ -1650,7 +1671,7 @@ class Job:
             self.delete_injection_triggers[delete_trigger] -= 1
             p = self.params
             sudo = p.src_sudo if location == 'src' else p.dst_sudo
-            cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", dataset)
+            cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r {p.force_hard}", dataset)
             self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
     def cquote(self, arg: str):

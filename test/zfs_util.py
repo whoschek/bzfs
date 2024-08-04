@@ -29,7 +29,7 @@ def destroy_pool(pool_name, force=False):
     run_cmd(sudo_cmd + ['zpool', 'destroy'] + force + [pool_name])
 
 
-def destroy(name, recursive=False, force=False):
+def destroy(name, recursive=False, force=True):
     cmd = sudo_cmd + ['zfs', 'destroy']
     if recursive:
         cmd.append('-r')

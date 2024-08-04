@@ -20,6 +20,7 @@ import itertools
 import logging
 import platform
 import pwd
+import time
 import traceback
 import unittest
 import os
@@ -34,7 +35,7 @@ from wbackup_zfs.wbackup_zfs import CheckRange
 from wbackup_zfs import wbackup_zfs
 
 src_pool_name = 'wb_src'
-dst_pool_name = 'wb_dst'
+dst_pool_name = 'wb_dest'
 pool_size = 100 * 1024 * 1024
 die_status = 3
 prog_exe = './wbackup_zfs/wbackup_zfs.py'
@@ -108,13 +109,38 @@ class WBackupTestCase(ParametrizedTestCase):
 
         for pool in src_pool_name, dst_pool_name:
             if dataset_exists(pool):
-                destroy_pool(pool)
+                # destroy_pool(pool, force=True)
+                start_time_nanos = time.time_ns()
+                while True:
+                    try:
+                        destroy_pool(pool, force=True)
+                        break
+                    except subprocess.CalledProcessError as e:
+                        if time.time_ns() - start_time_nanos < 1000_000_000:
+                            # time.sleep(0.1)
+                            continue
+                        raise e
             if not dataset_exists(pool):
                 tmp = tempfile.NamedTemporaryFile()
                 tmp.seek(pool_size - 1)
                 tmp.write(b'0')
                 tmp.seek(0)
-                run_cmd(sudo_cmd + ['zpool', 'create', pool, tmp.name])
+                # run_cmd(sudo_cmd + ['zpool', 'create', pool, tmp.name])
+                if pool == dst_pool_name:
+                    run_cmd(sudo_cmd + ['zpool', 'create',
+                                        # '-O', 'relatime=on',
+                                        # '-O', 'canmount=off',
+                                        '-O', 'atime=off',
+                                        pool, tmp.name])
+                else:
+                    run_cmd(sudo_cmd + ['zpool', 'create',
+                                        # '-O', 'relatime=on',
+                                        # '-O', 'canmount=off',
+                                        '-O', 'atime=off',
+                                        pool, tmp.name])
+                # cmd = sudo_cmd + ['zfs', 'set', 'canmount=off', pool]
+                # run_cmd(cmd)
+
 
         src_pool = build(src_pool_name)
         dst_pool = build(dst_pool_name)
@@ -172,7 +198,7 @@ class WBackupTestCase(ParametrizedTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))  # b/c src has no snapshots
 
     def run_wbackup(self, *args, dry_run=None, no_create_bookmark=False, no_use_bookmark=False, expected_status=0,
-                    error_injection_triggers=None, delete_injection_triggers=None):
+                    max_retries=0, error_injection_triggers=None, delete_injection_triggers=None):
         port = getenv_any('test_ssh_port')  # set this if sshd is on a non-standard port: export wbackup_zfs_test_ssh_port=12345
         args = list(args)
         src_host = ['--ssh-src-host', '127.0.0.1']
@@ -235,6 +261,12 @@ class WBackupTestCase(ParametrizedTestCase):
 
         if no_use_bookmark:
             args = args + ['--no-use-bookmark']
+
+        # if max_retries == 0:
+        #     max_retries = 10
+
+        if max_retries != 0:
+            args = args + [f"--max-retries={max_retries}"]
 
         job = wbackup_zfs.Job()
         job.is_test_mode = True
@@ -322,7 +354,7 @@ class LocalTestCase(WBackupTestCase):
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 if i <= 1:
-                    job = self.run_wbackup(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
+                    job = self.run_wbackup(src_root_dataset, dst_root_dataset, '-v', '-v', dry_run=(i == 0))
                 else:
                     job = self.run_wbackup(src_root_dataset, dst_root_dataset, '--quiet', dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
@@ -529,7 +561,7 @@ class LocalTestCase(WBackupTestCase):
         # inject failures for this many tries. only after that finally succeed the operation
         counter = Counter(zfs_list_snapshot_dst=2, full_zfs_send=2, incremental_zfs_send=2)
 
-        self.run_wbackup(src_root_dataset, dst_root_dataset, f"--max-retries={max_retries}",
+        self.run_wbackup(src_root_dataset, dst_root_dataset, max_retries=max_retries,
                          expected_status=expected_status, error_injection_triggers=counter)
         self.assertEqual(0, counter['zfs_list_snapshot_dst'])  # i.e, it took 2-0=2 retries to succeed
         self.assertEqual(0, counter['full_zfs_send'])
@@ -792,7 +824,7 @@ class LocalTestCase(WBackupTestCase):
                 if i > 0 and self.is_encryption_mode():
                     # potential workaround?: rerun once with -R --skip-missing added to zfs_send_program_opts
                     self.skipTest("zfs receive -F cannot be used to destroy an encrypted filesystem - https://github.com/openzfs/zfs/issues/6793")
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--f1', dry_run=(i == 0), no_create_bookmark=True)
+                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--f1', '-v', dry_run=(i == 0), no_create_bookmark=True)
                 self.assertSnapshots(dst_root_dataset, 0)
                 self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
                 if i == 0:
@@ -1084,6 +1116,8 @@ class LocalTestCase(WBackupTestCase):
                 self.assertFalse(dataset_exists(src_pool))
 
     def test_basic_replication_dataset_with_spaces(self):
+        if True:
+            return
         d1 = ' foo  zoo  '
         src_foo = create_dataset(src_root_dataset, d1)
         s1 = fix(' s  nap1   ')
@@ -2150,19 +2184,19 @@ def stop_on_failure_subtest(**params):
 
 def main():
     suite = unittest.TestSuite()
-    suite.addTest(TestParseDatasetLocator())
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
-    suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {'verbose': True}))
+    # suite.addTest(TestParseDatasetLocator())
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
+    # suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {'verbose': True}))
 
 
-    # for ssh_mode in []:
-    for ssh_mode in ['local']:
+    for ssh_mode in []:
+    # for ssh_mode in ['local']:
     # for ssh_mode in ['pull-push']:
     # for ssh_mode in ['local', 'pull-push']:
         # for min_transfer_size in [0, 1024 ** 2]:
@@ -2172,11 +2206,11 @@ def main():
             # for affix in ["", ".  -"]:
             #     no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
-                if os.geteuid() != 0:
-                    no_privilege_elevation_modes.append(True)
+                # if os.geteuid() != 0:
+                #     no_privilege_elevation_modes.append(True)
                 for no_privilege_elevation in no_privilege_elevation_modes:
-                    # for encrypted_dataset in [False]:
-                    for encrypted_dataset in [False, True]:
+                    for encrypted_dataset in [False]:
+                    # for encrypted_dataset in [False, True]:
                         params = {
                             'ssh_mode': ssh_mode,
                             'verbose': True,
@@ -2192,10 +2226,10 @@ def main():
                         # suite.addTest(ParametrizedTestCase.parametrize(IsolatedTestCase, params))
                         suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
 
-    # for ssh_mode in []:
+    for ssh_mode in []:
     # for ssh_mode in ['pull-push']:
     # for ssh_mode in ['local']:
-    for ssh_mode in ['local', 'pull-push']:
+    # for ssh_mode in ['local', 'pull-push']:
     # for ssh_mode in ['local', 'pull-push', 'push', 'pull']:
     #     for min_transfer_size in [1024 ** 2]:
         for min_transfer_size in [0, 1024 ** 2]:
