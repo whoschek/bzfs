@@ -939,7 +939,7 @@ class Job:
                 self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
                 # rollback just in case the dst dataset was modified since its most recent snapshot
                 cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-                self.run_ssh_command('dst', self.debug, is_dry=p.dry_run, cmd=cmd)
+                self.run_ssh_command('dst', self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             if latest_src_snapshot == "" and latest_dst_snapshot == "":
                 self.info("Already-up-to-date:", dst_dataset)
                 return True
@@ -977,7 +977,7 @@ class Job:
                     self.info("Rolling back dst to most recent common snapshot:", latest_common_dst_snapshot)
                     cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback -r {p.force_hard}",
                                        latest_common_dst_snapshot)
-                    self.run_ssh_command('dst', self.debug, is_dry=params.dry_run, cmd=cmd)
+                    self.run_ssh_command('dst', self.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
                     latest_dst_snapshot = latest_common_dst_snapshot
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
@@ -1005,8 +1005,8 @@ class Job:
                 else:
                     cmd = p.split_args(
                         f"{p.dst_sudo} {p.zfs_program} destroy {p.force_hard} {p.verbose_destroy} {p.dry_run_destroy}",
-                        f"{dst_dataset}@%")
-                    self.run_ssh_command('dst', self.debug, cmd=cmd)  # delete all dst snapshots in a batch
+                        f"{dst_dataset}@%")  # delete all dst snapshots in a batch
+                    self.run_ssh_command('dst', self.debug, cmd=cmd, print_stdout=True)
                 if params.dry_run:
                     # As we're in --dry-run (--force) mode this conflict resolution step (see above) wasn't really
                     # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
@@ -1409,7 +1409,7 @@ class Job:
         cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy",
                            p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-        self.run_ssh_command('dst', self.debug, is_dry=is_dry, cmd=cmd)
+        self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
     def delete_datasets(self, datasets: Iterable[str]) -> None:
         """Delete the given datasets via zfs destroy -r """
@@ -1423,7 +1423,7 @@ class Job:
                 cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy -r", p.force_hard, p.verbose_destroy,
                                    p.dry_run_destroy, dataset)
                 is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-                self.run_ssh_command('dst', self.debug, is_dry=is_dry, cmd=cmd)
+                self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
                 last_deleted_dataset = dataset
 
     def create_dataset(self, dataset: str) -> None:
@@ -1439,7 +1439,7 @@ class Job:
             if not self.dst_dataset_exists[parent]:
                 cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} create -p", no_mount, parent)
                 try:
-                    self.run_ssh_command('dst', self.debug, stderr=PIPE, cmd=cmd)
+                    self.run_ssh_command('dst', self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     print(e.stderr, sys.stderr, end='')
                     # ignore harmless error caused by zfs create without the -u flag
@@ -1498,7 +1498,8 @@ class Job:
             if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src'):
                 cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
                 try:
-                    self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE, cmd=cmd)
+                    self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE,
+                                         print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
                     if ': bookmark exists' not in e.stderr:
@@ -1572,7 +1573,8 @@ class Job:
             ssh_cmd += [ssh_user_host]
         return ssh_cmd
 
-    def run_ssh_command(self, target='src', level=info, is_dry=False, check=True, stderr=None, cmd=None):
+    def run_ssh_command(self, target='src', level=info, is_dry=False, check=True, stderr=None, print_stdout=False,
+                        cmd=None):
         assert cmd is not None and len(cmd) > 0
         p = self.params
         ssh_cmd = p.ssh_src_cmd
@@ -1608,14 +1610,20 @@ class Job:
             if stderr != PIPE:
                 stderr = sys.stderr if check else PIPE
             process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=stderr, text=True, check=std_check)
+
+            def print_str(value: str, print_value: bool) -> str:
+                if print_value:
+                    print(value, end='')
+                return value
+
             if check is not None:
-                return process.stdout
+                return print_str(process.stdout, print_stdout)
             else:
                 # The value of subprocess_run(stdout=subprocess.PIPE, ...).stdout is an empty string if the process
                 # exits with a nonzero return code. Here we turn that empty string into None to indicate to the caller
                 # a nonzero return code vs a process success with empty string result, e.g. to differentiate between
                 # 'zfs list' on an empty dataset vs a non-existing dataset.
-                return process.stdout if process.returncode == 0 else None
+                return print_str(process.stdout, print_stdout) if process.returncode == 0 else None
 
     def try_ssh_command(self, target='src', level=info, is_dry=False, cmd=None, error_trigger=None):
         try:
@@ -1643,7 +1651,7 @@ class Job:
             p = self.params
             sudo = p.src_sudo if location == 'src' else p.dst_sudo
             cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", dataset)
-            self.run_ssh_command(location, self.debug, cmd=cmd)
+            self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
     def cquote(self, arg: str):
         return shlex.quote(arg)
