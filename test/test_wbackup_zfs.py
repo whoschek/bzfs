@@ -114,7 +114,7 @@ class WBackupTestCase(ParametrizedTestCase):
                 tmp.seek(pool_size - 1)
                 tmp.write(b'0')
                 tmp.seek(0)
-                run_cmd(sudo_cmd + ['zpool', 'create', pool, tmp.name])
+                run_cmd(sudo_cmd + ['zpool', 'create', '-O', 'atime=off', pool, tmp.name])
 
         src_pool = build(src_pool_name)
         dst_pool = build(dst_pool_name)
@@ -536,6 +536,24 @@ class LocalTestCase(WBackupTestCase):
         self.assertEqual(0, counter['incremental_zfs_send'])
         if expected_status == 0:
             self.assertSnapshots(dst_root_dataset, 3, 's')
+
+    def test_basic_replication_recursive_simple_with_force_unmount(self):
+        if self.is_encryption_mode():
+            self.skipTest("encryption key not loaded")
+        self.setup_basic()
+        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive')
+        dst_foo = dst_root_dataset + '/foo'
+        dst_foo_a = dst_foo + '/a'
+        run_cmd(['sudo', 'zfs', 'mount', dst_foo])
+        # run_cmd(['sudo', 'zfs', 'mount', dst_foo_a])
+        take_snapshot(dst_foo, fix('x1'))  # --force will need to rollback that dst snap
+        take_snapshot(dst_foo_a, fix('y1'))  # --force will need to rollback that dst snap
+        # self.run_wbackup(src_root_dataset, dst_root_dataset, '--force', '--recursive')
+        self.run_wbackup(src_root_dataset, dst_root_dataset, '--force', '--recursive', '--force-unmount')
+        self.assertSnapshots(dst_root_dataset, 3, 's')
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
+        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
+        self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))  # b/c src has no snapshots
 
     def test_basic_replication_flat_with_bookmarks1(self):
         if not is_zpool_bookmarks_feature_enabled_or_active('src'):
