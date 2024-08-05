@@ -1116,9 +1116,9 @@ class Job:
 
         force_convert_I_to_i = False
         if (not self.params.src_sudo and os.geteuid() != 0
-                and self.params.available_programs['src'].get('os', 'Linux') == 'Linux'
+                and self.params.available_programs['src'].get('zfs') != 'notOpenZFS'
                 and not self.params.getenv_bool('no_force_convert_I_to_i', False)):
-            # If using 'zfs allow' delegation mechanism on Linux, force convert 'zfs send -I' to a series of
+            # If using 'zfs allow' delegation mechanism on Linux or FreeBSD, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs bug https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
         return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
@@ -1799,7 +1799,7 @@ class Job:
         available_programs[location] = {}
         try:
             lines = self.run_ssh_command(location, self.debug, stderr=PIPE, cmd=[p.zfs_program, '--version'])
-        except FileNotFoundError as e:  # location is local and program file was not found
+        except (FileNotFoundError, PermissionError) as e:  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         except subprocess.CalledProcessError as e:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
@@ -1834,7 +1834,7 @@ class Job:
             else:
                 self.warn(f"Failed to run {p.shell_program} on {location}. Continuing with minimal assumptions...")
                 available_programs[location].update(available_programs_minimum)
-        except FileNotFoundError as e:  # location is local and shell program file was not found
+        except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
             if e.filename != p.shell_program:
                 raise e
             self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions...")
@@ -1850,7 +1850,7 @@ class Job:
             cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", pool)
             try:
                 lines = self.run_ssh_command(location, self.trace, check=False, cmd=cmd).splitlines()
-            except FileNotFoundError as e:
+            except (FileNotFoundError, PermissionError) as e:
                 if e.filename != params.zpool_program:
                     raise e
                 lines = []

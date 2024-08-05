@@ -180,7 +180,7 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
-        ./test.sh || exit 1
+        ./test.sh
 
         echo Now running tests as root user:
         sudo mkdir -p /root/.ssh
@@ -239,12 +239,15 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "14.1"
+        usesh: true
         prepare: |
+          set -e
           pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
+          set -e
           id -u -n
           uname -a
-          zfs --version
+          zfs --version || true
           python3 --version
           ssh -V
           zstd --version
@@ -259,14 +262,26 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
           ls -al $HOME $HOME/.ssh/id_rsa
 
-          echo Now running tests as non-root user; ./test.sh || exit 1
-          echo Now running coverage; ./coverage.sh || exit 1
+          echo Now running tests as root user; ./test.sh
+          echo Now running coverage; ./coverage.sh
+          
+          echo Now running tests as non-root user:
+          tuser=test
+          thome=/home/$tuser
+          pw userdel -n $tuser || true
+          pw useradd -n $tuser -d $thome -m
+          echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /usr/local/etc/sudoers
 
-          echo Now running tests as root user:
-          sudo mkdir -p /root/.ssh
-          sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
-          cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
-          sudo ./test.sh
+          mkdir -p $thome/.ssh
+          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $thome/.ssh/
+          cat $HOME/.ssh/id_rsa.pub >> $thome/.ssh/authorized_keys
+          chmod go-rwx $thome/.ssh/authorized_keys
+          chown -R $tuser $thome/.ssh
+
+          cp -Rp . $thome/wbackup-zfs # if running with Github Action
+          # cp -Rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-freebsd
+          chown -R $tuser $thome/wbackup-zfs
+          sudo -u $tuser sh -c "cd $thome/wbackup-zfs; ./test.sh"
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -282,12 +297,15 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "13.3"
+        usesh: true
         prepare: |
+          set -e
           pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
+          set -e
           id -u -n
           uname -a
-          zfs --version
+          zfs --version || true
           python3 --version
           ssh -V
           zstd --version
@@ -302,15 +320,28 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
           ls -al $HOME
           chsh -s /bin/sh
-          echo Now running tests as non-root user; ./test.sh || exit 1
-          echo Now running coverage; ./coverage.sh || exit 1
 
-          echo Now running tests as root user:
-          sudo mkdir -p /root/.ssh
-          sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
-          cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null          
-          sudo chsh -s /bin/sh
-          sudo ./test.sh
+          echo Now running tests as root user; ./test.sh
+          echo Now running coverage; ./coverage.sh
+          
+          echo Now running tests as non-root user:
+          tuser=test
+          thome=/home/$tuser
+          pw userdel -n $tuser || true
+          pw useradd -n $tuser -d $thome -m
+          echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /usr/local/etc/sudoers
+
+          mkdir -p $thome/.ssh
+          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $thome/.ssh/
+          cat $HOME/.ssh/id_rsa.pub >> $thome/.ssh/authorized_keys
+          chmod go-rwx $thome/.ssh/authorized_keys
+          chown -R $tuser $thome/.ssh
+
+          cp -Rp . $thome/wbackup-zfs # if running with Github Action
+          # cp -Rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-freebsd
+          chown -R $tuser $thome/wbackup-zfs
+          chsh -s /bin/sh $tuser 
+          sudo -u $tuser sh -c "cd $thome/wbackup-zfs; ./test.sh"
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -327,15 +358,16 @@ jobs:
       uses: vmactions/solaris-vm@v1  # see https://github.com/vmactions/solaris-vm
       with:
         release: "11.4"
-#          usesh: true
+#        usesh: true
 #          pkg update --accept; reboot # FIXME: reboot disconnects
 #          pkg exact-install runtime/python-37  # FIXME: install fails
 #          pkg install runtime/python-39  # FIXME: install fails
 #          pkg search python
         prepare: |
+          set -e
           # To better debug these steps run a tmp solaris VM like so: https://github.com/vmactions/shell-solaris
           id -u -n
-          pkg install sudo pv 
+          pkg install sudo pv || true
           pkgutil -y -i zstd mbuffer
           pyversion=3.9.19; export ax_cv_c_float_words_bigendian=no
           # pyversion=3.8.19; export ax_cv_c_float_words_bigendian=no
@@ -344,12 +376,13 @@ jobs:
           wget https://www.python.org/ftp/python/$pyversion/Python-$pyversion.tgz
           tar -zxf Python-$pyversion.tgz
           cd Python-$pyversion
-          pkg install gcc
+          pkg install gcc || true
           ./configure --prefix=/python3  # --enable-optimizations
           make
           rm -fr /python3
           make install
         run: |          
+          set -e
           id -u -n
           uname -a
           zfs help
@@ -369,9 +402,9 @@ jobs:
           cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
           ls -al $HOME
 
-          echo Now running coverage; ./coverage.sh || exit 1
+          echo Now running coverage; ./coverage.sh
           echo Now running tests as root user:
-          ./test.sh || exit 1
+          ./test.sh
 
           echo Now running tests as non-root user:
           tuser=test
