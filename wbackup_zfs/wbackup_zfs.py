@@ -207,15 +207,19 @@ feature.
               "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
               "operation is aborted with an error when encountering a conflicting snapshot.\n\n"))
     parser.add_argument(
-        '--force-once', '--f1', action='store_true',
-        help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
-              "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
+        '--force-unmount', action='store_true',
+        help=("On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' "
+              "and 'zfs destroy -f'. \n\n"))
     parser.add_argument(
         '--force-hard', action='store_true',
         # help=("On destination, --force will also delete dependents such as clones and bookmarks via "
         #       "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you
         #       want!\n\n"))
         help=argparse.SUPPRESS)
+    parser.add_argument(
+        '--force-once', '--f1', action='store_true',
+        help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
+              "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
     parser.add_argument(
         '--skip-missing-snapshots', choices=['true', 'false', 'error'], default='true', nargs='?',
         help=("Default is 'true'. During replication, handle source datasets that include no snapshots as follows: "
@@ -436,6 +440,7 @@ class Params:
         self.force_once = args.force_once
         if self.force_once:
             self.force = True
+        self.force_unmount = "-f" if args.force_unmount else ""
         self.force_hard = "-R" if args.force_hard else ""
         self.skip_missing_snapshots = {'true': True, 'false': False, 'error': None}[args.skip_missing_snapshots]
         self.create_bookmark = not args.no_create_bookmark
@@ -975,7 +980,7 @@ class Job:
                     if params.force_once:
                         params.force = False
                     self.info("Rolling back dst to most recent common snapshot:", latest_common_dst_snapshot)
-                    cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback -r {p.force_hard}",
+                    cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
                                        latest_common_dst_snapshot)
                     self.run_ssh_command('dst', self.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
                     latest_dst_snapshot = latest_common_dst_snapshot
@@ -1420,8 +1425,8 @@ class Job:
             if not f"{dataset}/".startswith(f"{last_deleted_dataset}/"):
                 self.info("Delete missing dataset tree:", f"{dataset} ...")
                 p = self.params
-                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy -r", p.force_hard, p.verbose_destroy,
-                                   p.dry_run_destroy, dataset)
+                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard,
+                                   p.verbose_destroy, p.dry_run_destroy, dataset)
                 is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
                 self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
                 last_deleted_dataset = dataset
@@ -1650,7 +1655,7 @@ class Job:
             self.delete_injection_triggers[delete_trigger] -= 1
             p = self.params
             sudo = p.src_sudo if location == 'src' else p.dst_sudo
-            cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", dataset)
+            cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
             self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
     def cquote(self, arg: str):

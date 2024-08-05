@@ -152,7 +152,7 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--exclude-dataset-regex REGEX [REGEX ...]]
                    [--include-snapshot-regex REGEX [REGEX ...]]
                    [--exclude-snapshot-regex REGEX [REGEX ...]] [--force]
-                   [--force-once]
+                   [--force-unmount] [--force-once]
                    [--skip-missing-snapshots [{true,false,error}]]
                    [--max-retries INT] [--zfs-send-program-opts STRING]
                    [--zfs-receive-program-opts STRING] [--skip-replication]
@@ -288,6 +288,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
     dataset is treated as append-only, hence no destination snapshot
     that already exists is deleted, and instead the operation is aborted
     with an error when encountering a conflicting snapshot.
+
+<!-- -->
+
+**--force-unmount**
+
+*  On destination, --force will also forcibly unmount file systems via
+    'zfs rollback -f' and 'zfs destroy -f'.
 
 <!-- -->
 
