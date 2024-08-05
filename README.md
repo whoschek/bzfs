@@ -1,4 +1,5 @@
 [![Build](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml)
+[![Coverage](https://whoschek.github.io/wbackup-zfs/coverage-badge.svg)](https://whoschek.github.io/wbackup-zfs/)
 wbackup-zfs
 ==========
 *wbackup-zfs is a backup command line tool that reliably replicates ZFS
