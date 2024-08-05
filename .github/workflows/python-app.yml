@@ -43,8 +43,8 @@ on:
         type: boolean
         default: False
   schedule:
-    - cron: '0 4 * * *'  # Runs daily at 4am UTC
-#    - cron: '0 5 * * 0'  # Runs weekly at 5am UTC on Sundays
+    - cron: '0 3 * * *'  # Runs daily at 3am UTC
+#    - cron: '0 4 * * 0'  # Runs weekly at 4am UTC on Sundays
 
 permissions:
   contents: read
