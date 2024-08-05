@@ -1753,8 +1753,9 @@ class Job:
         for key in ['local', 'src', 'dst']:
             for program in list(available_programs[key].keys()):
                 if program.startswith('uname-'):
-                    # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                     # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
+                    # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
+                    # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                     available_programs[key].pop(program)
                     uname = program[len('uname-'):]
                     available_programs[key]['uname'] = uname
