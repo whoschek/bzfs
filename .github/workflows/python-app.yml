@@ -451,6 +451,11 @@ jobs:
           coverage combine $(find . -name '.coverage*')
           coverage report | tee coverage_report.txt
           coverage html
+          coverage xml
+      - name: Generate coverage badge
+        run: |
+          pip install genbadge[coverage]  # see https://smarie.github.io/python-genbadge/
+          genbadge coverage -v -i coverage.xml -o htmlcov/coverage-badge.svg
       - name: Upload coverage report to workflow run page
         uses: ./.github/workflows/coverage-upload
 

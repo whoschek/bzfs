@@ -12,6 +12,8 @@ if [ "$(uname -s)" != "FreeBSD" ]; then
   python3 -m pip install --upgrade pip
   python3 -m pip install coverage
 fi
-PYTHONPATH=. coverage run --branch -m test.test_wbackup_zfs
+
+# see https://coverage.readthedocs.io/
+PYTHONPATH=. coverage run --branch --omit='test/*' --omit='*/__init__.py' -m test.test_wbackup_zfs
 coverage report | tee coverage_report.txt
 coverage html
