@@ -65,6 +65,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
       run: |
+        id -u -n
         uname -a
         zfs --version
         python3 --version
@@ -73,7 +74,6 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-        whoami
     - name: Test with unittest
       run: |
         ./test.sh
@@ -94,6 +94,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
       run: |
+        id -u -n
         uname -a
         zfs --version
         python3 --version
@@ -102,7 +103,6 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-        whoami
     - name: Test with unittest
       run: |
         ./test.sh
@@ -135,6 +135,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
       run: |
+        id -u -n
         uname -a
         zfs --version
         python3 --version
@@ -143,7 +144,6 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-        whoami
     - name: Test with unittest
       run: |
         ./test.sh
@@ -169,6 +169,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
       run: | 
+        id -u -n
         uname -a
         zfs --version
         python3 --version
@@ -177,7 +178,6 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-        whoami
     - name: Test with unittest
       run: |
         ./test.sh || exit 1
@@ -209,6 +209,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
       run: | 
+        id -u -n
         uname -a
         zfs --version
         python3 --version
@@ -217,7 +218,6 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-        whoami
     - name: Test with unittest
       run: |
         ./test.sh
@@ -242,6 +242,7 @@ jobs:
         prepare: |
           pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
+          id -u -n
           uname -a
           zfs --version
           python3 --version
@@ -251,7 +252,6 @@ jobs:
           mbuffer --version | head -n 1
           command -v sh | xargs ls -l
           sudo command -v sh | xargs ls -l
-          whoami
           
           mkdir -p $HOME/.ssh
           rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
@@ -285,6 +285,7 @@ jobs:
         prepare: |
           pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
+          id -u -n
           uname -a
           zfs --version
           python3 --version
@@ -294,7 +295,6 @@ jobs:
           mbuffer --version | head -n 1
           command -v sh | xargs ls -l
           sudo command -v sh | xargs ls -l
-          whoami
           
           mkdir -p $HOME/.ssh
           rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
@@ -334,7 +334,7 @@ jobs:
 #          pkg search python
         prepare: |
           # To better debug these steps run a tmp solaris VM like so: https://github.com/vmactions/shell-solaris
-          whoami
+          id -u -n
           pkg install sudo pv 
           pkgutil -y -i zstd mbuffer
           pyversion=3.9.19; export ax_cv_c_float_words_bigendian=no
@@ -350,6 +350,7 @@ jobs:
           rm -fr /python3
           make install
         run: |          
+          id -u -n
           uname -a
           zfs help
           zfs help list
@@ -361,7 +362,6 @@ jobs:
           pv --version | head -n 1
           mbuffer --version |& head -n 1
           command -v sh | xargs ls -l
-          whoami
 
           mkdir -p $HOME/.ssh
           rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
