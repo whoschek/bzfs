@@ -188,9 +188,9 @@ class WBackupTestCase(ParametrizedTestCase):
         elif params and params.get('ssh_mode') == 'pull':
             args = args + src_host + src_port
         elif params and params.get('ssh_mode') == 'pull-push':
-            args = args + src_host + dst_host + dst_port
+            args = args + src_host + dst_host + src_port + dst_port
             if params and 'min_transfer_size' in params and int(params['min_transfer_size']) == 0:
-                args = args + src_user + src_port + src_private_key + src_ssh_config_file
+                args = args + src_user + src_private_key + src_ssh_config_file
             args = args + ['--bwlimit=10000m']
         elif params and params.get('ssh_mode', 'local') != 'local':
             raise ValueError("Unknown ssh_mode: " + params['ssh_mode'])
@@ -1339,6 +1339,33 @@ class MinimalRemoteTestCase(WBackupTestCase):
     def test_basic_replication_recursive1(self):
         LocalTestCase(param=self.param).test_basic_replication_recursive1()
 
+    def test_inject_unavailable_sudo(self):
+        expected_error = die_status if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
+        self.inject_unavailable_program('inject_unavailable_sudo', expected_error=expected_error)
+        self.tearDownAndSetup()
+        expected_error = 1 if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
+        self.inject_unavailable_program('inject_failing_sudo', expected_error=expected_error)
+
+    def test_disabled_sudo(self):
+        expected_status = 0
+        if os.geteuid() != 0 and not self.is_no_privilege_elevation():
+            expected_status = die_status
+        self.inject_unavailable_program('disable_sudo',  expected_error=expected_status)
+
+    def inject_unavailable_program(self, *flags, expected_error=0):
+        self.setup_basic()
+        for flag in flags:
+            os.environ[qq + flag] = 'true'
+        try:
+            self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=expected_error)
+        finally:
+            for flag in flags:
+                os.environ.pop(qq + flag)
+        if expected_error != 0:
+            self.assertSnapshots(dst_root_dataset, 0)
+        else:
+            self.assertSnapshots(dst_root_dataset, 3, 's')
+
 
 #############################################################################
 class FullRemoteTestCase(MinimalRemoteTestCase):
@@ -1415,17 +1442,16 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
             self.tearDownAndSetup()
             self.inject_unavailable_program('inject_failing_ssh', expected_error=die_status)
 
-    def test_inject_unavailable_sudo(self):
-        expected_error = die_status if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
-        self.inject_unavailable_program('inject_unavailable_sudo', expected_error=expected_error)
-        self.tearDownAndSetup()
-        expected_error = 1 if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
-        self.inject_unavailable_program('inject_failing_sudo', expected_error=expected_error)
-
     def test_inject_unavailable_zfs(self):
         self.inject_unavailable_program('inject_unavailable_zfs', expected_error=die_status)
         self.tearDownAndSetup()
         self.inject_unavailable_program('inject_failing_zfs', expected_error=die_status)
+
+    def test_disabled_mbuffer(self):
+        self.inject_unavailable_program('disable_mbuffer')
+
+    def test_disabled_pv(self):
+        self.inject_unavailable_program('disable_pv')
 
     def test_disabled_sh(self):
         self.inject_unavailable_program('disable_sh')
@@ -1433,17 +1459,8 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_disabled_compression(self):
         self.inject_unavailable_program('disable_compression')
 
-    def inject_unavailable_program(self, *flags, expected_error=0):
-        self.setup_basic()
-        for flag in flags:
-            os.environ[qq + flag] = 'true'
-        self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=expected_error)
-        for flag in flags:
-            os.environ.pop(qq + flag)
-        if expected_error != 0:
-            self.assertSnapshots(dst_root_dataset, 0)
-        else:
-            self.assertSnapshots(dst_root_dataset, 3, 's')
+    def test_disabled_zpool(self):
+        self.inject_unavailable_program('disable_zpool')
 
 
 #############################################################################

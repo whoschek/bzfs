@@ -1766,11 +1766,6 @@ class Job:
         for key, value in available_programs.items():
             self.debug(f"available_programs[{key}]:", ', '.join(value))
 
-        if not self.is_program_available('zfs', 'src'):
-            die(f"{params.zfs_program} CLI is not available on src host: {params.ssh_src_user_host or 'localhost'}")
-        if not self.is_program_available('zfs', 'dst'):
-            die(f"{params.zfs_program} CLI is not available on dst host: {params.ssh_dst_user_host or 'localhost'}")
-
         if params.src_sudo and not self.is_program_available('sudo', 'src'):
             die(f"{params.sudo_program} CLI is not available on src host: {params.ssh_src_user_host or 'localhost'}")
         if params.dst_sudo and not self.is_program_available('sudo', 'dst'):
