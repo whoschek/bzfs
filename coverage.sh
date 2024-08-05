@@ -14,6 +14,6 @@ if [ "$(uname -s)" != "FreeBSD" ]; then
 fi
 
 # see https://coverage.readthedocs.io/
-PYTHONPATH=. coverage run --branch --omit='test/*' --omit='*/__init__.py' -m test.test_wbackup_zfs
+PYTHONPATH=. coverage run --branch --omit='test/*.py,*/__init__.py' -m test.test_wbackup_zfs
 coverage report | tee coverage_report.txt
 coverage html
