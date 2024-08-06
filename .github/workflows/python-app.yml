@@ -360,8 +360,8 @@ jobs:
 #          pkg install runtime/python-39  # FIXME: install fails
 #          pkg search python
         prepare: |
-          set -e
           # To better debug these steps run a tmp solaris VM like so: https://github.com/vmactions/shell-solaris
+          set -e
           id -u -n
           pkg install sudo pv || true
           pkgutil -y -i zstd mbuffer
