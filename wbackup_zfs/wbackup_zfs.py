@@ -1116,9 +1116,8 @@ class Job:
 
         force_convert_I_to_i = False
         if (not self.params.src_sudo and os.geteuid() != 0
-                and self.params.available_programs['src'].get('zfs') != 'notOpenZFS'
                 and not self.params.getenv_bool('no_force_convert_I_to_i', False)):
-            # If using 'zfs allow' delegation mechanism on Linux or FreeBSD, force convert 'zfs send -I' to a series of
+            # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs bug https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
         return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
