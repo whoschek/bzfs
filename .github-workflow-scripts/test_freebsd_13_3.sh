@@ -53,3 +53,4 @@ cp -R . "$thome/wbackup-zfs"
 chown -R "$tuser" "$thome/wbackup-zfs"
 chsh -s /bin/sh $tuser  # change shell as default shell on freebsd <= 13 is csh instead of sh
 sudo -u $tuser sh -c "cd $thome/wbackup-zfs; ./test.sh"
+echo "wbackup-zfs-testrun-success"
