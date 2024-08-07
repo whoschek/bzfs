@@ -77,6 +77,7 @@ jobs:
     - name: Test with unittest
       run: |
         ./test.sh
+        echo "wbackup-zfs-testrun-success"
 
 
   test_ubuntu_24_04:
@@ -108,7 +109,8 @@ jobs:
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
-        echo Now running coverage; ./coverage.sh
+        ./coverage.sh
+        echo "wbackup-zfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -150,6 +152,7 @@ jobs:
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
+        echo "wbackup-zfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -182,7 +185,7 @@ jobs:
       run: |
         ./test.sh
 
-        echo Now running tests as root user:
+        echo "Now running tests as root user"
         sudo mkdir -p /root/.ssh
         sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
         cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
@@ -190,6 +193,7 @@ jobs:
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
+        echo "wbackup-zfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -224,6 +228,7 @@ jobs:
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
+        echo "wbackup-zfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -239,48 +244,8 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "14.1"
-        prepare: |
-          set -e
-          pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
-          set -e
-          id -u -n
-          uname -a
-          zfs --version || true
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version | head -n 1
-          command -v sh | xargs ls -l
-          sudo command -v sh | xargs ls -l
-          
-          mkdir -p $HOME/.ssh
-          rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
-          ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
-          cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
-          ls -al $HOME $HOME/.ssh/id_rsa
-
-          echo Now running tests as root user; ./test.sh
-          echo Now running coverage; ./coverage.sh
-          
-          echo Now running tests as non-root user:
-          tuser=test
-          thome=/home/$tuser
-          #pw userdel -n $tuser || true
-          pw useradd $tuser -d $thome -m
-          echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /usr/local/etc/sudoers
-
-          mkdir -p $thome/.ssh
-          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $HOME/.ssh/authorized_keys $thome/.ssh/
-          chmod go-rwx $thome/.ssh/authorized_keys
-          chown -R $tuser $thome/.ssh
-
-          cp -Rp . $thome/wbackup-zfs # if running with Github Action
-          # cp -Rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-freebsd
-          chown -R $tuser $thome/wbackup-zfs
-          sudo -u $tuser sh -c "cd $thome/wbackup-zfs; ./test.sh"
-          echo wbackup-zfs-testrun-success
+          ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -296,49 +261,8 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "13.3"
-        prepare: |
-          pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
         run: |
-          # Note: csh syntax following here as default shell on freebsd <= 13 is csh instead of sh
-          id -u -n
-          uname -a
-          zfs --version
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version | head -n 1
-          command -v sh | xargs ls -l
-          sudo command -v sh | xargs ls -l
-          
-          mkdir -p $HOME/.ssh
-          rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
-          ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
-          cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
-          ls -al $HOME
-          chsh -s /bin/sh
-
-          echo Now running tests as root user; ./test.sh; if ($status != 0) exit 1
-          echo Now running coverage; ./coverage.sh; if ($status != 0) exit 1
-          
-          echo Now running tests as non-root user:
-          set tuser = test
-          set thome = /home/$tuser
-          #pw userdel -n $tuser
-          pw useradd $tuser -d $thome -m
-          echo "$tuser ALL=NOPASSWD:`command -v zfs`,`command -v zpool`" >> /usr/local/etc/sudoers
-          
-          mkdir -p $thome/.ssh
-          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $HOME/.ssh/authorized_keys $thome/.ssh/
-          chmod go-rwx $thome/.ssh/authorized_keys
-          chown -R $tuser $thome/.ssh
-          
-          cp -Rp . $thome/wbackup-zfs # if running with Github Action
-          # cp -Rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-freebsd
-          chown -R $tuser $thome/wbackup-zfs
-          chsh -s /bin/sh $tuser
-          sudo -u $tuser sh -c "cd $thome/wbackup-zfs; ./test.sh"; if ($status != 0) exit 1
-          echo wbackup-zfs-testrun-success
+          ./.github-workflow-scripts/test_freebsd_13_3.sh
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
@@ -355,73 +279,8 @@ jobs:
       uses: vmactions/solaris-vm@v1  # see https://github.com/vmactions/solaris-vm
       with:
         release: "11.4"
-#          pkg update --accept; reboot # FIXME: reboot disconnects
-#          pkg exact-install runtime/python-37  # FIXME: install fails
-#          pkg install runtime/python-39  # FIXME: install fails
-#          pkg search python
-        prepare: |
-          # To better debug these steps run a tmp solaris VM like so: https://github.com/vmactions/shell-solaris
-          set -e
-          id -u -n
-          pkg install sudo pv || true
-          pkgutil -y -i zstd mbuffer
-          pyversion=3.9.19; export ax_cv_c_float_words_bigendian=no
-          # pyversion=3.8.19; export ax_cv_c_float_words_bigendian=no
-          # pyversion=3.7.17 # works fine too
-          # pyversion=3.10.14; export ax_cv_c_float_words_bigendian=no # works fine too
-          wget https://www.python.org/ftp/python/$pyversion/Python-$pyversion.tgz
-          tar -zxf Python-$pyversion.tgz
-          cd Python-$pyversion
-          pkg install gcc || true
-          ./configure --prefix=/python3  # --enable-optimizations
-          make
-          rm -fr /python3
-          make install
         run: |          
-          set -e
-          id -u -n
-          uname -a
-          zfs help
-          zfs help list
-          python3 --version
-          export PATH=/python3/bin:$PATH
-          python3 --version
-          ssh -V
-          zstd --version
-          pv --version | head -n 1
-          mbuffer --version |& head -n 1
-          command -v sh | xargs ls -l
-
-          mkdir -p $HOME/.ssh
-          rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
-          ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
-          cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
-          ls -al $HOME
-
-          echo Now running coverage; ./coverage.sh
-          echo Now running tests as root user:
-          ./test.sh
-
-          echo Now running tests as non-root user:
-          tuser=test
-          thome=/home/$tuser
-          userdel -r $tuser || true
-          useradd -d $thome -m $tuser
-          echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /etc/sudoers
-          supath=$(grep "^SUPATH=" /etc/default/login | cut -d'=' -f2)
-          echo "PATH=$supath" >> /etc/default/login  # ensure zstd, mbuffer, etc are on the PATH via ssh
-
-          mkdir -p $thome/.ssh
-          cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $thome/.ssh/
-          chown -R $tuser $thome/.ssh
-          cat $HOME/.ssh/id_rsa.pub | sudo -u $tuser tee -a $thome/.ssh/authorized_keys > /dev/null          
-          chmod go-rwx $thome/.ssh/authorized_keys
-          
-          cp -rp . $thome/wbackup-zfs # if running with Github Action
-          # cp -rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-solaris
-          chown -R $tuser $thome/wbackup-zfs
-          sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/wbackup-zfs; ./test.sh"
-          echo wbackup-zfs-testrun-success
+          ./.github-workflow-scripts/test_solaris_14_1.sh
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload
 
