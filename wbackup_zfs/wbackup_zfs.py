@@ -479,7 +479,8 @@ class Params:
         os.close(fd)
         self.pv_program = self.program_name('pv')
         self.pv_program_opts = self.split_args(self.getenv(
-            'pv_program_opts', '--progress --timer --eta --rate --bytes --interval=1 --width=100 --buffer-size=1M'))
+            'pv_program_opts', '--progress --timer --eta --fineta --rate --average-rate --bytes '
+                               '--interval=1 --width=120 --buffer-size=1M'))
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
         self.mbuffer_program = self.program_name('mbuffer')
