@@ -632,10 +632,10 @@ class Job:
                     raise e
                 except subprocess.CalledProcessError as e:
                     error(f"Exiting with status code: {e.returncode}")
-                    raise e
+                    raise
                 except SystemExit as e:
                     error(f"Exiting with status code: {e.code}")
-                    raise e
+                    raise
 
                 for line in tail(params.pv_log_file, 10):
                     print(line, end='')
@@ -750,7 +750,7 @@ class Job:
 
         src_datasets = cut(field=2, lines=src_datasets_with_record_sizes)
         origin_src_datasets = set(src_datasets)
-        src_datasets = isorted(self.filter_datasets(src_datasets, p.src_root_dataset))
+        src_datasets = isorted(self.filter_datasets(src_datasets, p.src_root_dataset))  # apply include/exclude policy
 
         # Optionally, replicate src_root_dataset (optionally including its descendants) to dst_root_dataset
         if not params.skip_replication:
@@ -1380,8 +1380,8 @@ class Job:
                 # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
-                creation = int(snapshot[0:snapshot.index('\t')])
-                if oldest_dst_snapshot_creation <= creation <= newest_dst_snapshot_creation:
+                creation_time = int(snapshot[0:snapshot.index('\t')])
+                if oldest_dst_snapshot_creation <= creation_time <= newest_dst_snapshot_creation:
                     results.append(snapshot)
                 elif is_debug:
                     self.debug("Excluding b/c bookmark creation time:", snapshot)
@@ -1449,7 +1449,7 @@ class Job:
                     # ignore harmless error caused by zfs create without the -u flag
                     if ('filesystem successfully created, but it may only be mounted by root' not in e.stderr
                             and 'filesystem successfully created, but not mounted' not in e.stderr):  # SolarisZFS
-                        raise e
+                        raise
                 self.dst_dataset_exists[parent] = True
             parent += '/'
 
@@ -1508,7 +1508,7 @@ class Job:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
                     if ': bookmark exists' not in e.stderr:
                         print(e.stderr, sys.stderr, end='')
-                        raise e
+                        raise
 
     def warn(self, *items):
         self.log("[W]", *items)
@@ -1835,7 +1835,7 @@ class Job:
                 available_programs[location].update(available_programs_minimum)
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
             if e.filename != p.shell_program:
-                raise e
+                raise
             self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions...")
             available_programs[location].update(available_programs_minimum)
 
@@ -1851,7 +1851,7 @@ class Job:
                 lines = self.run_ssh_command(location, self.trace, check=False, cmd=cmd).splitlines()
             except (FileNotFoundError, PermissionError) as e:
                 if e.filename != params.zpool_program:
-                    raise e
+                    raise
                 lines = []
             if len(lines) == 0:
                 self.warn(f"Failed to detect zpool features on {location}: {pool}. "
@@ -1984,7 +1984,7 @@ def replace_prefix(line, s1, s2):
     return s2 + line.rstrip()[len(s1):]
 
 
-def human_readable_bytes(size) -> str:
+def human_readable_bytes(size: int) -> str:
     units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB"]
     i = 0
     while size >= 1024 and i < len(units) - 1:
