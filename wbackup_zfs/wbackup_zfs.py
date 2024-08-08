@@ -427,9 +427,9 @@ class Params:
         self.one_or_more_whitespace_regex = re.compile(r'\s+')
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
-        assert args.src_root_dataset
+        assert args.src_root_dataset is not None
         self.src_root_dataset = args.src_root_dataset
-        assert args.dst_root_dataset
+        assert args.dst_root_dataset is not None
         self.dst_root_dataset = args.dst_root_dataset
         self.origin_src_root_dataset = self.src_root_dataset
         self.origin_dst_root_dataset = self.dst_root_dataset
