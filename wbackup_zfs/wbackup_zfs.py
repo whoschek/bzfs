@@ -935,12 +935,13 @@ class Job:
 
         self.debug("latest_src_snapshot:", latest_src_snapshot)
         latest_dst_snapshot = ""
+        latest_dst_guid = ""
         latest_common_src_snapshot = ""
         latest_common_dst_snapshot = ""
 
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
-                latest_dst_snapshot = dst_snapshots_with_guids[-1].split('\t')[1]
+                latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split('\t', 1)
             if latest_dst_snapshot != "" and params.force:
                 self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
                 # rollback just in case the dst dataset was modified since its most recent snapshot
@@ -953,27 +954,25 @@ class Job:
             # find most recent snapshot that src_dataset and dst_dataset have in common - we'll start to replicate
             # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
             # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
-            common_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).intersection(
-                set(cut(1, lines=src_snapshots_with_guids)))
-
-            def latest_common_snapshot(snapshots_with_guids: List[str], common_guids: Set[str]) -> str:
+            def latest_common_snapshot(snapshots_with_guids: List[str], intersect_guids: Set[str]) -> Tuple[str, str]:
                 """Returns a true snapshot instead of its bookmark with the same GUID, per the sorting order
                 previously used for 'zfs list -s ...'"""
                 for _line in reversed(snapshots_with_guids):
                     _guid, _snapshot = _line.split('\t', 1)
-                    if _guid in common_guids:
-                        return _snapshot
-                return ""
+                    if _guid in intersect_guids:
+                        return _guid, _snapshot
+                return None, ""
 
-            latest_common_src_snapshot = latest_common_snapshot(src_snapshots_with_guids, common_snapshot_guids)
-            latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, common_snapshot_guids)
+            latest_common_guid, latest_common_src_snapshot = latest_common_snapshot(
+                src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids)))
             self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)
-            # self.debug("latest_common_dst_snapshot:", latest_common_dst_snapshot)
             # self.debug("latest_dst_snapshot:", latest_dst_snapshot)
 
             if latest_common_src_snapshot:
                 # common snapshot was found. rollback dst to that common snapshot
-                if latest_common_dst_snapshot != latest_dst_snapshot:
+                if latest_common_guid != latest_dst_guid:
+                    _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids,
+                                                                           [latest_common_guid])
                     if not params.force:
                         die(f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than " 
                             f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
@@ -984,14 +983,12 @@ class Job:
                     cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
                                        latest_common_dst_snapshot)
                     self.run_ssh_command('dst', self.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
-                    latest_dst_snapshot = latest_common_dst_snapshot
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
                 self.info("Already up-to-date:", dst_dataset)
                 return True
 
         self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)
-        # self.debug("latest_common_dst_snapshot:", latest_common_dst_snapshot)
         # self.debug("latest_dst_snapshot:", latest_dst_snapshot)
 
         is_dry_send_receive = False
@@ -1334,8 +1331,7 @@ class Job:
         for snapshot in snapshots:
             i = snapshot.find('#')  # bookmark separator
             if i < 0:
-                i = snapshot.find('@')  # snapshot separator
-            assert i >= 0
+                i = snapshot.index('@')  # snapshot separator
             if self.is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
             elif is_debug:
