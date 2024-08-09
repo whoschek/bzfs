@@ -571,7 +571,7 @@ class Params:
 
     @staticmethod
     def validate_quoting(opt: str):
-        if any(c in opt for c in ["'", '"']):
+        if "'" in opt or '"' in opt:
             die(f"Option must not contain a single quote or a double quote character: {opt}")
         return opt
 
@@ -744,12 +744,13 @@ class Job:
                            p.recursive_flag, p.src_root_dataset)
         src_datasets_with_record_sizes = self.try_ssh_command('src', self.info, cmd=cmd) or ""
         src_datasets_with_record_sizes = src_datasets_with_record_sizes.splitlines()
+        src_datasets = []
         self.recordsizes = {}
         for line in src_datasets_with_record_sizes:
             recordsize, src_dataset = line.split('\t', 1)
             self.recordsizes[src_dataset] = int(recordsize)
+            src_datasets.append(src_dataset)
 
-        src_datasets = cut(field=2, lines=src_datasets_with_record_sizes)
         origin_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src_datasets, p.src_root_dataset))  # apply include/exclude policy
 
@@ -1116,7 +1117,7 @@ class Job:
         if (not self.params.src_sudo and os.geteuid() != 0
                 and not self.params.getenv_bool('no_force_convert_I_to_i', False)):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
-            # 'zfs send -i' as a workaround for zfs bug https://github.com/openzfs/zfs/issues/16394
+            # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
         return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
 
@@ -1443,7 +1444,7 @@ class Job:
                     self.run_ssh_command('dst', self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     print(e.stderr, sys.stderr, end='')
-                    # ignore harmless error caused by zfs create without the -u flag
+                    # ignore harmless error caused by 'zfs create' without the -u flag
                     if ('filesystem successfully created, but it may only be mounted by root' not in e.stderr
                             and 'filesystem successfully created, but not mounted' not in e.stderr):  # SolarisZFS
                         raise
@@ -1828,12 +1829,12 @@ class Job:
                 available_programs[location].update(dict.fromkeys(
                     self.run_ssh_command(location, self.trace, cmd=cmd).splitlines()))
             else:
-                self.warn(f"Failed to run {p.shell_program} on {location}. Continuing with minimal assumptions...")
+                self.warn(f"Failed to run {p.shell_program} on {location}. Continuing with minimal assumptions ...")
                 available_programs[location].update(available_programs_minimum)
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
             if e.filename != p.shell_program:
                 raise
-            self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions...")
+            self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions ...")
             available_programs[location].update(available_programs_minimum)
 
     def is_solaris_zfs(self, location: str):
@@ -1852,7 +1853,7 @@ class Job:
                 lines = []
             if len(lines) == 0:
                 self.warn(f"Failed to detect zpool features on {location}: {pool}. "
-                          f"Continuing with minimal assumptions...")
+                          f"Continuing with minimal assumptions ...")
             props = {line.split('\t', 1)[0]: line.split('\t', 1)[1] for line in lines}
             features = {k: v for k, v in props.items() if k.startswith('feature@')}
             str_features = '\n'.join([f"{k}: {v}" for k, v in sorted(features.items())])
@@ -1965,10 +1966,11 @@ def xappend(lst, *items) -> List[str]:
     """Append each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
        If an item is an iterable do so recursively, flattening the output."""
     for item in items:
-        if isinstance(item, collections.abc.Iterable) and not isinstance(item, str):
+        if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
+            if item:
+                lst.append(item)
+        else:
             xappend(lst, *item)
-        elif item:
-            lst.append(item)
     return lst
 
 

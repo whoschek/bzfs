@@ -141,8 +141,7 @@ def snapshot_property(snapshot, prop):
     return zfs_list([snapshot], props=[prop], types=['snapshot'], max_depth=0)[0]
 
 
-def zfs_list(names=[], props=['name'], types=[], max_depth=None,
-             parsable=True, sort_props=[]):
+def zfs_list(names=[], props=['name'], types=[], max_depth=None, parsable=True, sort_props=[]):
     cmd = ['zfs', 'list']
     if max_depth is None:
         cmd.append('-r')
