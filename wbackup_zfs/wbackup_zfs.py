@@ -682,8 +682,8 @@ class Job:
         p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or ['.*'])
 
-        params.src_sudo = self.sudo_cmd(params.ssh_src_user_host, params.ssh_src_user)
-        params.dst_sudo = self.sudo_cmd(params.ssh_dst_user_host, params.ssh_dst_user)
+        params.src_sudo, params.src_use_zfs_delegation = self.sudo_cmd(params.ssh_src_user_host, params.ssh_src_user)
+        params.dst_sudo, params.dst_use_zfs_delegation = self.sudo_cmd(params.ssh_dst_user_host, params.ssh_dst_user)
 
         p.ssh_src_cmd = self.ssh_command(p.ssh_src_user, p.ssh_src_host, p.ssh_src_user_host, p.ssh_src_port,
                                          p.ssh_default_opts + p.ssh_src_extra_opts)
@@ -718,20 +718,23 @@ class Job:
             p.zfs_send_program_opts = ['compress' if opt == '--compressed' else opt for opt in p.zfs_send_program_opts]
             p.zfs_send_program_opts = ['-p' if opt == '--props' else opt for opt in p.zfs_send_program_opts]
 
-    def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> str:
-        params = self.params
-        sudo = ""
+    def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
+        is_root = True
         if ssh_user_host != "":
-            if params.enable_privilege_elevation:
-                # attempt to make ZFS operations work even if we are not root user
-                if not ssh_user:
-                    if os.geteuid() != 0:
-                        sudo = params.sudo_program
-                elif ssh_user != "root":
-                    sudo = params.sudo_program
-        elif params.enable_privilege_elevation and os.geteuid() != 0:
-            sudo = params.sudo_program  # attempt to make ZFS operations work even if we are not root user
-        return sudo
+            if not ssh_user:
+                if os.geteuid() != 0:
+                    is_root = False
+            elif ssh_user != "root":
+                is_root = False
+        elif os.geteuid() != 0:
+            is_root = False
+
+        if is_root:
+            sudo = ""  # using sudo in an attempt to make ZFS operations work even if we are not root user?
+            use_zfs_delegation = False  # or instead using 'zfs allow' delegation?
+            return sudo, use_zfs_delegation
+        else:
+            return (self.params.sudo_program, False) if self.params.enable_privilege_elevation else ("", True)
 
     def run_main_action(self):
         params = self.params
@@ -1114,8 +1117,7 @@ class Job:
             src_snapshots.append(snapshot)
 
         force_convert_I_to_i = False
-        if (not self.params.src_sudo and os.geteuid() != 0
-                and not self.params.getenv_bool('no_force_convert_I_to_i', False)):
+        if self.params.src_use_zfs_delegation and not self.params.getenv_bool('no_force_convert_I_to_i', False):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
