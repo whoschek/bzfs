@@ -190,7 +190,7 @@ class WBackupTestCase(ParametrizedTestCase):
         elif params and params.get('ssh_mode') == 'pull-push':
             args = args + src_host + dst_host + src_port + dst_port
             if params and 'min_transfer_size' in params and int(params['min_transfer_size']) == 0:
-                args = args + src_user + src_private_key + src_ssh_config_file
+                args = args + src_user + src_private_key + src_ssh_config_file + ['--ssh-cipher', '']
             args = args + ['--bwlimit=10000m']
         elif params and params.get('ssh_mode', 'local') != 'local':
             raise ValueError("Unknown ssh_mode: " + params['ssh_mode'])
@@ -1735,6 +1735,15 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual([], wbackup_zfs.append_if_absent([]))
         self.assertListEqual(['a'], wbackup_zfs.append_if_absent([], 'a'))
         self.assertListEqual(['a'], wbackup_zfs.append_if_absent([], 'a', 'a'))
+
+    def test_cut(self):
+        lines = ['34\td1@s1', '56\td2@s2']
+        self.assertListEqual(['34', '56'], wbackup_zfs.cut(1, lines=lines))
+        self.assertListEqual(['d1@s1', 'd2@s2'], wbackup_zfs.cut(2, lines=lines))
+        self.assertListEqual([], wbackup_zfs.cut(1, lines=[]))
+        self.assertListEqual([], wbackup_zfs.cut(2, lines=[]))
+        with self.assertRaises(ValueError):
+            wbackup_zfs.cut(0, lines=lines)
 
     def test_get_home_directory(self):
         old_home = os.environ.get('HOME')
