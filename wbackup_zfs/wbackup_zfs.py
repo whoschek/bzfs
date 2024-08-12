@@ -641,6 +641,7 @@ class Job:
                 for line in tail(params.pv_log_file, 10):
                     print(line, end='')
                 self.info_raw("Success. Goodbye!")
+                sys.stdout.flush()
                 sys.stderr.flush()
         self.info_raw("Log file was: " + params.log_file)
 
@@ -1518,7 +1519,7 @@ class Job:
 
     def info_raw(self, *items):
         if self.params.quiet != "":
-            print(f"{current_time()} [I] {' '.join(items)}", file=sys.stderr)
+            print(f"{current_time()} [I] {' '.join(items)}")
 
     def info(self, *items):
         self.log("[I]", *items)
@@ -1536,7 +1537,7 @@ class Job:
 
     def log(self, first, second, *items):
         if self.params.quiet != "":
-            print(f"{current_time()} {first} {second:<28} {' '.join(items)}", file=sys.stderr)  # right-pad second arg
+            print(f"{current_time()} {first} {second:<28} {' '.join(items)}")  # right-pad second arg
 
     def ssh_command(self, ssh_user: str, ssh_host: str, ssh_user_host: str, ssh_port: str, ssh_extra_opts: List[str]) \
             -> List[str]:
