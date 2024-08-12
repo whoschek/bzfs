@@ -47,6 +47,7 @@ zfs_recv_program_opts_default = '-u'
 exclude_dataset_regexes_default = r'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*'  # skip tmp datasets by default
 max_retries_default = 0
 ssh_private_key_file_default = ".ssh/id_rsa"
+ssh_cipher_default = '^aes256-gcm@openssh.com' if platform.system() != 'SunOS' else ''
 zfs_version_is_at_least_2_1_0 = 'zfs>=2.1.0'
 PIPE = subprocess.PIPE
 
@@ -70,7 +71,7 @@ the source since the last run. Source ZFS snapshots older than the most recent c
 destination are auto-skipped.
 
 {prog_name} does not create or delete ZFS snapshots on the source - it assumes you have a ZFS snapshot
-management tool to do so, for example policy-driven Sanoid, pyznap, zrepl, zfs-auto-snapshot, manual zfs
+management tool to do so, for example policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, manual zfs
 snapshot/destroy, etc. {prog_name} treats the source as read-only, thus the source remains unmodified.
 With the --dry-run flag, {prog_name} also treats the destination as read-only.
 In normal operation, {prog_name} treats the destination as append-only. Optional CLI flags are available to
@@ -270,7 +271,7 @@ feature.
     parser.add_argument(
         '--no-privilege-elevation', '-p', action='store_true',
         help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
-              "(via 'sudo -u root' elevation granted by appending this to /etc/sudoers: "
+              "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
               "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`). "
               "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
               "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
@@ -377,9 +378,11 @@ feature.
         help=f"Path to SSH private key file on local host (optional); will be passed into ssh -i CLI. "
              f"default: $HOME/{ssh_private_key_file_default}\n\n")
     parser.add_argument(
-        '--ssh-cipher', type=str, default='aes256-gcm@openssh.com', metavar='STRING',
-        help=f"Name of SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
-             f"(default: aes256-gcm@openssh.com)\n\n")
+        '--ssh-cipher', type=str, default=ssh_cipher_default, metavar='STRING',
+        help=f"SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
+             "cipher_spec is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
+             f"keyword in ssh_config(5) for more information - "
+             f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: {ssh_cipher_default}\n\n")
     parser.add_argument(
         '--ssh-src-user', type=str, metavar='STRING',
         help="Remote SSH username of source host to connect to (optional). Overrides username given in "
@@ -405,12 +408,12 @@ feature.
     parser.add_argument(
         '--ssh-src-extra-opt', action='append', default=[], metavar='STRING',
         help=("Additional option to be passed to ssh CLI when connecting to source host (optional). This option "
-              "can be specified multiple times. Example: `-v -v --ssh-src-extra-opt '-v -v'` to "
+              "can be specified multiple times. Example: `--ssh-src-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
     parser.add_argument(
         '--ssh-dst-extra-opt', action='append', default=[], metavar='STRING',
         help=("Additional option to be passed to ssh CLI when connecting to destination host (optional). This option "
-              "can be specified multiple times. Example: `-v -v --ssh-dst-extra-opt '-v -v'` to "
+              "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
     parser.add_argument(
         '--version', action='version', version=f"{prog_name}-{prog_version}, by {prog_author}",
@@ -1608,8 +1611,8 @@ class Job:
                     self.debug("Executing:", ' '.join(ssh_socket_cmd))
                     if subprocess_run(ssh_socket_cmd, stdout=PIPE, text=True).returncode != 0:
                         die(f"Cannot ssh into remote host via {ssh_socket_cmd}. "
-                            f"Fix ssh configuration first, considering diagnostic output from running {prog_name} with: " 
-                            f"-v -v --ssh-src-extra-opt '-v -v' --ssh-dst-extra-opt '-v -v'")
+                            f"Fix ssh configuration first, considering diagnostic log file output from running "
+                            f"{prog_name} with: -v -v --ssh-src-extra-opt '-v -v' --ssh-dst-extra-opt '-v -v'")
 
         msg = "Would execute:" if is_dry else "Executing:"
         level(msg, ' '.join(ssh_cmd + cmd))

@@ -22,7 +22,7 @@ snapshot found on the destination are auto-skipped.
 
 wbackup-zfs does not create or delete ZFS snapshots on the source - it
 assumes you have a ZFS snapshot management tool to do so, for example
-policy-driven Sanoid, pyznap, zrepl, zfs-auto-snapshot, manual zfs
+policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, manual zfs
 snapshot/destroy, etc. wbackup-zfs treats the source as read-only, thus
 the source remains unmodified. With the --dry-run flag, wbackup-zfs
 also treats the destination as read-only. In normal operation,
@@ -389,13 +389,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
 
 *  Do not attempt to run state changing ZFS operations 'zfs
     create/rollback/destroy/send/receive' as root (via 'sudo -u root'
-    elevation granted by appending this to /etc/sudoers:
-    `<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`). Instead, the
-    --no-privilege-elevation flag is for non-root users that have been
-    granted corresponding ZFS permissions by administrators via 'zfs
-    allow' delegation mechanism, like so: sudo zfs allow -u
-    $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; sudo zfs allow -u
-    $NON_ROOT_USER_NAME
+    elevation granted by administrators appending the following to
+    /etc/sudoers: `<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`).
+    Instead, the --no-privilege-elevation flag is for non-root users
+    that have been granted corresponding ZFS permissions by
+    administrators via 'zfs allow' delegation mechanism, like so: sudo
+    zfs allow -u $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; sudo
+    zfs allow -u $NON_ROOT_USER_NAME
     mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
     $DST_DATASET_OR_POOL; If you do not plan to use the --force flag
     or --delete-missing-snapshots or --delete-missing-dataset then ZFS
@@ -555,9 +555,12 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
 
 **--ssh-cipher** *STRING*
 
-*  Name of SSH cipher specification for encrypting the session
-    (optional); will be passed into ssh -c CLI. (default:
-    aes256-gcm@openssh.com)
+*  SSH cipher specification for encrypting the session (optional); will
+    be passed into ssh -c CLI. cipher_spec is a comma-separated list of
+    ciphers listed in order of preference. See the 'Ciphers' keyword
+    in ssh_config(5) for more information -
+    https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html.
+    Default: ^aes256-gcm@openssh.com
 
 <!-- -->
 
@@ -607,8 +610,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
 
 *  Additional option to be passed to ssh CLI when connecting to source
     host (optional). This option can be specified multiple times.
-    Example: `-v -v --ssh-src-extra-opt '-v -v'` to debug ssh
-    config issues.
+    Example: `--ssh-src-extra-opt='-v -v'` to debug ssh config
+    issues.
 
 <!-- -->
 
@@ -616,8 +619,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
 
 *  Additional option to be passed to ssh CLI when connecting to
     destination host (optional). This option can be specified multiple
-    times. Example: `-v -v --ssh-dst-extra-opt '-v -v'` to debug
-    ssh config issues.
+    times. Example: `--ssh-dst-extra-opt='-v -v'` to debug ssh
+    config issues.
 
 <!-- -->
 
