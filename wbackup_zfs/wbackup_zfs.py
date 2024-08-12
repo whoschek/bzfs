@@ -1321,6 +1321,7 @@ class Job:
                 rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
             if self.is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
                 results.append(dataset)
+                self.debug("Including b/c dataset regex:", dataset)
             else:
                 self.debug("Excluding b/c dataset regex:", dataset)
         return results
@@ -1337,8 +1338,10 @@ class Job:
                 i = snapshot.index('@')  # snapshot separator
             if self.is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
+                if is_debug:
+                    self.debug("Including b/c snaphot regex:", snapshot[1+snapshot.find('\t', 0, i):])
             elif is_debug:
-                self.debug("Excluding b/c snaphot regex:", snapshot)
+                self.debug("Excluding b/c snaphot regex:", snapshot[1+snapshot.find('\t', 0, i):])
         return results
 
     @staticmethod
