@@ -413,14 +413,14 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
 **--no-stream**
 
 *  During replication, only replicate the most recent source snapshot
-    of a dataset, hence skip all intermediate source snapshots that may
-    exist between that and the most recent common snapshot. If there is
-    no common snapshot also skip all other source snapshots for the
-    dataset, except for the most recent source snapshot. This option
-    helps the destination to 'catch up' with the source ASAP,
-    consuming a minimum of disk space, at the expense of reducing
-    reliable options for rolling back to intermediate snapshots in the
-    future.
+    of a dataset (using -i incrementals instead of -I incrementals),
+    hence skip all intermediate source snapshots that may exist between
+    that and the most recent common snapshot. If there is no common
+    snapshot also skip all other source snapshots for the dataset,
+    except for the most recent source snapshot. This option helps the
+    destination to 'catch up' with the source ASAP, consuming a
+    minimum of disk space, at the expense of reducing reliable options
+    for rolling back to intermediate snapshots in the future.
 
 <!-- -->
 

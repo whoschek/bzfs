@@ -287,12 +287,12 @@ feature.
               "https://tinyurl.com/9h97kh8n\n\n"))
     parser.add_argument(
         '--no-stream', action='store_true',
-        help=("During replication, only replicate the most recent source snapshot of a dataset, hence skip all "
-              "intermediate source snapshots that may exist between that and the most recent common snapshot. "
-              "If there is no common snapshot also skip all other source snapshots for the dataset, except for "
-              "the most recent source snapshot. This option helps the destination to 'catch up' with the "
-              "source ASAP, consuming a minimum of disk space, at the expense of reducing reliable options for "
-              "rolling back to intermediate snapshots in the future.\n\n"))
+        help=("During replication, only replicate the most recent source snapshot of a dataset (using -i incrementals "
+              "instead of -I incrementals), hence skip all intermediate source snapshots that may exist between that "
+              "and the most recent common snapshot. If there is no common snapshot also skip all other source "
+              "snapshots for the dataset, except for the most recent source snapshot. This option helps the "
+              "destination to 'catch up' with the source ASAP, consuming a minimum of disk space, at the expense "
+              "of reducing reliable options for rolling back to intermediate snapshots in the future.\n\n"))
     parser.add_argument(
         '--no-create-bookmark', action='store_true',
         help=(f"For increased safety, in normal operation {prog_name} behaves as follows wrt. ZFS bookmark creation, "
