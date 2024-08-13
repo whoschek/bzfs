@@ -83,7 +83,7 @@ backup.
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed 
 and executed on the 'coordinator' host which can be either the host that contains the source dataset (push mode), 
 or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required), 
-or any third-party (even non-ZFS) host as long as that host is able to SSH (via standard 'ssh' CLI) into 
+or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' CLI) into 
 both the source and destination host (pull-push mode). In Pull-push mode the source 'zfs send's the data stream  
 to the coordinator which immediately pipes the stream (without storing anything locally) to the destination 
 host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed 
@@ -94,7 +94,7 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure 
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python 
 versions >= 3.7 (including latest stable which is currently python-3.12). {prog_name} is a stand-alone 
-Python program, akin to a stand-alone shell script, and no additional Python packages are required.
+program, akin to a stand-alone shell script, and no additional Python packages are required.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
