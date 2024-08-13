@@ -240,11 +240,13 @@ def dataset_exists(dataset):
 def build(name, check=True):
     if check:
         if '@' in name:
-            kinds = ['snapshot']
+            types = ['snapshot']
+        elif '#' in name:
+            types = ['bookmark']
         else:
-            kinds = ['filesystem', 'volume']
+            types = ['filesystem', 'volume']
 
-        if len(zfs_list([name], types=kinds, max_depth=0)) == 0:
+        if len(zfs_list([name], types=types, max_depth=0)) == 0:
             raise ValueError('Cannot zfs_list: ' + name)
 
     return name
