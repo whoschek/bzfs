@@ -44,11 +44,12 @@ def create_volume(dataset, path=None, mk_parents=True, size=None, props=[], bloc
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ['zfs', 'create']
     if mk_parents:
-        cmd += ['-p']
+        cmd.append('-p')
     if sparse:
-        cmd += ['-s']
+        cmd.append('-s')
     if blocksize:
-        cmd += ['-b', str(blocksize)]
+        cmd.append('-b')
+        cmd.append(str(blocksize))
     if props:
         cmd += props
     cmd.append('-V')
@@ -58,7 +59,7 @@ def create_volume(dataset, path=None, mk_parents=True, size=None, props=[], bloc
     return dataset
 
 
-def create_dataset_simple(dataset, path=None, mk_parents=True, no_mount=True, props=[]):
+def create_filesystem_simple(dataset, path=None, mk_parents=True, no_mount=True, props=[]):
     path = "" if path is None else '/' + path
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ['zfs', 'create']
@@ -76,7 +77,7 @@ def create_dataset_simple(dataset, path=None, mk_parents=True, no_mount=True, pr
 zfs_version_is_at_least_2_1_0 = None
 
 
-def create_dataset(dataset, path=None, no_mount=True, props=[]):
+def create_filesystem(dataset, path=None, no_mount=True, props=[]):
     """ implies mk_parents=True
     if no_mount=True:
     To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
@@ -119,7 +120,7 @@ def create_dataset(dataset, path=None, no_mount=True, props=[]):
 
 
 def datasets(dataset):
-    return zfs_list([dataset], types=['filesystem'], max_depth=1)[1:]
+    return zfs_list([dataset], types=['filesystem', 'volume'], max_depth=1)[1:]
 
 
 def take_snapshot(dataset, snapshot_tag, recursive=False, props=[]):
@@ -158,8 +159,8 @@ def bookmark_name(bookmark):
 
 
 def dataset_property(dataset=None, prop=None):
-    return zfs_list([dataset], props=[prop], types=['filesystem'], max_depth=0)[0]
-    # return zfs_get([dataset], props=[prop], types=['filesystem'], max_depth=0, fields=['value'])[0]
+    return zfs_list([dataset], props=[prop], types=['filesystem', 'volume'], max_depth=0)[0]
+    # return zfs_get([dataset], props=[prop], types=['filesystem', 'volume'], max_depth=0, fields=['value'])[0]
 
 
 def snapshot_property(snapshot, prop):

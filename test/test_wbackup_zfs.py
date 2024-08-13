@@ -119,8 +119,8 @@ class WBackupTestCase(ParametrizedTestCase):
         src_pool = build(src_pool_name)
         dst_pool = build(dst_pool_name)
         afix = self.param.get('affix', '') if self.param is not None else ''
-        src_root_dataset = recreate_dataset(src_pool_name + '/tmp/' + fix('src'))
-        dst_root_dataset = recreate_dataset(dst_pool_name + '/tmp/' + fix('dst'))
+        src_root_dataset = recreate_filesystem(src_pool_name + '/tmp/' + fix('src'))
+        dst_root_dataset = recreate_filesystem(dst_pool_name + '/tmp/' + fix('dst'))
 
         global zpool_features
         if zpool_features is None:
@@ -150,9 +150,9 @@ class WBackupTestCase(ParametrizedTestCase):
             encryption_props += ['-o', 'keyformat=passphrase', '-o', f"keylocation={keylocation}"]
 
         dataset_props = encryption_props + compression_props if self.is_encryption_mode() else compression_props
-        src_foo = create_dataset(src_root_dataset, 'foo', props=dataset_props)
-        src_foo_a = create_volume(src_foo, 'a', size='1M') if volume else create_dataset(src_foo, 'a')
-        src_foo_b = create_dataset(src_foo, 'b')
+        src_foo = create_filesystem(src_root_dataset, 'foo', props=dataset_props)
+        src_foo_a = create_volume(src_foo, 'a', size='1M') if volume else create_filesystem(src_foo, 'a')
+        src_foo_b = create_filesystem(src_foo, 'b')
         take_snapshot(src_root_dataset, fix('s1'))
         take_snapshot(src_root_dataset, fix('s2'))
         take_snapshot(src_root_dataset, fix('s3'))
@@ -310,7 +310,7 @@ class LocalTestCase(WBackupTestCase):
 
     def test_basic_replication_without_source(self):
         destroy(src_root_dataset, recursive=True)
-        recreate_dataset(dst_root_dataset)
+        recreate_filesystem(dst_root_dataset)
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset, dst_root_dataset, dry_run=(i == 0), expected_status=die_status)
@@ -414,11 +414,11 @@ class LocalTestCase(WBackupTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
         self.setup_basic()
-        boo = create_dataset(src_root_dataset, 'goo')
+        boo = create_filesystem(src_root_dataset, 'goo')
         take_snapshot(boo, fix('g1'))
-        boo = create_dataset(src_root_dataset, 'boo')
+        boo = create_filesystem(src_root_dataset, 'boo')
         take_snapshot(boo, fix('b1'))
-        zoo = create_dataset(src_root_dataset, 'zoo')
+        zoo = create_filesystem(src_root_dataset, 'zoo')
         take_snapshot(zoo, fix('z1'))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
@@ -528,7 +528,7 @@ class LocalTestCase(WBackupTestCase):
 
     def basic_replication_flat_simple_with_retries_on_error_injection(self, max_retries=0, expected_status=0):
         self.setup_basic()
-        create_dataset(dst_root_dataset)
+        create_filesystem(dst_root_dataset)
 
         # inject failures for this many tries. only after that finally succeed the operation
         counter = Counter(zfs_list_snapshot_dst=2, full_zfs_send=2, incremental_zfs_send=2)
@@ -1121,11 +1121,11 @@ class LocalTestCase(WBackupTestCase):
 
     def test_basic_replication_dataset_with_spaces(self):
         d1 = ' foo  zoo  '
-        src_foo = create_dataset(src_root_dataset, d1)
+        src_foo = create_filesystem(src_root_dataset, d1)
         s1 = fix(' s  nap1   ')
         take_snapshot(src_foo, fix(s1))
         d2 = '..::   exit HOME f1.2 echo '
-        src_foo_a = create_dataset(src_foo, d2)
+        src_foo_a = create_filesystem(src_foo, d2)
         t1 = fix(d2 + 'snap')
         take_snapshot(src_foo_a, fix(t1))
         self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive')
@@ -1136,7 +1136,7 @@ class LocalTestCase(WBackupTestCase):
 
     def test_delete_missing_datasets_with_missing_src_root(self):
         destroy(src_root_dataset, recursive=True)
-        recreate_dataset(dst_root_dataset)
+        recreate_filesystem(dst_root_dataset)
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset, dst_root_dataset,
@@ -1148,7 +1148,7 @@ class LocalTestCase(WBackupTestCase):
 
     def test_delete_missing_datasets_flat_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
-        take_snapshot(create_dataset(dst_root_dataset, 'bar'), 'b1')
+        take_snapshot(create_filesystem(dst_root_dataset, 'bar'), 'b1')
         destroy(build(src_root_dataset + '/foo'), recursive=True)
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
@@ -1160,8 +1160,8 @@ class LocalTestCase(WBackupTestCase):
 
     def test_delete_missing_datasets_recursive1(self):
         self.setup_basic_with_recursive_replication_done()
-        take_snapshot(create_dataset(dst_root_dataset, 'bar'), fix('b1'))
-        take_snapshot(create_dataset(dst_root_dataset, 'zoo'), fix('z1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'bar'), fix('b1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'zoo'), fix('z1'))
         destroy(build(src_root_dataset + '/foo'), recursive=True)
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
@@ -1175,8 +1175,8 @@ class LocalTestCase(WBackupTestCase):
 
     def test_delete_missing_datasets_with_exclude_regex1(self):
         self.setup_basic_with_recursive_replication_done()
-        take_snapshot(create_dataset(dst_root_dataset, 'bar'), fix('b1'))
-        take_snapshot(create_dataset(dst_root_dataset, 'zoo'), fix('z1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'bar'), fix('b1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'zoo'), fix('z1'))
         destroy(build(src_root_dataset + '/foo'), recursive=True)
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
@@ -1191,8 +1191,8 @@ class LocalTestCase(WBackupTestCase):
 
     def test_delete_missing_datasets_with_exclude_regex2(self):
         self.setup_basic_with_recursive_replication_done()
-        take_snapshot(create_dataset(dst_root_dataset, 'bar'), fix('b1'))
-        take_snapshot(create_dataset(dst_root_dataset, 'zoo'), fix('z1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'bar'), fix('b1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'zoo'), fix('z1'))
         destroy(build(src_root_dataset + '/foo'), recursive=True)
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
@@ -1207,8 +1207,8 @@ class LocalTestCase(WBackupTestCase):
 
     def test_delete_missing_datasets_with_exclude_dataset(self):
         self.setup_basic_with_recursive_replication_done()
-        take_snapshot(create_dataset(dst_root_dataset, 'bar'), fix('b1'))
-        take_snapshot(create_dataset(dst_root_dataset, 'zoo'), fix('z1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'bar'), fix('b1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'zoo'), fix('z1'))
         destroy(build(src_root_dataset + '/foo'), recursive=True)
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
@@ -1228,18 +1228,18 @@ class LocalTestCase(WBackupTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset + '/zoo'))
 
     def test_delete_missing_datasets_and_empty_datasets(self):
-        create_datasets('axe')
-        create_datasets('foo/a')
-        create_datasets('foo/a/b')
-        create_datasets('foo/a/b/c')
-        create_datasets('foo/a/b/d')
-        take_snapshot(create_datasets('foo/a/e'), fix('e1'))
-        create_datasets('foo/b/c')
-        create_datasets('foo/b/c/d')
-        create_datasets('foo/b/d')
-        take_snapshot(create_datasets('foo/c'), fix('c1'))
+        create_filesystems('axe')
+        create_filesystems('foo/a')
+        create_filesystems('foo/a/b')
+        create_filesystems('foo/a/b/c')
+        create_filesystems('foo/a/b/d')
+        take_snapshot(create_filesystems('foo/a/e'), fix('e1'))
+        create_filesystems('foo/b/c')
+        create_filesystems('foo/b/c/d')
+        create_filesystems('foo/b/d')
+        take_snapshot(create_filesystems('foo/c'), fix('c1'))
         create_volumes('zoo')
-        create_datasets('boo')
+        create_filesystems('boo')
         self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
                          '--skip-replication', '--delete-missing-datasets', '--exclude-dataset', 'boo')
         self.assertFalse(dataset_exists(dst_root_dataset + '/axe'))
@@ -1349,8 +1349,8 @@ class LocalTestCase(WBackupTestCase):
 
     def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
         self.setup_basic_with_recursive_replication_done()
-        take_snapshot(create_dataset(dst_root_dataset, 'bar'), fix('b1'))
-        take_snapshot(create_dataset(dst_root_dataset, 'zoo'), fix('z1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'bar'), fix('b1'))
+        take_snapshot(create_filesystem(dst_root_dataset, 'zoo'), fix('z1'))
 
         # inject deletes for this many times. only after that stop deleting datasets
         counter = Counter(zfs_list_snapshot_src_for_delete_missing_snapshots=1)
@@ -1527,7 +1527,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         expected_results = ['d1', 'd2', 'd3', 'd4']
         dst_foo = dst_root_dataset + '/foo'
 
-        src_foo = create_dataset(src_root_dataset, 'foo')
+        src_foo = create_filesystem(src_root_dataset, 'foo')
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         self.run_wbackup(src_foo, dst_foo,
@@ -1535,7 +1535,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         self.assertSnapshotNames(dst_foo, expected_results)
 
         self.tearDownAndSetup()
-        src_foo = create_dataset(src_root_dataset, 'foo')
+        src_foo = create_filesystem(src_root_dataset, 'foo')
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[0]}"
@@ -1547,7 +1547,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         self.assertSnapshotNames(dst_foo, expected_results)
 
         self.tearDownAndSetup()
-        src_foo = create_dataset(src_root_dataset, 'foo')
+        src_foo = create_filesystem(src_root_dataset, 'foo')
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[0]}"
@@ -1568,7 +1568,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
             self.assertSnapshotNames(dst_foo, expected_results + ['d99'])
 
         self.tearDownAndSetup()
-        src_foo = create_dataset(src_root_dataset, 'foo')
+        src_foo = create_filesystem(src_root_dataset, 'foo')
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
@@ -1580,7 +1580,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         self.assertSnapshotNames(dst_foo, expected_results[1:])
 
         self.tearDownAndSetup()
-        src_foo = create_dataset(src_root_dataset, 'foo')
+        src_foo = create_filesystem(src_root_dataset, 'foo')
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
@@ -1592,7 +1592,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         self.assertSnapshotNames(dst_foo, [])
 
         self.tearDownAndSetup()
-        src_foo = create_dataset(src_root_dataset, 'foo')
+        src_foo = create_filesystem(src_root_dataset, 'foo')
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
@@ -1606,7 +1606,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
     def test_snapshot_series_excluding_hourlies_with_permutations(self):
         for testcase in ExcludeSnapshotRegexValidationCase().permute_snapshot_series(5):
             self.tearDownAndSetup()
-            src_foo = create_dataset(src_root_dataset, 'foo')
+            src_foo = create_filesystem(src_root_dataset, 'foo')
             dst_foo = dst_root_dataset + '/foo'
             for snapshot in testcase[None]:
                 take_snapshot(src_foo, snapshot)
@@ -2146,15 +2146,15 @@ class TestCheckRange(unittest.TestCase):
 
 
 #############################################################################
-def create_datasets(path, props=None):
-    create_dataset(src_root_dataset, path, props=props)
-    return create_dataset(dst_root_dataset, path, props=props)
+def create_filesystems(path, props=None):
+    create_filesystem(src_root_dataset, path, props=props)
+    return create_filesystem(dst_root_dataset, path, props=props)
 
 
-def recreate_dataset(dataset, props=None):
+def recreate_filesystem(dataset, props=None):
     if dataset_exists(dataset):
         destroy(dataset, recursive=True)
-    return create_dataset(dataset, props=props)
+    return create_filesystem(dataset, props=props)
 
 
 def create_volumes(path, props=None):
