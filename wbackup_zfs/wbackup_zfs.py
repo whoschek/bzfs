@@ -381,8 +381,8 @@ feature.
         '--ssh-cipher', type=str, default=ssh_cipher_default, metavar='STRING',
         help=f"SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "cipher_spec is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
-             f"keyword in ssh_config(5) for more information - "
-             f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: {ssh_cipher_default}\n\n")
+             f"keyword in ssh_config(5) for more information: "
+             f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
     parser.add_argument(
         '--ssh-src-user', type=str, metavar='STRING',
         help="Remote SSH username of source host to connect to (optional). Overrides username given in "
