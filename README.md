@@ -3,8 +3,8 @@
 wbackup-zfs
 ==========
 *wbackup-zfs is a backup command line tool that reliably replicates ZFS
-snapshots from a (local or remote) source ZFS dataset (aka ZFS
-filesystem) and its descendant datasets to a (local or remote)
+snapshots from a (local or remote) source ZFS dataset (ZFS filesystem or
+ZFS volume) and its descendant datasets to a (local or remote)
 destination ZFS dataset to make the destination dataset a recursively
 synchronized copy of the source dataset, using zfs
 send/receive/rollback/destroy and ssh tunnel as directed. For example,
@@ -178,15 +178,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
 **SRC_DATASET**
 
 *  Source ZFS dataset (and its descendants) that will be replicated.
-    Format is [[user@]host:]dataset. The host name can also be an
-    IPv4 address. If the host name is '-', the dataset will be on the
-    local host, and the corresponding SSH leg will be omitted. The same
-    is true if the host is omitted and the dataset does not contain a
-    ':' colon at the same time. Local dataset examples:
-    `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` Remote
-    dataset examples: `host:tank1/foo/bar`,
-    `host.example.com:tank1/foo/bar`, `root@host:tank`,
-    `root@host.example.com:tank1/foo/bar`,
+    Can be a ZFS filesystem or ZFS volume. Format is
+    [[user@]host:]dataset. The host name can also be an IPv4
+    address. If the host name is '-', the dataset will be on the local
+    host, and the corresponding SSH leg will be omitted. The same is
+    true if the host is omitted and the dataset does not contain a ':'
+    colon at the same time. Local dataset examples: `tank1/foo/bar`,
+    `tank1`, `-:tank1/foo/bar:baz:boo` Remote dataset examples:
+    `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`,
+    `root@host:tank`, `root@host.example.com:tank1/foo/bar`,
     `user@127.0.0.1:tank1/foo/bar:baz:boo`. The first component of the
     ZFS dataset name is the ZFS pool name, here `tank1`.
 

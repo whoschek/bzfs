@@ -141,7 +141,7 @@ class WBackupTestCase(ParametrizedTestCase):
         self.tearDown()
         self.setUp()
 
-    def setup_basic(self):
+    def setup_basic(self, volume=False):
         compression_props = ['-o', 'compression=on']
         encryption_props = ['-o', f"encryption={encryption_algo}"]
         if is_solaris_zfs():
@@ -151,7 +151,7 @@ class WBackupTestCase(ParametrizedTestCase):
 
         dataset_props = encryption_props + compression_props if self.is_encryption_mode() else compression_props
         src_foo = create_dataset(src_root_dataset, 'foo', props=dataset_props)
-        src_foo_a = create_dataset(src_foo, 'a')
+        src_foo_a = create_volume(src_foo, 'a', size='1M') if volume else create_dataset(src_foo, 'a')
         src_foo_b = create_dataset(src_foo, 'b')
         take_snapshot(src_root_dataset, fix('s1'))
         take_snapshot(src_root_dataset, fix('s2'))
@@ -381,10 +381,13 @@ class LocalTestCase(WBackupTestCase):
                 self.run_wbackup(src_root_dataset + '/foo/b', dst_root_dataset + '/foo/b', dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
 
-    def test_basic_replication_recursive1(self):
+    def test_basic_replication_recursive1_with_volume(self):
+        self.test_basic_replication_recursive1(volume=True)
+
+    def test_basic_replication_recursive1(self, volume=False):
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
-        self.setup_basic()
+        self.setup_basic(volume=volume)
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive', dry_run=(i == 0))
@@ -403,8 +406,9 @@ class LocalTestCase(WBackupTestCase):
                     self.assertEqual(encryption_prop, 'off')
                     encryption_prop = dataset_property(dst_root_dataset + "/foo", 'encryption')
                     self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else 'off')
-                    encryption_prop = dataset_property(dst_root_dataset + "/foo/a", 'encryption')
-                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else 'off')
+                    if not volume:
+                        encryption_prop = dataset_property(dst_root_dataset + "/foo/a", 'encryption')
+                        self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else 'off')
 
     def test_basic_replication_recursive_with_exclude_dataset(self):
         self.assertTrue(dataset_exists(dst_root_dataset))
@@ -833,12 +837,22 @@ class LocalTestCase(WBackupTestCase):
                 self.assertSnapshots(dst_root_dataset, 0)
                 self.assertSnapshots(dst_root_dataset + '/foo', 3, 't', offset=8)
 
-    def test_complex_replication_flat_use_bookmarks(self):
+    def test_complex_replication_flat_use_bookmarks_with_volume(self):
+        self.test_complex_replication_flat_use_bookmarks(volume=True)
+
+    def test_complex_replication_flat_use_bookmarks(self, volume=False):
         if not is_zpool_bookmarks_feature_enabled_or_active('src'):
             self.skipTest("ZFS has no bookmark feature")
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
         self.setup_basic()
         src_foo = build(src_root_dataset + '/foo')
+        if volume:
+            destroy(src_foo, recursive=True)
+            src_foo = create_volume(src_foo, size='1M')
+            take_snapshot(src_foo, fix('t1'))
+            take_snapshot(src_foo, fix('t2'))
+            take_snapshot(src_foo, fix('t3'))
+
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0))
@@ -943,10 +957,11 @@ class LocalTestCase(WBackupTestCase):
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])
 
         # replicate a child dataset
-        self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a')
-        self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
-        self.assertBookmarkNames(src_root_dataset + '/foo/a', ['u1', 'u3'])
-        self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')
+        if not volume:
+            self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a')
+            self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
+            self.assertBookmarkNames(src_root_dataset + '/foo/a', ['u1', 'u3'])
+            self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')
 
         # on src delete all snapshots so now there is no common snapshot anymore,
         # which isn't actually trouble because we have bookmarks for them...
@@ -959,7 +974,8 @@ class LocalTestCase(WBackupTestCase):
                 self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0))
                 self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')  # nothing has changed on dst
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])
-                self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
+                if not volume:
+                    self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
 
         take_snapshot(src_foo, fix('t9'))
         take_snapshot(src_foo, fix('t10'))
@@ -971,7 +987,8 @@ class LocalTestCase(WBackupTestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
+                if not volume:
+                    self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')  # nothing has changed on dst
                     self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])
@@ -1006,7 +1023,8 @@ class LocalTestCase(WBackupTestCase):
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force', dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
+                if not volume:
+                    self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
                 if i == 0:
                     self.assertSnapshotNames(dst_root_dataset + '/foo',
                                              ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])  # nothing has changed
@@ -1220,7 +1238,7 @@ class LocalTestCase(WBackupTestCase):
         create_datasets('foo/b/c/d')
         create_datasets('foo/b/d')
         take_snapshot(create_datasets('foo/c'), fix('c1'))
-        create_datasets('zoo')
+        create_volumes('zoo')
         create_datasets('boo')
         self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
                          '--skip-replication', '--delete-missing-datasets', '--exclude-dataset', 'boo')
@@ -2137,6 +2155,11 @@ def recreate_dataset(dataset, props=None):
     if dataset_exists(dataset):
         destroy(dataset, recursive=True)
     return create_dataset(dataset, props=props)
+
+
+def create_volumes(path, props=None):
+    create_volume(src_root_dataset, path, size='1M', props=props)
+    return create_volume(dst_root_dataset, path, size='1M', props=props)
 
 
 def detect_zpool_features(location, pool):

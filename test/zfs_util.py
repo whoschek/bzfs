@@ -39,6 +39,25 @@ def destroy(name, recursive=False, force=False):
     run_cmd(cmd)
 
 
+def create_volume(dataset, path=None, mk_parents=True, size=None, props=[], blocksize=None, sparse=False):
+    path = "" if path is None else '/' + path
+    dataset = f"{dataset}{path}"
+    cmd = sudo_cmd + ['zfs', 'create']
+    if mk_parents:
+        cmd += ['-p']
+    if sparse:
+        cmd += ['-s']
+    if blocksize:
+        cmd += ['-b', str(blocksize)]
+    if props:
+        cmd += props
+    cmd.append('-V')
+    cmd.append(str(size))
+    cmd.append(dataset)
+    run_cmd(cmd)
+    return dataset
+
+
 def create_dataset_simple(dataset, path=None, mk_parents=True, no_mount=True, props=[]):
     path = "" if path is None else '/' + path
     dataset = f"{dataset}{path}"
@@ -103,9 +122,15 @@ def datasets(dataset):
     return zfs_list([dataset], types=['filesystem'], max_depth=1)[1:]
 
 
-def take_snapshot(dataset, snapshot_tag):
+def take_snapshot(dataset, snapshot_tag, recursive=False, props=[]):
     snapshot = dataset + '@' + snapshot_tag
-    run_cmd(sudo_cmd + ['zfs', 'snapshot', snapshot])
+    cmd = sudo_cmd + ['zfs', 'snapshot']
+    if recursive:
+        cmd.append('-r')
+    if props:
+        cmd += props
+    cmd.append(snapshot)
+    run_cmd(cmd)
     return snapshot
 
 
@@ -214,11 +239,11 @@ def dataset_exists(dataset):
 def build(name, check=True):
     if check:
         if '@' in name:
-            kind = 'snapshot'
+            kinds = ['snapshot']
         else:
-            kind = 'filesystem'
+            kinds = ['filesystem', 'volume']
 
-        if len(zfs_list([name], types=[kind], max_depth=0)) == 0:
+        if len(zfs_list([name], types=kinds, max_depth=0)) == 0:
             raise ValueError('Cannot zfs_list: ' + name)
 
     return name

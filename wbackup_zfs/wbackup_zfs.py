@@ -58,8 +58,8 @@ def argument_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
         description=f'''
 *{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
-source ZFS dataset (aka ZFS filesystem) and its descendant datasets to a (local or remote) destination ZFS dataset 
-to make the destination dataset a recursively synchronized copy of the source dataset, using 
+source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote) 
+destination ZFS dataset to make the destination dataset a recursively synchronized copy of the source dataset, using 
 zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {prog_name} can be used to incrementally 
 replicate all ZFS snapshots since the most recent common snapshot from source to destination, in order to help 
 protect against data loss or ransomware.*
@@ -137,8 +137,8 @@ feature.
 
     parser.add_argument(
         'src_root_dataset', metavar='SRC_DATASET', type=str,
-        help=("Source ZFS dataset (and its descendants) that will be replicated. Format is "
-              "[[user@]host:]dataset. The host name can also be an IPv4 address. If the host name is '-', "
+        help=("Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
+              "Format is [[user@]host:]dataset. The host name can also be an IPv4 address. If the host name is '-', "
               "the dataset will be on the local host, and the corresponding SSH leg will be omitted. The same is true "
               "if the host is omitted and the dataset does not contain a ':' colon at the same time. "
               "Local dataset examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` "
@@ -747,15 +747,15 @@ class Job:
                   f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
-        cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o recordsize,name",
+        cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name",
                            p.recursive_flag, p.src_root_dataset)
         src_datasets_with_record_sizes = self.try_ssh_command('src', self.info, cmd=cmd) or ""
         src_datasets_with_record_sizes = src_datasets_with_record_sizes.splitlines()
         src_datasets = []
         self.recordsizes = {}
         for line in src_datasets_with_record_sizes:
-            recordsize, src_dataset = line.split('\t', 1)
-            self.recordsizes[src_dataset] = int(recordsize)
+            volblocksize, recordsize, src_dataset = line.split('\t', 2)
+            self.recordsizes[src_dataset] = int(recordsize) if recordsize != '-' else -int(volblocksize)
             src_datasets.append(src_dataset)
 
         origin_src_datasets = set(src_datasets)
@@ -778,7 +778,7 @@ class Job:
                 skip_src_dataset = ""
                 dst_dataset = p.dst_root_dataset + relativize_dataset(src_dataset, p.src_root_dataset)
                 self.debug("Replicating:", f"{src_dataset} --> {dst_dataset} ...")
-                self.mbuffer_current_opts = (['-s', str(max(128 * 1024, self.recordsizes[src_dataset]))]
+                self.mbuffer_current_opts = (['-s', str(max(128 * 1024, abs(self.recordsizes[src_dataset])))]
                                              + p.mbuffer_program_opts)
                 if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
                     skip_src_dataset = src_dataset
@@ -824,7 +824,7 @@ class Job:
         if params.delete_missing_datasets:
             self.info("--delete-missing-datasets:",
                       f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
-            cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name", p.recursive_flag, p.dst_root_dataset)
+            cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, p.dst_root_dataset)
             dst_datasets = self.run_ssh_command('dst', self.trace, check=False, cmd=cmd).splitlines()
             dst_datasets = set(self.filter_datasets(dst_datasets, p.dst_root_dataset))
             origins = {replace_prefix(src_ds, p.src_root_dataset, p.dst_root_dataset) for src_ds in origin_src_datasets}
@@ -1044,7 +1044,11 @@ class Job:
                 send_cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", p.zfs_send_program_opts, oldest_src_snapshot)
                 recv_opts = p.zfs_full_recv_opts.copy()
                 if p.getenv_bool('preserve_recordsize', False):
-                    recv_opts += ['-o', f"recordsize={self.recordsizes[src_dataset]}"]
+                    recordsize = self.recordsizes[src_dataset]
+                    if recordsize >= 0:
+                        recv_opts += ['-o', f"recordsize={recordsize}"]
+                    # else:  # feature is blocked on https://github.com/openzfs/zfs/issues/8704
+                    #     recv_opts += ['-o', f"volblocksize={abs(recordsize)}"]
                 recv_cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset)
                 self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_estimate_human}) ...")
                 self.run_zfs_send_receive(send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human,
