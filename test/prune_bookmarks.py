@@ -26,7 +26,7 @@ def main():
         description="Example ZFS bookmark pruning script that deletes the oldest bookmarks older than X days in a "
                     "given dataset and optionally also its descendant datasets, such that each dataset retains at "
                     "least N bookmarks.")
-    parser.add_argument('--dataset', type=str, required=True,
+    parser.add_argument('dataset', type=str, nargs='+',
                         help="Dataset to prune bookmarks for.")
     parser.add_argument('--recursive', '-r', action='store_true',
                         help="Include this flag to prune datasets recursively.")
@@ -46,23 +46,24 @@ def main():
               f"--min-bookmarks-to-retain must be greater than zero: {args.min_bookmarks_to_retain}", file=sys.stderr)
         sys.exit(1)
 
-    cmd = ['zfs', 'list', '-t', kind, '-Hp', '-o', 'creation,name']
-    if args.recursive:
-        cmd.append('-r')
-    cmd.append(args.dataset)
-    datasets = defaultdict(list)
-    for line in subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True).stdout.splitlines():
-        creation_time, bookmark = line.split('\t', 1)
-        dataset = bookmark.split('@' if args.snapshot else '#', 1)[0]
-        datasets[dataset].append((int(creation_time), bookmark))
+    for root_dataset in args.dataset:
+        cmd = ['zfs', 'list', '-t', kind, '-Hp', '-o', 'creation,name']
+        if args.recursive:
+            cmd.append('-r')
+        cmd.append(root_dataset)
+        datasets = defaultdict(list)
+        for line in subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True).stdout.splitlines():
+            creation_time, bookmark = line.split('\t', 1)
+            dataset = bookmark.split('@' if args.snapshot else '#', 1)[0]
+            datasets[dataset].append((int(creation_time), bookmark))
 
-    for dataset, bookmarks in sorted(datasets.items()):
-        n = max(0, len(bookmarks) - args.min_bookmarks_to_retain)
-        for bookmark in [bmark for ts, bmark in sorted(bookmarks) if ts <= int(time.time()) - args.days * 86400][0:n]:
-            msg = "Would delete" if args.dry_run else "Deleting"
-            print(f"{msg} {kind}: {bookmark} ...")
-            if not args.dry_run:
-                subprocess.run(['sudo', 'zfs', 'destroy', bookmark], check=True)
+        for dataset, bookmarks in sorted(datasets.items()):
+            n = max(0, len(bookmarks) - args.min_bookmarks_to_retain)
+            for bookmark in [bmark for ts, bmark in sorted(bookmarks) if ts <= int(time.time()) - args.days*86400][0:n]:
+                msg = "Would delete" if args.dry_run else "Deleting"
+                print(f"{msg} {kind}: {bookmark} ...")
+                if not args.dry_run:
+                    subprocess.run(['sudo', 'zfs', 'destroy', bookmark], check=True)
 
 
 if __name__ == "__main__":
