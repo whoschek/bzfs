@@ -171,7 +171,7 @@ usage: wbackup-zfs [-h] [--recursive]
 ```
 
 <!--
-Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-update README.md below, like so:
+Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update README.md below, like so:
 ./test/update-readme.py wbackup_zfs/wbackup_zfs.py README.md
 -->
 
@@ -556,9 +556,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options for and auto-up
 **--ssh-cipher** *STRING*
 
 *  SSH cipher specification for encrypting the session (optional); will
-    be passed into ssh -c CLI. cipher_spec is a comma-separated list of
-    ciphers listed in order of preference. See the 'Ciphers' keyword
-    in ssh_config(5) for more information:
+    be passed into ssh -c CLI. --ssh-cipher is a comma-separated list
+    of ciphers listed in order of preference. See the 'Ciphers'
+    keyword in ssh_config(5) for more information:
     https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html.
     Default: `^aes256-gcm@openssh.com`
 

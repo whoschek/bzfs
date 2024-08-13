@@ -58,16 +58,16 @@ def argument_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
         description=f'''
 *{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
-source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote) 
-destination ZFS dataset to make the destination dataset a recursively synchronized copy of the source dataset, using 
-zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {prog_name} can be used to incrementally 
-replicate all ZFS snapshots since the most recent common snapshot from source to destination, in order to help 
-protect against data loss or ransomware.*
+source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote)
+destination ZFS dataset to make the destination dataset a recursively synchronized copy of the source dataset,
+using zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {prog_name} can be used to
+incrementally replicate all ZFS snapshots since the most recent common snapshot from source to destination,
+in order to help protect against data loss or ransomware.*
 
 When run for the first time, {prog_name} replicates the dataset and all its snapshots from the source to the
 destination. On subsequent runs, {prog_name} transfers only the data that has changed since the previous run,
 i.e. it incrementally replicates to the destination all intermediate snapshots that have been created on
-the source since the last run. Source ZFS snapshots older than the most recent common snapshot found on the 
+the source since the last run. Source ZFS snapshots older than the most recent common snapshot found on the
 destination are auto-skipped.
 
 {prog_name} does not create or delete ZFS snapshots on the source - it assumes you have a ZFS snapshot
@@ -80,20 +80,20 @@ identical to the source if the two have somehow diverged in unforeseen ways. Thi
 (re)synchronizing the backup from the production state, as well as restoring the production state from
 backup.
 
-The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed 
-and executed on the 'coordinator' host which can be either the host that contains the source dataset (push mode), 
-or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required), 
-or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' CLI) into 
-both the source and destination host (pull-push mode). In Pull-push mode the source 'zfs send's the data stream  
-to the coordinator which immediately pipes the stream (without storing anything locally) to the destination 
-host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed 
-or executed on either source or destination host. Only the underlying 'zfs' CLI must be installed on both source 
-and destination host. {prog_name} can run as root or non-root user, in the latter case via a) sudo or b) when 
-granted corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism.
+The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
+and executed on the 'coordinator' host which can be either the host that contains the source dataset (push mode),
+or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required),
+or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' CLI) into
+both the source and destination host (pull-push mode). In Pull-push mode the source 'zfs send's the data stream
+to the coordinator which immediately pipes the stream (without storing anything locally) to the destination
+host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed or executed on either
+source or destination host. Only the underlying 'zfs' CLI must be installed on both source and destination host.
+{prog_name} can run as root or non-root user, in the latter case via a) sudo or b) when granted corresponding
+ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
-{prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure 
-coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python 
-versions >= 3.7 (including latest stable which is currently python-3.12). {prog_name} is a stand-alone 
+{prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
+coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
+versions >= 3.7 (including latest stable which is currently python-3.12). {prog_name} is a stand-alone
 program, akin to a stand-alone shell script, and no additional Python packages are required.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
@@ -380,7 +380,7 @@ feature.
     parser.add_argument(
         '--ssh-cipher', type=str, default=ssh_cipher_default, metavar='STRING',
         help=f"SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
-             "cipher_spec is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
+             "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
              f"keyword in ssh_config(5) for more information: "
              f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
     parser.add_argument(
@@ -983,7 +983,7 @@ class Job:
                     _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids,
                                                                            [latest_common_guid])
                     if not params.force:
-                        die(f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than " 
+                        die(f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
                             f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
                             f"for example via --force option.")
                     if params.force_once:
@@ -1483,7 +1483,7 @@ class Job:
                     max_sleep_mark = min(params.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
                     if params.max_retries > 0:
-                        error(f"Giving up because the last [{retry_count}/{params.max_retries}] retries across " 
+                        error(f"Giving up because the last [{retry_count}/{params.max_retries}] retries across "
                               f"[{elapsed_nanos // 1_000_000_000}/{params.max_elapsed_nanos // 1_000_000_000}] "
                               "seconds for the current request failed!")
                     raise retryable_error.__cause__
