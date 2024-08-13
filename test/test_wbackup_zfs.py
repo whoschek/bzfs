@@ -406,9 +406,8 @@ class LocalTestCase(WBackupTestCase):
                     self.assertEqual(encryption_prop, 'off')
                     encryption_prop = dataset_property(dst_root_dataset + "/foo", 'encryption')
                     self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else 'off')
-                    if not volume:
-                        encryption_prop = dataset_property(dst_root_dataset + "/foo/a", 'encryption')
-                        self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else 'off')
+                    encryption_prop = dataset_property(dst_root_dataset + "/foo/a", 'encryption')
+                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else 'off')
 
     def test_basic_replication_recursive_with_exclude_dataset(self):
         self.assertTrue(dataset_exists(dst_root_dataset))
