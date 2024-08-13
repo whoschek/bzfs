@@ -824,7 +824,8 @@ class Job:
         if params.delete_missing_datasets:
             self.info("--delete-missing-datasets:",
                       f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
-            cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, p.dst_root_dataset)
+            cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name",
+                               p.recursive_flag, p.dst_root_dataset)
             dst_datasets = self.run_ssh_command('dst', self.trace, check=False, cmd=cmd).splitlines()
             dst_datasets = set(self.filter_datasets(dst_datasets, p.dst_root_dataset))
             origins = {replace_prefix(src_ds, p.src_root_dataset, p.dst_root_dataset) for src_ds in origin_src_datasets}
@@ -1047,8 +1048,6 @@ class Job:
                     recordsize = self.recordsizes[src_dataset]
                     if recordsize >= 0:
                         recv_opts += ['-o', f"recordsize={recordsize}"]
-                    # else:  # feature is blocked on https://github.com/openzfs/zfs/issues/8704
-                    #     recv_opts += ['-o', f"volblocksize={abs(recordsize)}"]
                 recv_cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset)
                 self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_estimate_human}) ...")
                 self.run_zfs_send_receive(send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human,
