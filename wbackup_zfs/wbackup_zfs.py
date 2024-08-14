@@ -535,7 +535,7 @@ class Params:
         self.max_retries = args.max_retries
         self.min_sleep_secs = float(self.getenv('min_sleep_secs', 0.125))
         self.max_sleep_secs = float(self.getenv('max_sleep_secs', 5 * 60))
-        self.max_elapsed_secs = float(self.getenv('max_elapsed_secs', 3600))
+        self.max_elapsed_secs = float(self.getenv('max_elapsed_secs', 60 * 60))
         self.min_sleep_nanos = int(self.min_sleep_secs * 1000_000_000)
         self.max_sleep_nanos = int(self.max_sleep_secs * 1000_000_000)
         self.max_elapsed_nanos = int(self.max_elapsed_secs * 1000_000_000)
@@ -744,7 +744,7 @@ class Job:
         params = self.params
         p = params
         self.info('ZFS source --> destination:',
-                  f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
+                  f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name",
@@ -764,7 +764,7 @@ class Job:
         # Optionally, replicate src_root_dataset (optionally including its descendants) to dst_root_dataset
         if not params.skip_replication:
             self.info('ZFS dataset replication:',
-                      f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
+                      f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
             if len(origin_src_datasets) == 0:
                 die(f"Source dataset does not exist: {params.origin_src_root_dataset}")
             self.debug('Retry policy:', f"max_retries: {p.max_retries}, min_sleep_secs: {p.min_sleep_secs}, "
@@ -788,7 +788,7 @@ class Job:
         # dataset is included via --{include|exclude}-dataset-regex --{include|exclude}-dataset policy
         if params.delete_missing_snapshots:
             self.info('--delete-missing-snapshots:',
-                      f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
+                      f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
             skip_src_dataset = ""
             for src_dataset in src_datasets:
                 if f"{src_dataset}/".startswith(f"{skip_src_dataset}/"):
@@ -823,7 +823,7 @@ class Job:
         # --{include|exclude}-dataset-regex --{include|exclude}-dataset policy). Does not recurse without --recursive.
         if params.delete_missing_datasets:
             self.info('--delete-missing-datasets:',
-                      f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
+                      f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name",
                                p.recursive_flag, p.dst_root_dataset)
             dst_datasets = self.run_ssh_command('dst', self.trace, check=False, cmd=cmd).splitlines()
@@ -840,7 +840,7 @@ class Job:
             # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
             if p.delete_empty_datasets:
                 self.info('--delete-empty-datasets:',
-                          f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset}  ...")
+                          f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
 
                 # preparation: compute the direct children of each dataset
