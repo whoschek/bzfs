@@ -128,7 +128,8 @@ class WBackupTestCase(ParametrizedTestCase):
             detect_zpool_features('src', src_pool_name)
             print(f"zpool bookmarks feature: {is_zpool_bookmarks_feature_enabled_or_active('src')}", file=sys.stderr)
             props = zpool_features['src']
-            features = '\n'.join([f"{k}: {v}" for k, v in sorted(props.items()) if k.startswith('feature@')])
+            features = '\n'.join([f"{k}: {v}" for k, v in sorted(props.items())
+                                  if k.startswith('feature@') or k == 'delegation'])
             print(f"zpool features: {features}", file=sys.stderr)
 
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/wbackup-zfs/
@@ -472,6 +473,19 @@ class LocalTestCase(WBackupTestCase):
         self.run_wbackup(src_root_dataset + '/tmp', src_root_dataset, '--recursive', expected_status=die_status)
         self.run_wbackup(dst_root_dataset, dst_root_dataset + '/tmp', '--recursive', expected_status=die_status)
         self.run_wbackup(dst_root_dataset + '/tmp', dst_root_dataset, '--recursive', expected_status=die_status)
+
+    def test_basic_replication_with_delegation_disabled(self):
+        if not self.is_no_privilege_elevation():
+            self.skipTest("Test requires --no-privilege-elevation")
+        self.setup_basic()
+
+        run_cmd(sudo_cmd + ['zpool', 'set', 'delegation=off', src_pool_name])
+        self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=die_status)
+
+        run_cmd(sudo_cmd + ['zpool', 'set', 'delegation=on', src_pool_name])
+        run_cmd(sudo_cmd + ['zpool', 'set', 'delegation=off', dst_pool_name])
+        self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=die_status)
+        run_cmd(sudo_cmd + ['zpool', 'set', 'delegation=on', dst_pool_name])
 
     def test_basic_replication_skip_missing_snapshots(self):
         self.assertTrue(dataset_exists(src_root_dataset))

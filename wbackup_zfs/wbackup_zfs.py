@@ -711,6 +711,13 @@ class Job:
         self.detect_zpool_features('src', p.src_pool)
         self.detect_zpool_features('dst', p.dst_pool)
 
+        if p.src_use_zfs_delegation and p.zpool_features['src'].get('delegation') == 'off':
+            die(f"Permission denied as ZFS delegation is disabled for source dataset: {p.origin_src_root_dataset}. "
+                f"Manually enable it via 'sudo zpool set delegation=on {p.src_pool}'")
+        if p.dst_use_zfs_delegation and p.zpool_features['dst'].get('delegation') == 'off':
+            die(f"Permission denied as ZFS delegation is disabled for destination dataset: {p.origin_dst_root_dataset}. "
+                f"Manually enable it via 'sudo zpool set delegation=on {p.dst_pool}'")
+
         if self.is_zpool_feature_enabled_or_active('dst', 'feature@large_blocks'):
             append_if_absent(p.zfs_send_program_opts, '--large-block')  # solaris-11.4.0 does not have this feature
 
@@ -1867,7 +1874,7 @@ class Job:
                 self.warn(f"Failed to detect zpool features on {location}: {pool}. "
                           f"Continuing with minimal assumptions ...")
             props = {line.split('\t', 1)[0]: line.split('\t', 1)[1] for line in lines}
-            features = {k: v for k, v in props.items() if k.startswith('feature@')}
+            features = {k: v for k, v in props.items() if k.startswith('feature@') or k == 'delegation'}
             str_features = '\n'.join([f"{k}: {v}" for k, v in sorted(features.items())])
             self.trace(f"{location} zpool features:", str_features)
         params.zpool_features[location] = features
