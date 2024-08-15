@@ -28,7 +28,7 @@ import sys
 import tempfile
 from collections import defaultdict, Counter
 from contextlib import contextmanager
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open
 from .zfs_util import *
 from wbackup_zfs.wbackup_zfs import CheckRange
 from wbackup_zfs import wbackup_zfs
@@ -1662,14 +1662,14 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
     def permute_snapshot_series(self, max_length=9):
         """
         Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly
-        snapshots from replication. The expectation is that after repliction dst contains all daily snapshots
+        snapshots from replication. The expectation is that after replication dst contains all daily snapshots
         and no hourly snapshots.
         Example snapshot series: d1, h1, d2, d3, d4 --> expected dst output: d1, d2, d3, d4
         where
         d1 = first daily snapshot,  dN = n-th daily snapshot
         h1 = first hourly snapshot, hN = n-th hourly snapshot
 
-        We test all possible permutations of series of length L=[0...max_length] snapshots
+        We test all possible permutations of series of length L=[0..max_length] snapshots
         """
         assert max_length >= 0
         testcases = []
@@ -1690,6 +1690,8 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
         return testcases
 
     def validate_incremental_replication_steps(self, input_snapshots, expected_results):
+        """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input
+        snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
         # src_dataset = "s@"
         src_dataset = ""
         for force_convert_I_to_i in [False, True]:
@@ -1707,8 +1709,10 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
         return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
 
     def apply_incremental_replication_steps(self, steps, input_snapshots):
+        """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
+        Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
-        for i, (incr_flag, start_snapshot, end_snapshot) in enumerate(steps):
+        for incr_flag, start_snapshot, end_snapshot in steps:
             start = input_snapshots.index(start_snapshot)
             end = input_snapshots.index(end_snapshot)
             if incr_flag == '-I':
@@ -1721,7 +1725,7 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
     def incremental_replication_steps1(self, input_snapshots, src_dataset=None, force_convert_I_to_i=False):
         origin_src_snapshots_with_guids = []
         guid = 1
-        for i, snapshot in enumerate(input_snapshots):
+        for snapshot in input_snapshots:
             origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
             guid += 1
         return self.incremental_replication_steps2(origin_src_snapshots_with_guids,
@@ -1730,7 +1734,6 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
     def incremental_replication_steps2(self, origin_src_snapshots_with_guids, force_convert_I_to_i=False):
         guids = []
         input_snapshots = []
-        permutation = []
         included_guids = set()
         for line in origin_src_snapshots_with_guids:
             guid, snapshot = line.split('\t', 1)
@@ -1738,7 +1741,6 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
             input_snapshots.append(snapshot)
             i = snapshot.find('@')
             snapshot = snapshot[i+1:]
-            permutation.append(snapshot[0:1])
             if snapshot[0:1] == 'd':
                 included_guids.add(guid)
         return wbackup_zfs.Job().incremental_replication_steps(input_snapshots, guids, included_guids=included_guids,
