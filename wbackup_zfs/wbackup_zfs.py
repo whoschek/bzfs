@@ -1186,9 +1186,9 @@ class Job:
                     if start != i:
                         step = ('-I', src_snapshots[start], src_snapshots[i])
                         # print(f"r2 {self.replication_step_to_str(step)}")
-                        if not force_convert_I_to_i and '@' in src_snapshots[start]:
+                        if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
                             steps.append(step)
-                        else:  # convert to -i steps
+                        else:  # convert -I step to -i steps
                             for j in range(start, i):
                                 steps.append(('-i', src_snapshots[j], src_snapshots[j+1]))
                     i -= 1
@@ -1198,9 +1198,9 @@ class Job:
                 if start != i:
                     step = ('-I', src_snapshots[start], src_snapshots[i])
                     # print(f"r3 {self.replication_step_to_str(step)}")
-                    if not force_convert_I_to_i and '@' in src_snapshots[start]:
+                    if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
                         steps.append(step)
-                    else:   # convert to -i steps
+                    else:  # convert -I step to -i steps
                         for j in range(start, i):
                             steps.append(('-i', src_snapshots[j], src_snapshots[j+1]))
             i += 1
