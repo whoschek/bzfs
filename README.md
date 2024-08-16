@@ -194,7 +194,10 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--ssh-dst-user STRING] [--ssh-src-host STRING]
                    [--ssh-dst-host STRING] [--ssh-src-port INT]
                    [--ssh-dst-port INT] [--ssh-src-extra-opt STRING]
-                   [--ssh-dst-extra-opt STRING] [--version] [--help, -h]
+                   [--ssh-dst-extra-opt STRING]
+                   [--include-envvar-regex REGEX [REGEX ...]]
+                   [--exclude-envvar-regex REGEX [REGEX ...]] [--version]
+                   [--help, -h]
                    SRC_DATASET DST_DATASET
 ```
 
@@ -654,6 +657,34 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     destination host (optional). This option can be specified multiple
     times. Example: `--ssh-dst-extra-opt='-v -v'` to debug ssh
     config issues.
+
+<!-- -->
+
+**--include-envvar-regex** *REGEX [REGEX ...]*
+
+*  On program startup, unset all Unix environment variables for which
+    the full environment variable name matches at least one of the
+    excludes but none of the includes. The purpose is to tighten
+    security and help guard against accidental inheritance or malicious
+    injection of environment variable values that may have unintended
+    effects. This option can be specified multiple times. A leading
+    `!` character indicates logical negation, i.e. the regex matches
+    if the regex with the leading `!` character removed does not
+    match. The default is to include no environment variables, i.e. to
+    make no exceptions to --exclude-envvar-regex. Example that retains
+    at least these three env vars: `--include-envvar-regex
+    wbackup_zfs_log_dir --include-envvar-regex
+    wbackup_zfs_mbuffer_program_opts --include-envvar-regex
+    wbackup_zfs_max_elapsed_secs`. Example that retains all environment
+    variables without tightened security: `'.*'`
+
+<!-- -->
+
+**--exclude-envvar-regex** *REGEX [REGEX ...]*
+
+*  Same syntax as --include-envvar-regex (see above) except that the
+    default is to exclude no environment variables. Examples:
+    `wbackup_zfs_disable_.*`, `wbackup_zfs_.*`
 
 <!-- -->
 

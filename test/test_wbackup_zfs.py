@@ -173,7 +173,7 @@ class WBackupTestCase(ParametrizedTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))  # b/c src has no snapshots
 
     def run_wbackup(self, *args, dry_run=None, no_create_bookmark=False, no_use_bookmark=False, expected_status=0,
-                    error_injection_triggers=None, delete_injection_triggers=None):
+                    error_injection_triggers=None, delete_injection_triggers=None, inject_params=None):
         port = getenv_any('test_ssh_port')  # set this if sshd is on a non-standard port: export wbackup_zfs_test_ssh_port=12345
         args = list(args)
         src_host = ['--ssh-src-host', '127.0.0.1']
@@ -237,6 +237,8 @@ class WBackupTestCase(ParametrizedTestCase):
         if no_use_bookmark:
             args = args + ['--no-use-bookmark']
 
+        args = args + ['--exclude-envvar-regex=EDITOR']
+
         job = wbackup_zfs.Job()
         job.is_test_mode = True
         if error_injection_triggers is not None:
@@ -244,6 +246,9 @@ class WBackupTestCase(ParametrizedTestCase):
 
         if delete_injection_triggers is not None:
             job.delete_injection_triggers = delete_injection_triggers
+
+        if inject_params is not None:
+            job.inject_params = inject_params
 
         returncode = 0
         try:
@@ -269,7 +274,7 @@ class WBackupTestCase(ParametrizedTestCase):
 
             if params and 'min_transfer_size' in params:
                 if old_min_transfer_size is None:
-                    os.environ.pop(qq + 'min_transfer_size')
+                    os.environ.pop(qq + 'min_transfer_size', None)
                 else:
                     os.environ[qq + 'min_transfer_size'] = old_min_transfer_size
 
@@ -1399,9 +1404,9 @@ class MinimalRemoteTestCase(WBackupTestCase):
         expected_status = 0
         if os.geteuid() != 0 and not self.is_no_privilege_elevation():
             expected_status = die_status
-        self.inject_unavailable_program('disable_sudo',  expected_error=expected_status)
+        self.inject_disabled_program('disable_sudo',  expected_error=expected_status)
 
-    def inject_unavailable_program(self, *flags, expected_error=0):
+    def inject_disabled_program(self, *flags, expected_error=0):
         self.setup_basic()
         for flag in flags:
             os.environ[qq + flag] = 'true'
@@ -1409,7 +1414,17 @@ class MinimalRemoteTestCase(WBackupTestCase):
             self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=expected_error)
         finally:
             for flag in flags:
-                os.environ.pop(qq + flag)
+                os.environ.pop(qq + flag, None)
+        if expected_error != 0:
+            self.assertSnapshots(dst_root_dataset, 0)
+
+    def inject_unavailable_program(self, *flags, expected_error=0):
+        self.setup_basic()
+        inject_params = {}
+        for flag in flags:
+            inject_params[flag] = True
+        self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=expected_error,
+                         inject_params=inject_params)
         if expected_error != 0:
             self.assertSnapshots(dst_root_dataset, 0)
         else:
@@ -1453,11 +1468,11 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
+                inject_params = {}
                 if i == 0:
-                    os.environ[qq + flag] = 'true'
-                else:
-                    os.environ.pop(qq + flag)
-                self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=expected_error if i == 0 else 0)
+                    inject_params[flag] = True
+                self.run_wbackup(src_root_dataset, dst_root_dataset,
+                                 expected_status=expected_error if i == 0 else 0, inject_params=inject_params)
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset, 0)
                 else:
@@ -1497,19 +1512,19 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_unavailable_program('inject_failing_zfs', expected_error=die_status)
 
     def test_disabled_mbuffer(self):
-        self.inject_unavailable_program('disable_mbuffer')
+        self.inject_disabled_program('disable_mbuffer')
 
     def test_disabled_pv(self):
-        self.inject_unavailable_program('disable_pv')
+        self.inject_disabled_program('disable_pv')
 
     def test_disabled_sh(self):
-        self.inject_unavailable_program('disable_sh')
+        self.inject_disabled_program('disable_sh')
 
     def test_disabled_compression(self):
-        self.inject_unavailable_program('disable_compression')
+        self.inject_disabled_program('disable_compression')
 
     def test_disabled_zpool(self):
-        self.inject_unavailable_program('disable_zpool')
+        self.inject_disabled_program('disable_zpool')
 
 
 #############################################################################

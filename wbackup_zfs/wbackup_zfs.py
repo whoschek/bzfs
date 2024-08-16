@@ -48,6 +48,7 @@ exclude_dataset_regexes_default = r'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*'  # skip tmp d
 max_retries_default = 0
 ssh_private_key_file_default = '.ssh/id_rsa'
 ssh_cipher_default = '^aes256-gcm@openssh.com' if platform.system() != 'SunOS' else ''
+env_var_prefix = 'wbackup_zfs_'
 zfs_version_is_at_least_2_1_0 = 'zfs>=2.1.0'
 PIPE = subprocess.PIPE
 
@@ -420,6 +421,25 @@ feature.
               "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
     parser.add_argument(
+        '--include-envvar-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        help=("On program startup, unset all Unix environment variables for which the full environment variable "
+              "name matches at least one of the excludes but none of the includes. The purpose is to tighten "
+              "security and help guard against accidental inheritance or malicious injection of environment "
+              "variable values that may have unintended effects. "
+              "This option can be specified multiple times. "
+              "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
+              "leading `!` character removed does not match. "
+              "The default is to include no environment variables, i.e. to make no exceptions to "
+              "--exclude-envvar-regex. "
+              f" Example that retains at least these three env vars: `--include-envvar-regex {env_var_prefix}log_dir "
+              f"--include-envvar-regex {env_var_prefix}mbuffer_program_opts "
+              f"--include-envvar-regex {env_var_prefix}max_elapsed_secs`. "
+              "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
+    parser.add_argument(
+        '--exclude-envvar-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
+             f"environment variables. Examples: `{env_var_prefix}disable_.*`, `{env_var_prefix}.*`\n\n")
+    parser.add_argument(
         '--version', action='version', version=f"{prog_name}-{prog_version}, by {prog_author}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
@@ -430,10 +450,14 @@ feature.
 
 #############################################################################
 class Params:
-    def __init__(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
-        self.one_or_more_whitespace_regex = re.compile(r'\s+')
+    def __init__(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, inject_params: Dict = None):
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
+        self.inject_params = inject_params if inject_params is not None else {}
+        self.exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex or [])
+        self.include_envvar_regexes = compile_regexes(args.include_envvar_regex or [])
+        self.unset_matching_env_vars(self.exclude_envvar_regexes, self.include_envvar_regexes)
+        self.one_or_more_whitespace_regex = re.compile(r'\s+')
         assert args.src_root_dataset is not None
         self.src_root_dataset = args.src_root_dataset
         assert args.dst_root_dataset is not None
@@ -557,7 +581,7 @@ class Params:
 
     def getenv(self, key, default=None):
         # All shell environment variable names used for configuration start with this prefix
-        return os.getenv('wbackup_zfs_' + key, default)
+        return os.getenv(env_var_prefix + key, default)
 
     def getenv_bool(self, key, default=False):
         return self.getenv(key, str(default).lower()).strip().lower() == 'true'
@@ -588,12 +612,18 @@ class Params:
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
-        if self.getenv_bool('inject_unavailable_' + program, False):
+        if self.inject_params.get('inject_unavailable_' + program, False):
             return 'xxx-' + program  # substitute a program that cannot be found on the PATH
-        if self.getenv_bool('inject_failing_' + program, False):
+        if self.inject_params.get('inject_failing_' + program, False):
             return 'false'  # substitute a program that will error out with non-zero return code
         else:
             return program
+
+    @staticmethod
+    def unset_matching_env_vars(exclude_envvar_regexes, include_envvar_regexes):
+        for key in list(os.environ.keys()):
+            if is_included(key, exclude_envvar_regexes, include_envvar_regexes):
+                os.environ.pop(key, None)
 
 
 #############################################################################
@@ -620,9 +650,10 @@ class Job:
         self.is_test_mode = False
         self.error_injection_triggers = Counter()
         self.delete_injection_triggers = Counter()
+        self.inject_params = {}
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
-        self.params = Params(args, sys_argv)
+        self.params = Params(args, sys_argv, self.inject_params)
         params = self.params
         create_symlink(params.log_file, params.log_dir, 'current.log')
         self.info_raw("Log file is: " + params.log_file)
@@ -1244,9 +1275,9 @@ class Job:
 
         # assemble pipeline running on source leg
         src_pipe = ""
-        if params.getenv_bool('inject_src_pipe_fail', False):
+        if self.inject_params.get('inject_src_pipe_fail', False):
             src_pipe = f"{src_pipe} | head -c 64 && false"  # for testing; initially forward some bytes and then fail
-        if params.getenv_bool('inject_src_pipe_garble', False):
+        if self.inject_params.get('inject_src_pipe_garble', False):
             src_pipe = f"{src_pipe} | base64"  # for testing; forward garbled bytes
         if pv_src_cmd != "" and pv_src_cmd != "cat":
             src_pipe = f"{src_pipe} | {pv_src_cmd}"
@@ -1256,7 +1287,7 @@ class Job:
             src_pipe = f"{src_pipe} | {src_buffer}"
         if src_pipe.startswith(" |"):
             src_pipe = src_pipe[2:]  # strip leading ' |' part
-        if params.getenv_bool('inject_src_send_error', False):
+        if self.inject_params.get('inject_src_send_error', False):
             send_cmd = f"{send_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if src_pipe != "":
             src_shell_program = params.shell_program if len(params.ssh_src_cmd) > 0 else params.shell_program_local
@@ -1286,13 +1317,13 @@ class Job:
             dst_pipe = f"{dst_pipe} | {_decompress_cmd}"
         if pv_dst_cmd != "" and pv_dst_cmd != "cat":
             dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
-        if params.getenv_bool('inject_dst_pipe_fail', False):
+        if self.inject_params.get('inject_dst_pipe_fail', False):
             dst_pipe = f"{dst_pipe} | head -c 64 && false"  # for testing; initially forward some bytes and then fail
-        if params.getenv_bool('inject_dst_pipe_garble', False):
+        if self.inject_params.get('inject_dst_pipe_garble', False):
             dst_pipe = f"{dst_pipe} | base64"  # for testing; forward garbled bytes
         if dst_pipe.startswith(" |"):
             dst_pipe = dst_pipe[2:]  # strip leading ' |' part
-        if params.getenv_bool('inject_dst_receive_error', False):
+        if self.inject_params.get('inject_dst_receive_error', False):
             recv_cmd = f"{recv_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if dst_pipe != "":
             dst_shell_program = params.shell_program if len(params.ssh_dst_cmd) > 0 else params.shell_program_local
@@ -1337,7 +1368,7 @@ class Job:
             rel_dataset = relativize_dataset(dataset, root_dataset)
             if rel_dataset.startswith('/'):
                 rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
-            if self.is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
+            if is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
                 results.append(dataset)
                 self.debug('Including b/c dataset regex:', dataset)
             else:
@@ -1354,39 +1385,13 @@ class Job:
             i = snapshot.find('#')  # bookmark separator
             if i < 0:
                 i = snapshot.index('@')  # snapshot separator
-            if self.is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
+            if is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
                 if is_debug:
                     self.debug('Including b/c snaphot regex:', snapshot[1+snapshot.find('\t', 0, i):])
             elif is_debug:
                 self.debug('Excluding b/c snaphot regex:', snapshot[1+snapshot.find('\t', 0, i):])
         return results
-
-    @staticmethod
-    def is_included(name: str,
-                    include_regexes: List[Tuple[re.Pattern, bool]],
-                    exclude_regexes: List[Tuple[re.Pattern, bool]]) -> bool:
-        """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
-        else False. A regex that starts with a `!` is a negation - the regex matches if the regex without the
-        `!` prefix does not match."""
-        is_match = False
-        for regex, is_negation in include_regexes:
-            is_match = regex.fullmatch(name) if regex.pattern != '.*' else True
-            if is_negation:
-                is_match = not is_match
-            if is_match:
-                break
-
-        if not is_match:
-            return False
-
-        for regex, is_negation in exclude_regexes:
-            is_match = regex.fullmatch(name) if regex.pattern != '.*' else True
-            if is_negation:
-                is_match = not is_match
-            if is_match:
-                return False
-        return True
 
     def filter_bookmarks(self, snapshots_and_bookmarks: List[str],
                          oldest_dst_snapshot_creation: int,
@@ -1947,6 +1952,32 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
     """ converts an absolute dataset path to a relative dataset path wrt root_dataset
         Example: src_root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz """
     return dataset[len(root_dataset):]
+
+
+def is_included(name: str,
+                include_regexes: List[Tuple[re.Pattern, bool]],
+                exclude_regexes: List[Tuple[re.Pattern, bool]]) -> bool:
+    """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
+    else False. A regex that starts with a `!` is a negation - the regex matches if the regex without the
+    `!` prefix does not match."""
+    is_match = False
+    for regex, is_negation in include_regexes:
+        is_match = regex.fullmatch(name) if regex.pattern != '.*' else True
+        if is_negation:
+            is_match = not is_match
+        if is_match:
+            break
+
+    if not is_match:
+        return False
+
+    for regex, is_negation in exclude_regexes:
+        is_match = regex.fullmatch(name) if regex.pattern != '.*' else True
+        if is_negation:
+            is_match = not is_match
+        if is_match:
+            return False
+    return True
 
 
 def compile_regexes(regexes: List[str], suffix='') -> List[Tuple[re.Pattern, bool]]:
