@@ -275,17 +275,21 @@ feature.
               "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`). "
               "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
               "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
-              "sudo zfs allow -u $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
-              "sudo zfs allow -u $NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
+              "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
+              "sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
               "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL; "
-              "If you do not plan to use the --force flag or --delete-missing-snapshots or --delete-missing-dataset "
+              "For extra security, $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
+              "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
+              "user accounts with separate private keys, per the principle of least privilege. Further, "
+              "if you do not plan to use the --force flag or --delete-missing-snapshots or --delete-missing-dataset "
               "then ZFS permissions 'rollback,destroy' can be omitted. "
               "If you do not plan to customize the respective ZFS dataset property then "
               "ZFS permissions 'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be "
               "omitted, arriving at the absolutely minimal set of required destination permissions: "
               "`mount,create,receive`. Also see "
               "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
-              "https://tinyurl.com/9h97kh8n\n\n"))
+              "https://tinyurl.com/9h97kh8n and "
+              "https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq\n\n"))
     parser.add_argument(
         '--no-stream', action='store_true',
         help=("During replication, only replicate the most recent source snapshot of a dataset (using -i incrementals "
@@ -1622,7 +1626,7 @@ class Job:
                     if subprocess_run(ssh_socket_cmd, stdout=PIPE, text=True).returncode != 0:
                         die(f"Cannot ssh into remote host via {ssh_socket_cmd}. "
                             f"Fix ssh configuration first, considering diagnostic log file output from running "
-                            f"{prog_name} with: -v -v --ssh-src-extra-opt '-v -v' --ssh-dst-extra-opt '-v -v'")
+                            f"{prog_name} with: -v -v --ssh-src-extra-opt='-v -v' --ssh-dst-extra-opt='-v -v'")
 
         msg = 'Would execute:' if is_dry else 'Executing:'
         level(msg, ' '.join(ssh_cmd + cmd))
@@ -1660,13 +1664,13 @@ class Job:
             self.warn(stderr)
             raise RetryableError('Subprocess failed') from e
 
-    def maybe_inject_error(self, cmd=None, error_trigger=None):
+    def maybe_inject_error(self, cmd=None, error_trigger=None):  # for testing only
         if error_trigger and self.error_injection_triggers[error_trigger] > 0:
             self.error_injection_triggers[error_trigger] -= 1
             raise subprocess.CalledProcessError(returncode=1, cmd=' '.join(cmd),
                                                 stderr=error_trigger + ': dataset is busy')
 
-    def maybe_inject_delete(self, location=None, dataset=None, delete_trigger=None):
+    def maybe_inject_delete(self, location=None, dataset=None, delete_trigger=None):  # for testing only
         if delete_trigger and self.delete_injection_triggers[delete_trigger] > 0:
             self.delete_injection_triggers[delete_trigger] -= 1
             p = self.params

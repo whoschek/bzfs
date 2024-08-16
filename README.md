@@ -422,19 +422,24 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     Instead, the --no-privilege-elevation flag is for non-root users
     that have been granted corresponding ZFS permissions by
     administrators via 'zfs allow' delegation mechanism, like so: sudo
-    zfs allow -u $NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; sudo
-    zfs allow -u $NON_ROOT_USER_NAME
+    zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET;
+    sudo zfs allow -u $DST_NON_ROOT_USER_NAME
     mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
-    $DST_DATASET_OR_POOL; If you do not plan to use the --force flag
-    or --delete-missing-snapshots or --delete-missing-dataset then ZFS
-    permissions 'rollback,destroy' can be omitted. If you do not plan
-    to customize the respective ZFS dataset property then ZFS
-    permissions
+    $DST_DATASET_OR_POOL; For extra security, $SRC_NON_ROOT_USER_NAME
+    should be different than $DST_NON_ROOT_USER_NAME, i.e. the sending
+    Unix user on the source and the receiving Unix user at the
+    destination should be separate Unix user accounts with separate
+    private keys, per the principle of least privilege. Further, if you
+    do not plan to use the --force flag or --delete-missing-snapshots
+    or --delete-missing-dataset then ZFS permissions
+    'rollback,destroy' can be omitted. If you do not plan to customize
+    the respective ZFS dataset property then ZFS permissions
     'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
     can be omitted, arriving at the absolutely minimal set of required
     destination permissions: `mount,create,receive`. Also see
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES
-    and https://tinyurl.com/9h97kh8n
+    and https://tinyurl.com/9h97kh8n and
+    https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq
 
 <!-- -->
 
