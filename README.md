@@ -107,26 +107,54 @@ have drastically diverged:
 '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key
 /root/.ssh/id_rsa`
 
-# How To Install, Run and Test
+# How To Install and Run
 
-Here is how to install and run the program as well as Unit tests:
 ```
-    # Ubuntu / Debian:
-    sudo apt-get -y install zfsutils-linux python3 # ensure zfs and python are installed
-    sudo apt-get -y install zstd pv mbuffer # auxiliary helpers are optional
+# Ubuntu / Debian:
+sudo apt-get -y install zfsutils-linux python3 # ensure zfs and python are installed
+sudo apt-get -y install zstd pv mbuffer # auxiliary helpers are optional
 
-    git clone https://github.com/whoschek/wbackup-zfs.git
-    cd wbackup-zfs
-    ./wbackup-zfs --help # Run the CLI
-    sudo cp wbackup-zfs /usr/local/bin/ # Optional system installation
+git clone https://github.com/whoschek/wbackup-zfs.git
+cd wbackup-zfs
+./wbackup-zfs --help # Run the CLI
+sudo cp wbackup-zfs /usr/local/bin/ # Optional system installation
+```
 
-    # Run Unit tests:
-    # export wbackup_zfs_test_ssh_port=12345 # set this for unit tests if sshd is on a non-standard port (default is 22)
-    ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 echo hello # verify user can ssh in via loopback interface & private key
-    zfs --version # verify zfs is installed
-    python3 --version # verify python 3.7 or higher is installed
-    sudo ls # verify sudo is working
-    ./test.sh # Run Unit tests
+# How To Run Unit Tests
+```
+# verify zfs is installed
+zfs --version
+
+# verify python 3.7 or higher is installed
+python3 --version
+
+# verify sudo is working
+sudo ls
+
+# set this for unit tests if sshd is on a non-standard port (default is 22)
+# export wbackup_zfs_test_ssh_port=12345
+# export wbackup_zfs_test_ssh_port=22
+
+# verify user can ssh in via loopback interface & private key
+ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 echo hello
+
+# verify zfs is on PATH
+ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 zfs --version
+
+# verify zpool is on PATH
+ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 zpool --version
+
+# verify zstd is on PATH for compression to become enabled
+ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 zstd --version
+
+# verify pv is on PATH for progress monitoring to become enabled
+ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 pv --version
+
+# verify mbuffer is on PATH for efficient buffering to become enabled
+ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 mbuffer --version
+
+# Finally, run unit tests
+./test.sh
 ```
 
 

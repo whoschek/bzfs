@@ -72,12 +72,12 @@ def main():
 
     # processing to replace text between 'wbackup-zfs' and 'How To Install, Run and Test' in README.md
     wbackup_marker = 'wbackup-zfs'
-    install_marker = '# How To Install, Run and Test'
+    install_marker = '# How To Install and Run'
 
     start_wbackup = next((i for i, line in enumerate(readme_lines)
                           if line.strip() == wbackup_marker), None)
     start_install = next((i for i, line in enumerate(readme_lines[start_wbackup:], start=start_wbackup)
-                          if line.strip() == install_marker), None)
+                          if line.strip().startswith(install_marker)), None)
 
     if start_wbackup is not None and start_install is not None:
         # Retain the first line after the wbackup_marker as is
