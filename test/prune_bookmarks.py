@@ -64,6 +64,7 @@ def main():
                 print(f"{msg} {kind}: {bookmark} ...")
                 if not args.dry_run:
                     subprocess.run(['sudo', 'zfs', 'destroy', bookmark], check=True)
+    print('Success. Goodbye!')
 
 
 if __name__ == "__main__":
