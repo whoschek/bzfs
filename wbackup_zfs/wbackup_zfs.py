@@ -1589,7 +1589,7 @@ class Job:
                     name = re.sub(r'[^a-zA-Z0-9;:,<.>?~`!%#$%^&*+=_-]', '', name)
                     return name
 
-                unique = f"{time.time_ns()}@{random.randint(0, 999_999)}"
+                unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
                 if self.is_test_mode:
                     unique = 'x$#^&*(x'  # faster for running large numbers of short unit tests, also tests quoting
                 socket_name = f"{os.getpid()}@{unique}@{sanitize(ssh_host)[:45]}@{sanitize(ssh_user)}"
