@@ -50,7 +50,7 @@ permissions:
   contents: read
 
 jobs:
-  test_ubuntu_24_04_fast:
+  test_ubuntu_24_04_fast:  # currently uses zfs-2.2.2
     if: (!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch') || github.event.inputs.name == 'test_ubuntu_24_04_fast'
     runs-on: ubuntu-24.04
     strategy:
@@ -80,7 +80,7 @@ jobs:
         echo "wbackup-zfs-testrun-success"
 
 
-  test_ubuntu_24_04:
+  test_ubuntu_24_04:  # currently uses zfs-2.2.2
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
@@ -115,7 +115,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_latest:
+  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.2.5
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:
@@ -157,7 +157,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_22_04:
+  test_ubuntu_22_04:   # currently uses zfs-2.1.5
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04'
     runs-on: ubuntu-22.04
     strategy:
@@ -198,7 +198,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_20_04:
+  test_ubuntu_20_04:  # currently uses zfs-0.8.3
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04'
     runs-on: ubuntu-20.04
     strategy:
@@ -233,7 +233,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_freebsd_14_1:
+  test_freebsd_14_1:  # currently uses zfs-2.2.4
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
     runs-on: ubuntu-latest
     timeout-minutes: 80
@@ -250,7 +250,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_freebsd_13_3:
+  test_freebsd_13_3:  # currently uses zfs-2.1.14
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-latest
     timeout-minutes: 80
