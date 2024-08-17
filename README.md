@@ -428,7 +428,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET;
     sudo zfs allow -u $DST_NON_ROOT_USER_NAME
     mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
-    $DST_DATASET_OR_POOL; For extra security, $SRC_NON_ROOT_USER_NAME
+    $DST_DATASET_OR_POOL. For extra security $SRC_NON_ROOT_USER_NAME
     should be different than $DST_NON_ROOT_USER_NAME, i.e. the sending
     Unix user on the source and the receiving Unix user at the
     destination should be separate Unix user accounts with separate
