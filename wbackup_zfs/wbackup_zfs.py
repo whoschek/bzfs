@@ -1009,7 +1009,7 @@ class Job:
                 self.info('Already-up-to-date:', dst_dataset)
                 return True
 
-            # find most recent snapshot that src_dataset and dst_dataset have in common - we'll start to replicate
+            # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
             # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
             # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
             def latest_common_snapshot(snapshots_with_guids: List[str], intersect_guids: Set[str]) -> Tuple[str, str]:
@@ -1018,12 +1018,12 @@ class Job:
                 for _line in reversed(snapshots_with_guids):
                     _guid, _snapshot = _line.split('\t', 1)
                     if _guid in intersect_guids:
-                        return _guid, _snapshot
+                        return _guid, _snapshot  # can be a snapshot or bookmark
                 return None, ""
 
             latest_common_guid, latest_common_src_snapshot = latest_common_snapshot(
                 src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids)))
-            self.debug('latest_common_src_snapshot:', latest_common_src_snapshot)
+            self.debug('latest_common_src_snapshot:', latest_common_src_snapshot)  # is a snapshot or bookmark
             # self.debug('latest_dst_snapshot:', latest_dst_snapshot)
 
             if latest_common_src_snapshot:
@@ -1046,7 +1046,7 @@ class Job:
                 self.info('Already up-to-date:', dst_dataset)
                 return True
 
-        self.debug('latest_common_src_snapshot:', latest_common_src_snapshot)
+        self.debug('latest_common_src_snapshot:', latest_common_src_snapshot)  # is a snapshot or bookmark
         # self.debug('latest_dst_snapshot:', latest_dst_snapshot)
 
         is_dry_send_receive = False
@@ -1110,6 +1110,7 @@ class Job:
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
             def replication_candidates(origin_src_snapshots_with_guids, latest_common_src_snapshot):
+                # latest_common_src_snapshot is a snapshot or bookmark
                 results = []
                 last_appended_guid = ""
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
