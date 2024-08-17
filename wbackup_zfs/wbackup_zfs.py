@@ -454,9 +454,7 @@ class Params:
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
         self.inject_params = inject_params if inject_params is not None else {}
-        self.exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex or [])
-        self.include_envvar_regexes = compile_regexes(args.include_envvar_regex or [])
-        self.unset_matching_env_vars(self.exclude_envvar_regexes, self.include_envvar_regexes)
+        self.unset_matching_env_vars(args)
         self.one_or_more_whitespace_regex = re.compile(r'\s+')
         assert args.src_root_dataset is not None
         self.src_root_dataset = args.src_root_dataset
@@ -620,7 +618,9 @@ class Params:
             return program
 
     @staticmethod
-    def unset_matching_env_vars(exclude_envvar_regexes, include_envvar_regexes):
+    def unset_matching_env_vars(args):
+        exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex or [])
+        include_envvar_regexes = compile_regexes(args.include_envvar_regex or [])
         for key in list(os.environ.keys()):
             if is_included(key, exclude_envvar_regexes, include_envvar_regexes):
                 os.environ.pop(key, None)
