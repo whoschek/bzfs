@@ -454,7 +454,7 @@ class Params:
     def __init__(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, inject_params: Dict = None):
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
-        self.inject_params = inject_params if inject_params is not None else {}
+        self.inject_params = inject_params if inject_params is not None else {}  # for testing only
         self.unset_matching_env_vars(args)
         self.one_or_more_whitespace_regex = re.compile(r'\s+')
         assert args.src_root_dataset is not None
@@ -514,7 +514,7 @@ class Params:
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
         self.mbuffer_program = self.program_name('mbuffer')
-        self.mbuffer_program_opts = self.split_args(self.getenv('mbuffer_program_opts', '-q -Q -m 128M'))
+        self.mbuffer_program_opts = self.split_args(self.getenv('mbuffer_program_opts', '-q -m 128M'))
         self.compression_program = self.program_name('zstd')
         self.compression_program_opts = self.split_args(self.getenv('compression_program_opts', '-1'))
         # no point trying to be fancy for smaller data transfers:
@@ -648,10 +648,11 @@ class Job:
         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
         self.recordsizes = None
         self.mbuffer_current_opts = None
-        self.is_test_mode = False
-        self.error_injection_triggers = Counter()
-        self.delete_injection_triggers = Counter()
-        self.inject_params = {}
+
+        self.is_test_mode = False  # for testing only
+        self.error_injection_triggers = Counter()  # for testing only
+        self.delete_injection_triggers = Counter()  # for testing only
+        self.inject_params = {}  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
         self.params = Params(args, sys_argv, self.inject_params)
@@ -1075,7 +1076,7 @@ class Job:
                 oldest_src_snapshot = latest_src_snapshot
             if oldest_src_snapshot:
                 if not self.dst_dataset_exists[dst_dataset]:
-                    # on destination, create parent dataset and ancestors if they do not yet exist
+                    # on destination, create parent filesystem and ancestors if they do not yet exist
                     dst_dataset_parent = os.path.dirname(dst_dataset)
                     if not self.dst_dataset_exists[dst_dataset_parent]:
                         if params.dry_run:
@@ -1568,15 +1569,15 @@ class Job:
                 self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
                 last_deleted_dataset = dataset
 
-    def create_filesystem(self, dataset: str) -> None:
-        # zfs create -p -u $dataset
-        # To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
+    def create_filesystem(self, filesystem: str) -> None:
+        # zfs create -p -u $filesystem
+        # To ensure the filesystems that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
         # for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u' part only to
-        # the immediate dataset, rather than to the not-yet existing ancestors.
+        # the immediate filesystem, rather than to the not-yet existing ancestors.
         p = self.params
         parent = ''
         no_mount = '-u' if self.is_program_available(zfs_version_is_at_least_2_1_0, 'dst') else ''
-        for component in dataset.split('/'):
+        for component in filesystem.split('/'):
             parent += component
             if not self.dst_dataset_exists[parent]:
                 cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} create -p", no_mount, parent)
