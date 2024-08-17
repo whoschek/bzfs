@@ -1905,6 +1905,7 @@ class TestParseDatasetLocator(unittest.TestCase):
             else:
                 print("Test failed:")
             print(f"input: {input}\nuser exp: '{expected_user}' vs '{user}'\nhost exp: '{expected_host}' vs '{host}'\nuserhost exp: '{expected_user_host}' vs '{user_host}'\ndataset exp: '{expected_dataset}' vs '{dataset}'")
+            self.fail()
 
     def runTest(self):
         # Input format is [[user@]host:]dataset
@@ -1963,6 +1964,14 @@ class TestParseDatasetLocator(unittest.TestCase):
                       "tank1/foo/bar", "whitespace user@host.example.com", True)
         self.run_test("user@whitespace\thost:tank1/foo/bar", "user", "whitespace\thost", "tank1/foo/bar",
                       "user@whitespace\thost", True)
+        self.run_test("user@host:tank1/foo/whitespace\tbar", "user", "host", "tank1/foo/whitespace\tbar",
+                      "user@host", True)
+        self.run_test("user@host:tank1/foo/whitespace\nbar", "user", "host", "tank1/foo/whitespace\nbar",
+                      "user@host", True)
+        self.run_test("user@host:tank1/foo/whitespace\rbar", "user", "host", "tank1/foo/whitespace\rbar",
+                      "user@host", True)
+        self.run_test("user@host:tank1/foo/space bar", "user", "host", "tank1/foo/space bar",
+                      "user@host", False)
 
 
 #############################################################################

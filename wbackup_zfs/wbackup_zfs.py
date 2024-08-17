@@ -1347,7 +1347,7 @@ class Job:
         if self.params.quiet != "":
             print(f"{current_time()} {first} {second:<28} {' '.join(items)}")  # right-pad second arg
 
-    def ssh_command(self, ssh_private_key_file, ssh_user: str, ssh_host: str, ssh_user_host: str, ssh_port: str,
+    def ssh_command(self, ssh_private_key_file: str, ssh_user: str, ssh_host: str, ssh_user_host: str, ssh_port: str,
                     ssh_extra_opts: List[str]) -> List[str]:
         params = self.params
         ssh_cmd = []  # pool is on local host
@@ -2108,7 +2108,7 @@ def parse_dataset_locator(input_text, validate=True, user=None, host=None, port=
 
     # Input format is [[user@]host:]dataset
     #                           1234         5          6
-    match = re.fullmatch(r'(((([^@]*)@)?([^:]+)):)?(.*)', input_text)
+    match = re.fullmatch(r'(((([^@]*)@)?([^:]+)):)?(.*)', input_text, re.DOTALL)
     if match:
         if user_undefined:
             user = match.group(4) or ""
@@ -2142,7 +2142,9 @@ def validate_dataset_name(dataset, input_text):
     ds = dataset
     if (ds in ['', '.', '..'] or '//' in ds or ds.startswith('/') or ds.endswith('/') or ds.startswith('./')
             or ds.startswith('../') or ds.endswith('/.') or ds.endswith('/..') or '@' in ds or '#' in ds
-            or '"' in ds or "'" in ds or '%' in ds or not ds[0].isalpha()):
+            or '"' in ds or "'" in ds or '%' in ds
+            or any(char.isspace() and char != ' ' for char in ds)
+            or not ds[0].isalpha()):
         raise ValueError(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
