@@ -895,7 +895,7 @@ class Job:
                 orphans = set()
                 for dst_dataset in reversed(dst_datasets):
                     if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
-                        # no child of the dataset turned out to be an orphan so the dataset itself could be an orphan
+                        # all children of the dataset turned out to be orphans so the dataset itself could be an orphan
                         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o name", dst_dataset)
                         if not self.try_ssh_command('dst', self.trace, cmd=cmd):
                             orphans.add(dst_dataset)  # found zero snapshots - mark dataset as an orphan
