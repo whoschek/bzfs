@@ -379,15 +379,19 @@ feature.
         '--ssh-config-file', type=str, metavar='FILE',
         help="Path to SSH ssh_config(5) file (optional); will be passed into ssh -F CLI.\n\n")
     parser.add_argument(
-        '--ssh-private-key', type=str, metavar='FILE',
-        help=f"Path to SSH private key file on local host (optional); will be passed into ssh -i CLI. "
-             f"default: $HOME/{ssh_private_key_file_default}\n\n")
-    parser.add_argument(
         '--ssh-cipher', type=str, default=ssh_cipher_default, metavar='STRING',
         help=f"SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
              f"keyword in ssh_config(5) for more information: "
              f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
+    parser.add_argument(
+        '--ssh-src-private-key', type=str, metavar='FILE',
+        help=f"Path to SSH private key file on local host to connect to source (optional); will be passed into "
+             f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
+    parser.add_argument(
+        '--ssh-dst-private-key', type=str, metavar='FILE',
+        help=f"Path to SSH private key file on local host to connect to destination (optional); will be passed into "
+             f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
     parser.add_argument(
         '--ssh-src-user', type=str, metavar='STRING',
         help="Remote SSH username of source host to connect to (optional). Overrides username given in "
@@ -521,7 +525,8 @@ class Params:
         self.min_transfer_size = int(self.getenv('min_transfer_size', 1024 * 1024))
 
         self.ssh_config_file = self.validate_arg(args.ssh_config_file)
-        self.ssh_private_key_file = self.validate_arg(args.ssh_private_key)
+        self.ssh_src_private_key_file = self.validate_arg(args.ssh_src_private_key)
+        self.ssh_dst_private_key_file = self.validate_arg(args.ssh_dst_private_key)
         self.ssh_src_user = args.ssh_src_user
         self.ssh_dst_user = args.ssh_dst_user
         self.ssh_src_host = args.ssh_src_host
@@ -726,10 +731,10 @@ class Job:
         params.src_sudo, params.src_use_zfs_delegation = self.sudo_cmd(params.ssh_src_user_host, params.ssh_src_user)
         params.dst_sudo, params.dst_use_zfs_delegation = self.sudo_cmd(params.ssh_dst_user_host, params.ssh_dst_user)
 
-        p.ssh_src_cmd = self.ssh_command(p.ssh_src_user, p.ssh_src_host, p.ssh_src_user_host, p.ssh_src_port,
-                                         p.ssh_default_opts + p.ssh_src_extra_opts)
-        p.ssh_dst_cmd = self.ssh_command(p.ssh_dst_user, p.ssh_dst_host, p.ssh_dst_user_host, p.ssh_dst_port,
-                                         p.ssh_default_opts + p.ssh_dst_extra_opts)
+        p.ssh_src_cmd = self.ssh_command(p.ssh_src_private_key_file, p.ssh_src_user, p.ssh_src_host,
+                                         p.ssh_src_user_host, p.ssh_src_port, p.ssh_default_opts + p.ssh_src_extra_opts)
+        p.ssh_dst_cmd = self.ssh_command(p.ssh_dst_private_key_file, p.ssh_dst_user, p.ssh_dst_host,
+                                         p.ssh_dst_user_host, p.ssh_dst_port, p.ssh_default_opts + p.ssh_dst_extra_opts)
 
         try:
             self.detect_available_programs()
@@ -1342,8 +1347,8 @@ class Job:
         if self.params.quiet != "":
             print(f"{current_time()} {first} {second:<28} {' '.join(items)}")  # right-pad second arg
 
-    def ssh_command(self, ssh_user: str, ssh_host: str, ssh_user_host: str, ssh_port: str, ssh_extra_opts: List[str]) \
-            -> List[str]:
+    def ssh_command(self, ssh_private_key_file, ssh_user: str, ssh_host: str, ssh_user_host: str, ssh_port: str,
+                    ssh_extra_opts: List[str]) -> List[str]:
         params = self.params
         ssh_cmd = []  # pool is on local host
         if ssh_user_host != "":  # pool is on remote host
@@ -1352,10 +1357,10 @@ class Job:
                 if not os.path.isfile(params.ssh_config_file):
                     die("ssh config file does not exist: " + params.ssh_config_file)
                 ssh_cmd += ['-F', params.ssh_config_file]
-            if params.ssh_private_key_file:
-                if not os.path.isfile(params.ssh_private_key_file):
-                    die("ssh private key file does not exist: " + params.ssh_private_key_file)
-                ssh_cmd += ['-i', params.ssh_private_key_file]
+            if ssh_private_key_file:
+                if not os.path.isfile(ssh_private_key_file):
+                    die("ssh private key file does not exist: " + ssh_private_key_file)
+                ssh_cmd += ['-i', ssh_private_key_file]
             if params.ssh_cipher:
                 ssh_cmd += ['-c', params.ssh_cipher]
             if ssh_port:

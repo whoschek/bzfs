@@ -41,7 +41,7 @@ prog_exe = './wbackup_zfs/wbackup_zfs.py'
 zpool_features = None
 afix = ""
 encryption_algo = 'aes-256-gcm'
-qq = "wbackup_zfs_"
+qq = wbackup_zfs.env_var_prefix  # 'wbackup_zfs_'
 zfs_encryption_key_fd, zfs_encryption_key = tempfile.mkstemp(prefix='test_wbackup_zfs.key_')
 os.write(zfs_encryption_key_fd, 'mypasswd'.encode())
 os.close(zfs_encryption_key_fd)
@@ -181,7 +181,7 @@ class WBackupTestCase(ParametrizedTestCase):
         src_port = ['--ssh-src-port', '22' if port is None else str(port)]
         dst_port = [] if port is None else ['--ssh-dst-port', str(port)]
         src_user = ['--ssh-src-user', pwd.getpwuid(os.getuid()).pw_name]
-        src_private_key = ['--ssh-private-key', pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"]
+        src_private_key = ['--ssh-src-private-key', pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"]
         src_ssh_config_file = ['--ssh-config-file', ssh_config_file]
         params = self.param
         if params and params.get('ssh_mode') == 'push':

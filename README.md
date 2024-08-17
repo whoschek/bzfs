@@ -189,12 +189,12 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--no-privilege-elevation] [--no-stream]
                    [--no-create-bookmark] [--no-use-bookmark]
                    [--bwlimit STRING] [--dry-run] [--verbose] [--quiet]
-                   [--ssh-config-file FILE] [--ssh-private-key FILE]
-                   [--ssh-cipher STRING] [--ssh-src-user STRING]
-                   [--ssh-dst-user STRING] [--ssh-src-host STRING]
-                   [--ssh-dst-host STRING] [--ssh-src-port INT]
-                   [--ssh-dst-port INT] [--ssh-src-extra-opt STRING]
-                   [--ssh-dst-extra-opt STRING]
+                   [--ssh-config-file FILE] [--ssh-cipher STRING]
+                   [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
+                   [--ssh-src-user STRING] [--ssh-dst-user STRING]
+                   [--ssh-src-host STRING] [--ssh-dst-host STRING]
+                   [--ssh-src-port INT] [--ssh-dst-port INT]
+                   [--ssh-src-extra-opt STRING] [--ssh-dst-extra-opt STRING]
                    [--include-envvar-regex REGEX [REGEX ...]]
                    [--exclude-envvar-regex REGEX [REGEX ...]] [--version]
                    [--help, -h]
@@ -582,13 +582,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--ssh-private-key** *FILE*
-
-*  Path to SSH private key file on local host (optional); will be
-    passed into ssh -i CLI. default: $HOME/.ssh/id_rsa
-
-<!-- -->
-
 **--ssh-cipher** *STRING*
 
 *  SSH cipher specification for encrypting the session (optional); will
@@ -597,6 +590,22 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     keyword in ssh_config(5) for more information:
     https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html.
     Default: `^aes256-gcm@openssh.com`
+
+<!-- -->
+
+**--ssh-src-private-key** *FILE*
+
+*  Path to SSH private key file on local host to connect to source
+    (optional); will be passed into ssh -i CLI. default:
+    $HOME/.ssh/id_rsa
+
+<!-- -->
+
+**--ssh-dst-private-key** *FILE*
+
+*  Path to SSH private key file on local host to connect to destination
+    (optional); will be passed into ssh -i CLI. default:
+    $HOME/.ssh/id_rsa
 
 <!-- -->
 
