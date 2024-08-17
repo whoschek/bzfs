@@ -431,7 +431,8 @@ feature.
               "leading `!` character removed does not match. "
               "The default is to include no environment variables, i.e. to make no exceptions to "
               "--exclude-envvar-regex. "
-              f" Example that retains at least these three env vars: `--include-envvar-regex {env_var_prefix}log_dir "
+              f"Example that retains at least these three env vars: "
+              f"`--include-envvar-regex {env_var_prefix}log_dir "
               f"--include-envvar-regex {env_var_prefix}mbuffer_program_opts "
               f"--include-envvar-regex {env_var_prefix}max_elapsed_secs`. "
               "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
@@ -1080,7 +1081,7 @@ class Job:
                         if params.dry_run:
                             is_dry_send_receive = True
                         elif dst_dataset_parent != "":
-                            self.create_dataset(dst_dataset_parent)
+                            self.create_filesystem(dst_dataset_parent)
 
                 size_estimate_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
                 size_estimate_human = human_readable_bytes(size_estimate_bytes)
@@ -1155,96 +1156,6 @@ class Job:
                 if i == len(steps_todo)-1:
                     self.create_zfs_bookmark(end_snapshot, src_dataset)
         return True
-
-    def incremental_replication_steps_wrapper(self, origin_src_snapshots_with_guids: List[str],
-                                              included_guids: Set[str]) -> List[Tuple[str]]:
-        src_guids = []
-        src_snapshots = []
-        for line in origin_src_snapshots_with_guids:
-            guid, snapshot = line.split('\t', 1)
-            src_guids.append(guid)
-            src_snapshots.append(snapshot)
-
-        force_convert_I_to_i = False
-        if self.params.src_use_zfs_delegation and not self.params.getenv_bool('no_force_convert_I_to_i', False):
-            # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
-            # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
-            force_convert_I_to_i = True
-        return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
-
-    def incremental_replication_steps(self, src_snapshots: List[str], guids: List[str],
-                                      included_guids: Set[str], force_convert_I_to_i: bool) -> List[Tuple[str]]:
-        """ Computes steps to incrementally replicate the given src snapshots with the given guids such that we include
-        intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
-        (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
-        excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists.
-        Example: skip hourly snapshots and only include daily shapshots for replication
-        Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
-        -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
-        -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
-        The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
-        Also: 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
-        src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
-        is a bookmark we convert a -I step to one or more -i steps.
-        """
-        assert len(guids) == len(src_snapshots)
-        assert len(included_guids) >= 0
-        steps = []
-        n = len(guids)
-        i = 0
-        while i < n and guids[i] not in included_guids:  # skip hourlies
-            i += 1
-
-        while i < n:
-            assert guids[i] in included_guids  # it's a daily
-            start = i
-            i += 1
-            while i < n and guids[i] in included_guids:  # skip dailies
-                i += 1
-            if i < n:
-                if i - start == 1:
-                    # it's a single daily (that was already replicated) followed by an hourly
-                    i += 1
-                    while i < n and guids[i] not in included_guids:  # skip hourlies
-                        i += 1
-                    if i < n:
-                        # assert start != i
-                        if start != i:
-                            step = ('-i', src_snapshots[start], src_snapshots[i])
-                            # print(f"r1 {self.replication_step_to_str(step)}")
-                            steps.append(step)
-                        i -= 1
-                else:
-                    # it's a run of more than one daily
-                    i -= 1
-                    # assert start != i
-                    if start != i:
-                        step = ('-I', src_snapshots[start], src_snapshots[i])
-                        # print(f"r2 {self.replication_step_to_str(step)}")
-                        if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
-                            steps.append(step)
-                        else:  # convert -I step to -i steps
-                            for j in range(start, i):
-                                steps.append(('-i', src_snapshots[j], src_snapshots[j+1]))
-                    i -= 1
-            else:
-                # finish up run of trailing dailies
-                i -= 1
-                if start != i:
-                    step = ('-I', src_snapshots[start], src_snapshots[i])
-                    # print(f"r3 {self.replication_step_to_str(step)}")
-                    if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
-                        steps.append(step)
-                    else:  # convert -I step to -i steps
-                        for j in range(start, i):
-                            steps.append(('-i', src_snapshots[j], src_snapshots[j+1]))
-            i += 1
-        return steps
-
-    @staticmethod
-    def replication_step_to_str(step):
-        # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
-        return str(step)
 
     def run_zfs_send_receive(self, send_cmd: List[str], recv_cmd: List[str],
                              size_estimate_bytes: int, size_estimate_human: str, is_dry_send_receive: bool,
@@ -1357,184 +1268,53 @@ class Job:
                 self.warn(stderr_to_str(e.stderr))
                 raise RetryableError('Subprocess failed') from e
 
-    def filter_datasets(self, datasets: List[str], root_dataset: str) -> List[str]:
-        """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
-        exclude regexes."""
+    def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
+        """If mbuffer command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
+        smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation"""
         params = self.params
-        results = []
-        for i, dataset in enumerate(datasets):
-            if i == 0 and params.skip_parent and params.recursive:
-                continue
-            rel_dataset = relativize_dataset(dataset, root_dataset)
-            if rel_dataset.startswith('/'):
-                rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
-            if is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
-                results.append(dataset)
-                self.debug('Including b/c dataset regex:', dataset)
-            else:
-                self.debug('Excluding b/c dataset regex:', dataset)
-        return results
+        p = params
+        if size_estimate_bytes >= params.min_transfer_size and \
+            ( (loc == 'src' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") )
+            or (loc == 'dst' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") )
+            or (loc == 'local' and p.ssh_src_user_host != "" and p.ssh_dst_user_host != "") ) \
+            and self.is_program_available('mbuffer', loc):
+            return f"{p.mbuffer_program} {' '.join(self.mbuffer_current_opts)} 2> /dev/null"
+        else:
+            return 'cat'
 
-    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
-        """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
-        include_snapshot_regexes = self.params.include_snapshot_regexes
-        exclude_snapshot_regexes = self.params.exclude_snapshot_regexes
-        is_debug = self.is_debug_enabled()
-        results = []
-        for snapshot in snapshots:
-            i = snapshot.find('#')  # bookmark separator
-            if i < 0:
-                i = snapshot.index('@')  # snapshot separator
-            if is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
-                results.append(snapshot)
-                if is_debug:
-                    self.debug('Including b/c snaphot regex:', snapshot[1+snapshot.find('\t', 0, i):])
-            elif is_debug:
-                self.debug('Excluding b/c snaphot regex:', snapshot[1+snapshot.find('\t', 0, i):])
-        return results
-
-    def filter_bookmarks(self, snapshots_and_bookmarks: List[str],
-                         oldest_dst_snapshot_creation: int,
-                         newest_dst_snapshot_creation: int) -> List[str]:
-        is_debug = self.is_debug_enabled()
-        results = []
-        for snapshot in snapshots_and_bookmarks:
-            if '@' in snapshot:
-                results.append(snapshot)  # it's a true snapshot
-            else:
-                # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
-                # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
-                # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
-                # accumulate over time without periodic pruning.
-                creation_time = int(snapshot[0:snapshot.index('\t')])
-                if oldest_dst_snapshot_creation <= creation_time <= newest_dst_snapshot_creation:
-                    results.append(snapshot)
-                elif is_debug:
-                    self.debug('Excluding b/c bookmark creation time:', snapshot)
-        return results
-
-    @staticmethod
-    def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
-        """For each line in input_list, print the line if input_set contains the first column field of that line."""
-        results = []
-        if len(input_set) == 0:
-            return results
-        for line in input_list:
-            if line[0:line.index('\t')] in input_set:
-                results.append(line)
-        return results
-
-    def delete_snapshots(self, dataset: str, snapshot_tags: List[str] = []) -> None:
-        if len(snapshot_tags) > 0:
-            if self.is_solaris_zfs('dst'):
-                # solaris-11.4.0 has no syntax to delete multiple snapshots in a single CLI invocation
-                for snapshot_tag in reversed(snapshot_tags):
-                    self.delete_snapshot(f"{dataset}@{snapshot_tag}")
-            else:
-                self.delete_snapshot(dataset + '@' + ','.join(reversed(snapshot_tags)))
-
-    def delete_snapshot(self, snaps_to_delete: str) -> None:
-        p = self.params
-        self.info('Deleting snapshot(s):', snaps_to_delete)
-        cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy",
-                           p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete)
-        is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-        self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
-
-    def delete_datasets(self, datasets: Iterable[str]) -> None:
-        """Delete the given datasets via zfs destroy -r """
-        # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
-        # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
-        last_deleted_dataset = ""
-        for dataset in isorted(datasets):
-            if not f"{dataset}/".startswith(f"{last_deleted_dataset}/"):
-                self.info('Delete missing dataset tree:', f"{dataset} ...")
-                p = self.params
-                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard,
-                                   p.verbose_destroy, p.dry_run_destroy, dataset)
-                is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-                self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
-                last_deleted_dataset = dataset
-
-    def create_dataset(self, dataset: str) -> None:
-        # zfs create -p -u $dataset
-        # To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
-        # for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u' part only to
-        # the immediate dataset, rather than to the not-yet existing ancestors.
-        p = self.params
-        parent = ''
-        no_mount = '-u' if self.is_program_available(zfs_version_is_at_least_2_1_0, 'dst') else ''
-        for component in dataset.split('/'):
-            parent += component
-            if not self.dst_dataset_exists[parent]:
-                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} create -p", no_mount, parent)
-                try:
-                    self.run_ssh_command('dst', self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
-                except subprocess.CalledProcessError as e:
-                    print(e.stderr, sys.stderr, end='')
-                    # ignore harmless error caused by 'zfs create' without the -u flag
-                    if ('filesystem successfully created, but it may only be mounted by root' not in e.stderr
-                            and 'filesystem successfully created, but not mounted' not in e.stderr):  # SolarisZFS
-                        raise
-                self.dst_dataset_exists[parent] = True
-            parent += '/'
-
-    def run_with_retries(self, func, *args, **kwargs) -> Any:
-        """Run the given function with the given arguments, and retry on failure as indicated by params """
+    def compress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
+        """If zstd command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
+        reduce network bottlenecks by sending compressed data."""
         params = self.params
-        max_sleep_mark = params.min_sleep_nanos
-        retry_count = 0
-        start_time_nanos = time.time_ns()
-        while True:
-            try:
-                return func(*args, **kwargs)  # Call the target function with the provided arguments
-            except RetryableError as retryable_error:
-                elapsed_nanos = time.time_ns() - start_time_nanos
-                if retry_count < params.max_retries and elapsed_nanos < params.max_elapsed_nanos:
-                    # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
-                    sleep_nanos = random.randint(params.min_sleep_nanos, max_sleep_mark)
-                    self.info(f"Retrying [{retry_count + 1}/{params.max_retries}] soon ...")
-                    time.sleep(sleep_nanos / 1_000_000_000)
-                    retry_count = retry_count + 1
-                    max_sleep_mark = min(params.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
-                else:
-                    if params.max_retries > 0:
-                        error(f"Giving up because the last [{retry_count}/{params.max_retries}] retries across "
-                              f"[{elapsed_nanos // 1_000_000_000}/{params.max_elapsed_nanos // 1_000_000_000}] "
-                              "seconds for the current request failed!")
-                    raise retryable_error.__cause__
+        p = params
+        if size_estimate_bytes >= p.min_transfer_size and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") \
+            and self.is_program_available('zstd', loc):
+            return f"{p.compression_program} {' '.join(p.compression_program_opts)}"
+        else:
+            return 'cat'
 
-    def estimate_zfs_send_size(self, *items) -> int:
-        """estimate num bytes to transfer via 'zfs send'"""
-        if self.is_solaris_zfs('src'):
-            return 0  # solaris-11.4.0 does not have a --parsable equivalent
-        p = self.params
-        zfs_send_program_opts = ['--parsable' if opt == '-P' else opt for opt in p.zfs_send_program_opts.copy()]
-        zfs_send_program_opts = append_if_absent(zfs_send_program_opts, '-v', '-n', '--parsable')
-        cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", zfs_send_program_opts, items)
-        lines = self.try_ssh_command('src', self.trace, cmd=cmd)
-        if lines is None:
-            return 0  # src dataset or snapshot has been deleted by third party
-        size = None
-        for line in lines.splitlines():
-            if line.startswith('size'):
-                size = line
-        return int(size[size.index('\t')+1:])
+    def decompress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
+        params = self.params
+        p = params
+        if size_estimate_bytes >= p.min_transfer_size and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") \
+            and self.is_program_available('zstd', loc):
+            return f"{p.compression_program} -d"
+        else:
+            return 'cat'
 
-    def create_zfs_bookmark(self, src_snapshot: str, src_dataset: str) -> None:
-        p = self.params
-        if '@' in src_snapshot:
-            bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
-            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src'):
-                cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
-                try:
-                    self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE,
-                                         print_stdout=True, cmd=cmd)
-                except subprocess.CalledProcessError as e:
-                    # ignore harmless zfs error caused by bookmark with the same name already existing
-                    if ': bookmark exists' not in e.stderr:
-                        print(e.stderr, sys.stderr, end='')
-                        raise
+    def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
+        """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
+        Progress can be viewed via "tail -f $pv_log_file" aka current.pv or similar """
+        params = self.params
+        p = params
+        if size_estimate_bytes >= p.min_transfer_size and self.is_program_available('pv', loc):
+            size = f"--size={size_estimate_bytes}"
+            if disable_progress_bar:
+                size = ""
+            readable = size_estimate_human.replace(' ', '')
+            return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {p.pv_log_file}"
+        else:
+            return 'cat'
 
     def warn(self, *items):
         self.log('[W]', *items)
@@ -1689,53 +1469,298 @@ class Job:
     def dquote(self, ssh_cmd, arg: str):
         return arg if len(ssh_cmd) == 0 else self.cquote(arg)
 
-    def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
-        """If mbuffer command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
-        smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation"""
+    def filter_datasets(self, datasets: List[str], root_dataset: str) -> List[str]:
+        """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
+        exclude regexes."""
         params = self.params
-        p = params
-        if size_estimate_bytes >= params.min_transfer_size and \
-            ( (loc == 'src' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") )
-            or (loc == 'dst' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") )
-            or (loc == 'local' and p.ssh_src_user_host != "" and p.ssh_dst_user_host != "") ) \
-            and self.is_program_available('mbuffer', loc):
-            return f"{p.mbuffer_program} {' '.join(self.mbuffer_current_opts)} 2> /dev/null"
-        else:
-            return 'cat'
+        results = []
+        for i, dataset in enumerate(datasets):
+            if i == 0 and params.skip_parent and params.recursive:
+                continue
+            rel_dataset = relativize_dataset(dataset, root_dataset)
+            if rel_dataset.startswith('/'):
+                rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
+            if is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
+                results.append(dataset)
+                self.debug('Including b/c dataset regex:', dataset)
+            else:
+                self.debug('Excluding b/c dataset regex:', dataset)
+        return results
 
-    def compress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
-        """If zstd command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
-        reduce network bottlenecks by sending compressed data."""
-        params = self.params
-        p = params
-        if size_estimate_bytes >= p.min_transfer_size and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") \
-            and self.is_program_available('zstd', loc):
-            return f"{p.compression_program} {' '.join(p.compression_program_opts)}"
-        else:
-            return 'cat'
+    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
+        """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
+        include_snapshot_regexes = self.params.include_snapshot_regexes
+        exclude_snapshot_regexes = self.params.exclude_snapshot_regexes
+        is_debug = self.is_debug_enabled()
+        results = []
+        for snapshot in snapshots:
+            i = snapshot.find('#')  # bookmark separator
+            if i < 0:
+                i = snapshot.index('@')  # snapshot separator
+            if is_included(snapshot[i+1:], include_snapshot_regexes, exclude_snapshot_regexes):
+                results.append(snapshot)
+                if is_debug:
+                    self.debug('Including b/c snaphot regex:', snapshot[1+snapshot.find('\t', 0, i):])
+            elif is_debug:
+                self.debug('Excluding b/c snaphot regex:', snapshot[1+snapshot.find('\t', 0, i):])
+        return results
 
-    def decompress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
-        params = self.params
-        p = params
-        if size_estimate_bytes >= p.min_transfer_size and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") \
-            and self.is_program_available('zstd', loc):
-            return f"{p.compression_program} -d"
-        else:
-            return 'cat'
+    def filter_bookmarks(self, snapshots_and_bookmarks: List[str],
+                         oldest_dst_snapshot_creation: int,
+                         newest_dst_snapshot_creation: int) -> List[str]:
+        is_debug = self.is_debug_enabled()
+        results = []
+        for snapshot in snapshots_and_bookmarks:
+            if '@' in snapshot:
+                results.append(snapshot)  # it's a true snapshot
+            else:
+                # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
+                # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
+                # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
+                # accumulate over time without periodic pruning.
+                creation_time = int(snapshot[0:snapshot.index('\t')])
+                if oldest_dst_snapshot_creation <= creation_time <= newest_dst_snapshot_creation:
+                    results.append(snapshot)
+                elif is_debug:
+                    self.debug('Excluding b/c bookmark creation time:', snapshot)
+        return results
 
-    def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
-        """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
-        Progress can be viewed via "tail -f $pv_log_file" aka current.pv or similar """
+    @staticmethod
+    def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
+        """For each line in input_list, print the line if input_set contains the first column field of that line."""
+        results = []
+        if len(input_set) == 0:
+            return results
+        for line in input_list:
+            if line[0:line.index('\t')] in input_set:
+                results.append(line)
+        return results
+
+    def delete_snapshots(self, dataset: str, snapshot_tags: List[str] = []) -> None:
+        if len(snapshot_tags) > 0:
+            if self.is_solaris_zfs('dst'):
+                # solaris-11.4.0 has no syntax to delete multiple snapshots in a single CLI invocation
+                for snapshot_tag in reversed(snapshot_tags):
+                    self.delete_snapshot(f"{dataset}@{snapshot_tag}")
+            else:
+                self.delete_snapshot(dataset + '@' + ','.join(reversed(snapshot_tags)))
+
+    def delete_snapshot(self, snaps_to_delete: str) -> None:
+        p = self.params
+        self.info('Deleting snapshot(s):', snaps_to_delete)
+        cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy",
+                           p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete)
+        is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
+        self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+
+    def delete_datasets(self, datasets: Iterable[str]) -> None:
+        """Delete the given datasets via zfs destroy -r """
+        # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
+        # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
+        last_deleted_dataset = ""
+        for dataset in isorted(datasets):
+            if not f"{dataset}/".startswith(f"{last_deleted_dataset}/"):
+                self.info('Delete missing dataset tree:', f"{dataset} ...")
+                p = self.params
+                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard,
+                                   p.verbose_destroy, p.dry_run_destroy, dataset)
+                is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
+                self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+                last_deleted_dataset = dataset
+
+    def create_filesystem(self, dataset: str) -> None:
+        # zfs create -p -u $dataset
+        # To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
+        # for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u' part only to
+        # the immediate dataset, rather than to the not-yet existing ancestors.
+        p = self.params
+        parent = ''
+        no_mount = '-u' if self.is_program_available(zfs_version_is_at_least_2_1_0, 'dst') else ''
+        for component in dataset.split('/'):
+            parent += component
+            if not self.dst_dataset_exists[parent]:
+                cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} create -p", no_mount, parent)
+                try:
+                    self.run_ssh_command('dst', self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
+                except subprocess.CalledProcessError as e:
+                    print(e.stderr, sys.stderr, end='')
+                    # ignore harmless error caused by 'zfs create' without the -u flag
+                    if ('filesystem successfully created, but it may only be mounted by root' not in e.stderr
+                            and 'filesystem successfully created, but not mounted' not in e.stderr):  # SolarisZFS
+                        raise
+                self.dst_dataset_exists[parent] = True
+            parent += '/'
+
+    def create_zfs_bookmark(self, src_snapshot: str, src_dataset: str) -> None:
+        p = self.params
+        if '@' in src_snapshot:
+            bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
+            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src'):
+                cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
+                try:
+                    self.run_ssh_command('src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE,
+                                         print_stdout=True, cmd=cmd)
+                except subprocess.CalledProcessError as e:
+                    # ignore harmless zfs error caused by bookmark with the same name already existing
+                    if ': bookmark exists' not in e.stderr:
+                        print(e.stderr, sys.stderr, end='')
+                        raise
+
+    def estimate_zfs_send_size(self, *items) -> int:
+        """estimate num bytes to transfer via 'zfs send'"""
+        if self.is_solaris_zfs('src'):
+            return 0  # solaris-11.4.0 does not have a --parsable equivalent
+        p = self.params
+        zfs_send_program_opts = ['--parsable' if opt == '-P' else opt for opt in p.zfs_send_program_opts.copy()]
+        zfs_send_program_opts = append_if_absent(zfs_send_program_opts, '-v', '-n', '--parsable')
+        cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", zfs_send_program_opts, items)
+        lines = self.try_ssh_command('src', self.trace, cmd=cmd)
+        if lines is None:
+            return 0  # src dataset or snapshot has been deleted by third party
+        size = None
+        for line in lines.splitlines():
+            if line.startswith('size'):
+                size = line
+        return int(size[size.index('\t')+1:])
+
+    def dataset_regexes(self, datasets: List[str]) -> List[str]:
         params = self.params
-        p = params
-        if size_estimate_bytes >= p.min_transfer_size and self.is_program_available('pv', loc):
-            size = f"--size={size_estimate_bytes}"
-            if disable_progress_bar:
-                size = ""
-            readable = size_estimate_human.replace(' ', '')
-            return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {p.pv_log_file}"
-        else:
-            return 'cat'
+        results = []
+        for dataset in datasets:
+            if dataset.startswith('/'):
+                # it's an absolute dataset - convert it to a relative dataset
+                dataset = dataset[1:]
+                if f"{dataset}/".startswith(f"{params.src_root_dataset}/"):
+                    dataset = relativize_dataset(dataset, params.src_root_dataset)
+                elif f"{dataset}/".startswith(f"{params.dst_root_dataset}/"):
+                    dataset = relativize_dataset(dataset, params.dst_root_dataset)
+                else:
+                    continue  # ignore datasets that make no difference
+                if dataset.startswith('/'):
+                    dataset = dataset[1:]
+            if dataset.endswith('/'):
+                dataset = dataset[0:-1]
+            if dataset:
+                regex = re.escape(dataset)
+            else:
+                regex = '.*'
+            results.append(regex)
+        return results
+
+    def run_with_retries(self, func, *args, **kwargs) -> Any:
+        """Run the given function with the given arguments, and retry on failure as indicated by params """
+        params = self.params
+        max_sleep_mark = params.min_sleep_nanos
+        retry_count = 0
+        start_time_nanos = time.time_ns()
+        while True:
+            try:
+                return func(*args, **kwargs)  # Call the target function with the provided arguments
+            except RetryableError as retryable_error:
+                elapsed_nanos = time.time_ns() - start_time_nanos
+                if retry_count < params.max_retries and elapsed_nanos < params.max_elapsed_nanos:
+                    # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
+                    sleep_nanos = random.randint(params.min_sleep_nanos, max_sleep_mark)
+                    self.info(f"Retrying [{retry_count + 1}/{params.max_retries}] soon ...")
+                    time.sleep(sleep_nanos / 1_000_000_000)
+                    retry_count = retry_count + 1
+                    max_sleep_mark = min(params.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
+                else:
+                    if params.max_retries > 0:
+                        error(f"Giving up because the last [{retry_count}/{params.max_retries}] retries across "
+                              f"[{elapsed_nanos // 1_000_000_000}/{params.max_elapsed_nanos // 1_000_000_000}] "
+                              "seconds for the current request failed!")
+                    raise retryable_error.__cause__
+
+    def incremental_replication_steps_wrapper(self, origin_src_snapshots_with_guids: List[str],
+                                              included_guids: Set[str]) -> List[Tuple[str]]:
+        src_guids = []
+        src_snapshots = []
+        for line in origin_src_snapshots_with_guids:
+            guid, snapshot = line.split('\t', 1)
+            src_guids.append(guid)
+            src_snapshots.append(snapshot)
+
+        force_convert_I_to_i = False
+        if self.params.src_use_zfs_delegation and not self.params.getenv_bool('no_force_convert_I_to_i', False):
+            # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
+            # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
+            force_convert_I_to_i = True
+        return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
+
+    def incremental_replication_steps(self, src_snapshots: List[str], guids: List[str],
+                                      included_guids: Set[str], force_convert_I_to_i: bool) -> List[Tuple[str]]:
+        """ Computes steps to incrementally replicate the given src snapshots with the given guids such that we include
+        intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
+        (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
+        excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists.
+        Example: skip hourly snapshots and only include daily shapshots for replication
+        Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
+        -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
+        -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
+        The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
+        Also: 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
+        src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
+        is a bookmark we convert a -I step to one or more -i steps.
+        """
+        assert len(guids) == len(src_snapshots)
+        assert len(included_guids) >= 0
+        steps = []
+        n = len(guids)
+        i = 0
+        while i < n and guids[i] not in included_guids:  # skip hourlies
+            i += 1
+
+        while i < n:
+            assert guids[i] in included_guids  # it's a daily
+            start = i
+            i += 1
+            while i < n and guids[i] in included_guids:  # skip dailies
+                i += 1
+            if i < n:
+                if i - start == 1:
+                    # it's a single daily (that was already replicated) followed by an hourly
+                    i += 1
+                    while i < n and guids[i] not in included_guids:  # skip hourlies
+                        i += 1
+                    if i < n:
+                        # assert start != i
+                        if start != i:
+                            step = ('-i', src_snapshots[start], src_snapshots[i])
+                            # print(f"r1 {self.replication_step_to_str(step)}")
+                            steps.append(step)
+                        i -= 1
+                else:
+                    # it's a run of more than one daily
+                    i -= 1
+                    # assert start != i
+                    if start != i:
+                        step = ('-I', src_snapshots[start], src_snapshots[i])
+                        # print(f"r2 {self.replication_step_to_str(step)}")
+                        if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
+                            steps.append(step)
+                        else:  # convert -I step to -i steps
+                            for j in range(start, i):
+                                steps.append(('-i', src_snapshots[j], src_snapshots[j+1]))
+                    i -= 1
+            else:
+                # finish up run of trailing dailies
+                i -= 1
+                if start != i:
+                    step = ('-I', src_snapshots[start], src_snapshots[i])
+                    # print(f"r3 {self.replication_step_to_str(step)}")
+                    if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
+                        steps.append(step)
+                    else:  # convert -I step to -i steps
+                        for j in range(start, i):
+                            steps.append(('-i', src_snapshots[j], src_snapshots[j+1]))
+            i += 1
+        return steps
+
+    @staticmethod
+    def replication_step_to_str(step):
+        # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
+        return str(step)
 
     def is_program_available(self, program: str, location: str) -> bool:
         return program in self.params.available_programs[location]
@@ -1895,30 +1920,6 @@ class Job:
     def is_zpool_bookmarks_feature_enabled_or_active(self, location: str) -> bool:
         return (self.is_zpool_feature_enabled_or_active(location, 'feature@bookmark_v2')
                 and self.is_zpool_feature_enabled_or_active(location, 'feature@bookmark_written'))
-
-    def dataset_regexes(self, datasets: List[str]) -> List[str]:
-        params = self.params
-        results = []
-        for dataset in datasets:
-            if dataset.startswith('/'):
-                # it's an absolute dataset - convert it to a relative dataset
-                dataset = dataset[1:]
-                if f"{dataset}/".startswith(f"{params.src_root_dataset}/"):
-                    dataset = relativize_dataset(dataset, params.src_root_dataset)
-                elif f"{dataset}/".startswith(f"{params.dst_root_dataset}/"):
-                    dataset = relativize_dataset(dataset, params.dst_root_dataset)
-                else:
-                    continue  # ignore datasets that make no difference
-                if dataset.startswith('/'):
-                    dataset = dataset[1:]
-            if dataset.endswith('/'):
-                dataset = dataset[0:-1]
-            if dataset:
-                regex = re.escape(dataset)
-            else:
-                regex = '.*'
-            results.append(regex)
-        return results
 
 
 #############################################################################
