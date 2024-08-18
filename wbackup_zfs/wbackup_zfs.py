@@ -16,6 +16,7 @@
 
 import argparse
 import collections
+import grp
 import operator
 import os
 import platform
@@ -563,6 +564,7 @@ class Params:
         self.shell_program_local = 'sh'
         self.shell_program = self.program_name(self.shell_program_local)
         self.uname_program = self.program_name('uname')
+        self.groups_program = self.program_name('groups')
 
         self.max_retries = args.max_retries
         self.min_sleep_secs = float(self.getenv('min_sleep_secs', 0.125))
@@ -770,6 +772,12 @@ class Job:
             p.zfs_send_program_opts = ['-w' if opt == '--raw' else opt for opt in p.zfs_send_program_opts]
             p.zfs_send_program_opts = ['compress' if opt == '--compressed' else opt for opt in p.zfs_send_program_opts]
             p.zfs_send_program_opts = ['-p' if opt == '--props' else opt for opt in p.zfs_send_program_opts]
+
+        if p.ssh_src_user_host or not self.is_test_mode:
+            stdout = self.run_ssh_command('src', self.trace, check=False, cmd=[p.groups_program])
+            p.src_os_groups = stdout.strip().split(' ') if stdout else []
+        else:
+            p.src_os_groups = os_group_names()
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
         is_root = True
@@ -2061,6 +2069,14 @@ def get_home_directory() -> str:
         # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
         home = pwd.getpwuid(os.getuid()).pw_dir
     return home
+
+
+def os_group_names():
+    # username = getpass.getuser()
+    username = pwd.getpwuid(os.getuid()).pw_name
+    group_ids = os.getgrouplist(username, os.getgid())
+    group_names = [grp.getgrgid(gid).gr_name for gid in group_ids]  # convert numeric gids to group names
+    return group_names
 
 
 def create_symlink(src, dst_dir, dst):

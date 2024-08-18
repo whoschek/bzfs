@@ -1535,11 +1535,11 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 #############################################################################
 class IsolatedTestCase(WBackupTestCase):
 
-    # def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
-    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_with_injected_dataset_deletes()
+    def test_delete_missing_datasets_recursive1(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_recursive1()
 
-    def test_basic_replication_with_injected_dataset_deletes(self):
-        LocalTestCase(param=self.param).test_basic_replication_with_injected_dataset_deletes()
+    # def test_basic_replication_with_injected_dataset_deletes(self):
+    #     LocalTestCase(param=self.param).test_basic_replication_with_injected_dataset_deletes()
 
     # def basic_replication_flat_simple_with_retries_on_error_injection(self):
     #     LocalTestCase(param=self.param).basic_replication_flat_simple_with_retries_on_error_injection()
@@ -2188,6 +2188,409 @@ class TestCheckRange(unittest.TestCase):
         args = parser.parse_args(['--age', '50'])
         self.assertEqual(args.age, 50)
 
+def has_zfs_permission1(user: str, dataset: str, permission: str) -> bool:
+    """
+    Check if a user has a specific ZFS permission on a dataset,
+    considering inherited permissions from ancestors and permission sets.
+    """
+    zfs_permissions = run_cmd(["zfs", "allow", dataset])
+
+    user_permissions = {}
+    group_permissions = {}
+    everyone_permissions = []
+    permission_sets = {}
+    current_entity = None
+    local_permissions = False
+    descendent_permissions = False
+
+    # Parse the ZFS permission output
+    print('newcmd')
+    for line in zfs_permissions:
+        line = line.strip()
+        if not line:
+            continue
+        print('line='+line)
+
+        # Detect section headers for dataset and its ancestors
+        if line.startswith("---- Permissions on"):
+            current_entity = None
+            local_permissions = False
+            descendent_permissions = False
+            continue
+
+        # Identify the permission scope
+        if "Local+Descendent permissions:" in line:
+            local_permissions = True
+            descendent_permissions = True
+            continue
+        elif "Local permissions:" in line:
+            local_permissions = True
+            descendent_permissions = False
+            continue
+        elif "Descendent permissions:" in line:
+            local_permissions = False
+            descendent_permissions = True
+            continue
+
+        # Identify permission sets
+        if line.startswith("Permission sets:"):
+            current_entity = None
+            continue
+
+        # Parse and store permission sets
+        if line.startswith("@"):
+            parts = line.split()
+            setname = parts[0]
+            perms = parts[1].split(',')
+            permission_sets[setname] = perms
+            continue
+
+        # Identify if this is a new user/group definition or a continuation
+        if line.startswith("user "):
+            parts = line.split()
+            current_entity = ('user', parts[1])
+            perms = parts[2].split(',')
+            if current_entity[1] in user_permissions:
+                user_permissions[current_entity[1]].extend(perms)
+            else:
+                user_permissions[current_entity[1]] = perms
+        elif line.startswith("group "):
+            parts = line.split()
+            current_entity = ('group', parts[1])
+            perms = parts[2].split(',')
+            if current_entity[1] in group_permissions:
+                group_permissions[current_entity[1]].extend(perms)
+            else:
+                group_permissions[current_entity[1]] = perms
+        elif line.startswith("everyone "):
+            parts = line.split()
+            perms = parts[1].split(',')
+            everyone_permissions.extend(perms)
+        elif current_entity and not line.startswith('user') and not line.startswith('group'):
+            # Continuation of permissions from the previous entity
+            perms = line.split(',')
+            if current_entity[0] == 'user':
+                user_permissions[current_entity[1]].extend(perms)
+            elif current_entity[0] == 'group':
+                group_permissions[current_entity[1]].extend(perms)
+
+    # Expand user and group permissions with permission sets
+    for entity_permissions in (user_permissions, group_permissions):
+        for entity, perms in entity_permissions.items():
+            expanded_perms = []
+            for perm in perms:
+                if perm.startswith("@") and perm in permission_sets:
+                    expanded_perms.extend(permission_sets[perm])
+                else:
+                    expanded_perms.append(perm)
+            entity_permissions[entity] = expanded_perms
+
+    # Expand "everyone" permissions with permission sets
+    expanded_everyone_permissions = []
+    for perm in everyone_permissions:
+        if perm.startswith("@") and perm in permission_sets:
+            expanded_everyone_permissions.extend(permission_sets[perm])
+        else:
+            expanded_everyone_permissions.append(perm)
+
+    # Check "everyone" permissions first
+    if permission in expanded_everyone_permissions:
+        return True
+
+    # Check direct user permissions
+    if user in user_permissions and permission in user_permissions[user]:
+        return True
+
+    # Check group memberships
+    try:
+        groups = run_cmd(["groups", user]).strip().split(": ")[1].split()
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to retrieve groups for user {user}: {e}")
+        return False
+
+    for group in groups:
+        if group in group_permissions and permission in group_permissions[group]:
+            return True
+
+    # If no permission is found, return False
+    return False
+
+# TODO: return one of None, 'Local', 'Local+Descendent', maybe also 'Descendent' for skip_parent==True
+# for using -I need 'Local+Descendent' on 'hold' perm on src_root_dataset
+def has_zfs_permission(user: str, dataset: str, permission: str) -> bool:
+    """
+    Check if a user has a specific ZFS permission on a dataset,
+    considering inherited permissions from ancestors and permission sets.
+    """
+    zfs_permissions = zfs_allow_print(dataset)
+    my_unix_groups = set(wbackup_zfs.os_group_names())
+
+    ancestors = []
+    node = {}
+    user_permissions = defaultdict(list)
+    group_permissions = defaultdict(list)
+    everyone_permissions = []
+    permission_sets = {}
+    current_entity = None
+    local_permissions = False
+    descendent_permissions = False
+    node['permission_sets'] = permission_sets
+    node['permission_sets'] = permission_sets
+
+    # Parse the ZFS permission output
+    print('newcmd')
+    for line in zfs_permissions:
+        line = line.strip()
+        print('line='+line)
+        if not line:
+            continue
+
+        # Detect section headers for dataset and its ancestors
+        if line.startswith("---- Permissions on"):
+            current_entity = None
+            local_permissions = False
+            descendent_permissions = False
+            continue
+
+        # Identify the permission scope
+        if "Local+Descendent permissions:" in line:
+            local_permissions = True
+            descendent_permissions = True
+            continue
+        elif "Local permissions:" in line:
+            local_permissions = True
+            descendent_permissions = False
+            continue
+        elif "Descendent permissions:" in line:
+            local_permissions = False
+            descendent_permissions = True
+            continue
+
+        # Identify permission sets
+        if line.startswith("Permission sets:"):
+            current_entity = None
+            continue
+
+        # Parse and store permission sets
+        if line.startswith("@"):
+            parts = line.split(maxsplit=1)
+            setname = parts[0]
+            perms = parts[1].split(',')
+            permission_sets[setname] = perms
+            continue
+
+        # Identify if this is a new user/group definition or a continuation
+        if line.startswith("user "):
+            parts = line.split(maxsplit=2)
+            current_entity = ('user', parts[1])
+            perms = parts[2].split(',')
+            user_permissions[current_entity[1]].extend(perms)
+        elif line.startswith("group "):
+            parts = line.split(maxsplit=2)
+            current_entity = ('group', parts[1])
+            perms = parts[2].split(',')
+            group_permissions[current_entity[1]].extend(perms)
+        elif line.startswith("everyone "):
+            parts = line.split(maxsplit=1)
+            # current_entity = ('everyone', 'everyone')
+            perms = parts[1].split(',')
+            everyone_permissions.extend(perms)
+        elif current_entity and not line.startswith('user') and not line.startswith('group'):
+            # Continuation of permissions from the previous entity
+            perms = line.split(',')
+            if current_entity[0] == 'user':
+                user_permissions[current_entity[1]].extend(perms)
+            elif current_entity[0] == 'group':
+                group_permissions[current_entity[1]].extend(perms)
+
+    # Expand user and group permissions with permission sets
+    for entity_permissions in (user_permissions, group_permissions):  # WH add everyone_permissions
+        for entity, perms in entity_permissions.items():
+            expanded_perms = []
+            for perm in perms:
+                if perm.startswith("@") and perm in permission_sets:
+                    expanded_perms.extend(permission_sets[perm])
+                else:
+                    expanded_perms.append(perm)
+            entity_permissions[entity] = expanded_perms
+
+    # Expand "everyone" permissions with permission sets
+    expanded_everyone_permissions = []
+    for perm in everyone_permissions:
+        if perm.startswith("@") and perm in permission_sets:
+            expanded_everyone_permissions.extend(permission_sets[perm])
+        else:
+            expanded_everyone_permissions.append(perm)
+
+    # Check permissions based on the flags
+    if descendent_permissions and not local_permissions:
+        # If checking a descendant, exclude local-only permissions
+        if permission in expanded_everyone_permissions:
+            return True
+    else:
+        # Check "everyone" permissions for local or local+descendant
+        if permission in expanded_everyone_permissions:
+            return True
+
+    # Check direct user permissions
+    if user in user_permissions and permission in user_permissions[user]:
+        return True
+
+    # Check group memberships
+    groups = run_cmd(["groups", user])[0].split(": ", 1)[1].split()  # TODO cache this
+
+    for group in groups:
+        if group in group_permissions and permission in group_permissions[group]:
+            return True
+
+    # If no permission is found, return False
+    return False
+
+
+#############################################################################
+@unittest.skipIf(os.geteuid() == 0, "Skipping test because ZFS delegation is not necessary for root user")
+class TestZfsAllowPermissions(WBackupTestCase):
+
+    # @staticmethod
+    # def create_filesystem(dataset):
+    #     # Create a new ZFS dataset
+    #     run_cmd(["zfs", "create", f"{src_root_dataset}/{dataset}"])
+
+    # @staticmethod
+    # def teardown_dataset(dataset):
+    #     # Destroy the ZFS dataset
+    #     run_cmd(["zfs", "destroy", f"{src_root_dataset}/{dataset}"])
+
+    # @staticmethod
+    # def sanitize(lst):
+    #     return [item for item in lst if item]
+
+    def allow_user(self, dataset, user, permissions, local=False, descendent=False):
+        dataset = src_root_dataset + dataset
+        zfs_allow(dataset, kind='u', owners=[user], perms=permissions.split(','), local=local, descendent=descendent)
+
+    def allow_group(self, dataset, group, permissions, local=False, descendent=False):
+        dataset = src_root_dataset + dataset
+        zfs_allow(dataset, kind='g', owners=[group], perms=permissions.split(','), local=local, descendent=descendent)
+
+    def allow_everyone(self, dataset, permissions, local=False, descendent=False):
+        dataset = src_root_dataset + dataset
+        zfs_allow(dataset, kind='e', perms=permissions.split(','), local=local, descendent=descendent)
+
+    def allow_permission_set(self, dataset, setname, permissions):
+        dataset = src_root_dataset + dataset
+        zfs_allow_permission_set(dataset, setname=setname, perms=permissions.split(','))
+
+    def setUp(self):
+        super().setUp()
+        self.current_user = os_username()
+        create_filesystem(src_root_dataset + "/foo")
+        create_filesystem(src_root_dataset + "/foo/a")
+        create_filesystem(src_root_dataset + "/foo/a/a")
+        create_filesystem(src_root_dataset + "/foo/b")
+        create_filesystem(src_root_dataset + "/tmp")
+        create_filesystem(src_root_dataset + "/bar")
+        create_filesystem(src_root_dataset + "/baz")
+
+        self.delete_group('wb_test_group')
+        self.create_group('wb_test_group', 'root')
+        self.allow_user("/foo", self.current_user, "hold")
+        self.allow_group("/foo", "wb_test_group", "create,send")
+
+        self.allow_permission_set("/baz", "@mydefault", "send,hold")
+        self.allow_user("/baz", self.current_user, "@mydefault")
+
+        self.allow_permission_set("/bar", "@pset", "create,send,hold")
+        self.allow_group("/bar", "wb_test_group", "@pset")
+        # TODO: descendant only, local only
+        # TODO: nested (recursive) permission sets
+        # TODO: perm set that gets redefined in child, which perm applies (parent or child)?, try out manually
+
+
+        # Setup for everyone permissions
+        self.allow_everyone("/foo", "load-key")
+        self.allow_everyone("/foo/a", "load-key,change-key", descendent=True)
+        self.allow_everyone("/foo", "rollback", local=True)  # Local only
+
+        # Parent-specific setup
+        self.allow_user("/foo", "root", "send")
+        self.allow_user("/foo/a", "root", "hold", local=True)  # Local only
+
+    def tearDown(self):
+        self.delete_group('wb_test_group')
+
+    def test_user_has_direct_permission(self):
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo", 'hold'))
+
+    def test_user_lacks_permission(self):
+        self.assertFalse(has_zfs_permission(self.current_user, src_root_dataset + "/foo", 'send'))
+
+    # def test_invalid_dataset(self):
+    #     self.assertFalse(has_zfs_permission(self.current_user, 'nonexistentpool', 'hold'))
+
+    def test_user_has_group_permission(self):
+        self.assertTrue(has_zfs_permission('root', src_root_dataset + "/foo", 'create'))
+        self.assertTrue(has_zfs_permission('root', src_root_dataset + "/foo", 'send'))
+        self.assertFalse(has_zfs_permission('root', src_root_dataset + "/foo", 'hold'))
+
+    def test_everyone_permissions(self):
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo", 'load-key'))
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo/b", 'load-key'))
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo/a", 'load-key'))
+        # self.assertFalse(has_zfs_permission(self.current_user, src_root_dataset + "/foo/a", 'change-key'))
+        # self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo/a/a", 'change-key'))
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo", 'rollback'))
+        # self.assertFalse(has_zfs_permission(self.current_user, src_root_dataset + "/foo/a", 'rollback'))
+
+    def test_inherited_permission(self):
+        # Simulate inherited permission by applying permission to the parent dataset
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo", 'hold'))
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/foo/b", 'hold'))
+
+        self.assertTrue(has_zfs_permission('root', src_root_dataset + "/foo", 'send'))
+        self.assertTrue(has_zfs_permission('root', src_root_dataset + "/foo/a", 'send'))
+
+    def test_permission_set_applied(self):
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/baz", 'send'))
+        self.assertTrue(has_zfs_permission(self.current_user, src_root_dataset + "/baz", 'hold'))
+        self.assertFalse(has_zfs_permission(self.current_user, src_root_dataset + "/baz", 'receive'))
+
+        self.assertTrue(has_zfs_permission('root', src_root_dataset + "/bar", 'create'))
+        self.assertTrue(has_zfs_permission('root', src_root_dataset + "/bar", 'send'))
+        self.assertTrue(has_zfs_permission('root', src_root_dataset + "/bar", 'hold'))
+        self.assertFalse(has_zfs_permission('root', src_root_dataset + "/bar", 'receive'))
+
+    @staticmethod
+    def runcmd(cmd, check=True):
+        subprocess.run(cmd, check=check)
+
+    def create_group(self, group_name, user_name_to_add=None):
+        system = platform.system()
+        if system == 'Linux':
+            self.runcmd(sudo_cmd + ['groupadd', group_name])
+            if user_name_to_add:
+                self.runcmd(sudo_cmd + ['usermod', '-a', '-G', group_name, user_name_to_add])
+        elif system == 'FreeBSD':
+            self.runcmd(sudo_cmd + ['pw', 'groupadd', group_name])
+            if user_name_to_add:
+                self.runcmd(sudo_cmd + ['pw', 'groupmod', group_name, '-m', user_name_to_add])
+        elif system == 'SunOS':
+            self.runcmd(sudo_cmd + ['groupadd', group_name])
+            if user_name_to_add:
+                self.runcmd(sudo_cmd + ['usermod', '-a', '-G', group_name, user_name_to_add])
+        else:
+            raise EnvironmentError("Unsupported OS.")
+
+    def delete_group(self, group_name):
+        system = platform.system()
+        if system == 'Linux':
+            self.runcmd(sudo_cmd + ['groupdel', group_name], check=False)
+        elif system == 'FreeBSD':
+            self.runcmd(sudo_cmd + ['pw', 'groupdel', group_name], check=False)
+        elif system == 'SunOS':
+            self.runcmd(sudo_cmd + ['groupdel', group_name], check=False)
+        else:
+            raise EnvironmentError("Unsupported OS.")
 
 #############################################################################
 def create_filesystems(path, props=None):
@@ -2262,18 +2665,18 @@ def stop_on_failure_subtest(**params):
 def main():
     suite = unittest.TestSuite()
     suite.addTest(TestParseDatasetLocator())
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
-    suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {'verbose': True}))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
+    # suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {'verbose': True}))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestZfsAllowPermissions))
 
-
-    # for ssh_mode in []:
-    for ssh_mode in ['local']:
+    for ssh_mode in []:
+    # for ssh_mode in ['local']:
     # for ssh_mode in ['pull-push']:
     # for ssh_mode in ['local', 'pull-push']:
         # for min_transfer_size in [0, 1024 ** 2]:
@@ -2300,13 +2703,13 @@ def main():
                         # params = {'ssh_mode': 'pull-push', 'verbose': True, 'min_transfer_size': min_transfer_size}
                         # params = {'verbose': True}
                         # params = None
-                        # suite.addTest(ParametrizedTestCase.parametrize(IsolatedTestCase, params))
-                        suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
+                        suite.addTest(ParametrizedTestCase.parametrize(IsolatedTestCase, params))
+                        # suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
 
-    # for ssh_mode in []:
+    for ssh_mode in []:
     # for ssh_mode in ['pull-push']:
     # for ssh_mode in ['local']:
-    for ssh_mode in ['local', 'pull-push']:
+    # for ssh_mode in ['local', 'pull-push']:
     # for ssh_mode in ['local', 'pull-push', 'push', 'pull']:
     #     for min_transfer_size in [1024 ** 2]:
         for min_transfer_size in [0, 1024 ** 2]:
@@ -2335,8 +2738,8 @@ def main():
             for min_transfer_size in [0]:
                 for affix in [""]:
                     for no_privilege_elevation in [True]:
-                        for encrypted_dataset in [False]:
-                        # for encrypted_dataset in []:
+                        # for encrypted_dataset in [False]:
+                        for encrypted_dataset in []:
                             params = {
                                 'ssh_mode': ssh_mode,
                                 'verbose': False,

@@ -252,6 +252,54 @@ def build(name, check=True):
     return name
 
 
+def zfs_allow_print(dataset=None):
+    """Displays permissions that have been delegated on the specified dataset"""
+    return run_cmd(['zfs', 'allow', dataset])
+
+
+def zfs_allow(dataset=None, kind='e', owners=[], perms=[], local=False, descendent=False):
+    """Delegates ZFS administration permissions for the dataset to non-privileged users"""
+    cmd = sudo_cmd + ['zfs', 'allow']
+    if not local and not descendent:
+        local = True
+        descendent = True
+    if local:
+        cmd.append('-l')
+    if descendent:
+        cmd.append('-d')
+    if kind is None:
+        kind = 'e'
+    if kind not in ['u', 'g', 'e']:  # user, group, everyone
+        raise ValueError('Illegal ZFS delegation kind: ' + kind)
+    cmd.append('-' + kind)
+    if kind != 'e':
+        assert len(owners) > 0
+        cmd.append(','.join(owners))
+    assert len(perms) > 0
+    cmd.append(','.join(perms))
+    cmd.append(dataset)
+    return run_cmd(cmd)
+
+
+def zfs_allow_permission_set(dataset=None, setname=None, perms=[]):
+    """Create or update a permission set"""
+    cmd = sudo_cmd + ['zfs', 'allow', '-s', setname]
+    assert len(perms) > 0
+    cmd.append(','.join(perms))
+    cmd.append(dataset)
+    return run_cmd(cmd)
+
+
+def zfs_allow_create_time(dataset=None, set_name=None, perms=[]):
+    """Sets 'create time' permissions.  These permissions are granted (locally) to the creator of any newly-created
+    descendent file system."""
+    cmd = sudo_cmd + ['zfs', 'allow', '-c']
+    assert len(perms) > 0
+    cmd.append(','.join(perms))
+    cmd.append(dataset)
+    return run_cmd(cmd)
+
+
 def zfs_version():
     """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5"""
     try:
@@ -271,6 +319,13 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     if version_str is None:
         return False
     return tuple(map(int, version_str.split('.'))) >= tuple(map(int, min_version_str.split('.')))
+
+
+def check_no_whitespace(opts):
+    for opt in opts:
+        if any(char.isspace() for char in opt):
+            raise ValueError(f"Option must not contain a whitespace character: {opt}")
+    return opts
 
 
 def run_cmd(*params):
