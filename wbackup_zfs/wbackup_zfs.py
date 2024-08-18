@@ -1119,7 +1119,8 @@ class Job:
                     recordsize = self.recordsizes[src_dataset]
                     if recordsize >= 0:
                         recv_opts += ['-o', f"recordsize={recordsize}"]
-                recv_cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset)
+                recv_cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} receive -F",
+                                        p.dry_run_recv, recv_opts, dst_dataset)
                 self.info('Full zfs send:', f"{oldest_src_snapshot} --> {dst_dataset} ({size_estimate_human}) ...")
                 self.run_zfs_send_receive(send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human,
                                           is_dry_send_receive, error_trigger='full_zfs_send')
