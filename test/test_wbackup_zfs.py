@@ -1572,61 +1572,98 @@ class TestFindMatch(unittest.TestCase):
     def test_basic(self):
         condition = lambda arg: arg.startswith('-')
 
-        list1 = ['a', 'b', '-c', 'd']
-        self.assertEqual(2, find_match(list1, condition))
+        lst = ['a', 'b', '-c', 'd']
+        self.assert_find_match(2, lst, condition)
 
-        self.assertEqual(2, find_match(list1, condition, -3))
-        self.assertEqual(2, find_match(list1, condition, -2))
-        self.assertEqual(-1, find_match(list1, condition, -1))
-        self.assertEqual(2, find_match(list1, condition, 0))
-        self.assertEqual(2, find_match(list1, condition, 1))
-        self.assertEqual(2, find_match(list1, condition, 2))
-        self.assertEqual(-1, find_match(list1, condition, 3))
-        self.assertEqual(-1, find_match(list1, condition, 4))
-        self.assertEqual(-1, find_match(list1, condition, 5))
+        self.assert_find_match(2, lst, condition, -3)
+        self.assert_find_match(2, lst, condition, -2)
+        self.assert_find_match(-1, lst, condition, -1)
+        self.assert_find_match(2, lst, condition, 0)
+        self.assert_find_match(2, lst, condition, 1)
+        self.assert_find_match(2, lst, condition, 2)
+        self.assert_find_match(-1, lst, condition, 3)
+        self.assert_find_match(-1, lst, condition, 4)
+        self.assert_find_match(-1, lst, condition, 5)
 
-        self.assertEqual(-1, find_match(list1, condition, end=-3))
-        self.assertEqual(-1, find_match(list1, condition, end=-2))
-        self.assertEqual(2, find_match(list1, condition, end=-1))
-        self.assertEqual(-1, find_match(list1, condition, end=0))
-        self.assertEqual(-1, find_match(list1, condition, end=1))
-        self.assertEqual(-1, find_match(list1, condition, end=2))
-        self.assertEqual(2, find_match(list1, condition, end=3))
-        self.assertEqual(2, find_match(list1, condition, end=4))
-        self.assertEqual(2, find_match(list1, condition, end=5))
-        self.assertEqual(2, find_match(list1, condition, end=6))
+        self.assert_find_match(-1, lst, condition, end=-3)
+        self.assert_find_match(-1, lst, condition, end=-2)
+        self.assert_find_match(2, lst, condition, end=-1)
+        self.assert_find_match(-1, lst, condition, end=0)
+        self.assert_find_match(-1, lst, condition, end=1)
+        self.assert_find_match(-1, lst, condition, end=2)
+        self.assert_find_match(2, lst, condition, end=3)
+        self.assert_find_match(2, lst, condition, end=4)
+        self.assert_find_match(2, lst, condition, end=5)
+        self.assert_find_match(2, lst, condition, end=6)
 
-        self.assertEqual(2, find_match(list1, condition, start=2, end=-1))
-        self.assertEqual(-1, find_match(list1, condition, start=2, end=-2))
-        self.assertEqual(-1, find_match(list1, condition, start=3, end=-1))
+        self.assert_find_match(2, lst, condition, start=2, end=-1)
+        self.assert_find_match(-1, lst, condition, start=2, end=-2)
+        self.assert_find_match(-1, lst, condition, start=3, end=-1)
 
-        list1 = ['-c']
-        self.assertEqual(0, find_match(list1, condition))
-        self.assertEqual(0, find_match(list1, condition, -1))
-        self.assertEqual(0, find_match(list1, condition, 0))
-        self.assertEqual(-1, find_match(list1, condition, 1))
+        lst = ['-c']
+        self.assert_find_match(0, lst, condition)
+        self.assert_find_match(0, lst, condition, -1)
+        self.assert_find_match(0, lst, condition, 0)
+        self.assert_find_match(-1, lst, condition, 1)
 
-        self.assertEqual(-1, find_match(list1, condition, end=-1))
-        self.assertEqual(-1, find_match(list1, condition, end=0))
-        self.assertEqual(0, find_match(list1, condition, end=1))
+        self.assert_find_match(-1, lst, condition, end=-1)
+        self.assert_find_match(-1, lst, condition, end=0)
+        self.assert_find_match(0, lst, condition, end=1)
 
-        self.assertEqual(-1, find_match(list1, condition, start=2, end=-1))
-        self.assertEqual(-1, find_match(list1, condition, start=2, end=-2))
-        self.assertEqual(-1, find_match(list1, condition, start=3, end=-1))
+        self.assert_find_match(-1, lst, condition, start=2, end=-1)
+        self.assert_find_match(-1, lst, condition, start=2, end=-2)
+        self.assert_find_match(-1, lst, condition, start=3, end=-1)
 
-        list1 = []
-        self.assertEqual(-1, find_match(list1, condition))
-        self.assertEqual(-1, find_match(list1, condition, -1))
-        self.assertEqual(-1, find_match(list1, condition, 0))
-        self.assertEqual(-1, find_match(list1, condition, 1))
+        lst = []
+        self.assert_find_match(-1, lst, condition)
+        self.assert_find_match(-1, lst, condition, -1)
+        self.assert_find_match(-1, lst, condition, 0)
+        self.assert_find_match(-1, lst, condition, 1)
 
-        self.assertEqual(-1, find_match(list1, condition, end=-1))
-        self.assertEqual(-1, find_match(list1, condition, end=0))
-        self.assertEqual(-1, find_match(list1, condition, end=1))
+        self.assert_find_match(-1, lst, condition, end=-1)
+        self.assert_find_match(-1, lst, condition, end=0)
+        self.assert_find_match(-1, lst, condition, end=1)
 
-        self.assertEqual(-1, find_match(list1, condition, start=2, end=-1))
-        self.assertEqual(-1, find_match(list1, condition, start=2, end=-2))
-        self.assertEqual(-1, find_match(list1, condition, start=3, end=-1))
+        self.assert_find_match(-1, lst, condition, start=2, end=-1)
+        self.assert_find_match(-1, lst, condition, start=2, end=-2)
+        self.assert_find_match(-1, lst, condition, start=3, end=-1)
+
+        lst = ['a', 'b', '-c', '-d']
+        self.assertEqual(2, find_match(lst, condition, start=None, end=None, reverse=False))
+        self.assertEqual(3, find_match(lst, condition, start=None, end=None, reverse=True))
+        self.assertEqual(2, find_match(lst, condition, start=2, end=None, reverse=False))
+        self.assertEqual(3, find_match(lst, condition, start=2, end=None, reverse=True))
+        self.assertEqual(3, find_match(lst, condition, start=3, end=None, reverse=False))
+        self.assertEqual(3, find_match(lst, condition, start=3, end=None, reverse=True))
+
+        self.assertEqual(2, find_match(lst, condition, start=0, end=None, reverse=False))
+        self.assertEqual(3, find_match(lst, condition, start=0, end=None, reverse=True))
+        self.assertEqual(3, find_match(lst, condition, start=-1, end=None, reverse=False))
+        self.assertEqual(3, find_match(lst, condition, start=-1, end=None, reverse=True))
+        self.assertEqual(2, find_match(lst, condition, start=-2, end=None, reverse=False))
+        self.assertEqual(3, find_match(lst, condition, start=-2, end=None, reverse=True))
+        self.assertEqual(2, find_match(lst, condition, start=-3, end=None, reverse=False))
+        self.assertEqual(3, find_match(lst, condition, start=-3, end=None, reverse=True))
+
+        lst = ['-a', '-b', 'c', 'd']
+        self.assertEqual(0, find_match(lst, condition, end=-1, reverse=False))
+        self.assertEqual(1, find_match(lst, condition, end=-1, reverse=True))
+        self.assertEqual(0, find_match(lst, condition, end=-2, reverse=False))
+        self.assertEqual(1, find_match(lst, condition, end=-2, reverse=True))
+        self.assertEqual(0, find_match(lst, condition, end=-3, reverse=False))
+        self.assertEqual(0, find_match(lst, condition, end=-3, reverse=True))
+        self.assertEqual(-1, find_match(lst, condition, end=-4, reverse=False))
+        self.assertEqual(-1, find_match(lst, condition, end=-4, reverse=True))
+
+        lst = ['a', '-b', '-c', 'd']
+        self.assertEqual(1, find_match(lst, condition, start=1, end=-1, reverse=False))
+        self.assertEqual(2, find_match(lst, condition, start=1, end=-1, reverse=True))
+        self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=False))
+        self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=True))
+
+    def assert_find_match(self, expected, lst, condition, start=None, end=None):
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False))
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True))
 
 
 #############################################################################
@@ -2336,13 +2373,19 @@ def natsort_key(s: str):
     return s, 0
 
 
-def find_match(lst, condition, start=None, end=None):
-    """Returns the index of the first list item that matches the given condition, or -1 if no matching item is found;
+def find_match(lst, condition, start=None, end=None, reverse=False):
+    """Returns the index within lst of the first item (or last item if reverse==True) that matches the given condition,
+    or -1 if no matching item is found;
     analog to str.find()"""
     offset = 0 if start is None else start if start >= 0 else len(lst) + start
-    for i, item in enumerate(lst[start:end], start=offset):
+    if start is not None or end is not None:
+        lst = lst[start:end]
+    for i, item in enumerate(reversed(lst)) if reverse else enumerate(lst):
         if condition(item):
-            return i
+            if reverse:
+                return len(lst) - i - 1 + offset
+            else:
+                return i + offset
     # raise ValueError("No item found that matches condition")
     return -1
 
