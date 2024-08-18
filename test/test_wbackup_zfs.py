@@ -477,6 +477,52 @@ class LocalTestCase(WBackupTestCase):
             wbackup_zfs.main()
         self.assertEqual(e.exception.code, 2)
 
+    def test_basic_replication_flat_simple_with_skip_parent(self):
+        self.setup_basic()
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                job = self.run_wbackup(src_root_dataset, dst_root_dataset,
+                                       '--skip-parent', dry_run=(i == 0))
+                self.assertSnapshots(src_root_dataset, 3, 's')
+                self.assertTrue(dataset_exists(dst_root_dataset))
+                self.assertSnapshots(dst_root_dataset, 0)
+
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                job = self.run_wbackup(src_root_dataset, dst_root_dataset,
+                                       '--skip-parent', '--delete-missing-datasets', dry_run=(i == 0))
+                self.assertSnapshots(src_root_dataset, 3, 's')
+                self.assertTrue(dataset_exists(dst_root_dataset))
+                self.assertSnapshots(dst_root_dataset, 0)
+
+    def test_basic_replication_recursive_with_skip_parent(self):
+        self.setup_basic()
+        destroy(dst_root_dataset, recursive=True)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_wbackup(src_root_dataset, dst_root_dataset,
+                                 '--skip-parent', '--recursive', dry_run=(i == 0))
+                self.assertSnapshots(src_root_dataset, 3, 's')
+                if i == 0:
+                    self.assertFalse(dataset_exists(dst_root_dataset))
+                else:
+                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
+
+        destroy(dst_root_dataset, recursive=True)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_wbackup(src_root_dataset, dst_root_dataset,
+                                 '--skip-parent', '--delete-missing-datasets', '--recursive', dry_run=(i == 0))
+                self.assertSnapshots(src_root_dataset, 3, 's')
+                if i == 0:
+                    self.assertFalse(dataset_exists(dst_root_dataset))
+                else:
+                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
+
     def test_basic_replication_flat_simple_using_main(self):
         self.setup_basic()
         with patch('sys.argv', ['wbackup_zfs.py', src_root_dataset, dst_root_dataset]):
@@ -2399,7 +2445,7 @@ def stop_on_failure_subtest(**params):
     try:
         yield
     except AssertionError as e:
-        raise AssertionError(f"SubTest failed with parameters: {params}") from None
+        raise AssertionError(f"SubTest failed with parameters: {params}") from e
 
 
 def main():

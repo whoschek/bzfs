@@ -182,12 +182,13 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--include-snapshot-regex REGEX [REGEX ...]]
                    [--exclude-snapshot-regex REGEX [REGEX ...]] [--force]
                    [--force-unmount] [--force-once]
+                   [--zfs-send-program-opts STRING]
+                   [--zfs-receive-program-opts STRING] [--max-retries INT]
+                   [--skip-parent]
                    [--skip-missing-snapshots [{true,false,error}]]
-                   [--max-retries INT] [--zfs-send-program-opts STRING]
-                   [--zfs-receive-program-opts STRING] [--skip-replication]
-                   [--delete-missing-snapshots] [--delete-missing-datasets]
-                   [--no-privilege-elevation] [--no-stream]
-                   [--no-create-bookmark] [--no-use-bookmark]
+                   [--skip-replication] [--delete-missing-snapshots]
+                   [--delete-missing-datasets] [--no-privilege-elevation]
+                   [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
                    [--bwlimit STRING] [--dry-run] [--verbose] [--quiet]
                    [--ssh-config-file FILE] [--ssh-cipher STRING]
                    [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
@@ -375,6 +376,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html
     and
     https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
+
+<!-- -->
+
+**--skip-parent**
+
+*  Skip processing of the SRC_DATASET and DST_DATASET and only process
+    their descendant datasets, i.e. children, and children of children,
+    etc (with --recursive). No dataset is processed unless --recursive
+    is also specified.
 
 <!-- -->
 

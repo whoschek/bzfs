@@ -224,22 +224,6 @@ feature.
         help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
               "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
     parser.add_argument(
-        '--skip-missing-snapshots', choices=['true', 'false', 'error'], default='true', nargs='?',
-        help=("Default is 'true'. During replication, handle source datasets that include no snapshots as follows: "
-              "a) 'error': Abort with an error. "
-              "b) 'true': Skip the source dataset with a warning. Skip descendant datasets if --recursive and "
-              "destination dataset does not exist. "
-              "c) otherwise (regardless of --recursive flag): If destination snapshots exist, delete them (with "
-              "--force) or abort with an error (without --force). Create empty destination dataset and ancestors "
-              "if they do not yet exist and source dataset has at least one descendant that includes a snapshot.\n\n"))
-    parser.add_argument(
-        '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
-        help=(f"The number of times a replication step shall be retried if it fails, for example because of network "
-              f"hiccups (default: {max_retries_default}). "
-              "Also consider this option if a periodic pruning script may simultaneously "
-              f"delete a dataset or snapshot or bookmark while {prog_name} is running and attempting to access "
-              "it.\n\n"))
-    parser.add_argument(
         '--zfs-send-program-opts', type=str, default=zfs_send_program_opts_default, metavar='STRING',
         help=("Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
               f"Default is '{zfs_send_program_opts_default}'. "
@@ -251,6 +235,11 @@ feature.
               f"Default is '{zfs_recv_program_opts_default}'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
+    parser.add_argument(
+        '--skip-parent', action='store_true',
+        help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
+             "children, and children of children, etc (with --recursive). No dataset is processed unless --recursive "
+             "is also specified.\n\n")
     parser.add_argument(
         '--skip-replication', action='store_true',
         help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
@@ -470,7 +459,7 @@ class Params:
         self.origin_dst_root_dataset = None  # deferred until run_main()
         self.recursive = args.recursive
         self.recursive_flag = '-r' if args.recursive else ""
-        self.skip_parent = self.getenv_bool('skip_parent', False)
+        self.skip_parent = args.skip_parent
         self.force = args.force
         self.force_once = args.force_once
         if self.force_once:
@@ -814,7 +803,7 @@ class Job:
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name",
                            p.recursive_flag, p.src_root_dataset)
-        src_datasets_with_record_sizes = self.try_ssh_command('src', self.info, cmd=cmd) or ""
+        src_datasets_with_record_sizes = self.try_ssh_command('src', self.debug, cmd=cmd) or ""
         src_datasets_with_record_sizes = src_datasets_with_record_sizes.splitlines()
         src_datasets = []
         self.recordsizes = {}
@@ -1499,7 +1488,7 @@ class Job:
         params = self.params
         results = []
         for i, dataset in enumerate(datasets):
-            if i == 0 and params.skip_parent and params.recursive:
+            if i == 0 and params.skip_parent:
                 continue
             rel_dataset = relativize_dataset(dataset, root_dataset)
             if rel_dataset.startswith('/'):
@@ -1685,7 +1674,7 @@ class Job:
                 if retry_count < params.max_retries and elapsed_nanos < params.max_elapsed_nanos:
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(params.min_sleep_nanos, max_sleep_mark)
-                    self.info(f"Retrying [{retry_count + 1}/{params.max_retries}] soon ...")
+                    self.info(f"Retrying attempt [{retry_count + 1}/{params.max_retries}] soon ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     retry_count = retry_count + 1
                     max_sleep_mark = min(params.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
