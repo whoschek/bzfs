@@ -137,20 +137,21 @@ feature.
 ''', formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
-        'src_root_dataset', metavar='SRC_DATASET', type=str,
-        help=("Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
-              "Format is [[user@]host:]dataset. The host name can also be an IPv4 address. If the host name is '-', "
-              "the dataset will be on the local host, and the corresponding SSH leg will be omitted. The same is true "
-              "if the host is omitted and the dataset does not contain a ':' colon at the same time. "
-              "Local dataset examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` "
-              "Remote dataset examples: `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`, "
-              "`root@host:tank`, `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`. "
-              "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`.\n\n"))
-    parser.add_argument(
-        'dst_root_dataset', metavar='DST_DATASET', type=str,
-        help=("Destination ZFS dataset for replication. Has same naming format as SRC_DATASET. During replication, "
-              "destination datasets that do not yet exist are created as necessary, along with their parent and "
-              "ancestors.\n\n"))
+        'root_datasets', nargs='+', action=DatasetsAction, metavar="SRC_DATASET DST_DATASET",
+        help=(
+            "SRC_DATASET: "
+            "Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
+            "Format is [[user@]host:]dataset. The host name can also be an IPv4 address. If the host name is '-', "
+            "the dataset will be on the local host, and the corresponding SSH leg will be omitted. The same is true "
+            "if the host is omitted and the dataset does not contain a ':' colon at the same time. "
+            "Local dataset examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` "
+            "Remote dataset examples: `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`, "
+            "`root@host:tank`, `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`. "
+            "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`.\n\n"
+            "DST_DATASET: "
+            "Destination ZFS dataset for replication. Has same naming format as SRC_DATASET. During replication, "
+            "destination datasets that do not yet exist are created as necessary, along with their parent and "
+            "ancestors.\n\n"))
     parser.add_argument(
         '--recursive', '-r', action='store_true',
         help=("During replication, also consider descendant datasets, i.e. datasets within the dataset tree, "
@@ -461,12 +462,12 @@ class Params:
         self.inject_params = inject_params if inject_params is not None else {}  # for testing only
         self.unset_matching_env_vars(args)
         self.one_or_more_whitespace_regex = re.compile(r'\s+')
-        assert args.src_root_dataset is not None
-        self.src_root_dataset = args.src_root_dataset
-        assert args.dst_root_dataset is not None
-        self.dst_root_dataset = args.dst_root_dataset
-        self.origin_src_root_dataset = self.src_root_dataset
-        self.origin_dst_root_dataset = self.dst_root_dataset
+        assert len(args.root_datasets) > 0
+        self.root_datasets = args.root_datasets
+        self.src_root_dataset = None  # deferred until run_main()
+        self.dst_root_dataset = None  # deferred until run_main()
+        self.origin_src_root_dataset = None  # deferred until run_main()
+        self.origin_dst_root_dataset = None  # deferred until run_main()
         self.recursive = args.recursive
         self.recursive_flag = '-r' if args.recursive else ""
         self.skip_parent = self.getenv_bool('skip_parent', False)
@@ -494,10 +495,11 @@ class Params:
         self.verbose_trace = True if args.verbose >= 2 else False
         self.enable_privilege_elevation = not args.no_privilege_elevation
         self.exclude_dataset_regexes = None  # deferred to validate() phase
-        self.include_dataset_regexes = None
-        self.exclude_snapshot_regexes = None
-        self.include_snapshot_regexes = None
+        self.include_dataset_regexes = None  # deferred to validate() phase
+        self.exclude_snapshot_regexes = None  # deferred to validate() phase
+        self.include_snapshot_regexes = None  # deferred to validate() phase
         self.zfs_send_program_opts = self.sanitize_send_recv_opts(self.split_args(args.zfs_send_program_opts))
+        self.current_zfs_send_program_opts = None
         self.zfs_recv_program_opts = self.sanitize_send_recv_opts(self.split_args(args.zfs_receive_program_opts))
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, '-v')
@@ -650,7 +652,7 @@ def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
 class Job:
     def __init__(self):
         self.params = None
-        self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
+        self.dst_dataset_exists = None
         self.recordsizes = None
         self.mbuffer_current_opts = None
 
@@ -669,8 +671,20 @@ class Job:
         with open(params.log_file, 'a', encoding='utf-8') as log_fileFD:
             with redirect_stdout(Tee(log_fileFD, sys.stdout)), redirect_stderr(Tee(log_fileFD, sys.stderr)):
                 try:
-                    self.validate()
-                    self.run_main_action()
+                    self.info('CLI arguments:', ' '.join(params.sys_argv), f"[euid: {os.geteuid()}]")
+                    self.debug('Parsed CLI arguments:', str(params.args))
+                    self.validate_once()
+                    for src_root_dataset, dst_root_dataset in params.root_datasets:
+                        assert src_root_dataset is not None
+                        assert dst_root_dataset is not None
+                        params.src_root_dataset = src_root_dataset
+                        params.dst_root_dataset = dst_root_dataset
+                        params.origin_src_root_dataset = src_root_dataset
+                        params.origin_dst_root_dataset = dst_root_dataset
+                        params.current_zfs_send_program_opts = params.zfs_send_program_opts.copy()
+                        self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
+                        self.validate()
+                        self.run_main_action()
                 except RetryableError as e:
                     e = e.__cause__
                     returncode = e.returncode if hasattr(e, 'returncode') else die_status
@@ -690,12 +704,14 @@ class Job:
                 sys.stderr.flush()
         self.info_raw("Log file was: " + params.log_file)
 
+    def validate_once(self):
+        p = self.params
+        p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
+        p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or ['.*'])
+
     def validate(self):
         params = self.params
         p = params
-        self.info('CLI arguments:', ' '.join(params.sys_argv), f"[euid: {os.geteuid()}]")
-        self.debug('Parsed CLI arguments:', str(params.args))
-
         validate_user_name(params.ssh_src_user, '--ssh-src-user')
         validate_user_name(params.ssh_dst_user, '--ssh-dst-user')
         validate_host_name(params.ssh_src_host, '--ssh-src-host')
@@ -725,8 +741,6 @@ class Job:
         p.exclude_dataset_regexes = compile_regexes(exclude_regexes or [exclude_dataset_regexes_default],
                                                     suffix=re_suffix)
         p.include_dataset_regexes = compile_regexes(include_regexes or ['.*'], suffix=re_suffix)
-        p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
-        p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or ['.*'])
 
         params.src_sudo, params.src_use_zfs_delegation = self.sudo_cmd(params.ssh_src_user_host, params.ssh_src_user)
         params.dst_sudo, params.dst_use_zfs_delegation = self.sudo_cmd(params.ssh_dst_user_host, params.ssh_dst_user)
@@ -760,16 +774,18 @@ class Job:
             die(f"Permission denied as ZFS delegation is disabled for destination dataset: {p.origin_dst_root_dataset}. "
                 f"Manually enable it via 'sudo zpool set delegation=on {p.dst_pool}'")
 
+        zfs_send_program_opts = p.current_zfs_send_program_opts
         if self.is_zpool_feature_enabled_or_active('dst', 'feature@large_blocks'):
-            append_if_absent(p.zfs_send_program_opts, '--large-block')  # solaris-11.4.0 does not have this feature
+            append_if_absent(zfs_send_program_opts, '--large-block')  # solaris-11.4.0 does not have this feature
 
         if self.is_solaris_zfs('dst'):
             self.params.dry_run_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -n' flag
             self.params.verbose_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -v' flag
         if self.is_solaris_zfs('src'):  # solaris-11.4.0 only knows -w compress
-            p.zfs_send_program_opts = ['-w' if opt == '--raw' else opt for opt in p.zfs_send_program_opts]
-            p.zfs_send_program_opts = ['compress' if opt == '--compressed' else opt for opt in p.zfs_send_program_opts]
-            p.zfs_send_program_opts = ['-p' if opt == '--props' else opt for opt in p.zfs_send_program_opts]
+            zfs_send_program_opts = ['-w' if opt == '--raw' else opt for opt in zfs_send_program_opts]
+            zfs_send_program_opts = ['compress' if opt == '--compressed' else opt for opt in zfs_send_program_opts]
+            zfs_send_program_opts = ['-p' if opt == '--props' else opt for opt in zfs_send_program_opts]
+        p.current_zfs_send_program_opts = zfs_send_program_opts
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
         is_root = True
@@ -1091,7 +1107,8 @@ class Job:
 
                 size_estimate_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
                 size_estimate_human = human_readable_bytes(size_estimate_bytes)
-                send_cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", p.zfs_send_program_opts, oldest_src_snapshot)
+                send_cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send",
+                                        p.current_zfs_send_program_opts, oldest_src_snapshot)
                 recv_opts = p.zfs_full_recv_opts.copy()
                 if p.getenv_bool('preserve_recordsize', False):
                     recordsize = self.recordsizes[src_dataset]
@@ -1151,7 +1168,7 @@ class Job:
                 size_estimate_bytes = self.estimate_zfs_send_size(incr_flag, start_snapshot, end_snapshot)
                 size_estimate_human = human_readable_bytes(size_estimate_bytes)
                 send_cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send",
-                                        p.zfs_send_program_opts, incr_flag, start_snapshot, end_snapshot)
+                                        p.current_zfs_send_program_opts, incr_flag, start_snapshot, end_snapshot)
                 recv_cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} receive",
                                         p.dry_run_recv, p.zfs_recv_program_opts, dst_dataset)
                 self.info(f"Incremental zfs send: {incr_flag}",
@@ -1618,7 +1635,7 @@ class Job:
         if self.is_solaris_zfs('src'):
             return 0  # solaris-11.4.0 does not have a --parsable equivalent
         p = self.params
-        zfs_send_program_opts = ['--parsable' if opt == '-P' else opt for opt in p.zfs_send_program_opts.copy()]
+        zfs_send_program_opts = ['--parsable' if opt == '-P' else opt for opt in p.current_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, '-v', '-n', '--parsable')
         cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", zfs_send_program_opts, items)
         lines = self.try_ssh_command('src', self.trace, cmd=cmd)
@@ -2189,6 +2206,15 @@ class Tee:
 
     def fileno(self):
         return self.files[0].fileno()
+
+
+#############################################################################
+class DatasetsAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if len(values) % 2 != 0:
+            parser.error("Each SRC_DATASET must have a corresponding DST_DATASET.")
+        pairs = [(values[i], values[i+1]) for i in range(0, len(values), 2)]
+        setattr(namespace, self.dest, pairs)
 
 
 #############################################################################

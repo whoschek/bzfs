@@ -55,7 +55,7 @@ def main():
         manpage_lines = f.readlines()
 
     # Extract replacement_text from cleaned markdown
-    src_dataset_marker = '**SRC_DATASET**'
+    src_dataset_marker = '**SRC_DATASET'
     description_marker = '# DESCRIPTION'
     start_description = next((i for i, line in enumerate(manpage_lines)
                               if line.startswith(description_marker)), None)

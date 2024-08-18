@@ -206,7 +206,9 @@ class WBackupTestCase(ParametrizedTestCase):
                            '--ssh-dst-extra-opt', '-o StrictHostKeyChecking=no']
 
         if params and 'skip_missing_snapshots' in params:
-            args = args[0:2] + ['--skip-missing-snapshots=' + str(params['skip_missing_snapshots'])] + args[2:]
+            i = find_match(args, lambda arg: arg.startswith('-'))
+            i = 0 if i < 0 else i
+            args = args[0:i] + ['--skip-missing-snapshots=' + str(params['skip_missing_snapshots'])] + args[i:]
 
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
@@ -351,6 +353,19 @@ class LocalTestCase(WBackupTestCase):
                     self.assertTrue(job.is_program_available('zstd', loc))
                     self.assertTrue(job.is_program_available('mbuffer', loc))
                     self.assertTrue(job.is_program_available('pv', loc))
+
+    def test_basic_replication_flat_simple_with_multiple_datasets(self):
+        self.setup_basic()
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                job = self.run_wbackup(src_root_dataset, dst_root_dataset,
+                                       src_root_dataset, dst_root_dataset, '-v', '-v',
+                                       dry_run=(i == 0))
+                self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
+                if i == 0:
+                    self.assertSnapshots(dst_root_dataset, 0)
+                else:
+                    self.assertSnapshots(dst_root_dataset, 3, 's')
 
     def test_basic_replication_flat_nonzero_snapshots_create_parents(self):
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
@@ -1538,8 +1553,8 @@ class IsolatedTestCase(WBackupTestCase):
     # def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
     #     LocalTestCase(param=self.param).test_delete_missing_snapshots_with_injected_dataset_deletes()
 
-    def test_basic_replication_with_injected_dataset_deletes(self):
-        LocalTestCase(param=self.param).test_basic_replication_with_injected_dataset_deletes()
+    def test_basic_replication_flat_simple_with_multiple_datasets(self):
+        LocalTestCase(param=self.param).test_basic_replication_flat_simple_with_multiple_datasets()
 
     # def basic_replication_flat_simple_with_retries_on_error_injection(self):
     #     LocalTestCase(param=self.param).basic_replication_flat_simple_with_retries_on_error_injection()
@@ -1549,6 +1564,69 @@ class IsolatedTestCase(WBackupTestCase):
     #
     # def test_basic_replication_skip_missing_snapshots(self):
     #     LocalTestCase(param=self.param).test_basic_replication_skip_missing_snapshots()
+
+
+#############################################################################
+class TestFindMatch(unittest.TestCase):
+
+    def test_basic(self):
+        condition = lambda arg: arg.startswith('-')
+
+        list1 = ['a', 'b', '-c', 'd']
+        self.assertEqual(2, find_match(list1, condition))
+
+        self.assertEqual(2, find_match(list1, condition, -3))
+        self.assertEqual(2, find_match(list1, condition, -2))
+        self.assertEqual(-1, find_match(list1, condition, -1))
+        self.assertEqual(2, find_match(list1, condition, 0))
+        self.assertEqual(2, find_match(list1, condition, 1))
+        self.assertEqual(2, find_match(list1, condition, 2))
+        self.assertEqual(-1, find_match(list1, condition, 3))
+        self.assertEqual(-1, find_match(list1, condition, 4))
+        self.assertEqual(-1, find_match(list1, condition, 5))
+
+        self.assertEqual(-1, find_match(list1, condition, end=-3))
+        self.assertEqual(-1, find_match(list1, condition, end=-2))
+        self.assertEqual(2, find_match(list1, condition, end=-1))
+        self.assertEqual(-1, find_match(list1, condition, end=0))
+        self.assertEqual(-1, find_match(list1, condition, end=1))
+        self.assertEqual(-1, find_match(list1, condition, end=2))
+        self.assertEqual(2, find_match(list1, condition, end=3))
+        self.assertEqual(2, find_match(list1, condition, end=4))
+        self.assertEqual(2, find_match(list1, condition, end=5))
+        self.assertEqual(2, find_match(list1, condition, end=6))
+
+        self.assertEqual(2, find_match(list1, condition, start=2, end=-1))
+        self.assertEqual(-1, find_match(list1, condition, start=2, end=-2))
+        self.assertEqual(-1, find_match(list1, condition, start=3, end=-1))
+
+        list1 = ['-c']
+        self.assertEqual(0, find_match(list1, condition))
+        self.assertEqual(0, find_match(list1, condition, -1))
+        self.assertEqual(0, find_match(list1, condition, 0))
+        self.assertEqual(-1, find_match(list1, condition, 1))
+
+        self.assertEqual(-1, find_match(list1, condition, end=-1))
+        self.assertEqual(-1, find_match(list1, condition, end=0))
+        self.assertEqual(0, find_match(list1, condition, end=1))
+
+        self.assertEqual(-1, find_match(list1, condition, start=2, end=-1))
+        self.assertEqual(-1, find_match(list1, condition, start=2, end=-2))
+        self.assertEqual(-1, find_match(list1, condition, start=3, end=-1))
+
+        list1 = []
+        self.assertEqual(-1, find_match(list1, condition))
+        self.assertEqual(-1, find_match(list1, condition, -1))
+        self.assertEqual(-1, find_match(list1, condition, 0))
+        self.assertEqual(-1, find_match(list1, condition, 1))
+
+        self.assertEqual(-1, find_match(list1, condition, end=-1))
+        self.assertEqual(-1, find_match(list1, condition, end=0))
+        self.assertEqual(-1, find_match(list1, condition, end=1))
+
+        self.assertEqual(-1, find_match(list1, condition, start=2, end=-1))
+        self.assertEqual(-1, find_match(list1, condition, start=2, end=-2))
+        self.assertEqual(-1, find_match(list1, condition, start=3, end=-1))
 
 
 #############################################################################
@@ -1856,6 +1934,18 @@ class TestCLI(unittest.TestCase):
         with self.assertRaises(SystemExit) as e:
             args = parser.parse_args(['--version'])
         self.assertEqual(0, e.exception.code)
+
+    def test_missing_datasets(self):
+        parser = wbackup_zfs.argument_parser()
+        with self.assertRaises(SystemExit) as e:
+            args = parser.parse_args(['--max-retries=1'])
+        self.assertEqual(2, e.exception.code)
+
+    def test_missing_dst_dataset(self):
+        parser = wbackup_zfs.argument_parser()
+        with self.assertRaises(SystemExit) as e:
+            args = parser.parse_args(['src_dataset'])  # Each SRC_DATASET must have a corresponding DST_DATASET
+        self.assertEqual(2, e.exception.code)
 
 
 #############################################################################
@@ -2246,6 +2336,17 @@ def natsort_key(s: str):
     return s, 0
 
 
+def find_match(lst, condition, start=None, end=None):
+    """Returns the index of the first list item that matches the given condition, or -1 if no matching item is found;
+    analog to str.find()"""
+    offset = 0 if start is None else start if start >= 0 else len(lst) + start
+    for i, item in enumerate(lst[start:end], start=offset):
+        if condition(item):
+            return i
+    # raise ValueError("No item found that matches condition")
+    return -1
+
+
 def is_solaris_zfs():
     return platform.system() == 'SunOS'
 
@@ -2261,6 +2362,7 @@ def stop_on_failure_subtest(**params):
 
 def main():
     suite = unittest.TestSuite()
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
     suite.addTest(TestParseDatasetLocator())
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))

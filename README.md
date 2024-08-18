@@ -198,7 +198,7 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--include-envvar-regex REGEX [REGEX ...]]
                    [--exclude-envvar-regex REGEX [REGEX ...]] [--version]
                    [--help, -h]
-                   SRC_DATASET DST_DATASET
+                   SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 
 <!--
@@ -206,10 +206,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 ./test/update-readme.py wbackup_zfs/wbackup_zfs.py README.md
 -->
 
-**SRC_DATASET**
+**SRC_DATASET DST_DATASET**
 
-*  Source ZFS dataset (and its descendants) that will be replicated.
-    Can be a ZFS filesystem or ZFS volume. Format is
+*  SRC_DATASET: Source ZFS dataset (and its descendants) that will be
+    replicated. Can be a ZFS filesystem or ZFS volume. Format is
     [[user@]host:]dataset. The host name can also be an IPv4
     address. If the host name is '-', the dataset will be on the local
     host, and the corresponding SSH leg will be omitted. The same is
@@ -221,14 +221,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     `user@127.0.0.1:tank1/foo/bar:baz:boo`. The first component of the
     ZFS dataset name is the ZFS pool name, here `tank1`.
 
-<!-- -->
-
-**DST_DATASET**
-
-*  Destination ZFS dataset for replication. Has same naming format as
-    SRC_DATASET. During replication, destination datasets that do not
-    yet exist are created as necessary, along with their parent and
-    ancestors.
+    DST_DATASET: Destination ZFS dataset for replication. Has same
+    naming format as SRC_DATASET. During replication, destination
+    datasets that do not yet exist are created as necessary, along with
+    their parent and ancestors.
 
 
 
