@@ -2251,6 +2251,17 @@ class FileOrLiteralAction(argparse.Action):
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Allows you to validate open, closed, and half-open intervals on int as well as float arguments.
+# Each endpoint can be either a number or positive or negative infinity:
+# [a, b] --> min=a, max=b
+# [a, b) --> min=a, sup=b
+# (a, b] --> inf=a, max=b
+# (a, b) --> inf=a, sup=b
+# [a, +infinity) --> min=a
+# (a, +infinity) --> inf=a
+# (-infinity, b] --> max=b
+# (-infinity, b) --> sup=b
 class CheckRange(argparse.Action):
     ops = {'inf': operator.gt,
            'min': operator.ge,
