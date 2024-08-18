@@ -76,6 +76,11 @@ def fix(str):
     return afix + str + afix
 
 
+def os_username():
+    # return getpass.getuser()
+    return pwd.getpwuid(os.getuid()).pw_name
+
+
 #############################################################################
 class ParametrizedTestCase(unittest.TestCase):
     """ TestCase classes that want to be parametrized should
@@ -180,7 +185,7 @@ class WBackupTestCase(ParametrizedTestCase):
         dst_host = ['--ssh-dst-host', '127.0.0.1']
         src_port = ['--ssh-src-port', '22' if port is None else str(port)]
         dst_port = [] if port is None else ['--ssh-dst-port', str(port)]
-        src_user = ['--ssh-src-user', pwd.getpwuid(os.getuid()).pw_name]
+        src_user = ['--ssh-src-user', os_username()]
         src_private_key = ['--ssh-src-private-key', pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"]
         src_ssh_config_file = ['--ssh-config-file', ssh_config_file]
         params = self.param
@@ -214,10 +219,10 @@ class WBackupTestCase(ParametrizedTestCase):
             optional_dst_permissions = ',canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
             optional_dst_permissions = ',keylocation,compression' if not is_solaris_zfs() else ',keysource,encryption,salt,compression,checksum'
             dst_permissions = 'mount,create,receive,rollback,destroy' + optional_dst_permissions
-            cmd = f"sudo zfs allow -u {getpass.getuser()} {src_permissions}".split(' ') + [src_pool_name]
+            cmd = f"sudo zfs allow -u {os_username()} {src_permissions}".split(' ') + [src_pool_name]
             if dataset_exists(src_pool_name):
                 run_cmd(cmd)
-            cmd = f"sudo zfs allow -u {getpass.getuser()} {dst_permissions}".split(' ') + [dst_pool_name]
+            cmd = f"sudo zfs allow -u {os_username()} {dst_permissions}".split(' ') + [dst_pool_name]
             if dataset_exists(dst_pool_name):
                 run_cmd(cmd)
 
@@ -265,10 +270,10 @@ class WBackupTestCase(ParametrizedTestCase):
         finally:
             if self.is_no_privilege_elevation():
                 # revoke all ZFS delegation permissions
-                cmd = f"sudo zfs unallow -r -u {getpass.getuser()}".split(' ') + [src_pool_name]
+                cmd = f"sudo zfs unallow -r -u {os_username()}".split(' ') + [src_pool_name]
                 if dataset_exists(src_pool_name):
                     run_cmd(cmd)
-                cmd = f"sudo zfs unallow -r -u {getpass.getuser()}".split(' ') + [dst_pool_name]
+                cmd = f"sudo zfs unallow -r -u {os_username()}".split(' ') + [dst_pool_name]
                 if dataset_exists(dst_pool_name):
                     run_cmd(cmd)
 
