@@ -2445,7 +2445,7 @@ def stop_on_failure_subtest(**params):
     try:
         yield
     except AssertionError as e:
-        raise AssertionError(f"SubTest failed with parameters: {params}") from e
+        raise AssertionError(f"SubTest failed with parameters: {params}")
 
 
 def main():
