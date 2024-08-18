@@ -2386,7 +2386,6 @@ def find_match(lst, condition, start=None, end=None, reverse=False):
                 return len(lst) - i - 1 + offset
             else:
                 return i + offset
-    # raise ValueError("No item found that matches condition")
     return -1
 
 
