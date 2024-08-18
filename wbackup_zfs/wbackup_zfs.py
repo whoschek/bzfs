@@ -1378,12 +1378,8 @@ class Job:
         if ssh_user_host != "":  # pool is on remote host
             ssh_cmd = [params.ssh_program] + ssh_extra_opts
             if params.ssh_config_file:
-                if not os.path.isfile(params.ssh_config_file):
-                    die("ssh config file does not exist: " + params.ssh_config_file)
                 ssh_cmd += ['-F', params.ssh_config_file]
             if ssh_private_key_file:
-                if not os.path.isfile(ssh_private_key_file):
-                    die("ssh private key file does not exist: " + ssh_private_key_file)
                 ssh_cmd += ['-i', ssh_private_key_file]
             if params.ssh_cipher:
                 ssh_cmd += ['-c', params.ssh_cipher]
