@@ -236,10 +236,26 @@ feature.
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
     parser.add_argument(
+        '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
+        help=(f"The number of times a replication step shall be retried if it fails, for example because of network "
+              f"hiccups (default: {max_retries_default}). "
+              "Also consider this option if a periodic pruning script may simultaneously "
+              f"delete a dataset or snapshot or bookmark while {prog_name} is running and attempting to access "
+              "it.\n\n"))
+    parser.add_argument(
         '--skip-parent', action='store_true',
         help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
              "children, and children of children, etc (with --recursive). No dataset is processed unless --recursive "
              "is also specified.\n\n")
+    parser.add_argument(
+        '--skip-missing-snapshots', choices=['true', 'false', 'error'], default='true', nargs='?',
+        help=("Default is 'true'. During replication, handle source datasets that include no snapshots as follows: "
+              "a) 'error': Abort with an error. "
+              "b) 'true': Skip the source dataset with a warning. Skip descendant datasets if --recursive and "
+              "destination dataset does not exist. "
+              "c) otherwise (regardless of --recursive flag): If destination snapshots exist, delete them (with "
+              "--force) or abort with an error (without --force). Create empty destination dataset and ancestors "
+              "if they do not yet exist and source dataset has at least one descendant that includes a snapshot.\n\n"))
     parser.add_argument(
         '--skip-replication', action='store_true',
         help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "

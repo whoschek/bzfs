@@ -335,30 +335,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--skip-missing-snapshots** *[{true,false,error}]*
-
-*  Default is 'true'. During replication, handle source datasets that
-    include no snapshots as follows: a) 'error': Abort with an
-    error. b) 'true': Skip the source dataset with a warning. Skip
-    descendant datasets if --recursive and destination dataset does not
-    exist. c) otherwise (regardless of --recursive flag): If
-    destination snapshots exist, delete them (with --force) or abort
-    with an error (without --force). Create empty destination dataset
-    and ancestors if they do not yet exist and source dataset has at
-    least one descendant that includes a snapshot.
-
-<!-- -->
-
-**--max-retries** *INT*
-
-*  The number of times a replication step shall be retried if it fails,
-    for example because of network hiccups (default: 0). Also consider
-    this option if a periodic pruning script may simultaneously delete a
-    dataset or snapshot or bookmark while wbackup-zfs is running and
-    attempting to access it.
-
-<!-- -->
-
 **--zfs-send-program-opts** *STRING*
 
 *  Parameters to fine-tune 'zfs send' behaviour (optional); will be
@@ -379,12 +355,36 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--max-retries** *INT*
+
+*  The number of times a replication step shall be retried if it fails,
+    for example because of network hiccups (default: 0). Also consider
+    this option if a periodic pruning script may simultaneously delete a
+    dataset or snapshot or bookmark while wbackup-zfs is running and
+    attempting to access it.
+
+<!-- -->
+
 **--skip-parent**
 
 *  Skip processing of the SRC_DATASET and DST_DATASET and only process
     their descendant datasets, i.e. children, and children of children,
     etc (with --recursive). No dataset is processed unless --recursive
     is also specified.
+
+<!-- -->
+
+**--skip-missing-snapshots** *[{true,false,error}]*
+
+*  Default is 'true'. During replication, handle source datasets that
+    include no snapshots as follows: a) 'error': Abort with an
+    error. b) 'true': Skip the source dataset with a warning. Skip
+    descendant datasets if --recursive and destination dataset does not
+    exist. c) otherwise (regardless of --recursive flag): If
+    destination snapshots exist, delete them (with --force) or abort
+    with an error (without --force). Create empty destination dataset
+    and ancestors if they do not yet exist and source dataset has at
+    least one descendant that includes a snapshot.
 
 <!-- -->
 
