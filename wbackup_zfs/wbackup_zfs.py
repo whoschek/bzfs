@@ -461,7 +461,8 @@ feature.
 
 #############################################################################
 class Params:
-    def __init__(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, inject_params: Dict = None):
+    def __init__(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None,
+                 inject_params: Optional[Dict[str,bool]] = None):
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
         self.inject_params = inject_params if inject_params is not None else {}  # for testing only
@@ -581,8 +582,8 @@ class Params:
         self.min_sleep_nanos = max(1, self.min_sleep_nanos)
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
 
-        self.available_programs = {}
-        self.zpool_features = {}
+        self.available_programs: Dict[str, Dict[str, str]] = {}
+        self.zpool_features: Dict[str, Dict[str, str]] = {}
 
         self.os_geteuid = os.geteuid()
         self.prog_version = prog_version
@@ -1051,7 +1052,7 @@ class Job:
                 # common snapshot was found. rollback dst to that common snapshot
                 if latest_common_guid != latest_dst_guid:
                     _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids,
-                                                                           [latest_common_guid])
+                                                                           {latest_common_guid})
                     if not params.force:
                         die(f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
                             f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
@@ -1189,7 +1190,7 @@ class Job:
 
     def run_zfs_send_receive(self, send_cmd: List[str], recv_cmd: List[str],
                              size_estimate_bytes: int, size_estimate_human: str, is_dry_send_receive: bool,
-                             error_trigger: str = None):
+                             error_trigger: Optional[str] = None):
         params = self.params
         send_cmd = ' '.join([self.cquote(item) for item in send_cmd])
         recv_cmd = ' '.join([self.cquote(item) for item in recv_cmd])
@@ -1428,7 +1429,7 @@ class Job:
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
                 ssh_cmd_trimmed = ssh_cmd[0:-1]  # remove trailing $ssh_user_host
                 ssh_socket_cmd = xappend(ssh_cmd_trimmed.copy(), '-O', 'check', ssh_user_host)
-                if subprocess_run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:  # &> /dev/null
+                if subprocess_run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:
                     self.trace('ssh socket is alive:', ' '.join(ssh_socket_cmd))
                 else:
                     self.trace('ssh socket is not yet alive:', ' '.join(ssh_socket_cmd))
@@ -1461,7 +1462,7 @@ class Job:
                 # 'zfs list' on an empty dataset vs a non-existing dataset.
                 return print_str(process.stdout, print_stdout) if process.returncode == 0 else None
 
-    def try_ssh_command(self, target='src', level=info, is_dry=False, cmd=None, error_trigger=None):
+    def try_ssh_command(self, target='src', level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
             return self.run_ssh_command(target=target, level=level, is_dry=is_dry, check=True, stderr=PIPE, cmd=cmd)
@@ -1475,7 +1476,7 @@ class Job:
             self.warn(stderr)
             raise RetryableError('Subprocess failed') from e
 
-    def maybe_inject_error(self, cmd=None, error_trigger=None):  # for testing only
+    def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None):  # for testing only
         if error_trigger and self.error_injection_triggers[error_trigger] > 0:
             self.error_injection_triggers[error_trigger] -= 1
             raise subprocess.CalledProcessError(returncode=1, cmd=' '.join(cmd),
@@ -1489,10 +1490,10 @@ class Job:
             cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
             self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
-    def cquote(self, arg: str):
+    def cquote(self, arg: str) -> str:
         return shlex.quote(arg)
 
-    def dquote(self, ssh_cmd, arg: str):
+    def dquote(self, ssh_cmd, arg: str) -> str:
         return arg if len(ssh_cmd) == 0 else self.cquote(arg)
 
     def filter_datasets(self, datasets: List[str], root_dataset: str) -> List[str]:
@@ -1554,7 +1555,7 @@ class Job:
     @staticmethod
     def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
         """For each line in input_list, print the line if input_set contains the first column field of that line."""
-        results = []
+        results: List[str] = []
         if len(input_set) == 0:
             return results
         for line in input_list:
@@ -1596,9 +1597,9 @@ class Job:
 
     def create_filesystem(self, filesystem: str) -> None:
         # zfs create -p -u $filesystem
-        # To ensure the filesystems that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
-        # for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u' part only to
-        # the immediate filesystem, rather than to the not-yet existing ancestors.
+        # To ensure the filesystems that we create do not get mounted, we apply a separate 'zfs create -p -u'
+        # invocationvfor each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
+        # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
         p = self.params
         parent = ''
         no_mount = '-u' if self.is_program_available(zfs_version_is_at_least_2_1_0, 'dst') else ''
@@ -1647,6 +1648,7 @@ class Job:
         for line in lines.splitlines():
             if line.startswith('size'):
                 size = line
+        assert size is not None
         return int(size[size.index('\t')+1:])
 
     def dataset_regexes(self, datasets: List[str]) -> List[str]:
@@ -1699,7 +1701,7 @@ class Job:
                     raise retryable_error.__cause__
 
     def incremental_replication_steps_wrapper(self, origin_src_snapshots_with_guids: List[str],
-                                              included_guids: Set[str]) -> List[Tuple[str]]:
+                                              included_guids: Set[str]) -> List[Tuple[str, str, str]]:
         src_guids = []
         src_snapshots = []
         for line in origin_src_snapshots_with_guids:
@@ -1715,9 +1717,10 @@ class Job:
         return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
 
     def incremental_replication_steps(self, src_snapshots: List[str], guids: List[str],
-                                      included_guids: Set[str], force_convert_I_to_i: bool) -> List[Tuple[str]]:
-        """ Computes steps to incrementally replicate the given src snapshots with the given guids such that we include
-        intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
+                                      included_guids: Set[str], force_convert_I_to_i: bool) \
+            -> List[Tuple[str, str, str]]:
+        """ Computes steps to incrementally replicate the given src snapshots with the given guids such that we
+        include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
         excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists.
         Example: skip hourly snapshots and only include daily shapshots for replication
@@ -1965,7 +1968,7 @@ def die(*items):
     exit(die_status)
 
 
-def cut(field: int = None, separator='\t', lines: List[str] = None) -> List[str]:
+def cut(field: int = -1, separator='\t', lines: List[str] = None) -> List[str]:
     """Retain only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command"""
     if field == 1:
         return [line[0:line.index(separator)] for line in lines]
