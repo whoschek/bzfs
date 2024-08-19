@@ -2422,8 +2422,7 @@ def natsort_key(s: str):
 
 def find_match(lst, condition, start=None, end=None, reverse=False):
     """Returns the index within lst of the first item (or last item if reverse==True) that matches the given condition,
-    or -1 if no matching item is found;
-    analog to str.find()"""
+    or -1 if no matching item is found; analog to str.find()"""
     offset = 0 if start is None else start if start >= 0 else len(lst) + start
     if start is not None or end is not None:
         lst = lst[start:end]
