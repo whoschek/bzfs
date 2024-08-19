@@ -1598,7 +1598,7 @@ class Job:
     def create_filesystem(self, filesystem: str) -> None:
         # zfs create -p -u $filesystem
         # To ensure the filesystems that we create do not get mounted, we apply a separate 'zfs create -p -u'
-        # invocationvfor each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
+        # invocation for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
         # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
         p = self.params
         parent = ''
