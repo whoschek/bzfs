@@ -183,9 +183,9 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--exclude-snapshot-regex REGEX [REGEX ...]] [--force]
                    [--force-unmount] [--force-once]
                    [--zfs-send-program-opts STRING]
-                   [--zfs-receive-program-opts STRING] [--max-retries INT]
-                   [--skip-parent]
-                   [--skip-missing-snapshots [{true,false,error}]]
+                   [--zfs-receive-program-opts STRING] [--skip-parent]
+                   [--skip-missing-snapshots [{fail,dataset,continue}]]
+                   [--max-retries INT] [--skip-on-error [{fail,tree,dataset}]]
                    [--skip-replication] [--delete-missing-snapshots]
                    [--delete-missing-datasets] [--no-privilege-elevation]
                    [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
@@ -355,36 +355,77 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--max-retries** *INT*
-
-*  The number of times a replication step shall be retried if it fails,
-    for example because of network hiccups (default: 0). Also consider
-    this option if a periodic pruning script may simultaneously delete a
-    dataset or snapshot or bookmark while wbackup-zfs is running and
-    attempting to access it.
-
-<!-- -->
-
 **--skip-parent**
 
 *  Skip processing of the SRC_DATASET and DST_DATASET and only process
     their descendant datasets, i.e. children, and children of children,
     etc (with --recursive). No dataset is processed unless --recursive
-    is also specified.
+    is also specified. Analogy: `wbackup-zfs --recursive
+    --skip-parent src dst` is akin to Unix `cp -r src/* dst/`
 
 <!-- -->
 
-**--skip-missing-snapshots** *[{true,false,error}]*
+**--skip-missing-snapshots** *[{fail,dataset,continue}]*
 
-*  Default is 'true'. During replication, handle source datasets that
-    include no snapshots as follows: a) 'error': Abort with an
-    error. b) 'true': Skip the source dataset with a warning. Skip
-    descendant datasets if --recursive and destination dataset does not
-    exist. c) otherwise (regardless of --recursive flag): If
-    destination snapshots exist, delete them (with --force) or abort
-    with an error (without --force). Create empty destination dataset
-    and ancestors if they do not yet exist and source dataset has at
-    least one descendant that includes a snapshot.
+*  During replication, handle source datasets that include no snapshots
+    as follows:
+
+    a) 'fail': Abort with an error.
+
+    b) 'dataset' (default): Skip the source dataset with a warning.
+    Skip descendant datasets if --recursive and destination dataset
+    does not exist. Otherwise skip to the next dataset.
+
+    c) 'continue': Skip nothing. If destination snapshots exist,
+    delete them (with --force) or abort with an error (without
+    --force). If there is no such abort, create empty destination
+    dataset and ancestors if they do not yet exist and source dataset
+    has at least one descendant that includes a snapshot. Continue
+    processing with the next dataset.
+
+<!-- -->
+
+**--max-retries** *INT*
+
+*  The number of times a retryable replication step shall be retried if
+    it fails, for example because of network hiccups (default: 0). Also
+    consider this option if a periodic pruning script may simultaneously
+    delete a dataset or snapshot or bookmark while wbackup-zfs is
+    running and attempting to access it.
+
+<!-- -->
+
+**--skip-on-error** *[{fail,tree,dataset}]*
+
+*  During replication, if an error is not retryable, or --max-retries
+    has been exhausted, or --skip-missing-snapshots raises an error,
+    proceed as follows:
+
+    a) 'fail': Abort the program with an error. This mode is ideal
+    for testing, clear error reporting, and situations where consistency
+    trumps availability.
+
+    b) 'tree': Log the error, skip the dataset tree rooted at the
+    dataset for which the error occurred, and continue processing the
+    next (sibling) dataset tree. Example: Assume datasets tank/user1/foo
+    and tank/user2/bar and an error occurs while processing tank/user1.
+    In this case processing skips tank/user1/foo and proceeds with
+    tank/user2.
+
+    c) 'dataset' (default): Same as 'tree' except if the
+    destination dataset already exists, skip to the next dataset
+    instead. Example: Assume datasets tank/user1/foo and tank/user2/bar
+    and an error occurs while processing tank/user1. In this case
+    processing skips tank/user1 and proceeds with tank/user1/foo if the
+    destination already contains tank/user1. Otherwise processing
+    continues with tank/user2. This mode is for production use cases
+    that require timely forward progress even in the presence of partial
+    failures. For example, assume the job is to backup the home
+    directories or virtual machines of thousands of users across an
+    organization. Even if replication of some of the datasets for some
+    users fails due too conflicts, busy datasets, etc, the replication
+    job will continue for the remaining dataset trees and the remaining
+    users.
 
 <!-- -->
 
@@ -428,21 +469,24 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     create/rollback/destroy/send/receive' as root (via 'sudo -u root'
     elevation granted by administrators appending the following to
     /etc/sudoers: `<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`).
+
     Instead, the --no-privilege-elevation flag is for non-root users
     that have been granted corresponding ZFS permissions by
     administrators via 'zfs allow' delegation mechanism, like so: sudo
     zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET;
     sudo zfs allow -u $DST_NON_ROOT_USER_NAME
     mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
-    $DST_DATASET_OR_POOL. For extra security $SRC_NON_ROOT_USER_NAME
-    should be different than $DST_NON_ROOT_USER_NAME, i.e. the sending
-    Unix user on the source and the receiving Unix user at the
-    destination should be separate Unix user accounts with separate
-    private keys, per the principle of least privilege. Further, if you
-    do not plan to use the --force flag or --delete-missing-snapshots
-    or --delete-missing-dataset then ZFS permissions
-    'rollback,destroy' can be omitted. If you do not plan to customize
-    the respective ZFS dataset property then ZFS permissions
+    $DST_DATASET_OR_POOL.
+
+    For extra security $SRC_NON_ROOT_USER_NAME should be different than
+    $DST_NON_ROOT_USER_NAME, i.e. the sending Unix user on the source
+    and the receiving Unix user at the destination should be separate
+    Unix user accounts with separate private keys, per the principle of
+    least privilege. Further, if you do not plan to use the --force
+    flag or --delete-missing-snapshots or --delete-missing-dataset
+    then ZFS permissions 'rollback,destroy' can be omitted. If you do
+    not plan to customize the respective ZFS dataset property then ZFS
+    permissions
     'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
     can be omitted, arriving at the absolutely minimal set of required
     destination permissions: `mount,create,receive`. Also see
@@ -481,8 +525,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     host, then bookmark the snapshot on the source dataset, then delete
     the snapshot from the source dataset to save disk space, and then
     still incrementally send the next upcoming snapshot from the source
-    dataset to the other host by referring to the bookmark. The
-    --no-create-bookmark option disables this safety feature but is
+    dataset to the other host by referring to the bookmark.
+
+    The --no-create-bookmark option disables this safety feature but is
     discouraged, because bookmarks are tiny and relatively cheap and
     help to ensure that ZFS replication can continue even if source and
     destination dataset somehow have no common snapshot anymore. For
@@ -491,38 +536,40 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     disk space, replication can still proceed because it can use the
     info in the bookmark (the bookmark must still exist in the source
     dataset) instead of the info in the metadata of the (now missing)
-    source snapshot. A ZFS bookmark is a tiny bit of metadata extracted
-    from a ZFS snapshot by the 'zfs bookmark' CLI, and attached to a
-    dataset, much like a ZFS snapshot. Note that a ZFS bookmark does not
-    contain user data; instead a ZFS bookmark is essentially a tiny
-    pointer in the form of the GUID of the snapshot and 64-bit
-    transaction group number of the snapshot and creation time of the
-    snapshot, which is sufficient to tell the destination ZFS pool how
-    to find the destination snapshot corresponding to the source
-    bookmark and (potentially already deleted) source snapshot. A
-    bookmark can be fed into 'zfs send' as the source of an
-    incremental send. Note that while a bookmark allows for its snapshot
-    to be deleted on the source after successful replication, it still
-    requires that its snapshot is not somehow deleted prematurely on the
-    destination dataset, so be mindful of that. By convention, a
-    bookmark created by wbackup-zfs has the same name as its
-    corresponding snapshot, the only difference being the leading '#'
-    separator instead of the leading '@' separator. wbackup-zfs itself
-    never deletes any bookmark. You can list bookmarks, like so: `zfs
-    list -t bookmark -o name,guid,createtxg,creation -d 1
-    $SRC_DATASET`, and you can (and should) periodically prune
-    obsolete bookmarks just like snapshots, like so: `zfs destroy
-    $SRC_DATASET#$BOOKMARK`. Typically, bookmarks should be pruned
-    less aggressively than snapshots, and destination snapshots should
-    be pruned less aggressively than source snapshots. As an example
-    starting point, here is a script that deletes all bookmarks older
-    than X days in a given dataset and its descendants: `days=90;
-    dataset=tank/foo/bar; zfs list -t bookmark -o name,creation -Hp -r
-    $dataset | while read -r BOOKMARK CREATION_TIME; do [
-    $CREATION_TIME -le $(($(date +%s) - days * 86400)) ] && echo
-    $BOOKMARK; done | xargs -I {} sudo zfs destroy {}` A better
-    example starting point can be found in third party tools or this
-    script:
+    source snapshot.
+
+    A ZFS bookmark is a tiny bit of metadata extracted from a ZFS
+    snapshot by the 'zfs bookmark' CLI, and attached to a dataset,
+    much like a ZFS snapshot. Note that a ZFS bookmark does not contain
+    user data; instead a ZFS bookmark is essentially a tiny pointer in
+    the form of the GUID of the snapshot and 64-bit transaction group
+    number of the snapshot and creation time of the snapshot, which is
+    sufficient to tell the destination ZFS pool how to find the
+    destination snapshot corresponding to the source bookmark and
+    (potentially already deleted) source snapshot. A bookmark can be fed
+    into 'zfs send' as the source of an incremental send. Note that
+    while a bookmark allows for its snapshot to be deleted on the source
+    after successful replication, it still requires that its snapshot is
+    not somehow deleted prematurely on the destination dataset, so be
+    mindful of that. By convention, a bookmark created by wbackup-zfs
+    has the same name as its corresponding snapshot, the only difference
+    being the leading '#' separator instead of the leading '@'
+    separator. wbackup-zfs itself never deletes any bookmark.
+
+    You can list bookmarks, like so: `zfs list -t bookmark -o
+    name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and
+    should) periodically prune obsolete bookmarks just like snapshots,
+    like so: `zfs destroy $SRC_DATASET#$BOOKMARK`. Typically,
+    bookmarks should be pruned less aggressively than snapshots, and
+    destination snapshots should be pruned less aggressively than source
+    snapshots. As an example starting point, here is a script that
+    deletes all bookmarks older than X days in a given dataset and its
+    descendants: `days=90; dataset=tank/foo/bar; zfs list -t bookmark
+    -o name,creation -Hp -r $dataset | while read -r BOOKMARK
+    CREATION_TIME; do [ $CREATION_TIME -le $(($(date +%s) - days *
+    86400)) ] && echo $BOOKMARK; done | xargs -I {} sudo zfs destroy
+    {}` A better example starting point can be found in third party
+    tools or this script:
     https://github.com/whoschek/wbackup-zfs/blob/main/test/prune_bookmarks.py
 
 <!-- -->
@@ -536,15 +583,17 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     bookmarks. The --no-use-bookmark option disables this safety
     feature but is discouraged, because bookmarks help to ensure that
     ZFS replication can continue even if source and destination dataset
-    somehow have no common snapshot anymore. Note that it does not
-    matter whether a bookmark was created by wbackup-zfs or a third
-    party script, as only the GUID of the bookmark and the GUID of the
-    snapshot is considered for comparison, and ZFS guarantees that any
-    bookmark of a given snapshot automatically has the same GUID,
-    transaction group number and creation time as the snapshot. Also
-    note that you can create, delete and prune bookmarks any way you
-    like, as wbackup-zfs (without --no-use-bookmark) will happily work
-    with whatever bookmarks currently exist, if any.
+    somehow have no common snapshot anymore.
+
+    Note that it does not matter whether a bookmark was created by
+    wbackup-zfs or a third party script, as only the GUID of the
+    bookmark and the GUID of the snapshot is considered for comparison,
+    and ZFS guarantees that any bookmark of a given snapshot
+    automatically has the same GUID, transaction group number and
+    creation time as the snapshot. Also note that you can create, delete
+    and prune bookmarks any way you like, as wbackup-zfs (without
+    --no-use-bookmark) will happily work with whatever bookmarks
+    currently exist, if any.
 
 <!-- -->
 

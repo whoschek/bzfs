@@ -35,8 +35,8 @@ from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional, Iterable, Set
 
+__version__ = '0.9.0'
 prog_name = 'wbackup-zfs'
-prog_version = '0.9.0'
 prog_author = 'Wolfgang Hoschek'
 die_status = 3
 if sys.version_info < (3, 7):
@@ -137,7 +137,7 @@ feature.
 ''', formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
-        'root_datasets', nargs='+', action=DatasetsAction, metavar="SRC_DATASET DST_DATASET",
+        'root_dataset_pairs', nargs='+', action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help=(
             "SRC_DATASET: "
             "Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
@@ -236,26 +236,47 @@ feature.
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
     parser.add_argument(
-        '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
-        help=(f"The number of times a replication step shall be retried if it fails, for example because of network "
-              f"hiccups (default: {max_retries_default}). "
-              "Also consider this option if a periodic pruning script may simultaneously "
-              f"delete a dataset or snapshot or bookmark while {prog_name} is running and attempting to access "
-              "it.\n\n"))
-    parser.add_argument(
         '--skip-parent', action='store_true',
         help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
              "children, and children of children, etc (with --recursive). No dataset is processed unless --recursive "
-             "is also specified.\n\n")
+             f"is also specified. Analogy: `{prog_name} --recursive --skip-parent src dst` is akin to Unix "
+             f"`cp -r src/* dst/`\n\n")
     parser.add_argument(
-        '--skip-missing-snapshots', choices=['true', 'false', 'error'], default='true', nargs='?',
-        help=("Default is 'true'. During replication, handle source datasets that include no snapshots as follows: "
-              "a) 'error': Abort with an error. "
-              "b) 'true': Skip the source dataset with a warning. Skip descendant datasets if --recursive and "
-              "destination dataset does not exist. "
-              "c) otherwise (regardless of --recursive flag): If destination snapshots exist, delete them (with "
-              "--force) or abort with an error (without --force). Create empty destination dataset and ancestors "
-              "if they do not yet exist and source dataset has at least one descendant that includes a snapshot.\n\n"))
+        '--skip-missing-snapshots', choices=['fail', 'dataset', 'continue'], default='dataset', nargs='?',
+        help=("During replication, handle source datasets that include no snapshots as follows:\n\n"
+              "a) 'fail': Abort with an error.\n\n"
+              "b) 'dataset' (default): Skip the source dataset with a warning. Skip descendant datasets if "
+              "--recursive and destination dataset does not exist. Otherwise skip to the next dataset.\n\n"
+              "c) 'continue': Skip nothing. If destination snapshots exist, delete them (with --force) or abort "
+              "with an error (without --force). If there is no such abort, create empty destination dataset and "
+              "ancestors if they do not yet exist and source dataset has at least one descendant that includes a "
+              "snapshot. Continue processing with the next dataset.\n\n"))
+    parser.add_argument(
+        '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
+        help=(f"The number of times a retryable replication step shall be retried if it fails, for example because "
+              f"of network hiccups (default: {max_retries_default}). "
+              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
+              f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n"))
+    parser.add_argument(
+        '--skip-on-error', choices=['fail', 'tree', 'dataset'], default='dataset', nargs='?',
+        help=("During replication, if an error is not retryable, or --max-retries has been exhausted, "
+              "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
+              "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "
+              "error reporting, and situations where consistency trumps availability.\n\n"
+              "b) 'tree': Log the error, skip the dataset tree rooted at the dataset for which the error "
+              "occurred, and continue processing the next (sibling) dataset tree. "
+              "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while processing "
+              "tank/user1. In this case processing skips tank/user1/foo and proceeds with tank/user2.\n\n"
+              "c) 'dataset' (default): Same as 'tree' except if the destination dataset already exists, skip to "
+              "the next dataset instead. "
+              "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while "
+              "processing tank/user1. In this case processing skips tank/user1 and proceeds with tank/user1/foo "
+              "if the destination already contains tank/user1. Otherwise processing continues with tank/user2. "
+              "This mode is for production use cases that require timely forward progress even in the presence of "
+              "partial failures. For example, assume the job is to backup the home directories or virtual machines "
+              "of thousands of users across an organization. Even if replication of some of the datasets for some "
+              "users fails due too conflicts, busy datasets, etc, the replication job will continue for the "
+              "remaining dataset trees and the remaining users.\n\n"))
     parser.add_argument(
         '--skip-replication', action='store_true',
         help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
@@ -279,12 +300,12 @@ feature.
         '--no-privilege-elevation', '-p', action='store_true',
         help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
               "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
-              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`). "
+              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`).\n\n"
               "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
               "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
               "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
               "sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
-              "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL. "
+              "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL.\n\n"
               "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
               "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
               "user accounts with separate private keys, per the principle of least privilege. Further, "
@@ -316,16 +337,16 @@ feature.
               "has been successfully replicated. This way you can send the snapshot from the source dataset to another "
               "host, then bookmark the snapshot on the source dataset, then delete the snapshot from the source "
               "dataset to save disk space, and then still incrementally send the next upcoming snapshot from the "
-              "source dataset to the other host by referring to the bookmark. The --no-create-bookmark option "
-              "disables this safety feature but is discouraged, because bookmarks are tiny and relatively cheap and "
-              "help to ensure that ZFS replication can continue even if source and destination dataset somehow have "
-              "no common snapshot anymore. "
+              "source dataset to the other host by referring to the bookmark.\n\n"
+              "The --no-create-bookmark option disables this safety feature but is discouraged, because bookmarks "
+              "are tiny and relatively cheap and help to ensure that ZFS replication can continue even if source and "
+              "destination dataset somehow have no common snapshot anymore. "
               "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
               "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
               "the info in the bookmark (the bookmark must still exist in the source dataset) instead of the info in "
-              "the metadata of the (now missing) source snapshot. A ZFS bookmark is a tiny bit of metadata extracted "
-              "from a ZFS snapshot by the 'zfs bookmark' CLI, and attached to a dataset, much like a ZFS snapshot. "
-              "Note that a ZFS bookmark does not contain user data; "
+              "the metadata of the (now missing) source snapshot.\n\n"
+              "A ZFS bookmark is a tiny bit of metadata extracted from a ZFS snapshot by the 'zfs bookmark' CLI, and "
+              "attached to a dataset, much like a ZFS snapshot. Note that a ZFS bookmark does not contain user data; "
               "instead a ZFS bookmark is essentially a tiny pointer in the form of the GUID of the snapshot and 64-bit "
               "transaction group number of the snapshot and creation time of the snapshot, which is sufficient to tell "
               "the destination ZFS pool how to find the destination snapshot corresponding to the source bookmark "
@@ -335,7 +356,7 @@ feature.
               "somehow deleted prematurely on the destination dataset, so be mindful of that. "
               f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
               "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
-              f"{prog_name} itself never deletes any bookmark. "
+              f"{prog_name} itself never deletes any bookmark.\n\n"
               "You can list bookmarks, like so: "
               "`zfs list -t bookmark -o name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and should) "
               "periodically prune obsolete bookmarks just like snapshots, like so: "
@@ -356,7 +377,7 @@ feature.
               "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks. "
               "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
               "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
-              "common snapshot anymore. "
+              "common snapshot anymore.\n\n"
               f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
               "as only the GUID of the bookmark and the GUID of the snapshot is considered for comparison, and ZFS "
               "guarantees that any bookmark of a given snapshot automatically has the same GUID, transaction group "
@@ -451,7 +472,7 @@ feature.
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
              f"environment variables. Examples: `{env_var_prefix}disable_.*`, `{env_var_prefix}.*`\n\n")
     parser.add_argument(
-        '--version', action='version', version=f"{prog_name}-{prog_version}, by {prog_author}",
+        '--version', action='version', version=f"{prog_name}-{__version__}, by {prog_author}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
         '--help, -h', action='help',
@@ -462,14 +483,14 @@ feature.
 #############################################################################
 class Params:
     def __init__(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None,
-                 inject_params: Optional[Dict[str,bool]] = None):
+                 inject_params: Optional[Dict[str, bool]] = None):
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
         self.inject_params = inject_params if inject_params is not None else {}  # for testing only
         self.unset_matching_env_vars(args)
         self.one_or_more_whitespace_regex = re.compile(r'\s+')
-        assert len(args.root_datasets) > 0
-        self.root_datasets = args.root_datasets
+        assert len(args.root_dataset_pairs) > 0
+        self.root_dataset_pairs = args.root_dataset_pairs
         self.src_root_dataset = None  # deferred until run_main()
         self.dst_root_dataset = None  # deferred until run_main()
         self.origin_src_root_dataset = None  # deferred until run_main()
@@ -483,7 +504,7 @@ class Params:
             self.force = True
         self.force_unmount = '-f' if args.force_unmount else ""
         self.force_hard = '-R' if args.force_hard else ""
-        self.skip_missing_snapshots = {'true': True, 'false': False, 'error': None}[args.skip_missing_snapshots]
+        self.skip_missing_snapshots = args.skip_missing_snapshots
         self.create_bookmark = not args.no_create_bookmark
         self.use_bookmark = not args.no_use_bookmark
         self.no_stream = args.no_stream
@@ -572,6 +593,7 @@ class Params:
         self.shell_program = self.program_name(self.shell_program_local)
         self.uname_program = self.program_name('uname')
 
+        self.skip_on_error = args.skip_on_error
         self.max_retries = args.max_retries
         self.min_sleep_secs = float(self.getenv('min_sleep_secs', 0.125))
         self.max_sleep_secs = float(self.getenv('max_sleep_secs', 5 * 60))
@@ -586,7 +608,7 @@ class Params:
         self.zpool_features: Dict[str, Dict[str, str]] = {}
 
         self.os_geteuid = os.geteuid()
-        self.prog_version = prog_version
+        self.prog_version = __version__
         self.python_version = sys.version
         self.platform_version = platform.version()
         self.platform_platform = platform.platform()
@@ -647,6 +669,8 @@ def main():
         run_main(argument_parser().parse_args(), sys.argv)
     except subprocess.CalledProcessError as e:
         sys.exit(e.returncode)
+    except SystemExit as e:
+        sys.exit(e.code)
 
 
 def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
@@ -661,54 +685,65 @@ class Job:
         self.dst_dataset_exists = None
         self.recordsizes = None
         self.mbuffer_current_opts = None
+        self.all_exceptions = []
+        self.first_exception = None
 
         self.is_test_mode = False  # for testing only
-        self.error_injection_triggers = Counter()  # for testing only
-        self.delete_injection_triggers = Counter()  # for testing only
+        self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
+        self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.inject_params = {}  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
-        self.params = Params(args, sys_argv, self.inject_params)
-        params = self.params
-        create_symlink(params.log_file, params.log_dir, 'current.log')
-        self.info_raw("Log file is: " + params.log_file)
-        create_symlink(params.pv_log_file, params.log_dir, 'current.pv')
+        self.params = p = Params(args, sys_argv, self.inject_params)
+        create_symlink(p.log_file, p.log_dir, 'current.log')
+        self.info_raw("Log file is: " + p.log_file)
+        create_symlink(p.pv_log_file, p.log_dir, 'current.pv')
 
-        with open(params.log_file, 'a', encoding='utf-8') as log_fileFD:
+        with open(p.log_file, 'a', encoding='utf-8') as log_fileFD:
             with redirect_stdout(Tee(log_fileFD, sys.stdout)), redirect_stderr(Tee(log_fileFD, sys.stderr)):
+                self.info('CLI arguments:', ' '.join(p.sys_argv), f"[euid: {os.geteuid()}]")
+                self.debug('Parsed CLI arguments:', str(p.args))
                 try:
-                    self.info('CLI arguments:', ' '.join(params.sys_argv), f"[euid: {os.geteuid()}]")
-                    self.debug('Parsed CLI arguments:', str(params.args))
                     self.validate_once()
-                    for src_root_dataset, dst_root_dataset in params.root_datasets:
-                        assert src_root_dataset is not None
-                        assert dst_root_dataset is not None
-                        params.src_root_dataset = src_root_dataset
-                        params.dst_root_dataset = dst_root_dataset
-                        params.origin_src_root_dataset = src_root_dataset
-                        params.origin_dst_root_dataset = dst_root_dataset
-                        params.current_zfs_send_program_opts = params.zfs_send_program_opts.copy()
+                    self.all_exceptions = []
+                    self.first_exception = None
+                    for i, (src_root_dataset, dst_root_dataset) in enumerate(p.root_dataset_pairs):
+                        p.src_root_dataset = p.origin_src_root_dataset = src_root_dataset
+                        p.dst_root_dataset = p.origin_dst_root_dataset = dst_root_dataset
+                        p.current_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
-                        self.validate()
-                        self.run_main_action()
-                except RetryableError as e:
-                    e = e.__cause__
-                    returncode = e.returncode if hasattr(e, 'returncode') else die_status
-                    error(f"Exiting with status code: {returncode}")
-                    raise e
+                        self.info('ZFS source --> destination:',
+                                  f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
+                        try:
+                            self.validate()
+                            self.run_main_action()
+                        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit) as e:
+                            error(str(e))
+                            if p.skip_on_error == 'fail':
+                                raise
+                            self.first_exception = self.first_exception or e
+                            self.all_exceptions.append(str(e))
+                            error(f"#{len(self.all_exceptions)}: ZFS source --> destination:",
+                                  f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
+                    error_count = len(self.all_exceptions)
+                    if error_count > 0:
+                        msgs = '\n'.join([f"{i+1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
+                        error(f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
+                        raise self.first_exception  # reraise first swallowed exception
                 except subprocess.CalledProcessError as e:
                     error(f"Exiting with status code: {e.returncode}")
                     raise
                 except SystemExit as e:
                     error(f"Exiting with status code: {e.code}")
                     raise
+                finally:
+                    self.info_raw("Log file was: " + p.log_file)
 
-                for line in tail(params.pv_log_file, 10):
+                for line in tail(p.pv_log_file, 10):
                     print(line, end='')
                 self.info_raw('Success. Goodbye!')
                 sys.stdout.flush()
                 sys.stderr.flush()
-        self.info_raw("Log file was: " + params.log_file)
 
     def validate_once(self):
         p = self.params
@@ -814,8 +849,6 @@ class Job:
     def run_main_action(self):
         params = self.params
         p = params
-        self.info('ZFS source --> destination:',
-                  f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name",
@@ -831,6 +864,7 @@ class Job:
 
         origin_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src_datasets, p.src_root_dataset))  # apply include/exclude policy
+        failed = False
 
         # Optionally, replicate src_root_dataset (optionally including its descendants) to dst_root_dataset
         if not params.skip_replication:
@@ -851,13 +885,24 @@ class Job:
                 self.debug('Replicating:', f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = (['-s', str(max(128 * 1024, abs(self.recordsizes[src_dataset])))]
                                              + p.mbuffer_program_opts)
-                if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
-                    skip_src_dataset = src_dataset
+                try:
+                    if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
+                        skip_src_dataset = src_dataset
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit) as e:
+                    if p.skip_on_error == 'fail':
+                        raise
+                    elif p.skip_on_error == 'tree' or not self.dst_dataset_exists[dst_dataset]:
+                        skip_src_dataset = src_dataset
+                    failed = True
+                    self.first_exception = self.first_exception or e
+                    self.all_exceptions.append(str(e))
+                    error(str(e))
+                    error(f"#{len(self.all_exceptions)}: Replicating:", f"{src_dataset} --> {dst_dataset}")
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex and the destination
         # dataset is included via --{include|exclude}-dataset-regex --{include|exclude}-dataset policy
-        if params.delete_missing_snapshots:
+        if params.delete_missing_snapshots and not failed:
             self.info('--delete-missing-snapshots:',
                       f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
             skip_src_dataset = ""
@@ -872,7 +917,7 @@ class Job:
                                          delete_trigger='zfs_list_snapshot_src_for_delete_missing_snapshots')
                 try:
                     src_snapshots_with_guids = self.run_ssh_command('src', self.trace, cmd=cmd).splitlines()
-                except subprocess.CalledProcessError as e:
+                except subprocess.CalledProcessError:
                     self.warn('Third party deleted source:', src_dataset)
                     skip_src_dataset = src_dataset
                     origin_src_datasets.remove(src_dataset)
@@ -892,7 +937,7 @@ class Job:
         # Also delete an existing destination dataset that has no snapshot if all descendants of that dataset do not
         # have a snapshot either (again, only if the existing destination dataset is included via
         # --{include|exclude}-dataset-regex --{include|exclude}-dataset policy). Does not recurse without --recursive.
-        if params.delete_missing_datasets:
+        if params.delete_missing_datasets and not failed:
             self.info('--delete-missing-datasets:',
                       f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...")
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name",
@@ -1003,10 +1048,10 @@ class Job:
                 if oldest_src_snapshot == "":
                     oldest_src_snapshot = snapshot
         if len(src_snapshots_with_guids) == 0:
-            if params.skip_missing_snapshots is None:
+            if params.skip_missing_snapshots == 'fail':
                 die(f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
                     f"using --skip-missing-snapshots=true")
-            elif params.skip_missing_snapshots:
+            elif params.skip_missing_snapshots == 'dataset':
                 self.warn('Skipping source dataset because it includes no snapshot:', src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and params.recursive:
                     self.warn('Also skipping descendant datasets because destination dataset does not exist:',
@@ -1477,18 +1522,22 @@ class Job:
             raise RetryableError('Subprocess failed') from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None):  # for testing only
-        if error_trigger and self.error_injection_triggers[error_trigger] > 0:
-            self.error_injection_triggers[error_trigger] -= 1
-            raise subprocess.CalledProcessError(returncode=1, cmd=' '.join(cmd),
-                                                stderr=error_trigger + ': dataset is busy')
+        if error_trigger:
+            counter = self.error_injection_triggers.get("before")
+            if counter and counter[error_trigger] > 0:
+                counter[error_trigger] -= 1
+                raise subprocess.CalledProcessError(returncode=1, cmd=' '.join(cmd),
+                                                    stderr=error_trigger + ': dataset is busy')
 
     def maybe_inject_delete(self, location=None, dataset=None, delete_trigger=None):  # for testing only
-        if delete_trigger and self.delete_injection_triggers[delete_trigger] > 0:
-            self.delete_injection_triggers[delete_trigger] -= 1
-            p = self.params
-            sudo = p.src_sudo if location == 'src' else p.dst_sudo
-            cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
-            self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
+        if delete_trigger:
+            counter = self.delete_injection_triggers.get("before")
+            if counter and counter[delete_trigger] > 0:
+                counter[delete_trigger] -= 1
+                p = self.params
+                sudo = p.src_sudo if location == 'src' else p.dst_sudo
+                cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
+                self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
     def cquote(self, arg: str) -> str:
         return shlex.quote(arg)
@@ -1689,7 +1738,7 @@ class Job:
                 if retry_count < params.max_retries and elapsed_nanos < params.max_elapsed_nanos:
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(params.min_sleep_nanos, max_sleep_mark)
-                    self.info(f"Retrying attempt [{retry_count + 1}/{params.max_retries}] soon ...")
+                    self.info(f"Retrying [{retry_count + 1}/{params.max_retries}] soon ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     retry_count = retry_count + 1
                     max_sleep_mark = min(params.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
@@ -1964,8 +2013,9 @@ def error(*items):
 
 
 def die(*items):
-    error(*items)
-    exit(die_status)
+    ex = SystemExit(' '.join(items))
+    ex.code = die_status
+    raise ex
 
 
 def cut(field: int = -1, separator='\t', lines: List[str] = None) -> List[str]:
@@ -2041,7 +2091,7 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     return regex
 
 
-def isorted(iterable, reverse=False) -> List:
+def isorted(iterable: Iterable[str], reverse=False) -> List[str]:
     """ case-insensitive sort (A < a < B < b and so on) """
     return sorted(iterable, key=str.casefold, reverse=reverse)
 
@@ -2168,24 +2218,24 @@ def validate_dataset_name(dataset, input_text):
             or '"' in ds or "'" in ds or '%' in ds
             or any(char.isspace() and char != ' ' for char in ds)
             or not ds[0].isalpha()):
-        raise ValueError(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
+        die(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
 def validate_user_name(user, input_text):
     if user and any(char.isspace() or char == '"' or char == "'" for char in user):
-        raise ValueError(f"Illegal user name: '{user}' for: '{input_text}'")
+        die(f"Illegal user name: '{user}' for: '{input_text}'")
 
 
 def validate_host_name(host, input_text):
     if host and any(char.isspace() or char == '@' or char == '"' or char == "'" for char in host):
-        raise ValueError(f"Illegal host name: '{host}' for: '{input_text}'")
+        die(f"Illegal host name: '{host}' for: '{input_text}'")
 
 
 def validate_port(port, message):
     if isinstance(port, int):
         port = str(port)
     if port and not port.isdigit():
-        raise ValueError(message + f"must be empty or a positive integer: '{port}'")
+        die(message + f"must be empty or a positive integer: '{port}'")
 
 
 #############################################################################
@@ -2214,7 +2264,7 @@ class Tee:
 
 
 #############################################################################
-class DatasetsAction(argparse.Action):
+class DatasetPairsAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         if len(values) % 2 != 0:
             parser.error("Each SRC_DATASET must have a corresponding DST_DATASET.")
