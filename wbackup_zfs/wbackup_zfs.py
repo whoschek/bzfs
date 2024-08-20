@@ -751,8 +751,7 @@ class Job:
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or ['.*'])
 
     def validate(self):
-        params = self.params
-        p = params
+        p = params = self.params
         validate_user_name(params.ssh_src_user, '--ssh-src-user')
         validate_user_name(params.ssh_dst_user, '--ssh-dst-user')
         validate_host_name(params.ssh_src_host, '--ssh-src-host')
@@ -847,8 +846,7 @@ class Job:
             return (self.params.sudo_program, False) if self.params.enable_privilege_elevation else ("", True)
 
     def run_main_action(self):
-        params = self.params
-        p = params
+        p = params = self.params
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name",
@@ -980,8 +978,7 @@ class Job:
         """Replicate src_dataset (without handling descendants) to dst_dataset"""
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
-        params = self.params
-        p = params
+        p = params = self.params
         use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src')
         props = 'creation,guid,name' if use_bookmark else 'guid,name'
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
@@ -1050,7 +1047,7 @@ class Job:
         if len(src_snapshots_with_guids) == 0:
             if params.skip_missing_snapshots == 'fail':
                 die(f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
-                    f"using --skip-missing-snapshots=true")
+                    f"using --skip-missing-snapshots=dataset")
             elif params.skip_missing_snapshots == 'dataset':
                 self.warn('Skipping source dataset because it includes no snapshot:', src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and params.recursive:
@@ -1347,9 +1344,8 @@ class Job:
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If mbuffer command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
         smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation"""
-        params = self.params
-        p = params
-        if size_estimate_bytes >= params.min_transfer_size and \
+        p = self.params
+        if size_estimate_bytes >= p.min_transfer_size and \
             ( (loc == 'src' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") )
             or (loc == 'dst' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") )
             or (loc == 'local' and p.ssh_src_user_host != "" and p.ssh_dst_user_host != "") ) \
@@ -1361,8 +1357,7 @@ class Job:
     def compress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If zstd command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
         reduce network bottlenecks by sending compressed data."""
-        params = self.params
-        p = params
+        p = self.params
         if size_estimate_bytes >= p.min_transfer_size and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") \
             and self.is_program_available('zstd', loc):
             return f"{p.compression_program} {' '.join(p.compression_program_opts)}"
@@ -1370,8 +1365,7 @@ class Job:
             return 'cat'
 
     def decompress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
-        params = self.params
-        p = params
+        p = self.params
         if size_estimate_bytes >= p.min_transfer_size and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "") \
             and self.is_program_available('zstd', loc):
             return f"{p.compression_program} -d"
@@ -1381,8 +1375,7 @@ class Job:
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
         """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka current.pv or similar """
-        params = self.params
-        p = params
+        p = self.params
         if size_estimate_bytes >= p.min_transfer_size and self.is_program_available('pv', loc):
             size = f"--size={size_estimate_bytes}"
             if disable_progress_bar:
@@ -1844,8 +1837,7 @@ class Job:
         return program in self.params.available_programs[location]
 
     def detect_available_programs(self) -> None:
-        params = self.params
-        p = params
+        p = params = self.params
         available_programs = params.available_programs
         available_programs['local'] = dict.fromkeys(subprocess_run(
             [p.shell_program_local, '-c', self.find_available_programs()],
