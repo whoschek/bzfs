@@ -22,6 +22,7 @@ from collections import defaultdict
 
 
 def main():
+    # fmt: off
     parser = argparse.ArgumentParser(
         description="Example ZFS bookmark pruning script that deletes the oldest bookmarks older than X days in a "
                     "given dataset and optionally also its descendant datasets, such that each dataset retains at "
@@ -38,12 +39,16 @@ def main():
                         help="Actually delete snapshots instead of bookmarks.")
     parser.add_argument('--dry-run', '-n', action='store_true',
                         help="Include this flag to print what would happen if the command were to be run for real.")
+    # fmt: on
 
     args = parser.parse_args()
     kind = 'snapshot' if args.snapshot else 'bookmark'
     if args.min_bookmarks_to_retain <= 0:
-        print(f"Cowardly refusing to potentially delete all your {kind}s; "
-              f"--min-bookmarks-to-retain must be greater than zero: {args.min_bookmarks_to_retain}", file=sys.stderr)
+        print(
+            f"Cowardly refusing to potentially delete all your {kind}s; "
+            f"--min-bookmarks-to-retain must be greater than zero: {args.min_bookmarks_to_retain}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     for root_dataset in args.dataset:
@@ -59,7 +64,7 @@ def main():
 
         for dataset, bookmarks in sorted(datasets.items()):
             n = max(0, len(bookmarks) - args.min_bookmarks_to_retain)
-            for bookmark in [bmark for ts, bmark in sorted(bookmarks) if ts <= int(time.time()) - args.days*86400][0:n]:
+            for bookmark in [bm for ts, bm in sorted(bookmarks) if ts <= int(time.time()) - args.days * 86400][0:n]:
                 msg = "Would delete" if args.dry_run else "Deleting"
                 print(f"{msg} {kind}: {bookmark} ...")
                 if not args.dry_run:

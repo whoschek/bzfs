@@ -47,7 +47,21 @@ def main():
     subprocess.run(cmd, check=True)
 
     # Step 3: Clean up markdown file
-    cmd = ['sed', '-i.bak', '-e', r's/\\\([`#-_|>\[\*]\)/\1/g', '-e', r"s/\\\'/'/g", '-e', r"s/\\\]/\]/g", '-e', r's/# OPTIONS//g', '-e', r's/:   /*  /g', tmp_manpage_md_path]
+    cmd = [
+        'sed',
+        '-i.bak',
+        '-e',
+        r's/\\\([`#-_|>\[\*]\)/\1/g',
+        '-e',
+        r"s/\\\'/'/g",
+        '-e',
+        r"s/\\\]/\]/g",
+        '-e',
+        r's/# OPTIONS//g',
+        '-e',
+        r's/:   /*  /g',
+        tmp_manpage_md_path,
+    ]
     subprocess.run(cmd, check=True)
 
     # Read the cleaned markdown file
@@ -57,12 +71,17 @@ def main():
     # Extract replacement_text from cleaned markdown
     src_dataset_marker = '**SRC_DATASET'
     description_marker = '# DESCRIPTION'
-    start_description = next((i for i, line in enumerate(manpage_lines)
-                              if line.startswith(description_marker)), None)
-    start_src_dataset = next((i for i, line in enumerate(manpage_lines[start_description:], start=start_description)
-                              if src_dataset_marker in line), None)
+    start_description = next((i for i, line in enumerate(manpage_lines) if line.startswith(description_marker)), None)
+    start_src_dataset = next(
+        (
+            i
+            for i, line in enumerate(manpage_lines[start_description:], start=start_description)
+            if src_dataset_marker in line
+        ),
+        None,
+    )
     if start_description is not None and start_src_dataset is not None:
-        replacement_text = ''.join(manpage_lines[start_description + 1:start_src_dataset]).strip()
+        replacement_text = ''.join(manpage_lines[start_description + 1 : start_src_dataset]).strip()
     else:
         print(f"Markers {description_marker} or {src_dataset_marker} not found in the cleaned markdown.")
         sys.exit(1)
@@ -74,14 +93,19 @@ def main():
     wbackup_marker = 'wbackup-zfs'
     install_marker = '# How To Install and Run'
 
-    start_wbackup = next((i for i, line in enumerate(readme_lines)
-                          if line.strip() == wbackup_marker), None)
-    start_install = next((i for i, line in enumerate(readme_lines[start_wbackup:], start=start_wbackup)
-                          if line.strip().startswith(install_marker)), None)
+    start_wbackup = next((i for i, line in enumerate(readme_lines) if line.strip() == wbackup_marker), None)
+    start_install = next(
+        (
+            i
+            for i, line in enumerate(readme_lines[start_wbackup:], start=start_wbackup)
+            if line.strip().startswith(install_marker)
+        ),
+        None,
+    )
 
     if start_wbackup is not None and start_install is not None:
         # Retain the first line after the wbackup_marker as is
-        updated_lines = readme_lines[:start_wbackup + 2] + [replacement_text + '\n\n'] + readme_lines[start_install:]
+        updated_lines = readme_lines[: start_wbackup + 2] + [replacement_text + '\n\n'] + readme_lines[start_install:]
         with open(readme_file, 'w') as f:
             f.writelines(updated_lines)
     else:
@@ -98,10 +122,10 @@ def main():
         sys.exit(1)
 
     # Extract lines after the marker from wbackup_zfs.py
-    extracted_lines = manpage_lines[start_index1 + 1:]
+    extracted_lines = manpage_lines[start_index1 + 1 :]
 
     # Retain lines before and including the marker in readme_file and replace the rest
-    updated_lines = readme_lines[:start_index2 + 1] + extracted_lines
+    updated_lines = readme_lines[: start_index2 + 1] + extracted_lines
 
     with open(readme_file, 'w') as f:
         f.writelines(updated_lines)

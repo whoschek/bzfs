@@ -49,11 +49,12 @@ os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
 os.write(ssh_config_file_fd, '# Empty ssh_config file'.encode())
 
 keylocation = f"file://{zfs_encryption_key}"
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(message)s',
-                    # datefmt='%Y-%m-%d %H:%M:%S',
-                    datefmt='%H:%M:%S:',
-                    )
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(message)s',
+    # datefmt='%Y-%m-%d %H:%M:%S',
+    datefmt='%H:%M:%S:',
+)
 
 
 def getenv_any(key, default=None):
@@ -82,17 +83,18 @@ def os_username():
 
 #############################################################################
 class ParametrizedTestCase(unittest.TestCase):
-    """ TestCase classes that want to be parametrized should
-        inherit from this class.
+    """TestCase classes that want to be parametrized should
+    inherit from this class.
     """
+
     def __init__(self, methodName='runTest', param=None):
         super(ParametrizedTestCase, self).__init__(methodName)
         self.param = param
 
     @staticmethod
     def parametrize(testcase_klass, param=None):
-        """ Create a suite containing all test taken from the given
-            subclass, passing them the parameter 'param'.
+        """Create a suite containing all test taken from the given
+        subclass, passing them the parameter 'param'.
         """
         testloader = unittest.TestLoader()
         testnames = testloader.getTestCaseNames(testcase_klass)
@@ -132,8 +134,9 @@ class WBackupTestCase(ParametrizedTestCase):
             detect_zpool_features('src', src_pool_name)
             print(f"zpool bookmarks feature: {is_zpool_bookmarks_feature_enabled_or_active('src')}", file=sys.stderr)
             props = zpool_features['src']
-            features = '\n'.join([f"{k}: {v}" for k, v in sorted(props.items())
-                                  if k.startswith('feature@') or k == 'delegation'])
+            features = '\n'.join(
+                [f"{k}: {v}" for k, v in sorted(props.items()) if k.startswith('feature@') or k == 'delegation']
+            )
             print(f"zpool features: {features}", file=sys.stderr)
 
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/wbackup-zfs/
@@ -176,9 +179,21 @@ class WBackupTestCase(ParametrizedTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))  # b/c src has no snapshots
 
-    def run_wbackup(self, *args, dry_run=None, no_create_bookmark=False, no_use_bookmark=False, skip_on_error='fail', expected_status=0,
-                    error_injection_triggers=None, delete_injection_triggers=None, inject_params=None):
-        port = getenv_any('test_ssh_port')  # set this if sshd is on a non-standard port: export wbackup_zfs_test_ssh_port=12345
+    def run_wbackup(
+        self,
+        *args,
+        dry_run=None,
+        no_create_bookmark=False,
+        no_use_bookmark=False,
+        skip_on_error='fail',
+        expected_status=0,
+        error_injection_triggers=None,
+        delete_injection_triggers=None,
+        inject_params=None,
+    ):
+        port = getenv_any(
+            'test_ssh_port'
+        )  # set this if sshd is on a non-standard port: export wbackup_zfs_test_ssh_port=12345
         args = list(args)
         src_host = ['--ssh-src-host', '127.0.0.1']
         dst_host = ['--ssh-dst-host', '127.0.0.1']
@@ -202,8 +217,12 @@ class WBackupTestCase(ParametrizedTestCase):
             raise ValueError("Unknown ssh_mode: " + params['ssh_mode'])
 
         if params and params.get('ssh_mode', 'local') != 'local':
-            args = args + ['--ssh-src-extra-opt', '-o StrictHostKeyChecking=no',
-                           '--ssh-dst-extra-opt', '-o StrictHostKeyChecking=no']
+            args = args + [
+                '--ssh-src-extra-opt',
+                '-o StrictHostKeyChecking=no',
+                '--ssh-dst-extra-opt',
+                '-o StrictHostKeyChecking=no',
+            ]
 
         if params and 'skip_missing_snapshots' in params:
             i = find_match(args, lambda arg: arg.startswith('-'))
@@ -219,7 +238,11 @@ class WBackupTestCase(ParametrizedTestCase):
             if delete_injection_triggers is not None:
                 src_permissions += ',destroy,mount'
             optional_dst_permissions = ',canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
-            optional_dst_permissions = ',keylocation,compression' if not is_solaris_zfs() else ',keysource,encryption,salt,compression,checksum'
+            optional_dst_permissions = (
+                ',keylocation,compression'
+                if not is_solaris_zfs()
+                else ',keysource,encryption,salt,compression,checksum'
+            )
             dst_permissions = 'mount,create,receive,rollback,destroy' + optional_dst_permissions
             cmd = f"sudo zfs allow -u {os_username()} {src_permissions}".split(' ') + [src_pool_name]
             if dataset_exists(src_pool_name):
@@ -361,9 +384,9 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                       src_root_dataset, dst_root_dataset, '-v', '-v',
-                                       dry_run=(i == 0))
+                job = self.run_wbackup(
+                    src_root_dataset, dst_root_dataset, src_root_dataset, dst_root_dataset, '-v', '-v', dry_run=(i == 0)
+                )
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset, 0)
@@ -374,11 +397,19 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(src_root_dataset + "_nonexistingdataset1", dst_root_dataset,
-                                       src_root_dataset, dst_root_dataset,
-                                       src_root_dataset + "_nonexistingdataset2", dst_root_dataset,
-                                       "--delete-missing-snapshots", "--delete-missing-datasets",
-                                       dry_run=(i == 0), skip_on_error='dataset', expected_status=die_status)
+                job = self.run_wbackup(
+                    src_root_dataset + "_nonexistingdataset1",
+                    dst_root_dataset,
+                    src_root_dataset,
+                    dst_root_dataset,
+                    src_root_dataset + "_nonexistingdataset2",
+                    dst_root_dataset,
+                    "--delete-missing-snapshots",
+                    "--delete-missing-datasets",
+                    dry_run=(i == 0),
+                    skip_on_error='dataset',
+                    expected_status=die_status,
+                )
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset, 0)
@@ -407,10 +438,15 @@ class LocalTestCase(WBackupTestCase):
                 extra_opt = ""
                 if is_zpool_feature_enabled_or_active('src', 'feature@large_blocks'):
                     extra_opt = ' --large-block'
-                self.run_wbackup(src_root_dataset + '/foo/a', dst_root_dataset + '/foo/a',
-                                 '-v', '-v',
-                                 '--zfs-send-program-opts=-v --dryrun' + extra_opt,
-                                 '--zfs-receive-program-opts=--verbose -n -u', dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset + '/foo/a',
+                    dst_root_dataset + '/foo/a',
+                    '-v',
+                    '-v',
+                    '--zfs-send-program-opts=-v --dryrun' + extra_opt,
+                    '--zfs-receive-program-opts=--verbose -n -u',
+                    dry_run=(i == 0),
+                )
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + '/foo/a'))
@@ -465,17 +501,21 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(zoo, fix('z1'))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                                 '--include-dataset=',
-                                 '--include-dataset=/' + src_root_dataset,
-                                 '--exclude-dataset=/' + src_root_dataset + '/foo',
-                                 '--include-dataset=/' + src_root_dataset + '/foo',
-                                 '--exclude-dataset=/' + dst_root_dataset + '/goo/',
-                                 '--include-dataset=/' + dst_root_dataset + '/goo',
-                                 '--include-dataset=/xxxxxxxxx',
-                                 '--exclude-dataset=boo/',
-                                 '--include-dataset=boo',
-                                 dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--recursive',
+                    '--include-dataset=',
+                    '--include-dataset=/' + src_root_dataset,
+                    '--exclude-dataset=/' + src_root_dataset + '/foo',
+                    '--include-dataset=/' + src_root_dataset + '/foo',
+                    '--exclude-dataset=/' + dst_root_dataset + '/goo/',
+                    '--include-dataset=/' + dst_root_dataset + '/goo',
+                    '--include-dataset=/xxxxxxxxx',
+                    '--exclude-dataset=boo/',
+                    '--include-dataset=boo',
+                    dry_run=(i == 0),
+                )
                 self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/goo'))
                 self.assertFalse(dataset_exists(dst_root_dataset + '/boo'))
@@ -499,16 +539,16 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                       '--skip-parent', dry_run=(i == 0))
+                job = self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-parent', dry_run=(i == 0))
                 self.assertSnapshots(src_root_dataset, 3, 's')
                 self.assertTrue(dataset_exists(dst_root_dataset))
                 self.assertSnapshots(dst_root_dataset, 0)
 
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                       '--skip-parent', '--delete-missing-datasets', dry_run=(i == 0))
+                job = self.run_wbackup(
+                    src_root_dataset, dst_root_dataset, '--skip-parent', '--delete-missing-datasets', dry_run=(i == 0)
+                )
                 self.assertSnapshots(src_root_dataset, 3, 's')
                 self.assertTrue(dataset_exists(dst_root_dataset))
                 self.assertSnapshots(dst_root_dataset, 0)
@@ -519,8 +559,7 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                 '--skip-parent', '--recursive', dry_run=(i == 0))
+                self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-parent', '--recursive', dry_run=(i == 0))
                 self.assertSnapshots(src_root_dataset, 3, 's')
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset))
@@ -532,8 +571,14 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                 '--skip-parent', '--delete-missing-datasets', '--recursive', dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--skip-parent',
+                    '--delete-missing-datasets',
+                    '--recursive',
+                    dry_run=(i == 0),
+                )
                 self.assertSnapshots(src_root_dataset, 3, 's')
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset))
@@ -565,8 +610,15 @@ class LocalTestCase(WBackupTestCase):
                 # test skip_on_error='tree'
                 for i in range(0, 2):
                     with stop_on_failure_subtest(i=i):
-                        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                         '--skip-parent', '--recursive', dry_run=(i == 0), skip_on_error='tree', expected_status=die_status)
+                        self.run_wbackup(
+                            src_root_dataset,
+                            dst_root_dataset,
+                            '--skip-parent',
+                            '--recursive',
+                            dry_run=(i == 0),
+                            skip_on_error='tree',
+                            expected_status=die_status,
+                        )
                         if i == 0:
                             self.assertFalse(dataset_exists(dst_user1_foo))
                             self.assertFalse(dataset_exists(dst_user2))
@@ -578,8 +630,15 @@ class LocalTestCase(WBackupTestCase):
                             self.assertSnapshots(dst_user2_bar, 1, 'b')
             elif j == 1:
                 # test skip_on_error='dataset'
-                self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                 '--skip-parent', '--recursive', dry_run=(i == 0), skip_on_error='dataset', expected_status=die_status)
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--skip-parent',
+                    '--recursive',
+                    dry_run=(i == 0),
+                    skip_on_error='dataset',
+                    expected_status=die_status,
+                )
                 self.assertSnapshots(dst_user1, 1, 'U')
                 self.assertSnapshots(dst_user1_foo, 1, 'f')
                 self.assertSnapshots(dst_user2, 1, 'v')
@@ -591,9 +650,15 @@ class LocalTestCase(WBackupTestCase):
                 # inject send failures before this many tries. only after that succeed the operation
                 counter = Counter(full_zfs_send=1)
 
-                self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                 '--skip-parent', '--recursive', skip_on_error='dataset',
-                                 expected_status=1, error_injection_triggers={"before": counter})
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--skip-parent',
+                    '--recursive',
+                    skip_on_error='dataset',
+                    expected_status=1,
+                    error_injection_triggers={"before": counter},
+                )
                 self.assertEqual(0, counter['full_zfs_send'])
                 self.assertFalse(dataset_exists(dst_user1))
                 self.assertSnapshots(dst_user2, 1, 'v')
@@ -637,33 +702,49 @@ class LocalTestCase(WBackupTestCase):
     def test_basic_replication_skip_missing_snapshots(self):
         self.assertTrue(dataset_exists(src_root_dataset))
         destroy(dst_root_dataset)
-        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                         '--skip-missing-snapshots=fail', expected_status=die_status)
+        self.run_wbackup(
+            src_root_dataset, dst_root_dataset, '--skip-missing-snapshots=fail', expected_status=die_status
+        )
         self.assertFalse(dataset_exists(dst_root_dataset))
-        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                         '--skip-missing-snapshots=dataset')
+        self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-missing-snapshots=dataset')
         self.assertFalse(dataset_exists(dst_root_dataset))
-        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                         '--skip-missing-snapshots=dataset',
-                         '--include-snapshot-regex=', '--recursive')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--skip-missing-snapshots=dataset',
+            '--include-snapshot-regex=',
+            '--recursive',
+        )
         self.assertFalse(dataset_exists(dst_root_dataset))
-        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                         '--skip-missing-snapshots=continue')
+        self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-missing-snapshots=continue')
         self.assertFalse(dataset_exists(dst_root_dataset))
 
         self.setup_basic()
         self.assertFalse(dataset_exists(dst_root_dataset))
-        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                         '--skip-missing-snapshots=fail',
-                         '--include-snapshot-regex=', '--recursive', expected_status=die_status)
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--skip-missing-snapshots=fail',
+            '--include-snapshot-regex=',
+            '--recursive',
+            expected_status=die_status,
+        )
         self.assertFalse(dataset_exists(dst_root_dataset))
-        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                         '--skip-missing-snapshots=dataset',
-                         '--include-snapshot-regex=!.*', '--recursive')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--skip-missing-snapshots=dataset',
+            '--include-snapshot-regex=!.*',
+            '--recursive',
+        )
         self.assertFalse(dataset_exists(dst_root_dataset))
-        self.run_wbackup(src_root_dataset, dst_root_dataset,
-                         '--skip-missing-snapshots=continue',
-                         '--include-snapshot-regex=', '--recursive')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--skip-missing-snapshots=continue',
+            '--include-snapshot-regex=',
+            '--recursive',
+        )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
     def test_basic_replication_with_injected_dataset_deletes(self):
@@ -693,8 +774,13 @@ class LocalTestCase(WBackupTestCase):
         # inject failures for this many tries. only after that finally succeed the operation
         counter = Counter(zfs_list_snapshot_dst=2, full_zfs_send=2, incremental_zfs_send=2)
 
-        self.run_wbackup(src_root_dataset, dst_root_dataset, f"--max-retries={max_retries}",
-                         expected_status=expected_status, error_injection_triggers={"before": counter})
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            f"--max-retries={max_retries}",
+            expected_status=expected_status,
+            error_injection_triggers={"before": counter},
+        )
         self.assertEqual(0, counter['zfs_list_snapshot_dst'])  # i.e, it took 2-0=2 retries to succeed
         self.assertEqual(0, counter['full_zfs_send'])
         self.assertEqual(0, counter['incremental_zfs_send'])
@@ -769,13 +855,19 @@ class LocalTestCase(WBackupTestCase):
                     self.assertBookmarkNames(src_root_dataset, ['d1'])
 
         # rename snapshot, which will cause no problem as we still have its bookmark
-        cmd = sudo_cmd + ['zfs', 'rename', snapshots(src_root_dataset)[0], snapshots(src_root_dataset)[0]+'h']
+        cmd = sudo_cmd + ['zfs', 'rename', snapshots(src_root_dataset)[0], snapshots(src_root_dataset)[0] + 'h']
         run_cmd(cmd)
 
         for i in range(0, 2):
             # replicate while excluding the rename snapshot
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=fail', dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--exclude-snapshot-regex=.*h',
+                    '--skip-missing-snapshots=fail',
+                    dry_run=(i == 0),
+                )
                 self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
                 self.assertBookmarkNames(src_root_dataset, ['d1'])  # nothing has changed
 
@@ -783,7 +875,13 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(src_root_dataset, fix('d2'))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=fail', dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--exclude-snapshot-regex=.*h',
+                    '--skip-missing-snapshots=fail',
+                    dry_run=(i == 0),
+                )
                 if i == 0:
                     self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
                     self.assertBookmarkNames(src_root_dataset, ['d1'])  # nothing has changed
@@ -805,7 +903,7 @@ class LocalTestCase(WBackupTestCase):
                     self.assertSnapshotNames(dst_root_dataset, ['d1'])
                     self.assertBookmarkNames(src_root_dataset, [])
         snapshot_tag = snapshots(src_root_dataset)[0].split('@', 1)[1]
-        create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag+'h')
+        create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag + 'h')
         create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag)
         self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h'])
 
@@ -816,7 +914,13 @@ class LocalTestCase(WBackupTestCase):
         for i in range(1, 2):
             # replicate while excluding hourly snapshots
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=fail', dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--exclude-snapshot-regex=.*h',
+                    '--skip-missing-snapshots=fail',
+                    dry_run=(i == 0),
+                )
                 self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
                 self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h'])  # nothing has changed
 
@@ -824,7 +928,13 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(src_root_dataset, fix('d2'))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset, '--exclude-snapshot-regex=.*h', '--skip-missing-snapshots=fail', dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--exclude-snapshot-regex=.*h',
+                    '--skip-missing-snapshots=fail',
+                    dry_run=(i == 0),
+                )
                 if i == 0:
                     self.assertSnapshotNames(dst_root_dataset, ['d1'])  # nothing has changed
                     self.assertBookmarkNames(src_root_dataset, ['d1', 'd1h'])  # nothing has changed
@@ -860,7 +970,9 @@ class LocalTestCase(WBackupTestCase):
         src_foo = build(src_root_dataset + '/foo')
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True)
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
@@ -874,7 +986,9 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(src_foo, fix('t5'))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True)
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset + '/foo', 3, 't')
@@ -887,7 +1001,9 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(src_foo, fix('t6'))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True)
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset + '/foo', 5, 't')
@@ -901,7 +1017,13 @@ class LocalTestCase(WBackupTestCase):
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True, expected_status=die_status)
+                self.run_wbackup(
+                    src_root_dataset + '/foo',
+                    dst_root_dataset + '/foo',
+                    dry_run=(i == 0),
+                    no_create_bookmark=True,
+                    expected_status=die_status,
+                )
                 self.assertSnapshots(dst_root_dataset + '/foo', 8, 't')  # nothing has changed on dst
 
         # resolve conflict via dst rollback to most recent common snapshot
@@ -923,28 +1045,48 @@ class LocalTestCase(WBackupTestCase):
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True, expected_status=die_status)
+                self.run_wbackup(
+                    src_root_dataset + '/foo',
+                    dst_root_dataset + '/foo',
+                    dry_run=(i == 0),
+                    no_create_bookmark=True,
+                    expected_status=die_status,
+                )
                 self.assertSnapshots(dst_root_dataset + '/foo', 8, 't')  # nothing has changed on dst
-                self.assertEqual(dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid'))  # nothing has changed on dst
+                self.assertEqual(
+                    dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid')
+                )  # nothing has changed on dst
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force-once', dry_run=(i == 0), no_create_bookmark=True)  # resolve conflict via dst rollback
+                self.run_wbackup(
+                    src_root_dataset + '/foo',
+                    dst_root_dataset + '/foo',
+                    '--force-once',
+                    dry_run=(i == 0),
+                    no_create_bookmark=True,
+                )  # resolve conflict via dst rollback
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset + '/foo', 8, 't')  # nothing has changed on dst
-                    self.assertEqual(dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid'))  # nothing has changed on dst
+                    self.assertEqual(
+                        dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid')
+                    )  # nothing has changed on dst
                 else:
                     self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')
-                    self.assertEqual(src_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid'))  # now they are true replicas
+                    self.assertEqual(
+                        src_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid')
+                    )  # now they are true replicas
 
         # on src delete some snapshots that are older than most recent common snapshot, which is normal and won't cause changes to dst
         destroy(snapshots(src_foo)[0])
         destroy(snapshots(src_foo)[2])
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True)
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')
 
@@ -964,7 +1106,13 @@ class LocalTestCase(WBackupTestCase):
         # Conflict: no common snapshot was found.
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True, expected_status=die_status)
+                self.run_wbackup(
+                    src_root_dataset + '/foo',
+                    dst_root_dataset + '/foo',
+                    dry_run=(i == 0),
+                    no_create_bookmark=True,
+                    expected_status=die_status,
+                )
                 self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')  # nothing has changed on dst
                 self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
 
@@ -973,8 +1121,16 @@ class LocalTestCase(WBackupTestCase):
             with stop_on_failure_subtest(i=i):
                 if i > 0 and self.is_encryption_mode():
                     # potential workaround?: rerun once with -R --skip-missing added to zfs_send_program_opts
-                    self.skipTest("zfs receive -F cannot be used to destroy an encrypted filesystem - https://github.com/openzfs/zfs/issues/6793")
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--f1', dry_run=(i == 0), no_create_bookmark=True)
+                    self.skipTest(
+                        "zfs receive -F cannot be used to destroy an encrypted filesystem - https://github.com/openzfs/zfs/issues/6793"
+                    )
+                self.run_wbackup(
+                    src_root_dataset + '/foo',
+                    dst_root_dataset + '/foo',
+                    '--f1',
+                    dry_run=(i == 0),
+                    no_create_bookmark=True,
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
                 if i == 0:
@@ -985,7 +1141,9 @@ class LocalTestCase(WBackupTestCase):
         # no change on src means replication is a noop:
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True)
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), no_create_bookmark=True
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 self.assertSnapshots(dst_root_dataset + '/foo', 3, 't', offset=8)
 
@@ -993,7 +1151,13 @@ class LocalTestCase(WBackupTestCase):
         for i in range(0, 2):
             # rollback dst to most recent snapshot
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force', dry_run=(i == 0), no_create_bookmark=True)
+                self.run_wbackup(
+                    src_root_dataset + '/foo',
+                    dst_root_dataset + '/foo',
+                    '--force',
+                    dry_run=(i == 0),
+                    no_create_bookmark=True,
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 self.assertSnapshots(dst_root_dataset + '/foo', 3, 't', offset=8)
 
@@ -1062,7 +1226,9 @@ class LocalTestCase(WBackupTestCase):
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), expected_status=die_status)
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), expected_status=die_status
+                )
                 self.assertSnapshots(dst_root_dataset + '/foo', 8, 't')  # nothing has changed on dst
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6'])
 
@@ -1087,23 +1253,33 @@ class LocalTestCase(WBackupTestCase):
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), expected_status=die_status)
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), expected_status=die_status
+                )
                 self.assertSnapshots(dst_root_dataset + '/foo', 8, 't')  # nothing has changed on dst
-                self.assertEqual(dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid'))  # nothing has changed on dst
+                self.assertEqual(
+                    dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid')
+                )  # nothing has changed on dst
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6'])
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force-once', dry_run=(i == 0))  # resolve conflict via dst rollback
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', '--force-once', dry_run=(i == 0)
+                )  # resolve conflict via dst rollback
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset + '/foo', 8, 't')  # nothing has changed on dst
-                    self.assertEqual(dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid'))  # nothing has changed on dst
+                    self.assertEqual(
+                        dst_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid')
+                    )  # nothing has changed on dst
                     self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6'])
                 else:
                     self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')
-                    self.assertEqual(src_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid'))  # now they are true replicas
+                    self.assertEqual(
+                        src_guid, snapshot_property(snapshots(build(dst_root_dataset + '/foo'))[6], 'guid')
+                    )  # now they are true replicas
                     self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])
 
         # on src delete some snapshots that are older than most recent common snapshot, which is normal and won't cause changes to dst
@@ -1153,16 +1329,18 @@ class LocalTestCase(WBackupTestCase):
                     self.assertSnapshots(dst_root_dataset + '/foo', 7, 't')  # nothing has changed on dst
                     self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])
                 else:
-                    self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                         ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])
+                    self.assertSnapshotNames(
+                        dst_root_dataset + '/foo', ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11']
+                    )
                     self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7', 't11'])
 
         # no change on src means replication is a noop:
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0))
-                self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                         ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])
+                self.assertSnapshotNames(
+                    dst_root_dataset + '/foo', ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11']
+                )
                 self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7', 't11'])
 
         # on src delete the most recent snapshot and its bookmark, which is trouble as now src has nothing
@@ -1173,10 +1351,15 @@ class LocalTestCase(WBackupTestCase):
         self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), expected_status=die_status)
-                self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                         ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])  # nothing has changed
-                self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7'])  # nothing has changed
+                self.run_wbackup(
+                    src_root_dataset + '/foo', dst_root_dataset + '/foo', dry_run=(i == 0), expected_status=die_status
+                )
+                self.assertSnapshotNames(
+                    dst_root_dataset + '/foo', ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11']
+                )  # nothing has changed
+                self.assertBookmarkNames(
+                    src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7']
+                )  # nothing has changed
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
         take_snapshot(src_foo, fix('t12'))
@@ -1186,15 +1369,17 @@ class LocalTestCase(WBackupTestCase):
                 if not volume:
                     self.assertSnapshots(dst_root_dataset + '/foo/a', 3, 'u')
                 if i == 0:
-                    self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                             ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11'])  # nothing has changed
-                    self.assertBookmarkNames(src_root_dataset + '/foo',
-                                             ['t1', 't3', 't5', 't6', 't7'])  # nothing has changed
+                    self.assertSnapshotNames(
+                        dst_root_dataset + '/foo', ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't11']
+                    )  # nothing has changed
+                    self.assertBookmarkNames(
+                        src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7']
+                    )  # nothing has changed
                 else:
-                    self.assertSnapshotNames(dst_root_dataset + '/foo',
-                                             ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't12'])  # nothing has changed
-                    self.assertBookmarkNames(src_root_dataset + '/foo',
-                                             ['t1', 't3', 't5', 't6', 't7', 't12'])
+                    self.assertSnapshotNames(
+                        dst_root_dataset + '/foo', ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't9', 't10', 't12']
+                    )  # nothing has changed
+                    self.assertBookmarkNames(src_root_dataset + '/foo', ['t1', 't3', 't5', 't6', 't7', 't12'])
 
     def test_nostream1(self):
         self.setup_basic()
@@ -1238,7 +1423,9 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(src_pool, fix('p1'))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                if i > 0 and self.is_no_privilege_elevation():  # maybe related: https://github.com/openzfs/zfs/issues/10461
+                if (
+                    i > 0 and self.is_no_privilege_elevation()
+                ):  # maybe related: https://github.com/openzfs/zfs/issues/10461
                     self.skipTest(f"'cannot unmount '/wb_dst': permission denied' error on zfs receive -F -u wb_dst")
                 self.run_wbackup(src_pool, dst_pool, dry_run=(i == 0))
                 if i == 0:
@@ -1299,8 +1486,13 @@ class LocalTestCase(WBackupTestCase):
         recreate_filesystem(dst_root_dataset)
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                 '--skip-replication', '--delete-missing-datasets', dry_run=(i == 0))
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    '--skip-replication',
+                    '--delete-missing-datasets',
+                    dry_run=(i == 0),
+                )
                 if i == 0:
                     self.assertTrue(dataset_exists(dst_root_dataset))
                 else:
@@ -1326,8 +1518,9 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo'))
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-datasets')
+        self.run_wbackup(
+            src_root_dataset, dst_root_dataset, '--recursive', '--skip-replication', '--delete-missing-datasets'
+        )
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
         self.assertFalse(dataset_exists(dst_root_dataset + '/bar'))
@@ -1341,9 +1534,17 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo'))
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-datasets',
-                         '--exclude-dataset-regex', 'bar?', '--exclude-dataset-regex', 'zoo*')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--recursive',
+            '--skip-replication',
+            '--delete-missing-datasets',
+            '--exclude-dataset-regex',
+            'bar?',
+            '--exclude-dataset-regex',
+            'zoo*',
+        )
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(dst_root_dataset + '/bar'))
@@ -1357,9 +1558,15 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo'))
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-datasets',
-                         '--exclude-dataset-regex', '!bar')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--recursive',
+            '--skip-replication',
+            '--delete-missing-datasets',
+            '--exclude-dataset-regex',
+            '!bar',
+        )
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo'))
         self.assertFalse(dataset_exists(dst_root_dataset + '/bar'))
@@ -1373,13 +1580,21 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(src_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo'))
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-datasets',
-                         '--exclude-dataset', 'foo',
-                         '--exclude-dataset', 'zoo',
-                         '--exclude-dataset', 'foo/b',
-                         '--exclude-dataset', 'xxxxx',
-                         )
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--recursive',
+            '--skip-replication',
+            '--delete-missing-datasets',
+            '--exclude-dataset',
+            'foo',
+            '--exclude-dataset',
+            'zoo',
+            '--exclude-dataset',
+            'foo/b',
+            '--exclude-dataset',
+            'xxxxx',
+        )
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo'))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo/a'))
@@ -1400,8 +1615,15 @@ class LocalTestCase(WBackupTestCase):
         take_snapshot(create_filesystems('foo/c'), fix('c1'))
         create_volumes('zoo')
         create_filesystems('boo')
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-datasets', '--exclude-dataset', 'boo')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--recursive',
+            '--skip-replication',
+            '--delete-missing-datasets',
+            '--exclude-dataset',
+            'boo',
+        )
         self.assertFalse(dataset_exists(dst_root_dataset + '/axe'))
         self.assertTrue(dataset_exists(dst_root_dataset + '/foo/a'))
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/a/b'))
@@ -1416,8 +1638,9 @@ class LocalTestCase(WBackupTestCase):
         self.assertTrue(dataset_exists(src_root_dataset + '/foo/b'))
         self.assertEqual(0, len(snapshots(build(src_root_dataset + '/foo/b'))))
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
-        self.run_wbackup(src_root_dataset + '/foo/b', dst_root_dataset + '/foo/b',
-                         '--skip-replication', '--delete-missing-snapshots')
+        self.run_wbackup(
+            src_root_dataset + '/foo/b', dst_root_dataset + '/foo/b', '--skip-replication', '--delete-missing-snapshots'
+        )
         self.assertFalse(dataset_exists(dst_root_dataset + '/foo/b'))
 
     def test_delete_missing_snapshots_flat(self):
@@ -1450,16 +1673,23 @@ class LocalTestCase(WBackupTestCase):
         destroy(snapshots(src_foo)[1])
         src_foo_a = build(src_root_dataset + '/foo/a')
         destroy(snapshots(src_foo_a)[2])
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-snapshots')
+        self.run_wbackup(
+            src_root_dataset, dst_root_dataset, '--recursive', '--skip-replication', '--delete-missing-snapshots'
+        )
         self.assertSnapshotNames(dst_root_dataset, ['s2'])
         self.assertSnapshotNames(dst_root_dataset + '/foo', ['t1', 't3'])
         self.assertSnapshotNames(dst_root_dataset + '/foo/a', ['u1', 'u2'])
 
     def test_delete_missing_snapshots_with_excludes_flat_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-replication', '--delete-missing-snapshots',
-                         '--exclude-snapshot-regex', 'xxxx*')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--skip-replication',
+            '--delete-missing-snapshots',
+            '--exclude-snapshot-regex',
+            'xxxx*',
+        )
         self.assertSnapshots(dst_root_dataset, 3, 's')
         self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
@@ -1470,8 +1700,14 @@ class LocalTestCase(WBackupTestCase):
             destroy(snap)
         for snap in snapshots(build(src_root_dataset + '/foo')):
             destroy(snap)
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--skip-replication', '--delete-missing-snapshots',
-                         '--exclude-snapshot-regex', r'!.*s[1-2]+.*')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--skip-replication',
+            '--delete-missing-snapshots',
+            '--exclude-snapshot-regex',
+            r'!.*s[1-2]+.*',
+        )
         self.assertSnapshotNames(dst_root_dataset, ['s3'])
         self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
@@ -1482,11 +1718,19 @@ class LocalTestCase(WBackupTestCase):
             destroy(snap)
         for snap in snapshots(build(src_root_dataset + '/foo')):
             destroy(snap)
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-snapshots',
-                         '--exclude-snapshot-regex', '.*s[1-2]+.*',
-                         '--exclude-snapshot-regex', '.*t1.*',
-                         '--exclude-snapshot-regex', '.*u.*')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--recursive',
+            '--skip-replication',
+            '--delete-missing-snapshots',
+            '--exclude-snapshot-regex',
+            '.*s[1-2]+.*',
+            '--exclude-snapshot-regex',
+            '.*t1.*',
+            '--exclude-snapshot-regex',
+            '.*u.*',
+        )
         self.assertSnapshotNames(dst_root_dataset, ['s1', 's2'])
         self.assertSnapshotNames(dst_root_dataset + '/foo', ['t1'])
         self.assertSnapshotNames(dst_root_dataset + '/foo/a', ['u1', 'u2', 'u3'])
@@ -1497,12 +1741,21 @@ class LocalTestCase(WBackupTestCase):
             destroy(snap)
         for snap in snapshots(build(src_root_dataset + '/foo')):
             destroy(snap)
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-snapshots',
-                         '--exclude-dataset-regex', 'foo',
-                         '--exclude-snapshot-regex', '.*s[1-2]+.*',
-                         '--exclude-snapshot-regex', '.*t1.*',
-                         '--exclude-snapshot-regex', '.*u1.*')
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--recursive',
+            '--skip-replication',
+            '--delete-missing-snapshots',
+            '--exclude-dataset-regex',
+            'foo',
+            '--exclude-snapshot-regex',
+            '.*s[1-2]+.*',
+            '--exclude-snapshot-regex',
+            '.*t1.*',
+            '--exclude-snapshot-regex',
+            '.*u1.*',
+        )
         self.assertSnapshotNames(dst_root_dataset, ['s1', 's2'])
         self.assertSnapshots(dst_root_dataset + "/foo", 3, 't')
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, 'u')
@@ -1514,9 +1767,14 @@ class LocalTestCase(WBackupTestCase):
 
         # inject deletes for this many times. only after that stop deleting datasets
         counter = Counter(zfs_list_snapshot_src_for_delete_missing_snapshots=1)
-        self.run_wbackup(src_root_dataset, dst_root_dataset, '--recursive',
-                         '--skip-replication', '--delete-missing-snapshots',
-                         delete_injection_triggers={"before": counter})
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            '--recursive',
+            '--skip-replication',
+            '--delete-missing-snapshots',
+            delete_injection_triggers={"before": counter},
+        )
 
         # nothing has changed for the simultaneously deleted datasets:
         self.assertSnapshots(dst_root_dataset, 3, 's')
@@ -1546,7 +1804,7 @@ class MinimalRemoteTestCase(WBackupTestCase):
         expected_status = 0
         if os.geteuid() != 0 and not self.is_no_privilege_elevation():
             expected_status = die_status
-        self.inject_disabled_program('disable_sudo',  expected_error=expected_status)
+        self.inject_disabled_program('disable_sudo', expected_error=expected_status)
 
     def inject_disabled_program(self, *flags, expected_error=0):
         self.setup_basic()
@@ -1565,8 +1823,9 @@ class MinimalRemoteTestCase(WBackupTestCase):
         inject_params = {}
         for flag in flags:
             inject_params[flag] = True
-        self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=expected_error,
-                         inject_params=inject_params)
+        self.run_wbackup(
+            src_root_dataset, dst_root_dataset, expected_status=expected_error, inject_params=inject_params
+        )
         if expected_error != 0:
             self.assertSnapshots(dst_root_dataset, 0)
         else:
@@ -1613,8 +1872,12 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
                 inject_params = {}
                 if i == 0:
                     inject_params[flag] = True
-                self.run_wbackup(src_root_dataset, dst_root_dataset,
-                                 expected_status=expected_error if i == 0 else 0, inject_params=inject_params)
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    expected_status=expected_error if i == 0 else 0,
+                    inject_params=inject_params,
+                )
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset, 0)
                 else:
@@ -1800,8 +2063,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         src_foo = create_filesystem(src_root_dataset, 'foo')
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
-        self.run_wbackup(src_foo, dst_foo,
-                         '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+        self.run_wbackup(src_foo, dst_foo, '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
         self.assertSnapshotNames(dst_foo, expected_results)
 
         self.tearDownAndSetup()
@@ -1812,8 +2074,7 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[0]])
-        self.run_wbackup(src_foo, dst_foo,
-                         '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+        self.run_wbackup(src_foo, dst_foo, '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
         self.assertSnapshotNames(dst_foo, expected_results)
 
         self.tearDownAndSetup()
@@ -1827,14 +2088,12 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         if is_zpool_bookmarks_feature_enabled_or_active('src'):
             create_bookmark(src_foo, expected_results[0], expected_results[0])
             destroy(src_snapshot)
-            self.run_wbackup(src_foo, dst_foo,
-                             '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+            self.run_wbackup(src_foo, dst_foo, '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
             self.assertSnapshotNames(dst_foo, expected_results)
             src_snapshot2 = f"{src_foo}@{expected_results[-1]}"
             destroy(src_snapshot2)  # no problem because bookmark still exists
             take_snapshot(src_foo, 'd99')
-            self.run_wbackup(src_foo, dst_foo,
-                             '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+            self.run_wbackup(src_foo, dst_foo, '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
             self.assertSnapshotNames(dst_foo, expected_results + ['d99'])
 
         self.tearDownAndSetup()
@@ -1845,8 +2104,15 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
-        self.run_wbackup(src_foo, dst_foo, '--skip-missing-snapshots=continue',
-                         '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*')
+        self.run_wbackup(
+            src_foo,
+            dst_foo,
+            '--skip-missing-snapshots=continue',
+            '--include-snapshot-regex',
+            'd.*',
+            '--exclude-snapshot-regex',
+            'h.*',
+        )
         self.assertSnapshotNames(dst_foo, expected_results[1:])
 
         self.tearDownAndSetup()
@@ -1857,8 +2123,9 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
-        self.run_wbackup(src_foo, dst_foo, '--force', '--skip-missing-snapshots=continue',
-                         '--exclude-snapshot-regex', '.*')
+        self.run_wbackup(
+            src_foo, dst_foo, '--force', '--skip-missing-snapshots=continue', '--exclude-snapshot-regex', '.*'
+        )
         self.assertSnapshotNames(dst_foo, [])
 
         self.tearDownAndSetup()
@@ -1869,8 +2136,9 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
         cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
-        self.run_wbackup(src_foo, dst_foo, '--force', '--skip-missing-snapshots=continue',
-                         '--include-snapshot-regex', '!.*')
+        self.run_wbackup(
+            src_foo, dst_foo, '--force', '--skip-missing-snapshots=continue', '--include-snapshot-regex', '!.*'
+        )
         self.assertSnapshotNames(dst_foo, [])
 
     def test_snapshot_series_excluding_hourlies_with_permutations(self):
@@ -1885,9 +2153,16 @@ class ExcludeSnapshotRegexTestCase(WBackupTestCase):
             # logging.info(f"expected: {','.join(expected_results)}")
             for i in range(0, 2):
                 with stop_on_failure_subtest(i=i):
-                    self.run_wbackup(src_foo, dst_foo, '--skip-missing-snapshots=continue',
-                                     '--include-snapshot-regex', 'd.*', '--exclude-snapshot-regex', 'h.*',
-                                     dry_run=(i == 0))
+                    self.run_wbackup(
+                        src_foo,
+                        dst_foo,
+                        '--skip-missing-snapshots=continue',
+                        '--include-snapshot-regex',
+                        'd.*',
+                        '--exclude-snapshot-regex',
+                        'h.*',
+                        dry_run=(i == 0),
+                    )
                     if i == 0:
                         self.assertFalse(dataset_exists(dst_foo))
                     else:
@@ -1944,9 +2219,9 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
         """
         assert max_length >= 0
         testcases = []
-        for L in range(0, max_length+1):
-            for N in range(0, L+1):
-                steps = 'd' * N + 'h' * (L-N)
+        for L in range(0, max_length + 1):
+            for N in range(0, L + 1):
+                steps = 'd' * N + 'h' * (L - N)
                 # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
                 for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
                     snaps = defaultdict(list)
@@ -1967,7 +2242,8 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
         src_dataset = ""
         for force_convert_I_to_i in [False, True]:
             steps = self.incremental_replication_steps1(
-                input_snapshots, src_dataset=src_dataset, force_convert_I_to_i=force_convert_I_to_i)
+                input_snapshots, src_dataset=src_dataset, force_convert_I_to_i=force_convert_I_to_i
+            )
             # print(f"input_snapshots:" + ','.join(input_snapshots))
             # print("steps: " + ','.join([self.replication_step_to_str(step) for step in steps]))
             output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
@@ -1987,7 +2263,7 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
             start = input_snapshots.index(start_snapshot)
             end = input_snapshots.index(end_snapshot)
             if incr_flag == '-I':
-                for j in range(start+1, end+1):
+                for j in range(start + 1, end + 1):
                     output_snapshots.append(input_snapshots[j])
             else:
                 output_snapshots.append(input_snapshots[end])
@@ -1999,8 +2275,9 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
         for snapshot in input_snapshots:
             origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
             guid += 1
-        return self.incremental_replication_steps2(origin_src_snapshots_with_guids,
-                                                   force_convert_I_to_i=force_convert_I_to_i)
+        return self.incremental_replication_steps2(
+            origin_src_snapshots_with_guids, force_convert_I_to_i=force_convert_I_to_i
+        )
 
     def incremental_replication_steps2(self, origin_src_snapshots_with_guids, force_convert_I_to_i=False):
         guids = []
@@ -2011,11 +2288,12 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
             guids.append(guid)
             input_snapshots.append(snapshot)
             i = snapshot.find('@')
-            snapshot = snapshot[i+1:]
+            snapshot = snapshot[i + 1 :]
             if snapshot[0:1] == 'd':
                 included_guids.add(guid)
-        return wbackup_zfs.Job().incremental_replication_steps(input_snapshots, guids, included_guids=included_guids,
-                                                               force_convert_I_to_i=force_convert_I_to_i)
+        return wbackup_zfs.Job().incremental_replication_steps(
+            input_snapshots, guids, included_guids=included_guids, force_convert_I_to_i=force_convert_I_to_i
+        )
 
 
 #############################################################################
@@ -2121,6 +2399,7 @@ class TestPythonVersionCheck(unittest.TestCase):
         with patch('sys.stderr') as mock_stderr:
             import importlib
             from wbackup_zfs import wbackup_zfs
+
             importlib.reload(wbackup_zfs)  # Reload module to apply version patch
             mock_exit.assert_called_with(wbackup_zfs.die_status)
 
@@ -2129,21 +2408,26 @@ class TestPythonVersionCheck(unittest.TestCase):
     def test_version_3_7_or_higher(self, mock_exit):
         import importlib
         from wbackup_zfs import wbackup_zfs
+
         importlib.reload(wbackup_zfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()
 
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
-    def run_test(self, input, expected_user, expected_host, expected_dataset, expected_user_host,
-                 expected_error):
+    def run_test(self, input, expected_user, expected_host, expected_dataset, expected_user_host, expected_error):
         expected_status = 0 if not expected_error else 3
         passed = False
 
         # Run without validation
         user, host, user_host, pool, dataset = wbackup_zfs.parse_dataset_locator(input, validate=False)
 
-        if user == expected_user and host == expected_host and dataset == expected_dataset and user_host == expected_user_host:
+        if (
+            user == expected_user
+            and host == expected_host
+            and dataset == expected_dataset
+            and user_host == expected_user_host
+        ):
             passed = True
 
         # Rerun with validation
@@ -2158,28 +2442,66 @@ class TestParseDatasetLocator(unittest.TestCase):
                 print("Validation Test failed:")
             else:
                 print("Test failed:")
-            print(f"input: {input}\nuser exp: '{expected_user}' vs '{user}'\nhost exp: '{expected_host}' vs '{host}'\nuserhost exp: '{expected_user_host}' vs '{user_host}'\ndataset exp: '{expected_dataset}' vs '{dataset}'")
+            print(
+                f"input: {input}\nuser exp: '{expected_user}' vs '{user}'\nhost exp: '{expected_host}' vs '{host}'\nuserhost exp: '{expected_user_host}' vs '{user_host}'\ndataset exp: '{expected_dataset}' vs '{dataset}'"
+            )
             self.fail()
 
     def runTest(self):
         # Input format is [[user@]host:]dataset
         # test columns indicate values for: input | user | host | dataset | userhost | validationError
-        self.run_test("user@host.example.com:tank1/foo/bar", "user", "host.example.com", "tank1/foo/bar",
-                      "user@host.example.com", False)
-        self.run_test("joe@192.168.1.1:tank1/foo/bar:baz:boo", "joe", "192.168.1.1", "tank1/foo/bar:baz:boo",
-                      "joe@192.168.1.1", False)
+        self.run_test(
+            "user@host.example.com:tank1/foo/bar",
+            "user",
+            "host.example.com",
+            "tank1/foo/bar",
+            "user@host.example.com",
+            False,
+        )
+        self.run_test(
+            "joe@192.168.1.1:tank1/foo/bar:baz:boo",
+            "joe",
+            "192.168.1.1",
+            "tank1/foo/bar:baz:boo",
+            "joe@192.168.1.1",
+            False,
+        )
         self.run_test("tank1/foo/bar", "", "", "tank1/foo/bar", "", False)
         self.run_test("-:tank1/foo/bar:baz:boo", "", "", "tank1/foo/bar:baz:boo", "", False)
-        self.run_test("host.example.com:tank1/foo/bar", "", "host.example.com", "tank1/foo/bar", "host.example.com",
-                      False)
-        self.run_test("root@host.example.com:tank1", "root", "host.example.com", "tank1", "root@host.example.com",
-                      False)
+        self.run_test(
+            "host.example.com:tank1/foo/bar", "", "host.example.com", "tank1/foo/bar", "host.example.com", False
+        )
+        self.run_test(
+            "root@host.example.com:tank1", "root", "host.example.com", "tank1", "root@host.example.com", False
+        )
         self.run_test("192.168.1.1:tank1/foo/bar", "", "192.168.1.1", "tank1/foo/bar", "192.168.1.1", False)
-        self.run_test("user@192.168.1.1:tank1/foo/bar", "user", "192.168.1.1", "tank1/foo/bar", "user@192.168.1.1",
-                      False)
-        self.run_test("user@host_2024-01-02:a3:04:56:tank1/foo/bar", "user", "host_2024-01-02", "a3:04:56:tank1/foo/bar", "user@host_2024-01-02", False)
-        self.run_test("user@host_2024-01-02:a3:04:56:tank1:/foo:/:bar", "user", "host_2024-01-02", "a3:04:56:tank1:/foo:/:bar", "user@host_2024-01-02", False)
-        self.run_test("user@host_2024-01-02:03:04:56:tank1/foo/bar", "user", "host_2024-01-02", "03:04:56:tank1/foo/bar", "user@host_2024-01-02", True)
+        self.run_test(
+            "user@192.168.1.1:tank1/foo/bar", "user", "192.168.1.1", "tank1/foo/bar", "user@192.168.1.1", False
+        )
+        self.run_test(
+            "user@host_2024-01-02:a3:04:56:tank1/foo/bar",
+            "user",
+            "host_2024-01-02",
+            "a3:04:56:tank1/foo/bar",
+            "user@host_2024-01-02",
+            False,
+        )
+        self.run_test(
+            "user@host_2024-01-02:a3:04:56:tank1:/foo:/:bar",
+            "user",
+            "host_2024-01-02",
+            "a3:04:56:tank1:/foo:/:bar",
+            "user@host_2024-01-02",
+            False,
+        )
+        self.run_test(
+            "user@host_2024-01-02:03:04:56:tank1/foo/bar",
+            "user",
+            "host_2024-01-02",
+            "03:04:56:tank1/foo/bar",
+            "user@host_2024-01-02",
+            True,
+        )
         self.run_test("user@localhost:tank1/foo/bar", "user", "localhost", "tank1/foo/bar", "user@localhost", False)
         self.run_test("host.local:tank1/foo/bar", "", "host.local", "tank1/foo/bar", "host.local", False)
         self.run_test("host.local:tank1/foo/bar", "", "host.local", "tank1/foo/bar", "host.local", False)
@@ -2210,22 +2532,48 @@ class TestParseDatasetLocator(unittest.TestCase):
         self.run_test("../tank", "", "", "../tank", "", True)
         self.run_test("tank/..", "", "", "tank/..", "", True)
         self.run_test("tank/.", "", "", "tank/.", "", True)
-        self.run_test("user@host.example.com:tank1/foo@bar", "user", "host.example.com", "tank1/foo@bar",
-                      "user@host.example.com", True)
-        self.run_test("user@host.example.com:tank1/foo#bar", "user", "host.example.com", "tank1/foo#bar",
-                      "user@host.example.com", True)
-        self.run_test("whitespace user@host.example.com:tank1/foo/bar", "whitespace user", "host.example.com",
-                      "tank1/foo/bar", "whitespace user@host.example.com", True)
-        self.run_test("user@whitespace\thost:tank1/foo/bar", "user", "whitespace\thost", "tank1/foo/bar",
-                      "user@whitespace\thost", True)
-        self.run_test("user@host:tank1/foo/whitespace\tbar", "user", "host", "tank1/foo/whitespace\tbar",
-                      "user@host", True)
-        self.run_test("user@host:tank1/foo/whitespace\nbar", "user", "host", "tank1/foo/whitespace\nbar",
-                      "user@host", True)
-        self.run_test("user@host:tank1/foo/whitespace\rbar", "user", "host", "tank1/foo/whitespace\rbar",
-                      "user@host", True)
-        self.run_test("user@host:tank1/foo/space bar", "user", "host", "tank1/foo/space bar",
-                      "user@host", False)
+        self.run_test(
+            "user@host.example.com:tank1/foo@bar",
+            "user",
+            "host.example.com",
+            "tank1/foo@bar",
+            "user@host.example.com",
+            True,
+        )
+        self.run_test(
+            "user@host.example.com:tank1/foo#bar",
+            "user",
+            "host.example.com",
+            "tank1/foo#bar",
+            "user@host.example.com",
+            True,
+        )
+        self.run_test(
+            "whitespace user@host.example.com:tank1/foo/bar",
+            "whitespace user",
+            "host.example.com",
+            "tank1/foo/bar",
+            "whitespace user@host.example.com",
+            True,
+        )
+        self.run_test(
+            "user@whitespace\thost:tank1/foo/bar",
+            "user",
+            "whitespace\thost",
+            "tank1/foo/bar",
+            "user@whitespace\thost",
+            True,
+        )
+        self.run_test(
+            "user@host:tank1/foo/whitespace\tbar", "user", "host", "tank1/foo/whitespace\tbar", "user@host", True
+        )
+        self.run_test(
+            "user@host:tank1/foo/whitespace\nbar", "user", "host", "tank1/foo/whitespace\nbar", "user@host", True
+        )
+        self.run_test(
+            "user@host:tank1/foo/whitespace\rbar", "user", "host", "tank1/foo/whitespace\rbar", "user@host", True
+        )
+        self.run_test("user@host:tank1/foo/space bar", "user", "host", "tank1/foo/space bar", "user@host", False)
 
 
 #############################################################################
@@ -2249,8 +2597,7 @@ class TestReplaceCapturingGroups(unittest.TestCase):
         self.assertEqual(self.replace_capturing_group('(abc)(def)'), '(?:abc)(?:def)')
 
     def test_mixed_cases(self):
-        self.assertEqual(self.replace_capturing_group('a(bc\\(de)f(gh)?i'),
-                         'a(?:bc\\(de)f(?:gh)?i')
+        self.assertEqual(self.replace_capturing_group('a(bc\\(de)f(gh)?i'), 'a(?:bc\\(de)f(?:gh)?i')
 
     def test_empty_group(self):
         self.assertEqual(self.replace_capturing_group('()'), '(?:)')
@@ -2405,7 +2752,7 @@ class TestCheckRange(unittest.TestCase):
 
     def test_very_small_value(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument('--age', type=int, action=CheckRange, min=-10**18)
+        parser.add_argument('--age', type=int, action=CheckRange, min=-(10**18))
         args = parser.parse_args(['--age', '-999999999999999999'])
         self.assertEqual(args.age, -999999999999999999)
 
@@ -2469,8 +2816,9 @@ def is_zpool_feature_enabled_or_active(location, feature):
 
 
 def is_zpool_bookmarks_feature_enabled_or_active(location):
-    return (is_zpool_feature_enabled_or_active(location, 'feature@bookmark_v2')
-            and is_zpool_feature_enabled_or_active(location, 'feature@bookmark_written'))
+    return is_zpool_feature_enabled_or_active(location, 'feature@bookmark_v2') and is_zpool_feature_enabled_or_active(
+        location, 'feature@bookmark_written'
+    )
 
 
 def natsorted(iterable, key=None, reverse=False):
@@ -2536,17 +2884,16 @@ def main():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
     suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {'verbose': True}))
 
-
     # for ssh_mode in []:
     for ssh_mode in ['local']:
-    # for ssh_mode in ['pull-push']:
-    # for ssh_mode in ['local', 'pull-push']:
+        # for ssh_mode in ['pull-push']:
+        # for ssh_mode in ['local', 'pull-push']:
         # for min_transfer_size in [0, 1024 ** 2]:
-        for min_transfer_size in [1024 ** 2]:
+        for min_transfer_size in [1024**2]:
             for affix in [""]:
-            # for affix in [".  -"]:
-            # for affix in ["", ".  -"]:
-            #     no_privilege_elevation_modes = []
+                # for affix in [".  -"]:
+                # for affix in ["", ".  -"]:
+                #     no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
                 if os.geteuid() != 0:
                     no_privilege_elevation_modes.append(True)
@@ -2572,11 +2919,11 @@ def main():
     # for ssh_mode in ['pull-push']:
     # for ssh_mode in ['local']:
     for ssh_mode in ['local', 'pull-push']:
-    # for ssh_mode in ['local', 'pull-push', 'push', 'pull']:
-    #     for min_transfer_size in [1024 ** 2]:
-        for min_transfer_size in [0, 1024 ** 2]:
-        #     for affix in [""]:
-        #     for affix in [".  -"]:
+        # for ssh_mode in ['local', 'pull-push', 'push', 'pull']:
+        #     for min_transfer_size in [1024 ** 2]:
+        for min_transfer_size in [0, 1024**2]:
+            #     for affix in [""]:
+            #     for affix in [".  -"]:
             for affix in ["", ".  -"]:
                 no_privilege_elevation_modes = [False]
                 # no_privilege_elevation_modes = []
@@ -2601,7 +2948,7 @@ def main():
                 for affix in [""]:
                     for no_privilege_elevation in [True]:
                         for encrypted_dataset in [False]:
-                        # for encrypted_dataset in []:
+                            # for encrypted_dataset in []:
                             params = {
                                 'ssh_mode': ssh_mode,
                                 'verbose': False,

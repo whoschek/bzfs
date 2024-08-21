@@ -78,7 +78,7 @@ zfs_version_is_at_least_2_1_0 = None
 
 
 def create_filesystem(dataset, path=None, no_mount=True, props=[]):
-    """ implies mk_parents=True
+    """implies mk_parents=True
     if no_mount=True:
     To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
     for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u' part only to
@@ -105,7 +105,7 @@ def create_filesystem(dataset, path=None, no_mount=True, props=[]):
             else:
                 already_exists = dataset_exists(parent)
 
-        if props and i == len(splits)-1:  # apply props to leaf dataset only, just like 'zfs create -p dataset'
+        if props and i == len(splits) - 1:  # apply props to leaf dataset only, just like 'zfs create -p dataset'
             cmd += props
         cmd.append(parent)
         run_cmd(cmd)
@@ -151,11 +151,11 @@ def bookmarks(dataset):
 
 
 def snapshot_name(snapshot):
-    return snapshot[snapshot.find('@')+1:]
+    return snapshot[snapshot.find('@') + 1 :]
 
 
 def bookmark_name(bookmark):
-    return bookmark[bookmark.find('#')+1:]
+    return bookmark[bookmark.find('#') + 1 :]
 
 
 def dataset_property(dataset=None, prop=None):
