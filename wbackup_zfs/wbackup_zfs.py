@@ -35,7 +35,7 @@ from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional, Iterable, Set
 
-__version__ = "0.9.0"
+__version__ = "0.9.0-dev"
 prog_name = "wbackup-zfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
@@ -490,6 +490,7 @@ class Params:
         sys_argv: Optional[List[str]] = None,
         inject_params: Optional[Dict[str, bool]] = None,
     ):
+        assert args is not None
         self.args = args
         self.sys_argv = sys_argv if sys_argv is not None else []
         self.inject_params = inject_params if inject_params is not None else {}  # for testing only
@@ -623,11 +624,11 @@ class Params:
         self.platform_version = platform.version()
         self.platform_platform = platform.platform()
 
-    def getenv(self, key, default=None):
+    def getenv(self, key: str, default=None):
         # All shell environment variable names used for configuration start with this prefix
         return os.getenv(env_var_prefix + key, default)
 
-    def getenv_bool(self, key, default=False):
+    def getenv_bool(self, key: str, default=False):
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items) -> List[str]:
@@ -2320,7 +2321,7 @@ def parse_dataset_locator(input_text, validate=True, user=None, host=None, port=
     pool = ""
 
     # Input format is [[user@]host:]dataset
-    #                           1234         5          6
+    #                      1234         5          6
     match = re.fullmatch(r"(((([^@]*)@)?([^:]+)):)?(.*)", input_text, re.DOTALL)
     if match:
         if user_undefined:
