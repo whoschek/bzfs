@@ -27,22 +27,22 @@ def main():
         description="Example ZFS bookmark pruning script that deletes the oldest bookmarks older than X days in a "
                     "given dataset and optionally also its descendant datasets, such that each dataset retains at "
                     "least N bookmarks.")
-    parser.add_argument('dataset', type=str, nargs='+',
+    parser.add_argument("dataset", type=str, nargs="+",
                         help="Dataset to prune bookmarks for.")
-    parser.add_argument('--recursive', '-r', action='store_true',
+    parser.add_argument("--recursive", "-r", action="store_true",
                         help="Include this flag to prune datasets recursively.")
-    parser.add_argument('--days', type=int, default=90,
+    parser.add_argument("--days", type=int, default=90,
                         help="Number of days to retain bookmarks (default: 90).")
-    parser.add_argument('--min-bookmarks-to-retain', type=int, default=100,
+    parser.add_argument("--min-bookmarks-to-retain", type=int, default=100,
                         help="Minimum number of bookmarks to retain per dataset (default: 100).")
-    parser.add_argument('--snapshot', '-s', action='store_true',
+    parser.add_argument("--snapshot", "-s", action="store_true",
                         help="Actually delete snapshots instead of bookmarks.")
-    parser.add_argument('--dry-run', '-n', action='store_true',
+    parser.add_argument("--dry-run", "-n", action="store_true",
                         help="Include this flag to print what would happen if the command were to be run for real.")
     # fmt: on
 
     args = parser.parse_args()
-    kind = 'snapshot' if args.snapshot else 'bookmark'
+    kind = "snapshot" if args.snapshot else "bookmark"
     if args.min_bookmarks_to_retain <= 0:
         print(
             f"Cowardly refusing to potentially delete all your {kind}s; "
@@ -52,14 +52,14 @@ def main():
         sys.exit(1)
 
     for root_dataset in args.dataset:
-        cmd = ['zfs', 'list', '-t', kind, '-Hp', '-o', 'creation,name']
+        cmd = ["zfs", "list", "-t", kind, "-Hp", "-o", "creation,name"]
         if args.recursive:
-            cmd.append('-r')
+            cmd.append("-r")
         cmd.append(root_dataset)
         datasets = defaultdict(list)
         for line in subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True).stdout.splitlines():
-            creation_time, bookmark = line.split('\t', 1)
-            dataset = bookmark.split('@' if args.snapshot else '#', 1)[0]
+            creation_time, bookmark = line.split("\t", 1)
+            dataset = bookmark.split("@" if args.snapshot else "#", 1)[0]
             datasets[dataset].append((int(creation_time), bookmark))
 
         for dataset, bookmarks in sorted(datasets.items()):
@@ -68,8 +68,8 @@ def main():
                 msg = "Would delete" if args.dry_run else "Deleting"
                 print(f"{msg} {kind}: {bookmark} ...")
                 if not args.dry_run:
-                    subprocess.run(['sudo', 'zfs', 'destroy', bookmark], check=True)
-    print('Success. Goodbye!')
+                    subprocess.run(["sudo", "zfs", "destroy", bookmark], check=True)
+    print("Success. Goodbye!")
 
 
 if __name__ == "__main__":

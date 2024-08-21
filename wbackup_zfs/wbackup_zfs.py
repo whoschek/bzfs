@@ -35,21 +35,21 @@ from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional, Iterable, Set
 
-__version__ = '0.9.0'
-prog_name = 'wbackup-zfs'
-prog_author = 'Wolfgang Hoschek'
+__version__ = "0.9.0"
+prog_name = "wbackup-zfs"
+prog_author = "Wolfgang Hoschek"
 die_status = 3
 if sys.version_info < (3, 7):
     print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
     sys.exit(die_status)
-zfs_send_program_opts_default = '--props --raw --compressed'
-zfs_recv_program_opts_default = '-u'
-exclude_dataset_regexes_default = r'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*'  # skip tmp datasets by default
+zfs_send_program_opts_default = "--props --raw --compressed"
+zfs_recv_program_opts_default = "-u"
+exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp datasets by default
 max_retries_default = 0
-ssh_private_key_file_default = '.ssh/id_rsa'
-ssh_cipher_default = '^aes256-gcm@openssh.com' if platform.system() != 'SunOS' else ''
-env_var_prefix = 'wbackup_zfs_'
-zfs_version_is_at_least_2_1_0 = 'zfs>=2.1.0'
+ssh_private_key_file_default = ".ssh/id_rsa"
+ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
+env_var_prefix = "wbackup_zfs_"
+zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 PIPE = subprocess.PIPE
 
 
@@ -58,7 +58,7 @@ def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog_name,
         allow_abbrev=False,
-        description=f'''
+        description=f"""
 *{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
 source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote)
 destination ZFS dataset to make the destination dataset a recursively synchronized copy of the source dataset,
@@ -135,10 +135,10 @@ feature.
 * Example with further options:
 
 `   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key /root/.ssh/id_rsa`
-''', formatter_class=argparse.RawTextHelpFormatter)
+""", formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
-        'root_dataset_pairs', nargs='+', action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
+        "root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help=(
             "SRC_DATASET: "
             "Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
@@ -154,11 +154,11 @@ feature.
             "destination datasets that do not yet exist are created as necessary, along with their parent and "
             "ancestors.\n\n"))
     parser.add_argument(
-        '--recursive', '-r', action='store_true',
+        "--recursive", "-r", action="store_true",
         help=("During replication, also consider descendant datasets, i.e. datasets within the dataset tree, "
               "including children, and children of children, etc.\n\n"))
     parser.add_argument(
-        '--include-dataset', action=FileOrLiteralAction, nargs='+', default=[], metavar='DATASET',
+        "--include-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
         help=("During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
               "if its dataset name is one of the given include dataset names but none of the exclude dataset names. "
               "A dataset name is absolute if the specified dataset is prefixed by `/`, e.g. `/tank/baz/tmp`. "
@@ -171,11 +171,11 @@ feature.
               "Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), "
               "`@dataset_names.txt`, `@/path/to/dataset_names.txt`\n\n"))
     parser.add_argument(
-        '--exclude-dataset', action=FileOrLiteralAction, nargs='+', default=[], metavar='DATASET',
+        "--exclude-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
         help=("Same syntax as --include-dataset (see above) except that the option is automatically translated to an "
               "--exclude-dataset-regex (see below).\n\n"))
     parser.add_argument(
-        '--include-dataset-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        "--include-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
               "if its relative dataset path (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given include "
               "regular expressions but none of the exclude regular expressions. "
@@ -185,11 +185,11 @@ feature.
               "Default: `.*` (include all datasets). "
               "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`\n\n"))
     parser.add_argument(
-        '--exclude-dataset-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("Same syntax as --include-dataset-regex (see above) except that the default "
               f"is `{exclude_dataset_regexes_default}`\n\n"))
     parser.add_argument(
-        '--include-snapshot-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
               "the '@' and '#') that matches at least one of the given include regular expressions but none of the "
               "exclude regular expressions. "
@@ -199,11 +199,11 @@ feature.
               "Default: `.*` (include all snapshots). "
               "Examples: `test_.*`, `!prod_.*`, `.*_(hourly|frequent)`, `!.*_(weekly|daily)`\n\n"))
     parser.add_argument(
-        '--exclude-snapshot-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        "--exclude-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
     parser.add_argument(
-        '--force', action='store_true',
+        "--force", action="store_true",
         help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
               "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
               "correspondingly before starting replication. Also, if no common snapshot is included then delete all "
@@ -211,39 +211,39 @@ feature.
               "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
               "operation is aborted with an error when encountering a conflicting snapshot.\n\n"))
     parser.add_argument(
-        '--force-unmount', action='store_true',
+        "--force-unmount", action="store_true",
         help=("On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' "
               "and 'zfs destroy -f'. \n\n"))
     parser.add_argument(
-        '--force-hard', action='store_true',
+        "--force-hard", action="store_true",
         # help=("On destination, --force will also delete dependents such as clones and bookmarks via "
         #       "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you
         #       want!\n\n"))
         help=argparse.SUPPRESS)
     parser.add_argument(
-        '--force-once', '--f1', action='store_true',
+        "--force-once", "--f1", action="store_true",
         help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
               "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
     parser.add_argument(
-        '--zfs-send-program-opts', type=str, default=zfs_send_program_opts_default, metavar='STRING',
+        "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
         help=("Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
               f"Default is '{zfs_send_program_opts_default}'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
               "and https://github.com/openzfs/zfs/issues/13024\n\n"))
     parser.add_argument(
-        '--zfs-receive-program-opts', type=str, default=zfs_recv_program_opts_default, metavar='STRING',
+        "--zfs-receive-program-opts", type=str, default=zfs_recv_program_opts_default, metavar="STRING",
         help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
               f"Default is '{zfs_recv_program_opts_default}'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
     parser.add_argument(
-        '--skip-parent', action='store_true',
+        "--skip-parent", action="store_true",
         help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
              "children, and children of children, etc (with --recursive). No dataset is processed unless --recursive "
              f"is also specified. Analogy: `{prog_name} --recursive --skip-parent src dst` is akin to Unix "
              f"`cp -r src/* dst/`\n\n")
     parser.add_argument(
-        '--skip-missing-snapshots', choices=['fail', 'dataset', 'continue'], default='dataset', nargs='?',
+        "--skip-missing-snapshots", choices=["fail", "dataset", "continue"], default="dataset", nargs="?",
         help=("During replication, handle source datasets that include no snapshots as follows:\n\n"
               "a) 'fail': Abort with an error.\n\n"
               "b) 'dataset' (default): Skip the source dataset with a warning. Skip descendant datasets if "
@@ -253,13 +253,13 @@ feature.
               "ancestors if they do not yet exist and source dataset has at least one descendant that includes a "
               "snapshot. Continue processing with the next dataset.\n\n"))
     parser.add_argument(
-        '--max-retries', type=int, min=0, default=max_retries_default, action=CheckRange, metavar='INT',
+        "--max-retries", type=int, min=0, default=max_retries_default, action=CheckRange, metavar="INT",
         help=(f"The number of times a retryable replication step shall be retried if it fails, for example because "
               f"of network hiccups (default: {max_retries_default}). "
               "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
               f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n"))
     parser.add_argument(
-        '--skip-on-error', choices=['fail', 'tree', 'dataset'], default='dataset', nargs='?',
+        "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset", nargs="?",
         help=("During replication, if an error is not retryable, or --max-retries has been exhausted, "
               "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
               "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "
@@ -279,17 +279,17 @@ feature.
               "users fails due too conflicts, busy datasets, etc, the replication job will continue for the "
               "remaining dataset trees and the remaining users.\n\n"))
     parser.add_argument(
-        '--skip-replication', action='store_true',
+        "--skip-replication", action="store_true",
         help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
              "immediately (see below).\n\n")
     parser.add_argument(
-        '--delete-missing-snapshots', action='store_true',
+        "--delete-missing-snapshots", action="store_true",
         help=("After successful replication, delete existing destination snapshots that do not exist within the source "
               "dataset if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex "
               "and the destination dataset is included via --{include|exclude}-dataset-regex "
               "--{include|exclude}-dataset policy. Does not recurse without --recursive.\n\n"))
     parser.add_argument(
-        '--delete-missing-datasets', action='store_true',
+        "--delete-missing-datasets", action="store_true",
         help=("After successful replication step and successful --delete-missing-snapshots step, if any, delete "
               "existing destination datasets that do not exist within the source dataset if they are included via "
               "--{include|exclude}-dataset-regex --{include|exclude}-dataset policy. "
@@ -298,7 +298,7 @@ feature.
               "--{include|exclude}-dataset-regex --{include|exclude}-dataset policy). "
               "Does not recurse without --recursive.\n\n"))
     parser.add_argument(
-        '--no-privilege-elevation', '-p', action='store_true',
+        "--no-privilege-elevation", "-p", action="store_true",
         help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
               "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
               "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`).\n\n"
@@ -320,7 +320,7 @@ feature.
               "https://tinyurl.com/9h97kh8n and "
               "https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq\n\n"))
     parser.add_argument(
-        '--no-stream', action='store_true',
+        "--no-stream", action="store_true",
         help=("During replication, only replicate the most recent source snapshot of a dataset (using -i incrementals "
               "instead of -I incrementals), hence skip all intermediate source snapshots that may exist between that "
               "and the most recent common snapshot. If there is no common snapshot also skip all other source "
@@ -328,7 +328,7 @@ feature.
               "destination to 'catch up' with the source ASAP, consuming a minimum of disk space, at the expense "
               "of reducing reliable options for rolling back to intermediate snapshots in the future.\n\n"))
     parser.add_argument(
-        '--no-create-bookmark', action='store_true',
+        "--no-create-bookmark", action="store_true",
         help=(f"For increased safety, in normal operation {prog_name} behaves as follows wrt. ZFS bookmark creation, "
               "if it is autodetected that the source ZFS pool support bookmarks: "
               f"Whenever it has successfully completed replication of the most recent source snapshot, {prog_name} "
@@ -372,7 +372,7 @@ feature.
               "A better example starting point can be found in third party tools or this script: "
               "https://github.com/whoschek/wbackup-zfs/blob/main/test/prune_bookmarks.py\n\n"))
     parser.add_argument(
-        '--no-use-bookmark', action='store_true',
+        "--no-use-bookmark", action="store_true",
         help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
               "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
               "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks. "
@@ -386,74 +386,74 @@ feature.
               f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
               "bookmarks currently exist, if any.\n\n"))
     parser.add_argument(
-        '--bwlimit', type=str, metavar='STRING',
+        "--bwlimit", type=str, metavar="STRING",
         help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
               "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n"))
     parser.add_argument(
-        '--dry-run', '-n', action='store_true',
+        "--dry-run", "-n", action="store_true",
         help=("Do a dry-run (aka 'no-op') to print what operations would happen if the command were to be executed "
               "for real. This option treats both the ZFS source and destination as read-only.\n\n"))
     parser.add_argument(
-        '--verbose', '-v', action='count', default=0,
+        "--verbose", "-v", action="count", default=0,
         help=("Print verbose information. This option can be specified multiple times to increase the level of "
               "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
               "flag, maybe along with --dry-run. "
               "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
               "respectively.\n\n"))
     parser.add_argument(
-        '--quiet', '-q', action='store_true',
+        "--quiet", "-q", action="store_true",
         help="Suppress non-error, info, debug, and trace output.\n\n")
     parser.add_argument(
-        '--ssh-config-file', type=str, metavar='FILE',
+        "--ssh-config-file", type=str, metavar="FILE",
         help="Path to SSH ssh_config(5) file (optional); will be passed into ssh -F CLI.\n\n")
     parser.add_argument(
-        '--ssh-cipher', type=str, default=ssh_cipher_default, metavar='STRING',
+        "--ssh-cipher", type=str, default=ssh_cipher_default, metavar="STRING",
         help=f"SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
              f"keyword in ssh_config(5) for more information: "
              f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
     parser.add_argument(
-        '--ssh-src-private-key', type=str, metavar='FILE',
+        "--ssh-src-private-key", type=str, metavar="FILE",
         help=f"Path to SSH private key file on local host to connect to source (optional); will be passed into "
              f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
     parser.add_argument(
-        '--ssh-dst-private-key', type=str, metavar='FILE',
+        "--ssh-dst-private-key", type=str, metavar="FILE",
         help=f"Path to SSH private key file on local host to connect to destination (optional); will be passed into "
              f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
     parser.add_argument(
-        '--ssh-src-user', type=str, metavar='STRING',
+        "--ssh-src-user", type=str, metavar="STRING",
         help="Remote SSH username of source host to connect to (optional). Overrides username given in "
              "SRC_DATASET.\n\n")
     parser.add_argument(
-        '--ssh-dst-user', type=str, metavar='STRING',
+        "--ssh-dst-user", type=str, metavar="STRING",
         help="Remote SSH username of destination host to connect to (optional). Overrides username given in "
              "DST_DATASET.\n\n")
     parser.add_argument(
-        '--ssh-src-host', type=str, metavar='STRING',
+        "--ssh-src-host", type=str, metavar="STRING",
         help="Remote SSH hostname of source host to connect to (optional). Can also be an IPv4 or IPv6 address. "
              "Overrides hostname given in SRC_DATASET.\n\n")
     parser.add_argument(
-        '--ssh-dst-host', type=str, metavar='STRING',
+        "--ssh-dst-host", type=str, metavar="STRING",
         help="Remote SSH hostname of destination host to connect to (optional). Can also be an IPv4 or IPv6 address. "
              "Overrides hostname given in DST_DATASET.\n\n")
     parser.add_argument(
-        '--ssh-src-port', type=int, metavar='INT',
+        "--ssh-src-port", type=int, metavar="INT",
         help="Remote SSH port of source host to connect to (optional).\n\n")
     parser.add_argument(
-        '--ssh-dst-port', type=int, metavar='INT',
+        "--ssh-dst-port", type=int, metavar="INT",
         help="Remote SSH port of destination host to connect to (optional).\n\n")
     parser.add_argument(
-        '--ssh-src-extra-opt', action='append', default=[], metavar='STRING',
+        "--ssh-src-extra-opt", action="append", default=[], metavar="STRING",
         help=("Additional option to be passed to ssh CLI when connecting to source host (optional). This option "
               "can be specified multiple times. Example: `--ssh-src-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
     parser.add_argument(
-        '--ssh-dst-extra-opt', action='append', default=[], metavar='STRING',
+        "--ssh-dst-extra-opt", action="append", default=[], metavar="STRING",
         help=("Additional option to be passed to ssh CLI when connecting to destination host (optional). This option "
               "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
     parser.add_argument(
-        '--include-envvar-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("On program startup, unset all Unix environment variables for which the full environment variable "
               "name matches at least one of the excludes but none of the includes. The purpose is to tighten "
               "security and help guard against accidental inheritance or malicious injection of environment "
@@ -469,14 +469,14 @@ feature.
               f"--include-envvar-regex {env_var_prefix}max_elapsed_secs`. "
               "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
     parser.add_argument(
-        '--exclude-envvar-regex', action=FileOrLiteralAction, nargs='+', default=[], metavar='REGEX',
+        "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
              f"environment variables. Examples: `{env_var_prefix}disable_.*`, `{env_var_prefix}.*`\n\n")
     parser.add_argument(
-        '--version', action='version', version=f"{prog_name}-{__version__}, by {prog_author}",
+        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
-        '--help, -h', action='help',
+        "--help, -h", action="help",
         help="show this help message and exit.\n\n")
     return parser
 # fmt: on
@@ -494,7 +494,7 @@ class Params:
         self.sys_argv = sys_argv if sys_argv is not None else []
         self.inject_params = inject_params if inject_params is not None else {}  # for testing only
         self.unset_matching_env_vars(args)
-        self.one_or_more_whitespace_regex = re.compile(r'\s+')
+        self.one_or_more_whitespace_regex = re.compile(r"\s+")
         assert len(args.root_dataset_pairs) > 0
         self.root_dataset_pairs = args.root_dataset_pairs
         self.src_root_dataset = None  # deferred until run_main()
@@ -502,14 +502,14 @@ class Params:
         self.origin_src_root_dataset = None  # deferred until run_main()
         self.origin_dst_root_dataset = None  # deferred until run_main()
         self.recursive = args.recursive
-        self.recursive_flag = '-r' if args.recursive else ""
+        self.recursive_flag = "-r" if args.recursive else ""
         self.skip_parent = args.skip_parent
         self.force = args.force
         self.force_once = args.force_once
         if self.force_once:
             self.force = True
-        self.force_unmount = '-f' if args.force_unmount else ""
-        self.force_hard = '-R' if args.force_hard else ""
+        self.force_unmount = "-f" if args.force_unmount else ""
+        self.force_hard = "-R" if args.force_hard else ""
         self.skip_missing_snapshots = args.skip_missing_snapshots
         self.create_bookmark = not args.no_create_bookmark
         self.use_bookmark = not args.no_use_bookmark
@@ -519,11 +519,11 @@ class Params:
         self.delete_missing_snapshots = args.delete_missing_snapshots
         self.skip_replication = args.skip_replication
         self.dry_run = args.dry_run
-        self.dry_run_recv = '-n' if args.dry_run else ""
+        self.dry_run_recv = "-n" if args.dry_run else ""
         self.dry_run_destroy = self.dry_run_recv
-        self.verbose = '-v' if args.verbose >= 1 else ""
+        self.verbose = "-v" if args.verbose >= 1 else ""
         self.verbose_zfs = True if args.verbose >= 2 else False
-        self.quiet = "" if args.quiet else '-v'
+        self.quiet = "" if args.quiet else "-v"
         self.verbose_destroy = self.quiet
         self.verbose_trace = True if args.verbose >= 2 else False
         self.enable_privilege_elevation = not args.no_privilege_elevation
@@ -535,33 +535,33 @@ class Params:
         self.current_zfs_send_program_opts = None
         self.zfs_recv_program_opts = self.sanitize_send_recv_opts(self.split_args(args.zfs_receive_program_opts))
         if self.verbose_zfs:
-            append_if_absent(self.zfs_send_program_opts, '-v')
-            append_if_absent(self.zfs_recv_program_opts, '-v')
+            append_if_absent(self.zfs_send_program_opts, "-v")
+            append_if_absent(self.zfs_recv_program_opts, "-v")
         self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
-        self.timestamp = datetime.now().strftime('%Y_%m_%d__%H_%M_%S')
+        self.timestamp = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         self.home_dir = get_home_directory()
-        self.log_dir = self.validate_arg(self.getenv('log_dir', f"{self.home_dir}/{prog_name}-logs"))
+        self.log_dir = self.validate_arg(self.getenv("log_dir", f"{self.home_dir}/{prog_name}-logs"))
         os.makedirs(self.log_dir, exist_ok=True)
-        fd, self.log_file = tempfile.mkstemp(suffix='.log', prefix=f"{self.timestamp}__", dir=self.log_dir)
+        fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
-        fd, self.pv_log_file = tempfile.mkstemp(suffix='.pv', prefix=f"{self.timestamp}__", dir=self.log_dir)
+        fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
-        self.pv_program = self.program_name('pv')
+        self.pv_program = self.program_name("pv")
         self.pv_program_opts = self.split_args(
             self.getenv(
-                'pv_program_opts',
-                '--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 '
-                '--buffer-size=1M',
+                "pv_program_opts",
+                "--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 "
+                "--buffer-size=1M",
             )
         )
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
-        self.mbuffer_program = self.program_name('mbuffer')
-        self.mbuffer_program_opts = self.split_args(self.getenv('mbuffer_program_opts', '-q -m 128M'))
-        self.compression_program = self.program_name('zstd')
-        self.compression_program_opts = self.split_args(self.getenv('compression_program_opts', '-1'))
+        self.mbuffer_program = self.program_name("mbuffer")
+        self.mbuffer_program_opts = self.split_args(self.getenv("mbuffer_program_opts", "-q -m 128M"))
+        self.compression_program = self.program_name("zstd")
+        self.compression_program_opts = self.split_args(self.getenv("compression_program_opts", "-1"))
         # no point trying to be fancy for smaller data transfers:
-        self.min_transfer_size = int(self.getenv('min_transfer_size', 1024 * 1024))
+        self.min_transfer_size = int(self.getenv("min_transfer_size", 1024 * 1024))
 
         self.ssh_config_file = self.validate_arg(args.ssh_config_file)
         self.ssh_src_private_key_file = self.validate_arg(args.ssh_src_private_key)
@@ -582,32 +582,32 @@ class Params:
         self.src_sudo = None
         self.dst_sudo = None
 
-        self.ssh_default_opts = ['-o', 'ServerAliveInterval=0']
-        self.ssh_src_extra_opts = ['-x', '-T']
+        self.ssh_default_opts = ["-o", "ServerAliveInterval=0"]
+        self.ssh_src_extra_opts = ["-x", "-T"]
         self.ssh_dst_extra_opts = self.ssh_src_extra_opts.copy()
         for extra_opt in args.ssh_src_extra_opt:
             self.ssh_src_extra_opts += self.split_args(extra_opt)
         for extra_opt in args.ssh_dst_extra_opt:
             self.ssh_dst_extra_opts += self.split_args(extra_opt)
-        self.ssh_socket_enabled = self.getenv_bool('ssh_socket_enabled', True)
+        self.ssh_socket_enabled = self.getenv_bool("ssh_socket_enabled", True)
         self.ssh_cipher = self.validate_arg(args.ssh_cipher)  # for speed with confidentiality and integrity
         # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done
         # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
         # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
 
-        self.zfs_program = self.program_name('zfs')
-        self.zpool_program = self.program_name('zpool')
-        self.ssh_program = self.program_name('ssh')
-        self.sudo_program = self.program_name('sudo')
-        self.shell_program_local = 'sh'
+        self.zfs_program = self.program_name("zfs")
+        self.zpool_program = self.program_name("zpool")
+        self.ssh_program = self.program_name("ssh")
+        self.sudo_program = self.program_name("sudo")
+        self.shell_program_local = "sh"
         self.shell_program = self.program_name(self.shell_program_local)
-        self.uname_program = self.program_name('uname')
+        self.uname_program = self.program_name("uname")
 
         self.skip_on_error = args.skip_on_error
         self.max_retries = args.max_retries
-        self.min_sleep_secs = float(self.getenv('min_sleep_secs', 0.125))
-        self.max_sleep_secs = float(self.getenv('max_sleep_secs', 5 * 60))
-        self.max_elapsed_secs = float(self.getenv('max_elapsed_secs', 60 * 60))
+        self.min_sleep_secs = float(self.getenv("min_sleep_secs", 0.125))
+        self.max_sleep_secs = float(self.getenv("max_sleep_secs", 5 * 60))
+        self.max_elapsed_secs = float(self.getenv("max_elapsed_secs", 60 * 60))
         self.min_sleep_nanos = int(self.min_sleep_secs * 1000_000_000)
         self.max_sleep_nanos = int(self.max_sleep_secs * 1000_000_000)
         self.max_elapsed_nanos = int(self.max_elapsed_secs * 1000_000_000)
@@ -628,7 +628,7 @@ class Params:
         return os.getenv(env_var_prefix + key, default)
 
     def getenv_bool(self, key, default=False):
-        return self.getenv(key, str(default).lower()).strip().lower() == 'true'
+        return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items) -> List[str]:
         """split option string on runs of one or more whitespace into an option list"""
@@ -652,14 +652,14 @@ class Params:
 
     def sanitize_send_recv_opts(self, opts: List[str]):
         """These opts are instead managed via wbackup CLI args --dry-run and --verbose"""
-        return [opt for opt in opts if opt not in ['--dryrun', '-n', '--verbose', '-v']]
+        return [opt for opt in opts if opt not in ["--dryrun", "-n", "--verbose", "-v"]]
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
-        if self.inject_params.get('inject_unavailable_' + program, False):
-            return 'xxx-' + program  # substitute a program that cannot be found on the PATH
-        if self.inject_params.get('inject_failing_' + program, False):
-            return 'false'  # substitute a program that will error out with non-zero return code
+        if self.inject_params.get("inject_unavailable_" + program, False):
+            return "xxx-" + program  # substitute a program that cannot be found on the PATH
+        if self.inject_params.get("inject_failing_" + program, False):
+            return "false"  # substitute a program that will error out with non-zero return code
         else:
             return program
 
@@ -705,14 +705,14 @@ class Job:
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
         self.params = p = Params(args, sys_argv, self.inject_params)
-        create_symlink(p.log_file, p.log_dir, 'current.log')
+        create_symlink(p.log_file, p.log_dir, "current.log")
         self.info_raw("Log file is: " + p.log_file)
-        create_symlink(p.pv_log_file, p.log_dir, 'current.pv')
+        create_symlink(p.pv_log_file, p.log_dir, "current.pv")
 
-        with open(p.log_file, 'a', encoding='utf-8') as log_fileFD:
+        with open(p.log_file, "a", encoding="utf-8") as log_fileFD:
             with redirect_stdout(Tee(log_fileFD, sys.stdout)), redirect_stderr(Tee(log_fileFD, sys.stderr)):
-                self.info('CLI arguments:', ' '.join(p.sys_argv), f"[euid: {os.geteuid()}]")
-                self.debug('Parsed CLI arguments:', str(p.args))
+                self.info("CLI arguments:", " ".join(p.sys_argv), f"[euid: {os.geteuid()}]")
+                self.debug("Parsed CLI arguments:", str(p.args))
                 try:
                     self.validate_once()
                     self.all_exceptions = []
@@ -723,7 +723,7 @@ class Job:
                         p.current_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
                         self.info(
-                            'ZFS source --> destination:',
+                            "ZFS source --> destination:",
                             f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...",
                         )
                         try:
@@ -731,7 +731,7 @@ class Job:
                             self.run_main_action()
                         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit) as e:
                             error(str(e))
-                            if p.skip_on_error == 'fail':
+                            if p.skip_on_error == "fail":
                                 raise
                             self.first_exception = self.first_exception or e
                             self.all_exceptions.append(str(e))
@@ -741,7 +741,7 @@ class Job:
                             )
                     error_count = len(self.all_exceptions)
                     if error_count > 0:
-                        msgs = '\n'.join([f"{i+1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
+                        msgs = "\n".join([f"{i+1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                         error(f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                         raise self.first_exception  # reraise first swallowed exception
                 except subprocess.CalledProcessError as e:
@@ -754,24 +754,24 @@ class Job:
                     self.info_raw("Log file was: " + p.log_file)
 
                 for line in tail(p.pv_log_file, 10):
-                    print(line, end='')
-                self.info_raw('Success. Goodbye!')
+                    print(line, end="")
+                self.info_raw("Success. Goodbye!")
                 sys.stdout.flush()
                 sys.stderr.flush()
 
     def validate_once(self):
         p = self.params
         p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
-        p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or ['.*'])
+        p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or [".*"])
 
     def validate(self):
         p = params = self.params
-        validate_user_name(params.ssh_src_user, '--ssh-src-user')
-        validate_user_name(params.ssh_dst_user, '--ssh-dst-user')
-        validate_host_name(params.ssh_src_host, '--ssh-src-host')
-        validate_host_name(params.ssh_dst_host, '--ssh-dst-host')
-        validate_port(params.ssh_src_port, '--ssh-src-port ')
-        validate_port(params.ssh_dst_port, '--ssh-dst-port ')
+        validate_user_name(params.ssh_src_user, "--ssh-src-user")
+        validate_user_name(params.ssh_dst_user, "--ssh-dst-user")
+        validate_host_name(params.ssh_src_host, "--ssh-src-host")
+        validate_host_name(params.ssh_dst_host, "--ssh-dst-host")
+        validate_port(params.ssh_src_port, "--ssh-src-port ")
+        validate_port(params.ssh_dst_port, "--ssh-dst-port ")
 
         p.ssh_src_user, p.ssh_src_host, p.ssh_src_user_host, p.src_pool, p.src_root_dataset = parse_dataset_locator(
             p.src_root_dataset, user=p.ssh_src_user, host=p.ssh_src_host, port=p.ssh_src_port
@@ -795,13 +795,13 @@ class Job:
                         f"src: {p.origin_src_root_dataset}, dst: {p.origin_dst_root_dataset}"
                     )
 
-        re_suffix = r'(?:/.*)?'  # also match descendants of a matching dataset
+        re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         exclude_regexes = self.dataset_regexes(p.args.exclude_dataset or []) + (p.args.exclude_dataset_regex or [])
         include_regexes = self.dataset_regexes(p.args.include_dataset or []) + (p.args.include_dataset_regex or [])
         p.exclude_dataset_regexes = compile_regexes(
             exclude_regexes or [exclude_dataset_regexes_default], suffix=re_suffix
         )
-        p.include_dataset_regexes = compile_regexes(include_regexes or ['.*'], suffix=re_suffix)
+        p.include_dataset_regexes = compile_regexes(include_regexes or [".*"], suffix=re_suffix)
 
         params.src_sudo, params.src_use_zfs_delegation = self.sudo_cmd(params.ssh_src_user_host, params.ssh_src_user)
         params.dst_sudo, params.dst_use_zfs_delegation = self.sudo_cmd(params.ssh_dst_user_host, params.ssh_dst_user)
@@ -826,44 +826,44 @@ class Job:
         try:
             self.detect_available_programs()
         finally:
-            self.trace('Validated Param values:', pprint.pformat(vars(params)))
+            self.trace("Validated Param values:", pprint.pformat(vars(params)))
 
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", p.src_pool)
-        if self.try_ssh_command('src', self.trace, cmd=cmd) is None:
+        if self.try_ssh_command("src", self.trace, cmd=cmd) is None:
             die(f"Pool does not exist for source dataset: {p.origin_src_root_dataset}. Manually create the pool first!")
 
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", p.dst_pool)
-        if self.try_ssh_command('dst', self.trace, cmd=cmd) is None:
+        if self.try_ssh_command("dst", self.trace, cmd=cmd) is None:
             die(
                 f"Pool does not exist for destination dataset: {p.origin_dst_root_dataset}. "
                 f"Manually create the pool first!"
             )
 
-        self.detect_zpool_features('src', p.src_pool)
-        self.detect_zpool_features('dst', p.dst_pool)
+        self.detect_zpool_features("src", p.src_pool)
+        self.detect_zpool_features("dst", p.dst_pool)
 
-        if p.src_use_zfs_delegation and p.zpool_features['src'].get('delegation') == 'off':
+        if p.src_use_zfs_delegation and p.zpool_features["src"].get("delegation") == "off":
             die(
                 f"Permission denied as ZFS delegation is disabled for source dataset: {p.origin_src_root_dataset}. "
                 f"Manually enable it via 'sudo zpool set delegation=on {p.src_pool}'"
             )
-        if p.dst_use_zfs_delegation and p.zpool_features['dst'].get('delegation') == 'off':
+        if p.dst_use_zfs_delegation and p.zpool_features["dst"].get("delegation") == "off":
             die(
                 f"Permission denied as ZFS delegation is disabled for destination dataset: {p.origin_dst_root_dataset}. "
                 f"Manually enable it via 'sudo zpool set delegation=on {p.dst_pool}'"
             )
 
         zfs_send_program_opts = p.current_zfs_send_program_opts
-        if self.is_zpool_feature_enabled_or_active('dst', 'feature@large_blocks'):
-            append_if_absent(zfs_send_program_opts, '--large-block')  # solaris-11.4.0 does not have this feature
+        if self.is_zpool_feature_enabled_or_active("dst", "feature@large_blocks"):
+            append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4.0 does not have this feature
 
-        if self.is_solaris_zfs('dst'):
+        if self.is_solaris_zfs("dst"):
             self.params.dry_run_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -n' flag
             self.params.verbose_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -v' flag
-        if self.is_solaris_zfs('src'):  # solaris-11.4.0 only knows -w compress
-            zfs_send_program_opts = ['-w' if opt == '--raw' else opt for opt in zfs_send_program_opts]
-            zfs_send_program_opts = ['compress' if opt == '--compressed' else opt for opt in zfs_send_program_opts]
-            zfs_send_program_opts = ['-p' if opt == '--props' else opt for opt in zfs_send_program_opts]
+        if self.is_solaris_zfs("src"):  # solaris-11.4.0 only knows -w compress
+            zfs_send_program_opts = ["-w" if opt == "--raw" else opt for opt in zfs_send_program_opts]
+            zfs_send_program_opts = ["compress" if opt == "--compressed" else opt for opt in zfs_send_program_opts]
+            zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
         p.current_zfs_send_program_opts = zfs_send_program_opts
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
@@ -872,7 +872,7 @@ class Job:
             if not ssh_user:
                 if os.geteuid() != 0:
                     is_root = False
-            elif ssh_user != 'root':
+            elif ssh_user != "root":
                 is_root = False
         elif os.geteuid() != 0:
             is_root = False
@@ -893,13 +893,13 @@ class Job:
             p.recursive_flag,
             p.src_root_dataset,
         )
-        src_datasets_with_record_sizes = self.try_ssh_command('src', self.debug, cmd=cmd) or ""
+        src_datasets_with_record_sizes = self.try_ssh_command("src", self.debug, cmd=cmd) or ""
         src_datasets_with_record_sizes = src_datasets_with_record_sizes.splitlines()
         src_datasets = []
         self.recordsizes = {}
         for line in src_datasets_with_record_sizes:
-            volblocksize, recordsize, src_dataset = line.split('\t', 2)
-            self.recordsizes[src_dataset] = int(recordsize) if recordsize != '-' else -int(volblocksize)
+            volblocksize, recordsize, src_dataset = line.split("\t", 2)
+            self.recordsizes[src_dataset] = int(recordsize) if recordsize != "-" else -int(volblocksize)
             src_datasets.append(src_dataset)
 
         origin_src_datasets = set(src_datasets)
@@ -909,13 +909,13 @@ class Job:
         # Optionally, replicate src_root_dataset (optionally including its descendants) to dst_root_dataset
         if not params.skip_replication:
             self.info(
-                'ZFS dataset replication:',
+                "ZFS dataset replication:",
                 f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...",
             )
             if len(origin_src_datasets) == 0:
                 die(f"Source dataset does not exist: {params.origin_src_root_dataset}")
             self.debug(
-                'Retry policy:',
+                "Retry policy:",
                 f"max_retries: {p.max_retries}, min_sleep_secs: {p.min_sleep_secs}, "
                 f"max_sleep_secs: {p.max_sleep_secs}, max_elapsed_secs: {p.max_elapsed_secs}",
             )
@@ -927,18 +927,18 @@ class Job:
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
                 dst_dataset = p.dst_root_dataset + relativize_dataset(src_dataset, p.src_root_dataset)
-                self.debug('Replicating:', f"{src_dataset} --> {dst_dataset} ...")
+                self.debug("Replicating:", f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = [
-                    '-s',
+                    "-s",
                     str(max(128 * 1024, abs(self.recordsizes[src_dataset]))),
                 ] + p.mbuffer_program_opts
                 try:
                     if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
                         skip_src_dataset = src_dataset
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit) as e:
-                    if p.skip_on_error == 'fail':
+                    if p.skip_on_error == "fail":
                         raise
-                    elif p.skip_on_error == 'tree' or not self.dst_dataset_exists[dst_dataset]:
+                    elif p.skip_on_error == "tree" or not self.dst_dataset_exists[dst_dataset]:
                         skip_src_dataset = src_dataset
                     failed = True
                     self.first_exception = self.first_exception or e
@@ -951,7 +951,7 @@ class Job:
         # dataset is included via --{include|exclude}-dataset-regex --{include|exclude}-dataset policy
         if params.delete_missing_snapshots and not failed:
             self.info(
-                '--delete-missing-snapshots:',
+                "--delete-missing-snapshots:",
                 f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...",
             )
             skip_src_dataset = ""
@@ -963,24 +963,24 @@ class Job:
                 skip_src_dataset = ""
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
                 self.maybe_inject_delete(
-                    'src', dataset=src_dataset, delete_trigger='zfs_list_snapshot_src_for_delete_missing_snapshots'
+                    "src", dataset=src_dataset, delete_trigger="zfs_list_snapshot_src_for_delete_missing_snapshots"
                 )
                 try:
-                    src_snapshots_with_guids = self.run_ssh_command('src', self.trace, cmd=cmd).splitlines()
+                    src_snapshots_with_guids = self.run_ssh_command("src", self.trace, cmd=cmd).splitlines()
                 except subprocess.CalledProcessError:
-                    self.warn('Third party deleted source:', src_dataset)
+                    self.warn("Third party deleted source:", src_dataset)
                     skip_src_dataset = src_dataset
                     origin_src_datasets.remove(src_dataset)
                 else:
                     dst_dataset = p.dst_root_dataset + relativize_dataset(src_dataset, p.src_root_dataset)
                     cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", dst_dataset)
-                    dst_snapshots_with_guids = self.run_ssh_command('dst', self.trace, check=False, cmd=cmd)
+                    dst_snapshots_with_guids = self.run_ssh_command("dst", self.trace, check=False, cmd=cmd)
                     dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids.splitlines())
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                         set(cut(1, lines=src_snapshots_with_guids))
                     )
                     missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
-                    missing_snapshot_tags = cut(2, separator='@', lines=missing_snapshot_tags)
+                    missing_snapshot_tags = cut(2, separator="@", lines=missing_snapshot_tags)
                     self.delete_snapshots(dst_dataset, snapshot_tags=missing_snapshot_tags)
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
@@ -990,13 +990,13 @@ class Job:
         # --{include|exclude}-dataset-regex --{include|exclude}-dataset policy). Does not recurse without --recursive.
         if params.delete_missing_datasets and not failed:
             self.info(
-                '--delete-missing-datasets:',
+                "--delete-missing-datasets:",
                 f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...",
             )
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, p.dst_root_dataset
             )
-            dst_datasets = self.run_ssh_command('dst', self.trace, check=False, cmd=cmd).splitlines()
+            dst_datasets = self.run_ssh_command("dst", self.trace, check=False, cmd=cmd).splitlines()
             dst_datasets = set(self.filter_datasets(dst_datasets, p.dst_root_dataset))
             origins = {replace_prefix(src_ds, p.src_root_dataset, p.dst_root_dataset) for src_ds in origin_src_datasets}
             to_delete = dst_datasets.difference(origins)
@@ -1010,7 +1010,7 @@ class Job:
             # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
             if p.delete_empty_datasets:
                 self.info(
-                    '--delete-empty-datasets:',
+                    "--delete-empty-datasets:",
                     f"{p.origin_src_root_dataset} {p.recursive_flag} --> {p.origin_dst_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
@@ -1027,7 +1027,7 @@ class Job:
                     if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
                         # all children of the dataset turned out to be orphans so the dataset itself could be an orphan
                         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o name", dst_dataset)
-                        if not self.try_ssh_command('dst', self.trace, cmd=cmd):
+                        if not self.try_ssh_command("dst", self.trace, cmd=cmd):
                             orphans.add(dst_dataset)  # found zero snapshots - mark dataset as an orphan
 
                 self.delete_datasets(orphans)
@@ -1037,11 +1037,11 @@ class Job:
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         p = params = self.params
-        use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src')
-        props = 'creation,guid,name' if use_bookmark else 'guid,name'
+        use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active("src")
+        props = "creation,guid,name" if use_bookmark else "guid,name"
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
         dst_snapshots_with_guids = self.try_ssh_command(
-            'dst', self.trace, cmd=cmd, error_trigger='zfs_list_snapshot_dst'
+            "dst", self.trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst"
         )
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
@@ -1049,8 +1049,8 @@ class Job:
         oldest_dst_snapshot_creation = None
         latest_dst_snapshot_creation = None
         if len(dst_snapshots_with_guids) > 0 and use_bookmark:
-            oldest_dst_snapshot_creation = int(dst_snapshots_with_guids[0].split('\t', 1)[0])
-            latest_dst_snapshot_creation = int(dst_snapshots_with_guids[-1].split('\t', 1)[0])
+            oldest_dst_snapshot_creation = int(dst_snapshots_with_guids[0].split("\t", 1)[0])
+            latest_dst_snapshot_creation = int(dst_snapshots_with_guids[-1].split("\t", 1)[0])
             dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
@@ -1063,16 +1063,16 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        props = 'creation,guid,name'
-        types = 'snapshot,bookmark'
+        props = "creation,guid,name"
+        types = "snapshot,bookmark"
         if oldest_dst_snapshot_creation is None:
-            props = 'guid,name'
-            types = 'snapshot'
-        self.maybe_inject_delete('src', dataset=src_dataset, delete_trigger='zfs_list_snapshot_src')
+            props = "guid,name"
+            types = "snapshot"
+        self.maybe_inject_delete("src", dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
-        src_snapshots_and_bookmarks = self.try_ssh_command('src', self.trace, cmd=cmd)
+        src_snapshots_and_bookmarks = self.try_ssh_command("src", self.trace, cmd=cmd)
         if src_snapshots_and_bookmarks is None:
-            self.warn('Third party deleted source:', src_dataset)
+            self.warn("Third party deleted source:", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
 
@@ -1097,27 +1097,27 @@ class Job:
         latest_src_snapshot = ""
         src_snapshots_guids = set()
         for line in src_snapshots_with_guids:
-            guid, snapshot = line.split('\t', 1)
+            guid, snapshot = line.split("\t", 1)
             src_snapshots_guids.add(guid)
-            if '@' in snapshot:
+            if "@" in snapshot:
                 latest_src_snapshot = snapshot
                 if oldest_src_snapshot == "":
                     oldest_src_snapshot = snapshot
         if len(src_snapshots_with_guids) == 0:
-            if params.skip_missing_snapshots == 'fail':
+            if params.skip_missing_snapshots == "fail":
                 die(
                     f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
                     f"using --skip-missing-snapshots=dataset"
                 )
-            elif params.skip_missing_snapshots == 'dataset':
-                self.warn('Skipping source dataset because it includes no snapshot:', src_dataset)
+            elif params.skip_missing_snapshots == "dataset":
+                self.warn("Skipping source dataset because it includes no snapshot:", src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and params.recursive:
                     self.warn(
-                        'Also skipping descendant datasets because destination dataset does not exist:', src_dataset
+                        "Also skipping descendant datasets because destination dataset does not exist:", src_dataset
                     )
                 return self.dst_dataset_exists[dst_dataset]
 
-        self.debug('latest_src_snapshot:', latest_src_snapshot)
+        self.debug("latest_src_snapshot:", latest_src_snapshot)
         latest_dst_snapshot = ""
         latest_dst_guid = ""
         latest_common_src_snapshot = ""
@@ -1125,14 +1125,14 @@ class Job:
 
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
-                latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split('\t', 1)
+                latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
             if latest_dst_snapshot != "" and params.force:
-                self.info('Rolling back dst to most recent snapshot:', latest_dst_snapshot)
+                self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
                 # rollback just in case the dst dataset was modified since its most recent snapshot
                 cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-                self.run_ssh_command('dst', self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                self.run_ssh_command("dst", self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             if latest_src_snapshot == "" and latest_dst_snapshot == "":
-                self.info('Already-up-to-date:', dst_dataset)
+                self.info("Already-up-to-date:", dst_dataset)
                 return True
 
             # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
@@ -1142,7 +1142,7 @@ class Job:
                 """Returns a true snapshot instead of its bookmark with the same GUID, per the sorting order
                 previously used for 'zfs list -s ...'"""
                 for _line in reversed(snapshots_with_guids):
-                    _guid, _snapshot = _line.split('\t', 1)
+                    _guid, _snapshot = _line.split("\t", 1)
                     if _guid in intersect_guids:
                         return _guid, _snapshot  # can be a snapshot or bookmark
                 return None, ""
@@ -1150,7 +1150,7 @@ class Job:
             latest_common_guid, latest_common_src_snapshot = latest_common_snapshot(
                 src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids))
             )
-            self.debug('latest_common_src_snapshot:', latest_common_src_snapshot)  # is a snapshot or bookmark
+            self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
             # self.debug('latest_dst_snapshot:', latest_dst_snapshot)
 
             if latest_common_src_snapshot:
@@ -1167,18 +1167,18 @@ class Job:
                         )
                     if params.force_once:
                         params.force = False
-                    self.info('Rolling back dst to most recent common snapshot:', latest_common_dst_snapshot)
+                    self.info("Rolling back dst to most recent common snapshot:", latest_common_dst_snapshot)
                     cmd = p.split_args(
                         f"{p.dst_sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
                         latest_common_dst_snapshot,
                     )
-                    self.run_ssh_command('dst', self.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
+                    self.run_ssh_command("dst", self.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
-                self.info('Already up-to-date:', dst_dataset)
+                self.info("Already up-to-date:", dst_dataset)
                 return True
 
-        self.debug('latest_common_src_snapshot:', latest_common_src_snapshot)  # is a snapshot or bookmark
+        self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
         # self.debug('latest_dst_snapshot:', latest_dst_snapshot)
 
         is_dry_send_receive = False
@@ -1193,17 +1193,17 @@ class Job:
                     )
                 if params.force_once:
                     params.force = False
-                if self.is_solaris_zfs('dst'):
+                if self.is_solaris_zfs("dst"):
                     # solaris-11.4.0 has no wildcard syntax to delete all snapshots in a single CLI invocation
                     self.delete_snapshots(
-                        dst_dataset, snapshot_tags=cut(2, separator='@', lines=dst_snapshots_with_guids)
+                        dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids)
                     )
                 else:
                     cmd = p.split_args(
                         f"{p.dst_sudo} {p.zfs_program} destroy {p.force_hard} {p.verbose_destroy} {p.dry_run_destroy}",
                         f"{dst_dataset}@%",
                     )  # delete all dst snapshots in a batch
-                    self.run_ssh_command('dst', self.debug, cmd=cmd, print_stdout=True)
+                    self.run_ssh_command("dst", self.debug, cmd=cmd, print_stdout=True)
                 if params.dry_run:
                     # As we're in --dry-run (--force) mode this conflict resolution step (see above) wasn't really
                     # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
@@ -1231,21 +1231,21 @@ class Job:
                     f"{p.src_sudo} {p.zfs_program} send", p.current_zfs_send_program_opts, oldest_src_snapshot
                 )
                 recv_opts = p.zfs_full_recv_opts.copy()
-                if p.getenv_bool('preserve_recordsize', False):
+                if p.getenv_bool("preserve_recordsize", False):
                     recordsize = self.recordsizes[src_dataset]
                     if recordsize >= 0:
-                        recv_opts += ['-o', f"recordsize={recordsize}"]
+                        recv_opts += ["-o", f"recordsize={recordsize}"]
                 recv_cmd = p.split_args(
                     f"{p.dst_sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset
                 )
-                self.info('Full zfs send:', f"{oldest_src_snapshot} --> {dst_dataset} ({size_estimate_human}) ...")
+                self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_estimate_human}) ...")
                 self.run_zfs_send_receive(
                     send_cmd,
                     recv_cmd,
                     size_estimate_bytes,
                     size_estimate_human,
                     is_dry_send_receive,
-                    error_trigger='full_zfs_send',
+                    error_trigger="full_zfs_send",
                 )
 
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
@@ -1261,12 +1261,12 @@ class Job:
                 results = []
                 last_appended_guid = ""
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
-                    guid, snapshot = snapshot_with_guid.split('\t', 1)
-                    if '@' in snapshot:
+                    guid, snapshot = snapshot_with_guid.split("\t", 1)
+                    if "@" in snapshot:
                         results.append(snapshot_with_guid)
                         last_appended_guid = guid
                     if snapshot == latest_common_src_snapshot:
-                        if '@' not in snapshot and guid != last_appended_guid:
+                        if "@" not in snapshot and guid != last_appended_guid:
                             # we won't incrementally replicate from a bookmark to its own snapshot
                             results.append(snapshot_with_guid)
                         break
@@ -1279,7 +1279,7 @@ class Job:
             origin_src_snapshots_with_guids = replication_candidates(
                 origin_src_snapshots_with_guids, latest_common_src_snapshot
             )
-            latest_common_src_snapshot = origin_src_snapshots_with_guids[0].split('\t', 1)[1]
+            latest_common_src_snapshot = origin_src_snapshots_with_guids[0].split("\t", 1)[1]
 
             if len(origin_src_snapshots_with_guids) == 1:
                 # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
@@ -1288,14 +1288,14 @@ class Job:
                 return True  # nothing more tbd
             if p.no_stream:
                 # skip intermediate snapshots
-                steps_todo = [('-i', latest_common_src_snapshot, latest_src_snapshot)]
+                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot)]
             else:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
                 steps_todo = self.incremental_replication_steps_wrapper(
                     origin_src_snapshots_with_guids, src_snapshots_guids
                 )
-                self.trace('steps_todo:', '; '.join([self.replication_step_to_str(step) for step in steps_todo]))
+                self.trace("steps_todo:", "; ".join([self.replication_step_to_str(step) for step in steps_todo]))
             for i, (incr_flag, start_snapshot, end_snapshot) in enumerate(steps_todo):
                 size_estimate_bytes = self.estimate_zfs_send_size(incr_flag, start_snapshot, end_snapshot)
                 size_estimate_human = human_readable_bytes(size_estimate_bytes)
@@ -1321,7 +1321,7 @@ class Job:
                     size_estimate_bytes,
                     size_estimate_human,
                     is_dry_send_receive,
-                    error_trigger='incremental_zfs_send',
+                    error_trigger="incremental_zfs_send",
                 )
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(end_snapshot, src_dataset)
@@ -1337,34 +1337,34 @@ class Job:
         error_trigger: Optional[str] = None,
     ):
         params = self.params
-        send_cmd = ' '.join([self.cquote(item) for item in send_cmd])
-        recv_cmd = ' '.join([self.cquote(item) for item in recv_cmd])
+        send_cmd = " ".join([self.cquote(item) for item in send_cmd])
+        recv_cmd = " ".join([self.cquote(item) for item in recv_cmd])
 
-        _compress_cmd = self.compress_cmd('src', size_estimate_bytes)
-        _decompress_cmd = self.decompress_cmd('dst', size_estimate_bytes)
-        src_buffer = self.mbuffer_cmd('src', size_estimate_bytes)
-        dst_buffer = self.mbuffer_cmd('dst', size_estimate_bytes)
-        local_buffer = self.mbuffer_cmd('local', size_estimate_bytes)
+        _compress_cmd = self.compress_cmd("src", size_estimate_bytes)
+        _decompress_cmd = self.decompress_cmd("dst", size_estimate_bytes)
+        src_buffer = self.mbuffer_cmd("src", size_estimate_bytes)
+        dst_buffer = self.mbuffer_cmd("dst", size_estimate_bytes)
+        local_buffer = self.mbuffer_cmd("local", size_estimate_bytes)
 
         pv_src_cmd = ""
         pv_dst_cmd = ""
         pv_loc_cmd = ""
         if params.ssh_src_user_host == "":
-            pv_src_cmd = self.pv_cmd('local', size_estimate_bytes, size_estimate_human)
+            pv_src_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)
         elif params.ssh_dst_user_host == "":
-            pv_dst_cmd = self.pv_cmd('local', size_estimate_bytes, size_estimate_human)
-        elif _compress_cmd == 'cat':
-            pv_loc_cmd = self.pv_cmd('local', size_estimate_bytes, size_estimate_human)  # compression disabled
+            pv_dst_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)
+        elif _compress_cmd == "cat":
+            pv_loc_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)  # compression disabled
         else:
             # pull-push mode with compression enabled: reporting "percent complete" isn't straightforward because
             # localhost observes the compressed data instead of the uncompressed data, so we disable the progress bar.
-            pv_loc_cmd = self.pv_cmd('local', size_estimate_bytes, size_estimate_human, disable_progress_bar=True)
+            pv_loc_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human, disable_progress_bar=True)
 
         # assemble pipeline running on source leg
         src_pipe = ""
-        if self.inject_params.get('inject_src_pipe_fail', False):
+        if self.inject_params.get("inject_src_pipe_fail", False):
             src_pipe = f"{src_pipe} | head -c 64 && false"  # for testing; initially forward some bytes and then fail
-        if self.inject_params.get('inject_src_pipe_garble', False):
+        if self.inject_params.get("inject_src_pipe_garble", False):
             src_pipe = f"{src_pipe} | base64"  # for testing; forward garbled bytes
         if pv_src_cmd != "" and pv_src_cmd != "cat":
             src_pipe = f"{src_pipe} | {pv_src_cmd}"
@@ -1374,7 +1374,7 @@ class Job:
             src_pipe = f"{src_pipe} | {src_buffer}"
         if src_pipe.startswith(" |"):
             src_pipe = src_pipe[2:]  # strip leading ' |' part
-        if self.inject_params.get('inject_src_send_error', False):
+        if self.inject_params.get("inject_src_send_error", False):
             send_cmd = f"{send_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if src_pipe != "":
             src_shell_program = params.shell_program if len(params.ssh_src_cmd) > 0 else params.shell_program_local
@@ -1404,13 +1404,13 @@ class Job:
             dst_pipe = f"{dst_pipe} | {_decompress_cmd}"
         if pv_dst_cmd != "" and pv_dst_cmd != "cat":
             dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
-        if self.inject_params.get('inject_dst_pipe_fail', False):
+        if self.inject_params.get("inject_dst_pipe_fail", False):
             dst_pipe = f"{dst_pipe} | head -c 64 && false"  # for testing; initially forward some bytes and then fail
-        if self.inject_params.get('inject_dst_pipe_garble', False):
+        if self.inject_params.get("inject_dst_pipe_garble", False):
             dst_pipe = f"{dst_pipe} | base64"  # for testing; forward garbled bytes
         if dst_pipe.startswith(" |"):
             dst_pipe = dst_pipe[2:]  # strip leading ' |' part
-        if self.inject_params.get('inject_dst_receive_error', False):
+        if self.inject_params.get("inject_dst_receive_error", False):
             recv_cmd = f"{recv_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if dst_pipe != "":
             dst_shell_program = params.shell_program if len(params.ssh_dst_cmd) > 0 else params.shell_program_local
@@ -1420,21 +1420,21 @@ class Job:
 
         # If there's no support for shell pipelines, we can't do compression, mbuffering, monitoring and rate-limiting,
         # so we fall back to simple zfs send/receive.
-        if not self.is_program_available('sh', 'src'):
+        if not self.is_program_available("sh", "src"):
             src_pipe = send_cmd
-        if not self.is_program_available('sh', 'dst'):
+        if not self.is_program_available("sh", "dst"):
             dst_pipe = recv_cmd
-        if not self.is_program_available('sh', 'local'):
+        if not self.is_program_available("sh", "local"):
             local_pipe = ""
 
         src_pipe = self.dquote(params.ssh_src_cmd, src_pipe)
         dst_pipe = self.dquote(params.ssh_dst_cmd, dst_pipe)
-        src_cmd = ' '.join([self.cquote(item) for item in params.ssh_src_cmd])
-        dst_cmd = ' '.join([self.cquote(item) for item in params.ssh_dst_cmd])
+        src_cmd = " ".join([self.cquote(item) for item in params.ssh_src_cmd])
+        dst_cmd = " ".join([self.cquote(item) for item in params.ssh_dst_cmd])
 
-        cmd = [params.shell_program_local, '-c', f"{src_cmd} {src_pipe} {local_pipe} | {dst_cmd} {dst_pipe}"]
-        msg = 'Would execute:' if is_dry_send_receive else 'Executing:'
-        self.debug(msg, ' '.join(cmd))
+        cmd = [params.shell_program_local, "-c", f"{src_cmd} {src_pipe} {local_pipe} | {dst_cmd} {dst_pipe}"]
+        msg = "Would execute:" if is_dry_send_receive else "Executing:"
+        self.debug(msg, " ".join(cmd))
         if not is_dry_send_receive:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
@@ -1442,7 +1442,7 @@ class Job:
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 # op isn't idempotent so retries regather current state from the start of replicate_flat_dataset()
                 self.warn(stderr_to_str(e.stderr))
-                raise RetryableError('Subprocess failed') from e
+                raise RetryableError("Subprocess failed") from e
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If mbuffer command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
@@ -1451,15 +1451,15 @@ class Job:
         if (
             size_estimate_bytes >= p.min_transfer_size
             and (
-                (loc == 'src' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != ""))
-                or (loc == 'dst' and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != ""))
-                or (loc == 'local' and p.ssh_src_user_host != "" and p.ssh_dst_user_host != "")
+                (loc == "src" and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != ""))
+                or (loc == "dst" and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != ""))
+                or (loc == "local" and p.ssh_src_user_host != "" and p.ssh_dst_user_host != "")
             )
-            and self.is_program_available('mbuffer', loc)
+            and self.is_program_available("mbuffer", loc)
         ):
             return f"{p.mbuffer_program} {' '.join(self.mbuffer_current_opts)} 2> /dev/null"
         else:
-            return 'cat'
+            return "cat"
 
     def compress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If zstd command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
@@ -1468,56 +1468,56 @@ class Job:
         if (
             size_estimate_bytes >= p.min_transfer_size
             and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "")
-            and self.is_program_available('zstd', loc)
+            and self.is_program_available("zstd", loc)
         ):
             return f"{p.compression_program} {' '.join(p.compression_program_opts)}"
         else:
-            return 'cat'
+            return "cat"
 
     def decompress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         p = self.params
         if (
             size_estimate_bytes >= p.min_transfer_size
             and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "")
-            and self.is_program_available('zstd', loc)
+            and self.is_program_available("zstd", loc)
         ):
             return f"{p.compression_program} -d"
         else:
-            return 'cat'
+            return "cat"
 
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
         """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka current.pv or similar"""
         p = self.params
-        if size_estimate_bytes >= p.min_transfer_size and self.is_program_available('pv', loc):
+        if size_estimate_bytes >= p.min_transfer_size and self.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
             if disable_progress_bar:
                 size = ""
-            readable = size_estimate_human.replace(' ', '')
+            readable = size_estimate_human.replace(" ", "")
             return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {p.pv_log_file}"
         else:
-            return 'cat'
+            return "cat"
 
     def warn(self, *items):
-        self.log('[W]', *items)
+        self.log("[W]", *items)
 
     def info_raw(self, *items):
         if self.params.quiet != "":
             print(f"{current_time()} [I] {' '.join(items)}")
 
     def info(self, *items):
-        self.log('[I]', *items)
+        self.log("[I]", *items)
 
     def is_debug_enabled(self) -> bool:
         return self.params.verbose != ""
 
     def debug(self, *items):
         if self.params.verbose != "":
-            self.log('[D]', *items)
+            self.log("[D]", *items)
 
     def trace(self, *items):
         if self.params.verbose_trace:
-            self.log('[T]', *items)
+            self.log("[T]", *items)
 
     def log(self, first, second, *items):
         if self.params.quiet != "":
@@ -1537,49 +1537,49 @@ class Job:
         if ssh_user_host != "":  # pool is on remote host
             ssh_cmd = [params.ssh_program] + ssh_extra_opts
             if params.ssh_config_file:
-                ssh_cmd += ['-F', params.ssh_config_file]
+                ssh_cmd += ["-F", params.ssh_config_file]
             if ssh_private_key_file:
-                ssh_cmd += ['-i', ssh_private_key_file]
+                ssh_cmd += ["-i", ssh_private_key_file]
             if params.ssh_cipher:
-                ssh_cmd += ['-c', params.ssh_cipher]
+                ssh_cmd += ["-c", params.ssh_cipher]
             if ssh_port:
-                ssh_cmd += ['-p', str(ssh_port)]
+                ssh_cmd += ["-p", str(ssh_port)]
             if params.ssh_socket_enabled:
                 # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
                 # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
                 # generate unique private socket file name in user's home dir
-                socket_dir = os.path.join(params.home_dir, '.ssh', 'wbackup-zfs')
+                socket_dir = os.path.join(params.home_dir, ".ssh", "wbackup-zfs")
                 os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
                 os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # chmod u=rwx,go=
 
                 def sanitize(name):
                     # replace any whitespace, /, $, \, @ with a ~ tilde char
-                    name = re.sub(r'[\s\\/@$]', '~', name)
+                    name = re.sub(r"[\s\\/@$]", "~", name)
                     # Remove characters not in the allowed set
-                    name = re.sub(r'[^a-zA-Z0-9;:,<.>?~`!%#$%^&*+=_-]', '', name)
+                    name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$%^&*+=_-]", "", name)
                     return name
 
                 unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
                 if self.is_test_mode:
-                    unique = 'x$#^&*(x'  # faster for running large numbers of short unit tests, also tests quoting
+                    unique = "x$#^&*(x"  # faster for running large numbers of short unit tests, also tests quoting
                 socket_name = f"{os.getpid()}@{unique}@{sanitize(ssh_host)[:45]}@{sanitize(ssh_user)}"
                 socket_file = os.path.join(socket_dir, socket_name)[: max(100, len(socket_dir) + 10)]
-                ssh_cmd += ['-S', socket_file]
+                ssh_cmd += ["-S", socket_file]
             ssh_cmd += [ssh_user_host]
         return ssh_cmd
 
     def run_ssh_command(
-        self, target='src', level=info, is_dry=False, check=True, stderr=None, print_stdout=False, cmd=None
+        self, target="src", level=info, is_dry=False, check=True, stderr=None, print_stdout=False, cmd=None
     ):
         assert cmd is not None and len(cmd) > 0
         p = self.params
         ssh_cmd = p.ssh_src_cmd
         ssh_user_host = p.ssh_src_user_host
-        if target == 'dst':
+        if target == "dst":
             ssh_cmd = p.ssh_dst_cmd
             ssh_user_host = p.ssh_dst_user_host
         if len(ssh_cmd) > 0:
-            if 'ssh' not in p.available_programs['local']:
+            if "ssh" not in p.available_programs["local"]:
                 die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
             cmd = [self.dquote(ssh_cmd, arg) for arg in cmd]
             if p.ssh_socket_enabled:
@@ -1587,13 +1587,13 @@ class Job:
                 # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
                 ssh_cmd_trimmed = ssh_cmd[0:-1]  # remove trailing $ssh_user_host
-                ssh_socket_cmd = xappend(ssh_cmd_trimmed.copy(), '-O', 'check', ssh_user_host)
+                ssh_socket_cmd = xappend(ssh_cmd_trimmed.copy(), "-O", "check", ssh_user_host)
                 if subprocess_run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:
-                    self.trace('ssh socket is alive:', ' '.join(ssh_socket_cmd))
+                    self.trace("ssh socket is alive:", " ".join(ssh_socket_cmd))
                 else:
-                    self.trace('ssh socket is not yet alive:', ' '.join(ssh_socket_cmd))
-                    ssh_socket_cmd = xappend(ssh_cmd[0:-1], '-M', '-o', 'ControlPersist=60s', ssh_user_host, 'exit')
-                    self.debug('Executing:', ' '.join(ssh_socket_cmd))
+                    self.trace("ssh socket is not yet alive:", " ".join(ssh_socket_cmd))
+                    ssh_socket_cmd = xappend(ssh_cmd[0:-1], "-M", "-o", "ControlPersist=60s", ssh_user_host, "exit")
+                    self.debug("Executing:", " ".join(ssh_socket_cmd))
                     if subprocess_run(ssh_socket_cmd, stdout=PIPE, text=True).returncode != 0:
                         die(
                             f"Cannot ssh into remote host via {ssh_socket_cmd}. "
@@ -1601,8 +1601,8 @@ class Job:
                             f"{prog_name} with: -v -v --ssh-src-extra-opt='-v -v' --ssh-dst-extra-opt='-v -v'"
                         )
 
-        msg = 'Would execute:' if is_dry else 'Executing:'
-        level(msg, ' '.join(ssh_cmd + cmd))
+        msg = "Would execute:" if is_dry else "Executing:"
+        level(msg, " ".join(ssh_cmd + cmd))
         if not is_dry:
             std_check = False if check is None else check
             if stderr != PIPE:
@@ -1611,7 +1611,7 @@ class Job:
 
             def print_str(value: str, print_value: bool) -> str:
                 if print_value:
-                    print(value, end='')
+                    print(value, end="")
                 return value
 
             if check is not None:
@@ -1623,21 +1623,21 @@ class Job:
                 # 'zfs list' on an empty dataset vs a non-existing dataset.
                 return print_str(process.stdout, print_stdout) if process.returncode == 0 else None
 
-    def try_ssh_command(self, target='src', level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
+    def try_ssh_command(self, target="src", level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
             return self.run_ssh_command(target=target, level=level, is_dry=is_dry, check=True, stderr=PIPE, cmd=cmd)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             stderr = stderr_to_str(e.stderr)
             if (
-                ': dataset does not exist' in stderr
-                or ': filesystem does not exist' in stderr  # solaris 11.4.0
-                or ': does not exist' in stderr  # solaris 11.4.0 'zfs send' with missing snapshot
-                or ': no such pool' in stderr
+                ": dataset does not exist" in stderr
+                or ": filesystem does not exist" in stderr  # solaris 11.4.0
+                or ": does not exist" in stderr  # solaris 11.4.0 'zfs send' with missing snapshot
+                or ": no such pool" in stderr
             ):
                 return None
             self.warn(stderr)
-            raise RetryableError('Subprocess failed') from e
+            raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None):
         """For testing only"""
@@ -1646,7 +1646,7 @@ class Job:
             if counter and counter[error_trigger] > 0:
                 counter[error_trigger] -= 1
                 raise subprocess.CalledProcessError(
-                    returncode=1, cmd=' '.join(cmd), stderr=error_trigger + ': dataset is busy'
+                    returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ": dataset is busy"
                 )
 
     def maybe_inject_delete(self, location=None, dataset=None, delete_trigger=None):
@@ -1656,7 +1656,7 @@ class Job:
             if counter and counter[delete_trigger] > 0:
                 counter[delete_trigger] -= 1
                 p = self.params
-                sudo = p.src_sudo if location == 'src' else p.dst_sudo
+                sudo = p.src_sudo if location == "src" else p.dst_sudo
                 cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
                 self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
@@ -1675,13 +1675,13 @@ class Job:
             if i == 0 and params.skip_parent:
                 continue
             rel_dataset = relativize_dataset(dataset, root_dataset)
-            if rel_dataset.startswith('/'):
+            if rel_dataset.startswith("/"):
                 rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
             if is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
                 results.append(dataset)
-                self.debug('Including b/c dataset regex:', dataset)
+                self.debug("Including b/c dataset regex:", dataset)
             else:
-                self.debug('Excluding b/c dataset regex:', dataset)
+                self.debug("Excluding b/c dataset regex:", dataset)
         return results
 
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
@@ -1691,15 +1691,15 @@ class Job:
         is_debug = self.is_debug_enabled()
         results = []
         for snapshot in snapshots:
-            i = snapshot.find('#')  # bookmark separator
+            i = snapshot.find("#")  # bookmark separator
             if i < 0:
-                i = snapshot.index('@')  # snapshot separator
+                i = snapshot.index("@")  # snapshot separator
             if is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
                 if is_debug:
-                    self.debug('Including b/c snaphot regex:', snapshot[1 + snapshot.find('\t', 0, i) :])
+                    self.debug("Including b/c snaphot regex:", snapshot[1 + snapshot.find("\t", 0, i) :])
             elif is_debug:
-                self.debug('Excluding b/c snaphot regex:', snapshot[1 + snapshot.find('\t', 0, i) :])
+                self.debug("Excluding b/c snaphot regex:", snapshot[1 + snapshot.find("\t", 0, i) :])
         return results
 
     def filter_bookmarks(
@@ -1708,18 +1708,18 @@ class Job:
         is_debug = self.is_debug_enabled()
         results = []
         for snapshot in snapshots_and_bookmarks:
-            if '@' in snapshot:
+            if "@" in snapshot:
                 results.append(snapshot)  # it's a true snapshot
             else:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
-                creation_time = int(snapshot[0 : snapshot.index('\t')])
+                creation_time = int(snapshot[0 : snapshot.index("\t")])
                 if oldest_dst_snapshot_creation <= creation_time <= newest_dst_snapshot_creation:
                     results.append(snapshot)
                 elif is_debug:
-                    self.debug('Excluding b/c bookmark creation time:', snapshot)
+                    self.debug("Excluding b/c bookmark creation time:", snapshot)
         return results
 
     @staticmethod
@@ -1729,27 +1729,27 @@ class Job:
         if len(input_set) == 0:
             return results
         for line in input_list:
-            if line[0 : line.index('\t')] in input_set:
+            if line[0 : line.index("\t")] in input_set:
                 results.append(line)
         return results
 
     def delete_snapshots(self, dataset: str, snapshot_tags: List[str] = []) -> None:
         if len(snapshot_tags) > 0:
-            if self.is_solaris_zfs('dst'):
+            if self.is_solaris_zfs("dst"):
                 # solaris-11.4.0 has no syntax to delete multiple snapshots in a single CLI invocation
                 for snapshot_tag in reversed(snapshot_tags):
                     self.delete_snapshot(f"{dataset}@{snapshot_tag}")
             else:
-                self.delete_snapshot(dataset + '@' + ','.join(reversed(snapshot_tags)))
+                self.delete_snapshot(dataset + "@" + ",".join(reversed(snapshot_tags)))
 
     def delete_snapshot(self, snaps_to_delete: str) -> None:
         p = self.params
-        self.info('Deleting snapshot(s):', snaps_to_delete)
+        self.info("Deleting snapshot(s):", snaps_to_delete)
         cmd = p.split_args(
             f"{p.dst_sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete
         )
-        is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-        self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        is_dry = p.dry_run and self.is_solaris_zfs("dst")  # solaris-11.4.0 knows no 'zfs destroy -n' flag
+        self.run_ssh_command("dst", self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
     def delete_datasets(self, datasets: Iterable[str]) -> None:
         """Delete the given datasets via zfs destroy -r"""
@@ -1758,7 +1758,7 @@ class Job:
         last_deleted_dataset = ""
         for dataset in isorted(datasets):
             if not f"{dataset}/".startswith(f"{last_deleted_dataset}/"):
-                self.info('Delete missing dataset tree:', f"{dataset} ...")
+                self.info("Delete missing dataset tree:", f"{dataset} ...")
                 p = self.params
                 cmd = p.split_args(
                     f"{p.dst_sudo} {p.zfs_program} destroy -r",
@@ -1768,8 +1768,8 @@ class Job:
                     p.dry_run_destroy,
                     dataset,
                 )
-                is_dry = p.dry_run and self.is_solaris_zfs('dst')  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-                self.run_ssh_command('dst', self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+                is_dry = p.dry_run and self.is_solaris_zfs("dst")  # solaris-11.4.0 knows no 'zfs destroy -n' flag
+                self.run_ssh_command("dst", self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
                 last_deleted_dataset = dataset
 
     def create_filesystem(self, filesystem: str) -> None:
@@ -1778,64 +1778,64 @@ class Job:
         # invocation for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
         # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
         p = self.params
-        parent = ''
-        no_mount = '-u' if self.is_program_available(zfs_version_is_at_least_2_1_0, 'dst') else ''
-        for component in filesystem.split('/'):
+        parent = ""
+        no_mount = "-u" if self.is_program_available(zfs_version_is_at_least_2_1_0, "dst") else ""
+        for component in filesystem.split("/"):
             parent += component
             if not self.dst_dataset_exists[parent]:
                 cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} create -p", no_mount, parent)
                 try:
-                    self.run_ssh_command('dst', self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
+                    self.run_ssh_command("dst", self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
-                    print(e.stderr, sys.stderr, end='')
+                    print(e.stderr, sys.stderr, end="")
                     # ignore harmless error caused by 'zfs create' without the -u flag
                     if (
-                        'filesystem successfully created, but it may only be mounted by root' not in e.stderr
-                        and 'filesystem successfully created, but not mounted' not in e.stderr
+                        "filesystem successfully created, but it may only be mounted by root" not in e.stderr
+                        and "filesystem successfully created, but not mounted" not in e.stderr
                     ):  # SolarisZFS
                         raise
                 self.dst_dataset_exists[parent] = True
-            parent += '/'
+            parent += "/"
 
     def create_zfs_bookmark(self, src_snapshot: str, src_dataset: str) -> None:
         p = self.params
-        if '@' in src_snapshot:
+        if "@" in src_snapshot:
             bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
-            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active('src'):
+            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active("src"):
                 cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
                 try:
                     self.run_ssh_command(
-                        'src', self.debug, is_dry=p.dry_run, check=True, stderr=PIPE, print_stdout=True, cmd=cmd
+                        "src", self.debug, is_dry=p.dry_run, check=True, stderr=PIPE, print_stdout=True, cmd=cmd
                     )
                 except subprocess.CalledProcessError as e:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
-                    if ': bookmark exists' not in e.stderr:
-                        print(e.stderr, sys.stderr, end='')
+                    if ": bookmark exists" not in e.stderr:
+                        print(e.stderr, sys.stderr, end="")
                         raise
 
     def estimate_zfs_send_size(self, *items) -> int:
         """estimate num bytes to transfer via 'zfs send'"""
-        if self.is_solaris_zfs('src'):
+        if self.is_solaris_zfs("src"):
             return 0  # solaris-11.4.0 does not have a --parsable equivalent
         p = self.params
-        zfs_send_program_opts = ['--parsable' if opt == '-P' else opt for opt in p.current_zfs_send_program_opts]
-        zfs_send_program_opts = append_if_absent(zfs_send_program_opts, '-v', '-n', '--parsable')
+        zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.current_zfs_send_program_opts]
+        zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
         cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", zfs_send_program_opts, items)
-        lines = self.try_ssh_command('src', self.trace, cmd=cmd)
+        lines = self.try_ssh_command("src", self.trace, cmd=cmd)
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
         size = None
         for line in lines.splitlines():
-            if line.startswith('size'):
+            if line.startswith("size"):
                 size = line
         assert size is not None
-        return int(size[size.index('\t') + 1 :])
+        return int(size[size.index("\t") + 1 :])
 
     def dataset_regexes(self, datasets: List[str]) -> List[str]:
         params = self.params
         results = []
         for dataset in datasets:
-            if dataset.startswith('/'):
+            if dataset.startswith("/"):
                 # it's an absolute dataset - convert it to a relative dataset
                 dataset = dataset[1:]
                 if f"{dataset}/".startswith(f"{params.src_root_dataset}/"):
@@ -1844,14 +1844,14 @@ class Job:
                     dataset = relativize_dataset(dataset, params.dst_root_dataset)
                 else:
                     continue  # ignore datasets that make no difference
-                if dataset.startswith('/'):
+                if dataset.startswith("/"):
                     dataset = dataset[1:]
-            if dataset.endswith('/'):
+            if dataset.endswith("/"):
                 dataset = dataset[0:-1]
             if dataset:
                 regex = re.escape(dataset)
             else:
-                regex = '.*'
+                regex = ".*"
             results.append(regex)
         return results
 
@@ -1888,12 +1888,12 @@ class Job:
         src_guids = []
         src_snapshots = []
         for line in origin_src_snapshots_with_guids:
-            guid, snapshot = line.split('\t', 1)
+            guid, snapshot = line.split("\t", 1)
             src_guids.append(guid)
             src_snapshots.append(snapshot)
 
         force_convert_I_to_i = False
-        if self.params.src_use_zfs_delegation and not self.params.getenv_bool('no_force_convert_I_to_i', False):
+        if self.params.src_use_zfs_delegation and not self.params.getenv_bool("no_force_convert_I_to_i", False):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
@@ -1938,7 +1938,7 @@ class Job:
                     if i < n:
                         # assert start != i
                         if start != i:
-                            step = ('-i', src_snapshots[start], src_snapshots[i])
+                            step = ("-i", src_snapshots[start], src_snapshots[i])
                             # print(f"r1 {self.replication_step_to_str(step)}")
                             steps.append(step)
                         i -= 1
@@ -1947,25 +1947,25 @@ class Job:
                     i -= 1
                     # assert start != i
                     if start != i:
-                        step = ('-I', src_snapshots[start], src_snapshots[i])
+                        step = ("-I", src_snapshots[start], src_snapshots[i])
                         # print(f"r2 {self.replication_step_to_str(step)}")
-                        if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
+                        if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
                             steps.append(step)
                         else:  # convert -I step to -i steps
                             for j in range(start, i):
-                                steps.append(('-i', src_snapshots[j], src_snapshots[j + 1]))
+                                steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
                     i -= 1
             else:
                 # finish up run of trailing dailies
                 i -= 1
                 if start != i:
-                    step = ('-I', src_snapshots[start], src_snapshots[i])
+                    step = ("-I", src_snapshots[start], src_snapshots[i])
                     # print(f"r3 {self.replication_step_to_str(step)}")
-                    if i - start > 1 and not force_convert_I_to_i and '@' in src_snapshots[start]:
+                    if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
                         steps.append(step)
                     else:  # convert -I step to -i steps
                         for j in range(start, i):
-                            steps.append(('-i', src_snapshots[j], src_snapshots[j + 1]))
+                            steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
             i += 1
         return steps
 
@@ -1980,71 +1980,71 @@ class Job:
     def detect_available_programs(self) -> None:
         p = params = self.params
         available_programs = params.available_programs
-        available_programs['local'] = dict.fromkeys(
+        available_programs["local"] = dict.fromkeys(
             subprocess_run(
-                [p.shell_program_local, '-c', self.find_available_programs()], stdout=PIPE, text=True, check=False
+                [p.shell_program_local, "-c", self.find_available_programs()], stdout=PIPE, text=True, check=False
             ).stdout.splitlines()
         )
-        if subprocess_run([params.shell_program_local, '-c', 'exit'], stdout=PIPE, text=True).returncode != 0:
-            self.disable_program_internal('sh', 'local')
+        if subprocess_run([params.shell_program_local, "-c", "exit"], stdout=PIPE, text=True).returncode != 0:
+            self.disable_program_internal("sh", "local")
 
         # check if we can ssh into the remote hosts at all
         if len(params.ssh_src_cmd) > 0:
-            self.run_ssh_command('src', self.debug, cmd=['exit'])
+            self.run_ssh_command("src", self.debug, cmd=["exit"])
         if len(params.ssh_dst_cmd) > 0:
-            self.run_ssh_command('dst', self.debug, cmd=['exit'])
+            self.run_ssh_command("dst", self.debug, cmd=["exit"])
 
         # if 'sh' and 'echo' are available on remote hosts then detect available programs there
-        self.detect_available_programs_remote('src', available_programs, p.ssh_src_user_host)
-        self.detect_available_programs_remote('dst', available_programs, p.ssh_dst_user_host)
+        self.detect_available_programs_remote("src", available_programs, p.ssh_src_user_host)
+        self.detect_available_programs_remote("dst", available_programs, p.ssh_dst_user_host)
 
-        if not ('zstd' in available_programs['src'] and 'zstd' in available_programs['dst']):
-            self.disable_program('zstd')  # no compression is used if source and dst do not both support compression
-        if params.getenv_bool('disable_compression', False):
-            self.disable_program('zstd')
-        if params.getenv_bool('disable_mbuffer', False):
-            self.disable_program('mbuffer')
-        if params.getenv_bool('disable_pv', False):
-            self.disable_program('pv')
-        if params.getenv_bool('disable_sh', False):
-            self.disable_program('sh')
-        if params.getenv_bool('disable_sudo', False):
-            self.disable_program('sudo')
-        if params.getenv_bool('disable_zpool', False):
-            self.disable_program('zpool')
+        if not ("zstd" in available_programs["src"] and "zstd" in available_programs["dst"]):
+            self.disable_program("zstd")  # no compression is used if source and dst do not both support compression
+        if params.getenv_bool("disable_compression", False):
+            self.disable_program("zstd")
+        if params.getenv_bool("disable_mbuffer", False):
+            self.disable_program("mbuffer")
+        if params.getenv_bool("disable_pv", False):
+            self.disable_program("pv")
+        if params.getenv_bool("disable_sh", False):
+            self.disable_program("sh")
+        if params.getenv_bool("disable_sudo", False):
+            self.disable_program("sudo")
+        if params.getenv_bool("disable_zpool", False):
+            self.disable_program("zpool")
 
-        for key in ['local', 'src', 'dst']:
+        for key in ["local", "src", "dst"]:
             for program in list(available_programs[key].keys()):
-                if program.startswith('uname-'):
+                if program.startswith("uname-"):
                     # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
                     # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
                     # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                     available_programs[key].pop(program)
-                    uname = program[len('uname-') :]
-                    available_programs[key]['uname'] = uname
+                    uname = program[len("uname-") :]
+                    available_programs[key]["uname"] = uname
                     self.trace(f"available_programs[{key}][uname]:", uname)
-                    available_programs[key]['os'] = uname.split(' ')[0]  # Linux|FreeBSD|SunOS
+                    available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS
                     self.trace(f"available_programs[{key}][os]:", f"{available_programs[key]['os']}")
 
         for key, value in available_programs.items():
-            self.debug(f"available_programs[{key}]:", ', '.join(value))
+            self.debug(f"available_programs[{key}]:", ", ".join(value))
 
-        if params.src_sudo and not self.is_program_available('sudo', 'src'):
+        if params.src_sudo and not self.is_program_available("sudo", "src"):
             die(f"{params.sudo_program} CLI is not available on src host: {params.ssh_src_user_host or 'localhost'}")
-        if params.dst_sudo and not self.is_program_available('sudo', 'dst'):
+        if params.dst_sudo and not self.is_program_available("sudo", "dst"):
             die(f"{params.sudo_program} CLI is not available on dst host: {params.ssh_dst_user_host or 'localhost'}")
 
     def disable_program(self, program: str):
-        self.disable_program_internal(program, 'src')
-        self.disable_program_internal(program, 'dst')
-        self.disable_program_internal(program, 'local')
+        self.disable_program_internal(program, "src")
+        self.disable_program_internal(program, "dst")
+        self.disable_program_internal(program, "local")
 
     def disable_program_internal(self, program: str, location: str):
         self.params.available_programs[location].pop(program, None)
 
     def find_available_programs(self):
         params = self.params
-        return f'''
+        return f"""
         command -v echo > /dev/null && echo echo
         command -v {params.zpool_program} > /dev/null && echo zpool
         command -v {params.ssh_program} > /dev/null && echo ssh
@@ -2054,44 +2054,44 @@ class Job:
         command -v {params.mbuffer_program} > /dev/null && echo mbuffer
         command -v {params.pv_program} > /dev/null && echo pv
         command -v {params.uname_program} > /dev/null && printf uname- && {params.uname_program} -a || true
-        '''
+        """
 
     def detect_available_programs_remote(self, location: str, available_programs: Dict, ssh_user_host):
         p = self.params
-        available_programs_minimum = {'zpool': None, 'sudo': None}
+        available_programs_minimum = {"zpool": None, "sudo": None}
         available_programs[location] = {}
         try:
-            lines = self.run_ssh_command(location, self.debug, stderr=PIPE, cmd=[p.zfs_program, '--version'])
+            lines = self.run_ssh_command(location, self.debug, stderr=PIPE, cmd=[p.zfs_program, "--version"])
         except (FileNotFoundError, PermissionError) as e:  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         except subprocess.CalledProcessError as e:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-                available_programs[location]['zfs'] = 'notOpenZFS'  # solaris-11.4.0 zfs does not know --version flag
+                available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4.0 zfs does not know --version flag
             else:
-                print(e.stderr, sys.stderr, end='')
+                print(e.stderr, sys.stderr, end="")
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         else:
             line = lines.splitlines()[0]
-            assert line.startswith('zfs-')
+            assert line.startswith("zfs-")
             # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5
-            version = line.split('-')[1].strip()
-            match = re.fullmatch(r'(\d+\.\d+\.\d+).*', version)
+            version = line.split("-")[1].strip()
+            match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
             if match:
                 version = match.group(1)
             else:
                 raise ValueError("Unparsable zfs version string: " + version)
-            available_programs[location]['zfs'] = version
+            available_programs[location]["zfs"] = version
             try:
-                if is_version_at_least(version, '2.1.0'):
+                if is_version_at_least(version, "2.1.0"):
                     available_programs[location][zfs_version_is_at_least_2_1_0] = True
             except Exception:
                 pass
-        self.trace(f"available_programs[{location}][zfs]:", available_programs[location]['zfs'])
+        self.trace(f"available_programs[{location}][zfs]:", available_programs[location]["zfs"])
 
         try:
-            cmd = [p.shell_program, '-c', 'echo hello world']
-            if self.run_ssh_command(target=location, level=self.trace, check=False, cmd=cmd) == 'hello world\n':
-                cmd = [p.shell_program, '-c', self.find_available_programs()]
+            cmd = [p.shell_program, "-c", "echo hello world"]
+            if self.run_ssh_command(target=location, level=self.trace, check=False, cmd=cmd) == "hello world\n":
+                cmd = [p.shell_program, "-c", self.find_available_programs()]
                 available_programs[location].update(
                     dict.fromkeys(self.run_ssh_command(location, self.trace, cmd=cmd).splitlines())
                 )
@@ -2105,12 +2105,12 @@ class Job:
             available_programs[location].update(available_programs_minimum)
 
     def is_solaris_zfs(self, location: str):
-        return self.params.available_programs[location].get('zfs') == 'notOpenZFS'
+        return self.params.available_programs[location].get("zfs") == "notOpenZFS"
 
     def detect_zpool_features(self, location: str, pool: str) -> None:
         params = self.params
         features = {}
-        if self.is_program_available('zpool', location):
+        if self.is_program_available("zpool", location):
             cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", pool)
             try:
                 lines = self.run_ssh_command(location, self.trace, check=False, cmd=cmd).splitlines()
@@ -2123,28 +2123,28 @@ class Job:
                     f"Failed to detect zpool features on {location}: {pool}. "
                     f"Continuing with minimal assumptions ..."
                 )
-            props = {line.split('\t', 1)[0]: line.split('\t', 1)[1] for line in lines}
-            features = {k: v for k, v in props.items() if k.startswith('feature@') or k == 'delegation'}
-            str_features = '\n'.join([f"{k}: {v}" for k, v in sorted(features.items())])
+            props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
+            features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
+            str_features = "\n".join([f"{k}: {v}" for k, v in sorted(features.items())])
             self.trace(f"{location} zpool features:", str_features)
         params.zpool_features[location] = features
 
     def is_zpool_feature_enabled_or_active(self, location: str, feature: str) -> bool:
         value = self.params.zpool_features[location].get(feature, None)
-        return value == 'active' or value == 'enabled'
+        return value == "active" or value == "enabled"
 
     def is_zpool_bookmarks_feature_enabled_or_active(self, location: str) -> bool:
         return self.is_zpool_feature_enabled_or_active(
-            location, 'feature@bookmark_v2'
-        ) and self.is_zpool_feature_enabled_or_active(location, 'feature@bookmark_written')
+            location, "feature@bookmark_v2"
+        ) and self.is_zpool_feature_enabled_or_active(location, "feature@bookmark_written")
 
 
 #############################################################################
 def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
-    if ('stderr' not in kwargs or kwargs['stderr'] is not subprocess.PIPE) and (
-        'capture_output' not in kwargs or kwargs['capture_output'] is False
+    if ("stderr" not in kwargs or kwargs["stderr"] is not subprocess.PIPE) and (
+        "capture_output" not in kwargs or kwargs["capture_output"] is False
     ):
-        kwargs['stderr'] = sys.stderr  # redirect stderr of subprocess to log file unless directed otherwise
+        kwargs["stderr"] = sys.stderr  # redirect stderr of subprocess to log file unless directed otherwise
     return subprocess.run(*args, **kwargs)
 
 
@@ -2153,19 +2153,19 @@ def error(*items):
 
 
 def die(*items):
-    ex = SystemExit(' '.join(items))
+    ex = SystemExit(" ".join(items))
     ex.code = die_status
     raise ex
 
 
-def cut(field: int = -1, separator='\t', lines: List[str] = None) -> List[str]:
+def cut(field: int = -1, separator="\t", lines: List[str] = None) -> List[str]:
     """Retain only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command"""
     if field == 1:
         return [line[0 : line.index(separator)] for line in lines]
     elif field == 2:
         return [line[line.index(separator) + 1 :] for line in lines]
     else:
-        raise ValueError('Unsupported parameter value')
+        raise ValueError("Unsupported parameter value")
 
 
 def relativize_dataset(dataset: str, root_dataset: str) -> str:
@@ -2182,7 +2182,7 @@ def is_included(
     `!` prefix does not match."""
     is_match = False
     for regex, is_negation in include_regexes:
-        is_match = regex.fullmatch(name) if regex.pattern != '.*' else True
+        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
         if is_negation:
             is_match = not is_match
         if is_match:
@@ -2192,7 +2192,7 @@ def is_included(
         return False
 
     for regex, is_negation in exclude_regexes:
-        is_match = regex.fullmatch(name) if regex.pattern != '.*' else True
+        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
         if is_negation:
             is_match = not is_match
         if is_match:
@@ -2200,14 +2200,14 @@ def is_included(
     return True
 
 
-def compile_regexes(regexes: List[str], suffix='') -> List[Tuple[re.Pattern, bool]]:
+def compile_regexes(regexes: List[str], suffix="") -> List[Tuple[re.Pattern, bool]]:
     compiled_regexes = []
     for regex in regexes:
-        is_negation = regex.startswith('!')
+        is_negation = regex.startswith("!")
         if is_negation:
             regex = regex[1:]
         regex = replace_capturing_groups_with_non_capturing_groups(regex)
-        if regex != '.*' or not (suffix.startswith('(') and suffix.endswith(')?')):
+        if regex != ".*" or not (suffix.startswith("(") and suffix.endswith(")?")):
             regex = f"{regex}{suffix}"
         compiled_regexes.append((re.compile(regex), is_negation))
     return compiled_regexes
@@ -2224,8 +2224,8 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     # return pattern.sub('(?:', regex)
     i = len(regex) - 2
     while i >= 0:
-        i = regex.rfind('(', 0, i + 1)
-        if i >= 0 and regex[i] == '(' and (regex[i + 1] != '?') and (i == 0 or regex[i - 1] != '\\'):
+        i = regex.rfind("(", 0, i + 1)
+        if i >= 0 and regex[i] == "(" and (regex[i + 1] != "?") and (i == 0 or regex[i - 1] != "\\"):
             regex = f"{regex[0:i]}(?:{regex[i+1:]}"
         i -= 1
     return regex
@@ -2249,7 +2249,7 @@ def xappend(lst, *items) -> List[str]:
 
 
 def current_time() -> str:
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def replace_prefix(line, s1, s2):
@@ -2258,7 +2258,7 @@ def replace_prefix(line, s1, s2):
 
 
 def human_readable_bytes(size: int) -> str:
-    units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB']
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB"]
     i = 0
     while size >= 1024 and i < len(units) - 1:
         size //= 1024
@@ -2268,7 +2268,7 @@ def human_readable_bytes(size: int) -> str:
 
 def get_home_directory() -> str:
     """reliably detect home dir even if HOME env var is undefined"""
-    home = os.getenv('HOME')
+    home = os.getenv("HOME")
     if not home:
         # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
         home = pwd.getpwuid(os.getuid()).pw_dir
@@ -2278,7 +2278,7 @@ def get_home_directory() -> str:
 def create_symlink(src, dst_dir, dst):
     """For parallel usage, ensure there is no time window when the symlink does not exist; uses atomic os.rename()"""
     uniq = f".tmp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex}"
-    fd, temp_link = tempfile.mkstemp(suffix='.tmp', prefix=uniq, dir=dst_dir)
+    fd, temp_link = tempfile.mkstemp(suffix=".tmp", prefix=uniq, dir=dst_dir)
     os.close(fd)
     os.remove(temp_link)
     os.symlink(os.path.basename(src), temp_link)
@@ -2287,13 +2287,13 @@ def create_symlink(src, dst_dir, dst):
 
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     """Check if the version string is at least the minimum version string."""
-    return tuple(map(int, version_str.split('.'))) >= tuple(map(int, min_version_str.split('.')))
+    return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
 def tail(file, n: int):
     if not os.path.isfile(file):
         return []
-    with open(file, 'r', encoding='utf-8') as fd:
+    with open(file, "r", encoding="utf-8") as fd:
         return collections.deque(fd, maxlen=n)
 
 
@@ -2305,7 +2305,7 @@ def append_if_absent(lst: List, *items):
 
 
 def stderr_to_str(stderr):
-    return stderr if not isinstance(stderr, bytes) else stderr.decode('utf-8')
+    return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
 def parse_dataset_locator(input_text, validate=True, user=None, host=None, port=None):
@@ -2321,16 +2321,16 @@ def parse_dataset_locator(input_text, validate=True, user=None, host=None, port=
 
     # Input format is [[user@]host:]dataset
     #                           1234         5          6
-    match = re.fullmatch(r'(((([^@]*)@)?([^:]+)):)?(.*)', input_text, re.DOTALL)
+    match = re.fullmatch(r"(((([^@]*)@)?([^:]+)):)?(.*)", input_text, re.DOTALL)
     if match:
         if user_undefined:
             user = match.group(4) or ""
         if host_undefined:
             host = match.group(5) or ""
-        if host == '-':
+        if host == "-":
             host = ""
         dataset = match.group(6) or ""
-        i = dataset.find('/')
+        i = dataset.find("/")
         pool = dataset[0:i] if i >= 0 else dataset
 
         if user and host:
@@ -2354,20 +2354,20 @@ def validate_dataset_name(dataset, input_text):
     # and (by now nomore accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
     ds = dataset
     if (
-        ds in ['', '.', '..']
-        or '//' in ds
-        or ds.startswith('/')
-        or ds.endswith('/')
-        or ds.startswith('./')
-        or ds.startswith('../')
-        or ds.endswith('/.')
-        or ds.endswith('/..')
-        or '@' in ds
-        or '#' in ds
+        ds in ["", ".", ".."]
+        or "//" in ds
+        or ds.startswith("/")
+        or ds.endswith("/")
+        or ds.startswith("./")
+        or ds.startswith("../")
+        or ds.endswith("/.")
+        or ds.endswith("/..")
+        or "@" in ds
+        or "#" in ds
         or '"' in ds
         or "'" in ds
-        or '%' in ds
-        or any(char.isspace() and char != ' ' for char in ds)
+        or "%" in ds
+        or any(char.isspace() and char != " " for char in ds)
         or not ds[0].isalpha()
     ):
         die(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
@@ -2379,7 +2379,7 @@ def validate_user_name(user, input_text):
 
 
 def validate_host_name(host, input_text):
-    if host and any(char.isspace() or char == '@' or char == '"' or char == "'" for char in host):
+    if host and any(char.isspace() or char == "@" or char == '"' or char == "'" for char in host):
         die(f"Illegal host name: '{host}' for: '{input_text}'")
 
 
@@ -2432,11 +2432,11 @@ class FileOrLiteralAction(argparse.Action):
         if current_values is None:
             current_values = []
         for value in values:
-            if not value.startswith('@'):
+            if not value.startswith("@"):
                 current_values.append(value)
             else:
                 try:
-                    with open(value[1:], 'r', encoding='utf-8') as fd:
+                    with open(value[1:], "r", encoding="utf-8") as fd:
                         for line in fd:
                             current_values.append(line.strip())
                 except FileNotFoundError:
@@ -2470,9 +2470,12 @@ class FileOrLiteralAction(argparse.Action):
 # (a, +infinity) --> inf=a
 # (-infinity, b] --> max=b
 # (-infinity, b) --> sup=b
-# fmt: offf
+# fmt: off
 class CheckRange(argparse.Action):
-    ops = {'inf': operator.gt, 'min': operator.ge, 'sup': operator.lt, 'max': operator.le}
+    ops = {'inf': operator.gt,
+           'min': operator.ge,
+           'sup': operator.lt,
+           'max': operator.le}
 
     def __init__(self, *args, **kwargs):
         if 'min' in kwargs and 'inf' in kwargs:
@@ -2508,10 +2511,9 @@ class CheckRange(argparse.Action):
             if hasattr(self, name) and not op(values, getattr(self, name)):
                 raise argparse.ArgumentError(self, self.interval())
         setattr(namespace, self.dest, values)
-
-
 # fmt: on
 
+
 #############################################################################
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
