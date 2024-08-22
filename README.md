@@ -1,5 +1,8 @@
 [![Build](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml)
-[![Coverage](https://whoschek.github.io/wbackup-zfs/coverage-badge.svg)](https://whoschek.github.io/wbackup-zfs/)
+[![Coverage](https://whoschek.github.io/wbackup-zfs/badges/coverage-badge.svg)](https://whoschek.github.io/wbackup-zfs/)
+![os](https://whoschek.github.io/wbackup-zfs/badges/os-badge.svg)
+![zfs](https://whoschek.github.io/wbackup-zfs/badges/zfs-badge.svg)
+![python](https://whoschek.github.io/wbackup-zfs/badges/python-badge.svg)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 wbackup-zfs
 ==========
@@ -162,7 +165,7 @@ ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 mbuffer --version
 # Automated Test Runs
 
 Results of automated test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
-[here](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml?query=event%3Aschedule+), as generated
+[here](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
 by [this script](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml).
 The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, Solaris, etc.
 The script also generates code coverage reports which are published [here](https://whoschek.github.io/wbackup-zfs/).
