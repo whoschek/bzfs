@@ -2093,11 +2093,8 @@ class Job:
             else:
                 raise ValueError("Unparsable zfs version string: " + version)
             available_programs[location]["zfs"] = version
-            try:
-                if is_version_at_least(version, "2.1.0"):
-                    available_programs[location][zfs_version_is_at_least_2_1_0] = True
-            except Exception:
-                pass
+            if is_version_at_least(version, "2.1.0"):
+                available_programs[location][zfs_version_is_at_least_2_1_0] = True
         self.trace(f"available_programs[{location}][zfs]:", available_programs[location]["zfs"])
 
         try:
