@@ -902,6 +902,7 @@ class Job:
             volblocksize, recordsize, src_dataset = line.split("\t", 2)
             self.recordsizes[src_dataset] = int(recordsize) if recordsize != "-" else -int(volblocksize)
             src_datasets.append(src_dataset)
+        src_datasets_with_record_sizes = None  # help gc
 
         origin_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src_datasets, p.src_root_dataset))  # apply include/exclude policy
