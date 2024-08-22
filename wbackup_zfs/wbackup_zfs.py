@@ -742,7 +742,7 @@ class Job:
                             )
                     error_count = len(self.all_exceptions)
                     if error_count > 0:
-                        msgs = "\n".join([f"{i+1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
+                        msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                         error(f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                         raise self.first_exception  # reraise first swallowed exception
                 except subprocess.CalledProcessError as e:
@@ -2069,7 +2069,7 @@ class Job:
             # option is not known there
             lines = self.run_ssh_command(location, self.debug, stderr=PIPE, cmd=[p.zfs_program, "--version"])
             assert lines
-        except (FileNotFoundError, PermissionError) as e:  # location is local and program file was not found
+        except (FileNotFoundError, PermissionError):  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         except subprocess.CalledProcessError as e:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
@@ -2236,7 +2236,7 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     while i >= 0:
         i = regex.rfind("(", 0, i + 1)
         if i >= 0 and regex[i] == "(" and (regex[i + 1] != "?") and (i == 0 or regex[i - 1] != "\\"):
-            regex = f"{regex[0:i]}(?:{regex[i+1:]}"
+            regex = f"{regex[0:i]}(?:{regex[i + 1:]}"
         i -= 1
     return regex
 

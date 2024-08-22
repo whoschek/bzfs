@@ -321,7 +321,7 @@ class WBackupTestCase(ParametrizedTestCase):
         self.assertListEqual(expected_names, snap_names)
 
     def assertSnapshots(self, dataset, expected_num_snapshots, snapshot_prefix="", offset=0):
-        expected_names = [f"{snapshot_prefix}{i+1+offset}" for i in range(0, expected_num_snapshots)]
+        expected_names = [f"{snapshot_prefix}{i + 1 + offset}" for i in range(0, expected_num_snapshots)]
         self.assertSnapshotNames(dataset, expected_names)
 
     def assertBookmarkNames(self, dataset, expected_names):
@@ -384,7 +384,7 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(
+                self.run_wbackup(
                     src_root_dataset, dst_root_dataset, src_root_dataset, dst_root_dataset, "-v", "-v", dry_run=(i == 0)
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
@@ -397,7 +397,7 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(
+                self.run_wbackup(
                     src_root_dataset + "_nonexistingdataset1",
                     dst_root_dataset,
                     src_root_dataset,
@@ -539,14 +539,14 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(src_root_dataset, dst_root_dataset, "--skip-parent", dry_run=(i == 0))
+                self.run_wbackup(src_root_dataset, dst_root_dataset, "--skip-parent", dry_run=(i == 0))
                 self.assertSnapshots(src_root_dataset, 3, "s")
                 self.assertTrue(dataset_exists(dst_root_dataset))
                 self.assertSnapshots(dst_root_dataset, 0)
 
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                job = self.run_wbackup(
+                self.run_wbackup(
                     src_root_dataset, dst_root_dataset, "--skip-parent", "--delete-missing-datasets", dry_run=(i == 0)
                 )
                 self.assertSnapshots(src_root_dataset, 3, "s")
@@ -1426,7 +1426,7 @@ class LocalTestCase(WBackupTestCase):
                 if (
                     i > 0 and self.is_no_privilege_elevation()
                 ):  # maybe related: https://github.com/openzfs/zfs/issues/10461
-                    self.skipTest(f"'cannot unmount '/wb_dst': permission denied' error on zfs receive -F -u wb_dst")
+                    self.skipTest("'cannot unmount '/wb_dst': permission denied' error on zfs receive -F -u wb_dst")
                 self.run_wbackup(src_pool, dst_pool, dry_run=(i == 0))
                 if i == 0:
                     self.assertSnapshots(dst_pool, 0, "p")  # nothing has changed
@@ -2363,25 +2363,25 @@ class TestCLI(unittest.TestCase):
     def test_help(self):
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
-            args = parser.parse_args(["--help"])
+            parser.parse_args(["--help"])
         self.assertEqual(0, e.exception.code)
 
     def test_version(self):
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
-            args = parser.parse_args(["--version"])
+            parser.parse_args(["--version"])
         self.assertEqual(0, e.exception.code)
 
     def test_missing_datasets(self):
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
-            args = parser.parse_args(["--max-retries=1"])
+            parser.parse_args(["--max-retries=1"])
         self.assertEqual(2, e.exception.code)
 
     def test_missing_dst_dataset(self):
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
-            args = parser.parse_args(["src_dataset"])  # Each SRC_DATASET must have a corresponding DST_DATASET
+            parser.parse_args(["src_dataset"])  # Each SRC_DATASET must have a corresponding DST_DATASET
         self.assertEqual(2, e.exception.code)
 
 
@@ -2396,7 +2396,7 @@ class TestPythonVersionCheck(unittest.TestCase):
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 6))
     def test_version_below_3_7(self, mock_exit):
-        with patch("sys.stderr") as mock_stderr:
+        with patch("sys.stderr"):
             import importlib
             from wbackup_zfs import wbackup_zfs
 
@@ -2867,7 +2867,7 @@ def stop_on_failure_subtest(**params):
     """Context manager to mimic UnitTest.subTest() but stop on first failure"""
     try:
         yield
-    except AssertionError as e:
+    except AssertionError:
         raise AssertionError(f"SubTest failed with parameters: {params}")
 
 
