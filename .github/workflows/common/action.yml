@@ -19,15 +19,8 @@ runs:
     shell: bash
     run: |
       python -m pip install --upgrade pip
-      pip install flake8 pytest coverage
+      pip install coverage
       if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-  - name: Lint with flake8
-    shell: bash
-    run: |
-      # stop the build if there are Python syntax errors or undefined names
-      flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-      # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-      flake8 . --count --exit-zero --max-complexity=10 --max-line-length=150 --statistics
   - name: Install zfs + ssh + other dependencies
     shell: bash
     run: |
@@ -36,10 +29,3 @@ runs:
       rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
       ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key
       cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
-#  - name: Display ZFS version and Python version
-#    shell: bash
-#    run: |
-#      uname -a
-#      zfs --version
-#      python --version
-#      echo "Python version input: ${{ inputs.python-version }}"

@@ -117,7 +117,15 @@ jobs:
       shell: bash
       run: |
         pip install mypy
-        mypy wbackup_zfs/wbackup_zfs.py || true  # see https://mypy.readthedocs.io      
+        mypy wbackup_zfs/wbackup_zfs.py || true  # see https://mypy.readthedocs.io
+    - name: Lint with flake8
+      shell: bash
+      run: |
+        pip install flake8
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=150 --statistics
 
 
   test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.2.5
@@ -360,7 +368,7 @@ jobs:
         uses: ./.github/workflows/coverage-upload
 
 
-  generate_web_site:
+  generate_website:
     runs-on: ubuntu-24.04
     needs:
       - combine_coverage_reports
@@ -391,7 +399,7 @@ jobs:
   upload_web_site_to_github_pages:
     runs-on: ubuntu-24.04
     needs:
-      - generate_web_site
+      - generate_website
 
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
@@ -405,14 +413,14 @@ jobs:
       - name: Download web site artifact
         uses: actions/download-artifact@v4
         with:
-          name: generate_web_site
-          path: generate_web_site
+          name: generate_website
+          path: generate_website
       - name: Setup Pages
         uses: actions/configure-pages@v5  # https://github.com/actions/configure-pages
       - name: Upload web site to GitHub Pages
         uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
         with:
-          path: generate_web_site
+          path: generate_website
       - name: Deploy web site to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages

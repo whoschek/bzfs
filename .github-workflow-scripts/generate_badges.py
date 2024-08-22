@@ -25,6 +25,8 @@ dir = "badges"
 
 
 def main():
+    """Generate README.md badges for zfs/os/python version. Called by coverage.sh.
+    Uses https://smarie.github.io/python-genbadge/"""
     if sys.argv[1] != "merge":
         from test.zfs_util import zfs_version
 
