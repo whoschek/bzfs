@@ -40,7 +40,7 @@ def main():
         touch(f"{dir}/python", f"{sys.version_info.major}.{sys.version_info.minor}")
         touch(f"{dir}/os", platform.system().split()[0])
     else:
-        color = "green"
+        color = "brightgreen"
         generate_badge("zfs", merge_versions(f"{dir}/zfs", natsort=True), color)
         generate_badge("os", merge_versions(f"{dir}/os"), color)
         py_versions = merge_versions(f"{dir}/python")

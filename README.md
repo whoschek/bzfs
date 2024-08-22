@@ -1,5 +1,5 @@
 [![Build](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml)
-[![Coverage](https://whoschek.github.io/wbackup-zfs/badges/coverage-badge.svg)](https://whoschek.github.io/wbackup-zfs/)
+[![Coverage](https://whoschek.github.io/wbackup-zfs/badges/coverage-badge.svg)](https://whoschek.github.io/wbackup-zfs/coverage/)
 ![os](https://whoschek.github.io/wbackup-zfs/badges/os-badge.svg)
 ![zfs](https://whoschek.github.io/wbackup-zfs/badges/zfs-badge.svg)
 ![python](https://whoschek.github.io/wbackup-zfs/badges/python-badge.svg)
