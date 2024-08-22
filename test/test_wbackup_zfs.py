@@ -66,7 +66,7 @@ def getenv_bool(key, default=False):
 
 
 sudo_cmd = []
-if getenv_bool("test_enable_sudo", True) and os.geteuid() != 0:
+if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.system() == "SunOS"):
     sudo_cmd = ["sudo"]
     set_sudo_cmd(["sudo"])
 

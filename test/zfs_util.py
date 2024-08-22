@@ -99,7 +99,10 @@ def create_filesystem(dataset, path=None, no_mount=True, props=[]):
         global zfs_version_is_at_least_2_1_0
         if no_mount:
             if zfs_version_is_at_least_2_1_0 is None:
-                zfs_version_is_at_least_2_1_0 = is_version_at_least(zfs_version(), "2.1.0")
+                version = zfs_version()
+                if version is None:
+                    version = "0.0.0"
+                zfs_version_is_at_least_2_1_0 = is_version_at_least(version, "2.1.0")
             if zfs_version_is_at_least_2_1_0:
                 cmd.append("-u")
             else:
@@ -255,10 +258,23 @@ def build(name, check=True):
 def zfs_version():
     """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5"""
     try:
-        lines = run_cmd(["zfs", "--version"])
-    except subprocess.CalledProcessError:
-        return None
-    version = lines[0].split("-")[1].strip()
+        # on Linux, 'zfs --version' returns with zero status and prints the correct info
+        # on FreeBSD, 'zfs --version' returns with non-zero status but prints the same (correct) info as Linux
+        # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
+        # option is not known there
+        lines = subprocess.run(["zfs", "--version"], capture_output=True, text=True, check=True).stdout
+        assert lines
+    except subprocess.CalledProcessError as e:
+        if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
+            return None  # solaris-11.4.0 zfs does not know --version flag
+        elif not e.stdout.startswith("zfs-"):
+            raise
+        else:
+            lines = e.stdout  # FreeBSD
+            assert lines
+
+    line = lines.splitlines()[0]
+    version = line.split("-")[1].strip()
     match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
     if match:
         return match.group(1)
@@ -268,8 +284,6 @@ def zfs_version():
 
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     """Check if the version string is at least the minimum version string."""
-    if version_str is None:
-        return False
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 

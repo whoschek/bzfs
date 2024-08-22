@@ -2061,17 +2061,26 @@ class Job:
         p = self.params
         available_programs_minimum = {"zpool": None, "sudo": None}
         available_programs[location] = {}
+        lines = None
         try:
+            # on Linux, 'zfs --version' returns with zero status and prints the correct info
+            # on FreeBSD, 'zfs --version' returns with non-zero status but prints the same (correct) info as Linux
+            # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
+            # option is not known there
             lines = self.run_ssh_command(location, self.debug, stderr=PIPE, cmd=[p.zfs_program, "--version"])
+            assert lines
         except (FileNotFoundError, PermissionError) as e:  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         except subprocess.CalledProcessError as e:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
                 available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4.0 zfs does not know --version flag
-            else:
+            elif not e.stdout.startswith("zfs-"):
                 print(e.stderr, sys.stderr, end="")
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
-        else:
+            else:
+                lines = e.stdout  # FreeBSD
+                assert lines
+        if lines:
             line = lines.splitlines()[0]
             assert line.startswith("zfs-")
             # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5
