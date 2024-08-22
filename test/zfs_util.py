@@ -259,7 +259,8 @@ def zfs_version():
     """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5"""
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
-        # on FreeBSD, 'zfs --version' returns with non-zero status but prints the same (correct) info as Linux
+        # on FreeBSD, 'zfs --version' always prints the same (correct) info as Linux, but nonetheless sometimes
+        # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
         # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
         # option is not known there
         lines = subprocess.run(["zfs", "--version"], capture_output=True, text=True, check=True).stdout
@@ -270,7 +271,7 @@ def zfs_version():
         elif not e.stdout.startswith("zfs-"):
             raise
         else:
-            lines = e.stdout  # FreeBSD
+            lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
             assert lines
 
     line = lines.splitlines()[0]
