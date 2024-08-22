@@ -17,3 +17,5 @@ fi
 PYTHONPATH=. coverage run --branch --omit='test/*.py,*/__init__.py' -m test.test_wbackup_zfs
 coverage report | tee coverage_report.txt
 coverage html
+
+PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate

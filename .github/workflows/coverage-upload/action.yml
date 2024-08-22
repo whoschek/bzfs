@@ -12,3 +12,4 @@ runs:
         htmlcov
         coverage_report.txt
         .coverage
+        badges

@@ -350,15 +350,48 @@ jobs:
       - name: Generate coverage badge
         run: |
           pip install genbadge[coverage]  # see https://smarie.github.io/python-genbadge/
-          genbadge coverage -v -i coverage.xml -o htmlcov/coverage-badge.svg
+          mkdir -p badges
+          genbadge coverage -v -i coverage.xml -o badges/coverage-badge.svg
+      - name: Merge badges
+        run: |
+          cp -r */badges ./
+          PYTHONPATH=. .github-workflow-scripts/generate_badges.py merge
       - name: Upload coverage report to workflow run page
         uses: ./.github/workflows/coverage-upload
 
 
-  upload_combined_coverage_report_to_github_pages:
+  generate_web_site:
     runs-on: ubuntu-24.04
     needs:
       - combine_coverage_reports
+    env:
+      BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+    steps:
+      - name: Download combined coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-combine_coverage_reports
+          path: site/branch
+      - name: Prepare
+        run: |
+          mv site/branch site/$BRANCH_NAME
+          mv site/$BRANCH_NAME/htmlcov site/$BRANCH_NAME/coverage
+          mkdir -p site/$BRANCH_NAME/docs
+          echo "<!DOCTYPE HTML><meta charset='UTF-8'><meta http-equiv='refresh' content='0; url=./coverage/index.html'>" > site/$BRANCH_NAME/index.html
+          echo "<!DOCTYPE HTML><meta charset='UTF-8'><meta http-equiv='refresh' content='0; url=./$BRANCH_NAME/coverage/index.html'>" > site/index.html
+      - name: Upload site to workflow run page
+        uses: actions/upload-artifact@v4  # see https://github.com/actions/upload-artifact
+        with:
+          name: ${{ github.job }}
+          path: |
+            #site
+            site/${{ github.head_ref || github.ref_name }}
+
+
+  upload_web_site_to_github_pages:
+    runs-on: ubuntu-24.04
+    needs:
+      - generate_web_site
 
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
@@ -369,20 +402,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Download combined coverage artifact
+      - name: Download web site artifact
         uses: actions/download-artifact@v4
         with:
-          name: coverage-combine_coverage_reports
-          path: coverage-combine_coverage_reports
+          name: generate_web_site
+          path: generate_web_site
       - name: Setup Pages
         uses: actions/configure-pages@v5  # https://github.com/actions/configure-pages
-      - name: Upload artifact
+      - name: Upload web site to GitHub Pages
         uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
         with:
-          path: coverage-combine_coverage_reports/htmlcov
-      - name: Upload combined coverage report to workflow to GitHub Pages
+          path: generate_web_site
+      - name: Deploy web site to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
-      - name: "Display URL of GitHub Pages combined coverage report - https://whoschek.github.io/wbackup-zfs/"
+      - name: "Display URL of GitHub Pages - https://whoschek.github.io/wbackup-zfs/"
         run: |
-          echo "Uploaded combined coverage report to GitHub Pages at https://whoschek.github.io/wbackup-zfs/"
+          echo "Uploaded web site to GitHub Pages at https://whoschek.github.io/wbackup-zfs/"
