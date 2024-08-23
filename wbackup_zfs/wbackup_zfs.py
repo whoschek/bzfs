@@ -46,6 +46,8 @@ zfs_send_program_opts_default = "--props --raw --compressed"
 zfs_recv_program_opts_default = "-u"
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp datasets by default
 max_retries_default = 0
+compression_program_default = "zstd"
+compression_program_opts_default = "-1"
 ssh_private_key_file_default = ".ssh/id_rsa"
 ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
 env_var_prefix = "wbackup_zfs_"
@@ -452,33 +454,39 @@ feature.
         help=("Additional option to be passed to ssh CLI when connecting to destination host (optional). This option "
               "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
-    msg = "Use an empty string to disable this program.\n\n"
+
+    def hlp(program):
+        return f"The name or path to the '{program}' executable (optional). Default is '{program}'. "
+
+    msg = "Use '-' to disable the use of this program.\n\n"
     parser.add_argument(
-        "--mbuffer-program", default="mbuffer", metavar="STRING",
-        help="The name or path to the 'mbuffer' program (optional). Default is 'mbuffer'. " + msg)
+        "--compression-program", default=compression_program_default, action=NonEmptyStringAction,
+        metavar="STRING", help=hlp(compression_program_default) + msg)
     parser.add_argument(
-        "--pv-program", default="pv", metavar="STRING",
-        help="The name or path to the 'pv' program (optional). Default is 'pv'. " + msg)
+        "--compression-program-opts", default=compression_program_opts_default, metavar="STRING",
+        help=f"The options to be passed to the compression program on the compression step (optional). "
+             f"Default is '{compression_program_opts_default}'.")
     parser.add_argument(
-        "--shell-program", default="sh", metavar="STRING",
-        help="The name or path to the 'sh' program (optional). Default is 'sh'. " + msg)
+        "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("mbuffer") + msg)
     parser.add_argument(
-        "--ssh-program", default="ssh", metavar="STRING",
-        help=("The name or path to the 'ssh' program (optional). Default is 'ssh'. Example alternatives: 'hpnssh' "
-              "or '/opt/bin/ssh' or custom wrapper scripts around 'ssh'. " + msg))
+        "--pv-program", default="pv", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("pv") + msg)
     parser.add_argument(
-        "--sudo-program", default="sudo", metavar="STRING",
-        help="The name or path to the 'sudo' program (optional). Default is 'sudo'. " + msg)
+        "--shell-program", default="sh", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("sh") + msg)
     parser.add_argument(
-        "--zfs-program", default="zfs", metavar="STRING",
-        type=lambda s: s if s != "" else parser.error("--zfs-program: Empty string is not allowed."),
-        help="The name or path to the 'zfs' program (optional). Default is 'zfs'.\n\n")
+        "--ssh-program", default="ssh", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("ssh") + "Examples: 'hpnssh' or 'ssh' or '/opt/bin/ssh' or wrapper scripts around 'ssh'. " + msg)
     parser.add_argument(
-        "--zpool-program", default="zpool", metavar="STRING",
-        help="The name or path to the 'zpool' program (optional). Default is 'zpool'. " + msg)
+        "--sudo-program", default="sudo", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("sudo") + msg)
     parser.add_argument(
-        "--compression-program", default="zstd", metavar="STRING",
-        help="The name or path to the 'zstd' program (optional). Default is 'zstd'. " + msg)
+        "--zfs-program", default="zfs", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("zfs") + msg)
+    parser.add_argument(
+        "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING"
+        , help=hlp("zpool") + msg)
     parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("On program startup, unset all Unix environment variables for which the full environment variable "
@@ -587,7 +595,7 @@ class Params:
         self.mbuffer_program = self.program_name(self.validate_arg(args.mbuffer_program))
         self.mbuffer_program_opts = self.split_args(self.getenv("mbuffer_program_opts", "-q -m 128M"))
         self.compression_program = self.program_name(self.validate_arg(args.compression_program))
-        self.compression_program_opts = self.split_args(self.getenv("compression_program_opts", "-1"))
+        self.compression_program_opts = self.split_args(args.compression_program_opts)
         # no point trying to be fancy for smaller data transfers:
         self.min_transfer_size = int(self.getenv("min_transfer_size", 1024 * 1024))
 
@@ -624,7 +632,6 @@ class Params:
         # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
 
         self.zfs_program = self.program_name(self.validate_arg(args.zfs_program))
-        assert self.zfs_program
         self.zpool_program = self.program_name(self.validate_arg(args.zpool_program))
         self.ssh_program = self.program_name(self.validate_arg(args.ssh_program))
         self.sudo_program = self.program_name(self.validate_arg(args.sudo_program))
@@ -685,6 +692,8 @@ class Params:
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
+        if program.strip() == "":
+            die(f"Program name must not be the empty string")
         if self.inject_params.get("inject_unavailable_" + program, False):
             return program + "-xxx"  # substitute a program that cannot be found on the PATH
         if self.inject_params.get("inject_failing_" + program, False):
@@ -911,7 +920,7 @@ class Job:
             use_zfs_delegation = False  # or instead using 'zfs allow' delegation?
             return sudo, use_zfs_delegation
         elif self.params.enable_privilege_elevation:
-            if not self.params.sudo_program:
+            if self.params.sudo_program == "-":
                 die(f"sudo CLI is not available on host: {ssh_user_host or 'localhost'}")
             return self.params.sudo_program, False
         else:
@@ -1569,7 +1578,7 @@ class Job:
         params = self.params
         ssh_cmd = []  # pool is on local host
         if ssh_user_host != "":  # pool is on remote host
-            if not params.ssh_program:
+            if params.ssh_program == "-":
                 die(f"ssh CLI is not available on host: {params.ssh_user_host or 'localhost'}")
             ssh_cmd = [params.ssh_program] + ssh_extra_opts
             if params.ssh_config_file:
@@ -2036,17 +2045,17 @@ class Job:
 
         if not ("zstd" in available_programs["src"] and "zstd" in available_programs["dst"]):
             self.disable_program("zstd")  # no compression is used if source and dst do not both support compression
-        if not params.compression_program:
+        if params.compression_program == "-":
             self.disable_program("zstd")
-        if not params.mbuffer_program:
+        if params.mbuffer_program == "-":
             self.disable_program("mbuffer")
-        if not params.pv_program:
+        if params.pv_program == "-":
             self.disable_program("pv")
-        if not params.shell_program:
+        if params.shell_program == "-":
             self.disable_program("sh")
-        if not params.sudo_program:
+        if params.sudo_program == "-":
             self.disable_program("sudo")
-        if not params.zpool_program:
+        if params.zpool_program == "-":
             self.disable_program("zpool")
 
         for key in ["local", "src", "dst"]:
@@ -2457,6 +2466,14 @@ class Tee:
 
     def fileno(self):
         return self.files[0].fileno()
+
+
+#############################################################################
+class NonEmptyStringAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if values.strip() == "":
+            parser.error(f"{option_string}: Empty string is not allowed")
+        setattr(namespace, self.dest, values)
 
 
 #############################################################################

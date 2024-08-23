@@ -223,10 +223,12 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--ssh-src-host STRING] [--ssh-dst-host STRING]
                    [--ssh-src-port INT] [--ssh-dst-port INT]
                    [--ssh-src-extra-opt STRING] [--ssh-dst-extra-opt STRING]
+                   [--compression-program STRING]
+                   [--compression-program-opts STRING]
                    [--mbuffer-program STRING] [--pv-program STRING]
                    [--shell-program STRING] [--ssh-program STRING]
                    [--sudo-program STRING] [--zfs-program STRING]
-                   [--zpool-program STRING] [--compression-program STRING]
+                   [--zpool-program STRING]
                    [--include-envvar-regex REGEX [REGEX ...]]
                    [--exclude-envvar-regex REGEX [REGEX ...]] [--version]
                    [--help, -h]
@@ -755,61 +757,68 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--compression-program** *STRING*
+
+*  The name or path to the 'zstd' executable (optional). Default is
+    'zstd'. Use '-' to disable the use of this program.
+
+<!-- -->
+
+**--compression-program-opts** *STRING*
+
+*  The options to be passed to the compression program on the
+    compression step (optional). Default is '-1'.
+
+<!-- -->
+
 **--mbuffer-program** *STRING*
 
-*  The name or path to the 'mbuffer' program (optional). Default is
-    'mbuffer'. Use an empty string to disable this program.
+*  The name or path to the 'mbuffer' executable (optional). Default
+    is 'mbuffer'. Use '-' to disable the use of this program.
 
 <!-- -->
 
 **--pv-program** *STRING*
 
-*  The name or path to the 'pv' program (optional). Default is
-    'pv'. Use an empty string to disable this program.
+*  The name or path to the 'pv' executable (optional). Default is
+    'pv'. Use '-' to disable the use of this program.
 
 <!-- -->
 
 **--shell-program** *STRING*
 
-*  The name or path to the 'sh' program (optional). Default is
-    'sh'. Use an empty string to disable this program.
+*  The name or path to the 'sh' executable (optional). Default is
+    'sh'. Use '-' to disable the use of this program.
 
 <!-- -->
 
 **--ssh-program** *STRING*
 
-*  The name or path to the 'ssh' program (optional). Default is
-    'ssh'. Example alternatives: 'hpnssh' or '/opt/bin/ssh' or
-    custom wrapper scripts around 'ssh'. Use an empty string to
-    disable this program.
+*  The name or path to the 'ssh' executable (optional). Default is
+    'ssh'. Examples: 'hpnssh' or 'ssh' or '/opt/bin/ssh' or
+    wrapper scripts around 'ssh'. Use '-' to disable the use of this
+    program.
 
 <!-- -->
 
 **--sudo-program** *STRING*
 
-*  The name or path to the 'sudo' program (optional). Default is
-    'sudo'. Use an empty string to disable this program.
+*  The name or path to the 'sudo' executable (optional). Default is
+    'sudo'. Use '-' to disable the use of this program.
 
 <!-- -->
 
 **--zfs-program** *STRING*
 
-*  The name or path to the 'zfs' program (optional). Default is
-    'zfs'.
+*  The name or path to the 'zfs' executable (optional). Default is
+    'zfs'. Use '-' to disable the use of this program.
 
 <!-- -->
 
 **--zpool-program** *STRING*
 
-*  The name or path to the 'zpool' program (optional). Default is
-    'zpool'. Use an empty string to disable this program.
-
-<!-- -->
-
-**--compression-program** *STRING*
-
-*  The name or path to the 'zstd' program (optional). Default is
-    'zstd'. Use an empty string to disable this program.
+*  The name or path to the 'zpool' executable (optional). Default is
+    'zpool'. Use '-' to disable the use of this program.
 
 <!-- -->
 

@@ -1816,7 +1816,7 @@ class MinimalRemoteTestCase(WBackupTestCase):
 
     def inject_disabled_program(self, prog, expected_error=0):
         self.setup_basic()
-        self.run_wbackup(src_root_dataset, dst_root_dataset, f"--{prog}-program=", expected_status=expected_error)
+        self.run_wbackup(src_root_dataset, dst_root_dataset, f"--{prog}-program=-", expected_status=expected_error)
         if expected_error != 0:
             self.assertSnapshots(dst_root_dataset, 0)
 
