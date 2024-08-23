@@ -717,8 +717,6 @@ def main():
         run_main(argument_parser().parse_args(), sys.argv)
     except subprocess.CalledProcessError as e:
         sys.exit(e.returncode)
-    except SystemExit as e:
-        sys.exit(e.code)
 
 
 def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
@@ -742,7 +740,12 @@ class Job:
         self.inject_params = {}  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
-        self.params = p = Params(args, sys_argv, self.inject_params)
+        try:
+            self.params = p = Params(args, sys_argv, self.inject_params)
+        except SystemExit as e:
+            error(str(e))
+            raise
+
         create_symlink(p.log_file, p.log_dir, "current.log")
         self.info_raw("Log file is: " + p.log_file)
         create_symlink(p.pv_log_file, p.log_dir, "current.pv")
@@ -1832,7 +1835,7 @@ class Job:
                 try:
                     self.run_ssh_command("dst", self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
-                    print(e.stderr, sys.stderr, end="")
+                    print(e.stderr, file=sys.stderr, end="")
                     # ignore harmless error caused by 'zfs create' without the -u flag
                     if (
                         "filesystem successfully created, but it may only be mounted by root" not in e.stderr
@@ -1855,7 +1858,7 @@ class Job:
                 except subprocess.CalledProcessError as e:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
                     if ": bookmark exists" not in e.stderr:
-                        print(e.stderr, sys.stderr, end="")
+                        print(e.stderr, file=sys.stderr, end="")
                         raise
 
     def estimate_zfs_send_size(self, *items) -> int:
@@ -2120,7 +2123,7 @@ class Job:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
                 available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4.0 zfs does not know --version flag
             elif not e.stdout.startswith("zfs-"):
-                print(e.stderr, sys.stderr, end="")
+                print(e.stderr, file=sys.stderr, end="")
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
             else:
                 lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
