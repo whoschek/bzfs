@@ -1,11 +1,33 @@
+<!--
+ Copyright 2024 Wolfgang Hoschek AT mac DOT com
+
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
+-->
+
+# wbackup-zfs
 [![Build](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml)
 [![Coverage](https://whoschek.github.io/wbackup-zfs/badges/coverage-badge.svg)](https://whoschek.github.io/wbackup-zfs/coverage/)
-![os](https://whoschek.github.io/wbackup-zfs/badges/os-badge.svg)
-![zfs](https://whoschek.github.io/wbackup-zfs/badges/zfs-badge.svg)
-![python](https://whoschek.github.io/wbackup-zfs/badges/python-badge.svg)
+[![os](https://whoschek.github.io/wbackup-zfs/badges/os-badge.svg)](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml)
+[![zfs](https://whoschek.github.io/wbackup-zfs/badges/zfs-badge.svg)](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml)
+[![python](https://whoschek.github.io/wbackup-zfs/badges/python-badge.svg)](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-wbackup-zfs
-==========
+
+<!-- DESCRIPTION BEGIN -->
 *wbackup-zfs is a backup command line tool that reliably replicates ZFS
 snapshots from a (local or remote) source ZFS dataset (ZFS filesystem or
 ZFS volume) and its descendant datasets to a (local or remote)
@@ -168,7 +190,8 @@ Results of automated test runs on a matrix of various old and new versions of ZF
 [here](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
 by [this script](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml).
 The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, Solaris, etc.
-The script also generates code coverage reports which are published [here](https://whoschek.github.io/wbackup-zfs/).
+The script also generates code coverage reports which are published
+[here](https://whoschek.github.io/wbackup-zfs/coverage).
 
 The gist is that it should work on any flavor, with python (3.7 or higher, no additional python packages required)
 only needed on the coordinator host.

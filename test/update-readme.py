@@ -89,8 +89,8 @@ def main():
     with open(readme_file, "r") as f:
         readme_lines = f.readlines()
 
-    # processing to replace text between 'wbackup-zfs' and 'How To Install, Run and Test' in README.md
-    wbackup_marker = "wbackup-zfs"
+    # processing to replace text between '<!-- DESCRIPTION BEGIN -->' and 'How To Install, Run and Test' in README.md
+    wbackup_marker = "<!-- DESCRIPTION BEGIN -->"
     install_marker = "# How To Install and Run"
 
     start_wbackup = next((i for i, line in enumerate(readme_lines) if line.strip() == wbackup_marker), None)
@@ -104,8 +104,7 @@ def main():
     )
 
     if start_wbackup is not None and start_install is not None:
-        # Retain the first line after the wbackup_marker as is
-        updated_lines = readme_lines[: start_wbackup + 2] + [replacement_text + "\n\n"] + readme_lines[start_install:]
+        updated_lines = readme_lines[: start_wbackup + 1] + [replacement_text + "\n\n"] + readme_lines[start_install:]
         with open(readme_file, "w") as f:
             f.writelines(updated_lines)
     else:

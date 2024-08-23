@@ -40,7 +40,7 @@ def main():
         touch(f"{dir}/python", f"{sys.version_info.major}.{sys.version_info.minor}")
         touch(f"{dir}/os", platform.system().split()[0])
     else:
-        color = "blue"
+        color = "#007ec6"  # "blue" # see https://github.com/badges/shields/tree/master/badge-maker#colors
         generate_badge("zfs", merge_versions(f"{dir}/zfs", natsort=True), color)
         generate_badge("os", merge_versions(f"{dir}/os"), color)
         py_versions = merge_versions(f"{dir}/python")
@@ -59,6 +59,7 @@ def merge_versions(dir, natsort=False):
         versions = sort_versions(versions)
     else:
         versions = sorted(versions)
+        versions = ["Solaris" if v == "SunOS" else v for v in versions]
         if "Linux" in versions:
             versions = ["Linux"] + [v for v in versions if v != "Linux"]
     return " | ".join(versions)
