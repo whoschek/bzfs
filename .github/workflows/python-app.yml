@@ -140,10 +140,15 @@ jobs:
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
         # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
-        sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt update 
+        sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt update
         # sudo apt-get -y apt install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
+        
+        # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
+        sudo add-apt-repository ppa:rapier1/hpnssh; sudo apt update
+        sudo apt-get -y install hpnssh
+        hpnssh -V
     - name: Run common preparation steps
       uses: ./.github/workflows/common
       with:
@@ -161,6 +166,8 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
+        if [ "${{ matrix.python-version }}" == "3.11" ]; then export wbackup_zfs_test_ssh_program=hpnssh; fi
+        echo "wbackup_zfs_test_ssh_program: $wbackup_zfs_test_ssh_program"
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
@@ -184,7 +191,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
-      run: | 
+      run: |
         id -u -n
         uname -a
         zfs --version
@@ -225,7 +232,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Display ZFS version and Python version
-      run: | 
+      run: |
         id -u -n
         uname -a
         zfs --version
@@ -292,7 +299,7 @@ jobs:
       uses: vmactions/solaris-vm@v1  # see https://github.com/vmactions/solaris-vm
       with:
         release: "11.4"
-        run: |          
+        run: |
           ./.github-workflow-scripts/test_solaris_14_1.sh
     - name: Upload code coverage report to workflow run page
       uses: ./.github/workflows/coverage-upload

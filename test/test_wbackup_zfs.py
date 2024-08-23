@@ -65,6 +65,7 @@ def getenv_bool(key, default=False):
     return getenv_any(key, str(default).lower()).strip().lower() == "true"
 
 
+ssh_program = getenv_any("test_ssh_program", "ssh")
 sudo_cmd = []
 if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.system() == "SunOS"):
     sudo_cmd = ["sudo"]
@@ -197,7 +198,8 @@ class WBackupTestCase(ParametrizedTestCase):
         args = list(args)
         src_host = ["--ssh-src-host", "127.0.0.1"]
         dst_host = ["--ssh-dst-host", "127.0.0.1"]
-        src_port = ["--ssh-src-port", "22" if port is None else str(port)]
+        ssh_dflt_port = "2222" if ssh_program == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
+        src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
         src_user = ["--ssh-src-user", os_username()]
         private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
@@ -250,6 +252,12 @@ class WBackupTestCase(ParametrizedTestCase):
             cmd = f"sudo zfs allow -u {os_username()} {dst_permissions}".split(" ") + [dst_pool_name]
             if dataset_exists(dst_pool_name):
                 run_cmd(cmd)
+
+        args = args + ["--ssh-program=" + ssh_program]
+        if ssh_program == "hpnssh":
+            # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
+            args = args + ["--ssh-src-extra-opt=-oFallback=no"]
+            args = args + ["--ssh-dst-extra-opt=-oFallback=no"]
 
         if params and params.get("verbose", None):
             args = args + ["--verbose"]
