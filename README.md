@@ -411,10 +411,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
     c) 'continue': Skip nothing. If destination snapshots exist,
     delete them (with --force) or abort with an error (without
-    --force). If there is no such abort, create empty destination
-    dataset and ancestors if they do not yet exist and source dataset
-    has at least one descendant that includes a snapshot. Continue
-    processing with the next dataset.
+    --force). If there is no such abort, continue processing with the
+    next dataset. Eventually create empty destination dataset and
+    ancestors if they do not yet exist and source dataset has at least
+    one descendant that includes a snapshot.
 
 <!-- -->
 
@@ -457,7 +457,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     directories or virtual machines of thousands of users across an
     organization. Even if replication of some of the datasets for some
     users fails due too conflicts, busy datasets, etc, the replication
-    job will continue for the remaining dataset trees and the remaining
+    job will continue for the remaining datasets and the remaining
     users.
 
 <!-- -->

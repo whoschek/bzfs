@@ -251,9 +251,9 @@ feature.
               "b) 'dataset' (default): Skip the source dataset with a warning. Skip descendant datasets if "
               "--recursive and destination dataset does not exist. Otherwise skip to the next dataset.\n\n"
               "c) 'continue': Skip nothing. If destination snapshots exist, delete them (with --force) or abort "
-              "with an error (without --force). If there is no such abort, create empty destination dataset and "
-              "ancestors if they do not yet exist and source dataset has at least one descendant that includes a "
-              "snapshot. Continue processing with the next dataset.\n\n"))
+              "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
+              "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
+              "has at least one descendant that includes a snapshot.\n\n"))
     parser.add_argument(
         "--max-retries", type=int, min=0, default=max_retries_default, action=CheckRange, metavar="INT",
         help=(f"The number of times a retryable replication step shall be retried if it fails, for example because "
@@ -279,7 +279,7 @@ feature.
               "partial failures. For example, assume the job is to backup the home directories or virtual machines "
               "of thousands of users across an organization. Even if replication of some of the datasets for some "
               "users fails due too conflicts, busy datasets, etc, the replication job will continue for the "
-              "remaining dataset trees and the remaining users.\n\n"))
+              "remaining datasets and the remaining users.\n\n"))
     parser.add_argument(
         "--skip-replication", action="store_true",
         help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
