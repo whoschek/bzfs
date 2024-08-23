@@ -472,7 +472,7 @@ feature.
     parser.add_argument(
         "--zfs-program", default="zfs", metavar="STRING",
         type=lambda s: s if s != "" else parser.error("--zfs-program: Empty string is not allowed."),
-        help="The name or path to the 'zfs' program (optional). Default is 'zfs'.")
+        help="The name or path to the 'zfs' program (optional). Default is 'zfs'.\n\n")
     parser.add_argument(
         "--zpool-program", default="zpool", metavar="STRING",
         help="The name or path to the 'zpool' program (optional). Default is 'zpool'. " + msg)

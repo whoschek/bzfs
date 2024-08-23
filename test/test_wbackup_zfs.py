@@ -2894,8 +2894,8 @@ def main():
 
     # for ssh_mode in []:
     for ssh_mode in ["local"]:
-        # for ssh_mode in ['pull-push']:
-        # for ssh_mode in ['local', 'pull-push']:
+        # for ssh_mode in ["pull-push"]:
+        # for ssh_mode in ["local", "pull-push"]:
         # for min_transfer_size in [0, 1024 ** 2]:
         for min_transfer_size in [1024**2]:
             for affix in [""]:
@@ -2917,17 +2917,17 @@ def main():
                             "no_privilege_elevation": no_privilege_elevation,
                             "encrypted_dataset": encrypted_dataset,
                         }
-                        # params = {'ssh_mode': 'pull-push', 'verbose': True, 'min_transfer_size': min_transfer_size}
-                        # params = {'verbose': True}
+                        # params = {"ssh_mode": "pull-push", "verbose": True, "min_transfer_size": min_transfer_size}
+                        # params = {"verbose": True}
                         # params = None
                         # suite.addTest(ParametrizedTestCase.parametrize(IsolatedTestCase, params))
                         suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
 
     # for ssh_mode in []:
-    # for ssh_mode in ['pull-push']:
-    # for ssh_mode in ['local']:
+    # for ssh_mode in ["pull-push"]:
+    # for ssh_mode in ["local"]:
     for ssh_mode in ["local", "pull-push"]:
-        # for ssh_mode in ['local', 'pull-push', 'push', 'pull']:
+        # for ssh_mode in ["local", "pull-push", "push", "pull"]:
         #     for min_transfer_size in [1024 ** 2]:
         for min_transfer_size in [0, 1024**2]:
             #     for affix in [""]:
