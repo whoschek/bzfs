@@ -403,7 +403,7 @@ jobs:
             site/${{ github.head_ref || github.ref_name }}
 
 
-  upload_web_site_to_github_pages:
+  upload_website_to_github_pages:
     runs-on: ubuntu-24.04
     needs:
       - generate_website
@@ -417,20 +417,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Download web site artifact
+      - name: Download website artifact
         uses: actions/download-artifact@v4
         with:
           name: generate_website
           path: generate_website
       - name: Setup Pages
         uses: actions/configure-pages@v5  # https://github.com/actions/configure-pages
-      - name: Upload web site to GitHub Pages
+      - name: Upload website to GitHub Pages
         uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
         with:
           path: generate_website
-      - name: Deploy web site to GitHub Pages
+      - name: Deploy website to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
       - name: "Display URL of GitHub Pages - https://whoschek.github.io/wbackup-zfs/"
         run: |
-          echo "Uploaded web site to GitHub Pages at https://whoschek.github.io/wbackup-zfs/"
+          echo "Uploaded website to GitHub Pages at https://whoschek.github.io/wbackup-zfs/"

@@ -50,6 +50,7 @@ compression_program_default = "zstd"
 compression_program_opts_default = "-1"
 ssh_private_key_file_default = ".ssh/id_rsa"
 ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
+disable_prg = "-"
 env_var_prefix = "wbackup_zfs_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 PIPE = subprocess.PIPE
@@ -455,13 +456,13 @@ feature.
               "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
 
-    def hlp(program):
+    def hlp(program: str) -> str:
         return f"The name or path to the '{program}' executable (optional). Default is '{program}'. "
 
-    msg = "Use '-' to disable the use of this program.\n\n"
+    msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
     parser.add_argument(
         "--compression-program", default=compression_program_default, action=NonEmptyStringAction,
-        metavar="STRING", help=hlp(compression_program_default) + msg)
+        metavar="STRING", help=hlp(compression_program_default) + "Examples: 'lz4', 'pigz', '/opt/bin/zstd' " + msg)
     parser.add_argument(
         "--compression-program-opts", default=compression_program_opts_default, metavar="STRING",
         help=f"The options to be passed to the compression program on the compression step (optional). "
@@ -692,7 +693,7 @@ class Params:
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
-        if program.strip() == "":
+        if not program:
             die(f"Program name must not be the empty string")
         if self.inject_params.get("inject_unavailable_" + program, False):
             return program + "-xxx"  # substitute a program that cannot be found on the PATH
@@ -923,7 +924,7 @@ class Job:
             use_zfs_delegation = False  # or instead using 'zfs allow' delegation?
             return sudo, use_zfs_delegation
         elif self.params.enable_privilege_elevation:
-            if self.params.sudo_program == "-":
+            if self.params.sudo_program == disable_prg:
                 die(f"sudo CLI is not available on host: {ssh_user_host or 'localhost'}")
             return self.params.sudo_program, False
         else:
@@ -1581,7 +1582,7 @@ class Job:
         params = self.params
         ssh_cmd = []  # pool is on local host
         if ssh_user_host != "":  # pool is on remote host
-            if params.ssh_program == "-":
+            if params.ssh_program == disable_prg:
                 die(f"ssh CLI is not available on host: {params.ssh_user_host or 'localhost'}")
             ssh_cmd = [params.ssh_program] + ssh_extra_opts
             if params.ssh_config_file:
@@ -2048,17 +2049,17 @@ class Job:
 
         if not ("zstd" in available_programs["src"] and "zstd" in available_programs["dst"]):
             self.disable_program("zstd")  # no compression is used if source and dst do not both support compression
-        if params.compression_program == "-":
+        if params.compression_program == disable_prg:
             self.disable_program("zstd")
-        if params.mbuffer_program == "-":
+        if params.mbuffer_program == disable_prg:
             self.disable_program("mbuffer")
-        if params.pv_program == "-":
+        if params.pv_program == disable_prg:
             self.disable_program("pv")
-        if params.shell_program == "-":
+        if params.shell_program == disable_prg:
             self.disable_program("sh")
-        if params.sudo_program == "-":
+        if params.sudo_program == disable_prg:
             self.disable_program("sudo")
-        if params.zpool_program == "-":
+        if params.zpool_program == disable_prg:
             self.disable_program("zpool")
 
         for key in ["local", "src", "dst"]:
@@ -2474,7 +2475,8 @@ class Tee:
 #############################################################################
 class NonEmptyStringAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        if values.strip() == "":
+        values = values.strip()
+        if values == "":
             parser.error(f"{option_string}: Empty string is not allowed")
         setattr(namespace, self.dest, values)
 

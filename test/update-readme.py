@@ -22,6 +22,7 @@ import os
 def main():
     """
     Run this script to update README.md from the help info contained in wbackup_zfs.py.
+    Example usage: cd ~/repos/wbackup-zfs; test/update-readme.py wbackup_zfs/wbackup_zfs.py README.md
     This essentially does the following steps:
     brew install pandoc  # OSX
     sudo apt-get -y install pandoc  # Linux

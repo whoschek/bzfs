@@ -161,7 +161,7 @@ sudo ls
 # export wbackup_zfs_test_ssh_port=12345
 # export wbackup_zfs_test_ssh_port=22
 
-# verify user can ssh in via loopback interface & private key
+# verify user can ssh in passwordless via loopback interface & private key
 ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 echo hello
 
 # verify zfs is on PATH
@@ -760,7 +760,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--compression-program** *STRING*
 
 *  The name or path to the 'zstd' executable (optional). Default is
-    'zstd'. Use '-' to disable the use of this program.
+    'zstd'. Examples: 'lz4', 'pigz', '/opt/bin/zstd' Use '-'
+    to disable the use of this program.
 
 <!-- -->
 
