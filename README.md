@@ -223,6 +223,10 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--ssh-src-host STRING] [--ssh-dst-host STRING]
                    [--ssh-src-port INT] [--ssh-dst-port INT]
                    [--ssh-src-extra-opt STRING] [--ssh-dst-extra-opt STRING]
+                   [--mbuffer-program STRING] [--pv-program STRING]
+                   [--shell-program STRING] [--ssh-program STRING]
+                   [--sudo-program STRING] [--zfs-program STRING]
+                   [--zpool-program STRING] [--compression-program STRING]
                    [--include-envvar-regex REGEX [REGEX ...]]
                    [--exclude-envvar-regex REGEX [REGEX ...]] [--version]
                    [--help, -h]
@@ -751,6 +755,64 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--mbuffer-program** *STRING*
+
+*  The name or path to the 'mbuffer' program (optional). Default is
+    'mbuffer'. Use an empty string to disable this program.
+
+<!-- -->
+
+**--pv-program** *STRING*
+
+*  The name or path to the 'pv' program (optional). Default is
+    'pv'. Use an empty string to disable this program.
+
+<!-- -->
+
+**--shell-program** *STRING*
+
+*  The name or path to the 'sh' program (optional). Default is
+    'sh'. Use an empty string to disable this program.
+
+<!-- -->
+
+**--ssh-program** *STRING*
+
+*  The name or path to the 'ssh' program (optional). Default is
+    'ssh'. Example alternatives: 'hpnssh' or '/opt/bin/ssh' or
+    custom wrapper scripts around 'ssh'. Use an empty string to
+    disable this program.
+
+<!-- -->
+
+**--sudo-program** *STRING*
+
+*  The name or path to the 'sudo' program (optional). Default is
+    'sudo'. Use an empty string to disable this program.
+
+<!-- -->
+
+**--zfs-program** *STRING*
+
+*  The name or path to the 'zfs' program (optional). Default is
+    'zfs'.
+
+<!-- -->
+
+**--zpool-program** *STRING*
+
+*  The name or path to the 'zpool' program (optional). Default is
+    'zpool'. Use an empty string to disable this program.
+
+<!-- -->
+
+**--compression-program** *STRING*
+
+*  The name or path to the 'zstd' program (optional). Default is
+    'zstd'. Use an empty string to disable this program.
+
+<!-- -->
+
 **--include-envvar-regex** *REGEX [REGEX ...]*
 
 *  On program startup, unset all Unix environment variables for which
@@ -775,7 +837,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  Same syntax as --include-envvar-regex (see above) except that the
     default is to exclude no environment variables. Examples:
-    `wbackup_zfs_disable_.*`, `wbackup_zfs_.*`
+    `wbackup_zfs_.*_opts.*`, `wbackup_zfs_.*`
 
 <!-- -->
 

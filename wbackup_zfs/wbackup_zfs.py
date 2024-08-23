@@ -452,6 +452,33 @@ feature.
         help=("Additional option to be passed to ssh CLI when connecting to destination host (optional). This option "
               "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
+    msg = "Use an empty string to disable this program.\n\n"
+    parser.add_argument(
+        "--mbuffer-program", default="mbuffer", metavar="STRING",
+        help="The name or path to the 'mbuffer' program (optional). Default is 'mbuffer'. " + msg)
+    parser.add_argument(
+        "--pv-program", default="pv", metavar="STRING",
+        help="The name or path to the 'pv' program (optional). Default is 'pv'. " + msg)
+    parser.add_argument(
+        "--shell-program", default="sh", metavar="STRING",
+        help="The name or path to the 'sh' program (optional). Default is 'sh'. " + msg)
+    parser.add_argument(
+        "--ssh-program", default="ssh", metavar="STRING",
+        help=("The name or path to the 'ssh' program (optional). Default is 'ssh'. Example alternatives: 'hpnssh' "
+              "or '/opt/bin/ssh' or custom wrapper scripts around 'ssh'. " + msg))
+    parser.add_argument(
+        "--sudo-program", default="sudo", metavar="STRING",
+        help="The name or path to the 'sudo' program (optional). Default is 'sudo'. " + msg)
+    parser.add_argument(
+        "--zfs-program", default="zfs", metavar="STRING",
+        type=lambda s: s if s != "" else parser.error("--zfs-program: Empty string is not allowed."),
+        help="The name or path to the 'zfs' program (optional). Default is 'zfs'.")
+    parser.add_argument(
+        "--zpool-program", default="zpool", metavar="STRING",
+        help="The name or path to the 'zpool' program (optional). Default is 'zpool'. " + msg)
+    parser.add_argument(
+        "--compression-program", default="zstd", metavar="STRING",
+        help="The name or path to the 'zstd' program (optional). Default is 'zstd'. " + msg)
     parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("On program startup, unset all Unix environment variables for which the full environment variable "
@@ -471,7 +498,7 @@ feature.
     parser.add_argument(
         "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
-             f"environment variables. Examples: `{env_var_prefix}disable_.*`, `{env_var_prefix}.*`\n\n")
+             f"environment variables. Examples: `{env_var_prefix}.*_opts.*`, `{env_var_prefix}.*`\n\n")
     parser.add_argument(
         "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
         help="Display version information and exit.\n\n")
@@ -547,7 +574,7 @@ class Params:
         os.close(fd)
         fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
-        self.pv_program = self.program_name("pv")
+        self.pv_program = self.program_name(self.validate_arg(args.pv_program))
         self.pv_program_opts = self.split_args(
             self.getenv(
                 "pv_program_opts",
@@ -557,9 +584,9 @@ class Params:
         )
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
-        self.mbuffer_program = self.program_name("mbuffer")
+        self.mbuffer_program = self.program_name(self.validate_arg(args.mbuffer_program))
         self.mbuffer_program_opts = self.split_args(self.getenv("mbuffer_program_opts", "-q -m 128M"))
-        self.compression_program = self.program_name("zstd")
+        self.compression_program = self.program_name(self.validate_arg(args.compression_program))
         self.compression_program_opts = self.split_args(self.getenv("compression_program_opts", "-1"))
         # no point trying to be fancy for smaller data transfers:
         self.min_transfer_size = int(self.getenv("min_transfer_size", 1024 * 1024))
@@ -596,12 +623,13 @@ class Params:
         # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
         # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
 
-        self.zfs_program = self.program_name("zfs")
-        self.zpool_program = self.program_name("zpool")
-        self.ssh_program = self.program_name("ssh")
-        self.sudo_program = self.program_name("sudo")
+        self.zfs_program = self.program_name(self.validate_arg(args.zfs_program))
+        assert self.zfs_program
+        self.zpool_program = self.program_name(self.validate_arg(args.zpool_program))
+        self.ssh_program = self.program_name(self.validate_arg(args.ssh_program))
+        self.sudo_program = self.program_name(self.validate_arg(args.sudo_program))
         self.shell_program_local = "sh"
-        self.shell_program = self.program_name(self.shell_program_local)
+        self.shell_program = self.program_name(self.validate_arg(args.shell_program))
         self.uname_program = self.program_name("uname")
 
         self.skip_on_error = args.skip_on_error
@@ -658,7 +686,7 @@ class Params:
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
         if self.inject_params.get("inject_unavailable_" + program, False):
-            return "xxx-" + program  # substitute a program that cannot be found on the PATH
+            return program + "-xxx"  # substitute a program that cannot be found on the PATH
         if self.inject_params.get("inject_failing_" + program, False):
             return "false"  # substitute a program that will error out with non-zero return code
         else:
@@ -882,8 +910,12 @@ class Job:
             sudo = ""  # using sudo in an attempt to make ZFS operations work even if we are not root user?
             use_zfs_delegation = False  # or instead using 'zfs allow' delegation?
             return sudo, use_zfs_delegation
+        elif self.params.enable_privilege_elevation:
+            if not self.params.sudo_program:
+                die(f"sudo CLI is not available on host: {ssh_user_host or 'localhost'}")
+            return self.params.sudo_program, False
         else:
-            return (self.params.sudo_program, False) if self.params.enable_privilege_elevation else ("", True)
+            return "", True
 
     def run_main_action(self):
         p = params = self.params
@@ -1537,6 +1569,8 @@ class Job:
         params = self.params
         ssh_cmd = []  # pool is on local host
         if ssh_user_host != "":  # pool is on remote host
+            if not params.ssh_program:
+                die(f"ssh CLI is not available on host: {params.ssh_user_host or 'localhost'}")
             ssh_cmd = [params.ssh_program] + ssh_extra_opts
             if params.ssh_config_file:
                 ssh_cmd += ["-F", params.ssh_config_file]
@@ -2002,17 +2036,17 @@ class Job:
 
         if not ("zstd" in available_programs["src"] and "zstd" in available_programs["dst"]):
             self.disable_program("zstd")  # no compression is used if source and dst do not both support compression
-        if params.getenv_bool("disable_compression", False):
+        if not params.compression_program:
             self.disable_program("zstd")
-        if params.getenv_bool("disable_mbuffer", False):
+        if not params.mbuffer_program:
             self.disable_program("mbuffer")
-        if params.getenv_bool("disable_pv", False):
+        if not params.pv_program:
             self.disable_program("pv")
-        if params.getenv_bool("disable_sh", False):
+        if not params.shell_program:
             self.disable_program("sh")
-        if params.getenv_bool("disable_sudo", False):
+        if not params.sudo_program:
             self.disable_program("sudo")
-        if params.getenv_bool("disable_zpool", False):
+        if not params.zpool_program:
             self.disable_program("zpool")
 
         for key in ["local", "src", "dst"]:

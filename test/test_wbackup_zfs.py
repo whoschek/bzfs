@@ -1804,17 +1804,11 @@ class MinimalRemoteTestCase(WBackupTestCase):
         expected_status = 0
         if os.geteuid() != 0 and not self.is_no_privilege_elevation():
             expected_status = die_status
-        self.inject_disabled_program("disable_sudo", expected_error=expected_status)
+        self.inject_disabled_program("sudo", expected_error=expected_status)
 
-    def inject_disabled_program(self, *flags, expected_error=0):
+    def inject_disabled_program(self, prog, expected_error=0):
         self.setup_basic()
-        for flag in flags:
-            os.environ[qq + flag] = "true"
-        try:
-            self.run_wbackup(src_root_dataset, dst_root_dataset, expected_status=expected_error)
-        finally:
-            for flag in flags:
-                os.environ.pop(qq + flag, None)
+        self.run_wbackup(src_root_dataset, dst_root_dataset, f"--{prog}-program=", expected_status=expected_error)
         if expected_error != 0:
             self.assertSnapshots(dst_root_dataset, 0)
 
@@ -1907,9 +1901,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_inject_unavailable_ssh(self):
         if self.param and self.param.get("ssh_mode") != "local":
-            self.inject_unavailable_program("inject_unavailable_ssh", expected_error=die_status)
+            self.inject_unavailable_program("inject_unavailable_" + ssh_program, expected_error=die_status)
             self.tearDownAndSetup()
-            self.inject_unavailable_program("inject_failing_ssh", expected_error=die_status)
+            self.inject_unavailable_program("inject_failing_" + ssh_program, expected_error=die_status)
 
     def test_inject_unavailable_zfs(self):
         self.inject_unavailable_program("inject_unavailable_zfs", expected_error=die_status)
@@ -1917,19 +1911,19 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_unavailable_program("inject_failing_zfs", expected_error=die_status)
 
     def test_disabled_mbuffer(self):
-        self.inject_disabled_program("disable_mbuffer")
+        self.inject_disabled_program("mbuffer")
 
     def test_disabled_pv(self):
-        self.inject_disabled_program("disable_pv")
+        self.inject_disabled_program("pv")
 
     def test_disabled_sh(self):
-        self.inject_disabled_program("disable_sh")
+        self.inject_disabled_program("shell")
 
     def test_disabled_compression(self):
-        self.inject_disabled_program("disable_compression")
+        self.inject_disabled_program("compression")
 
     def test_disabled_zpool(self):
-        self.inject_disabled_program("disable_zpool")
+        self.inject_disabled_program("zpool")
 
 
 #############################################################################
@@ -2382,6 +2376,12 @@ class TestCLI(unittest.TestCase):
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
             parser.parse_args(["src_dataset"])  # Each SRC_DATASET must have a corresponding DST_DATASET
+        self.assertEqual(2, e.exception.code)
+
+    def test_zfs_program_must_not_be_disabled(self):
+        parser = wbackup_zfs.argument_parser()
+        with self.assertRaises(SystemExit) as e:
+            parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])  # --zfs-program must not be empty str
         self.assertEqual(2, e.exception.code)
 
 
