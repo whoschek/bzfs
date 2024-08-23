@@ -23,7 +23,9 @@ def main():
     """
     Run this script to update README.md from the help info contained in wbackup_zfs.py.
     This essentially does the following steps:
-    brew install pandoc; pip install argparse-manpage
+    brew install pandoc  # OSX
+    sudo apt-get -y install pandoc  # Linux
+    pip install argparse-manpage
     argparse-manpage --pyfile wbackup_zfs/wbackup_zfs.py --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
     sed -i.bak -e 's/\\\([`#-_|>\[\*]\)/\1/g' -e "s/\\\'/'/g" -e "s/\\\]/\]/g" -e 's/# OPTIONS//g' -e 's/:   /*  /g' /tmp/manpage.md
