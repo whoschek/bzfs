@@ -245,7 +245,8 @@ feature.
              f"`cp -r src/* dst/`\n\n")
     parser.add_argument(
         "--skip-missing-snapshots", choices=["fail", "dataset", "continue"], default="dataset", nargs="?",
-        help=("During replication, handle source datasets that include no snapshots as follows:\n\n"
+        help=("During replication, handle source datasets that include no snapshots (and no relevant bookmarks) "
+              "as follows:\n\n"
               "a) 'fail': Abort with an error.\n\n"
               "b) 'dataset' (default): Skip the source dataset with a warning. Skip descendant datasets if "
               "--recursive and destination dataset does not exist. Otherwise skip to the next dataset.\n\n"
@@ -467,7 +468,7 @@ feature.
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help=f"The options to be passed to the compression program on the compression step (optional). "
-             f"Default is '-1'.")
+             f"Default is '-1'.\n\n")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("mbuffer") + msg)
@@ -494,7 +495,7 @@ feature.
         help=hlp("sudo") + msg)
     parser.add_argument(
         "--zfs-program", default="zfs", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("zfs") + msg)
+        help=hlp("zfs") + "\n\n")
     parser.add_argument(
         "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING"
         , help=hlp("zpool") + msg)
@@ -510,14 +511,14 @@ feature.
               "The default is to include no environment variables, i.e. to make no exceptions to "
               "--exclude-envvar-regex. "
               f"Example that retains at least these three env vars: "
-              f"`--include-envvar-regex {env_var_prefix}log_dir "
-              f"--include-envvar-regex {env_var_prefix}mbuffer_program_opts "
+              f"`--include-envvar-regex {env_var_prefix}min_sleep_secs "
+              f"--include-envvar-regex {env_var_prefix}max_sleep_secs "
               f"--include-envvar-regex {env_var_prefix}max_elapsed_secs`. "
               "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
     parser.add_argument(
         "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
-             f"environment variables. Examples: `{env_var_prefix}.*_opts.*`, `{env_var_prefix}.*`\n\n")
+             f"environment variables. Example: `{env_var_prefix}.*`\n\n")
     parser.add_argument(
         "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
         help="Display version information and exit.\n\n")
@@ -832,14 +833,14 @@ class Job:
                     f"Source and destination dataset must not be the same! "
                     f"src: {p.origin_src_root_dataset}, dst: {p.origin_dst_root_dataset}"
                 )
-            if p.recursive:
-                if f"{p.src_root_dataset}/".startswith(f"{p.dst_root_dataset}/") or f"{p.dst_root_dataset}/".startswith(
-                    f"{p.src_root_dataset}/"
-                ):
-                    die(
-                        f"Source and destination dataset trees must not overlap! "
-                        f"src: {p.origin_src_root_dataset}, dst: {p.origin_dst_root_dataset}"
-                    )
+            if p.recursive and (
+                f"{p.src_root_dataset}/".startswith(f"{p.dst_root_dataset}/")
+                or f"{p.dst_root_dataset}/".startswith(f"{p.src_root_dataset}/")
+            ):
+                die(
+                    f"Source and destination dataset trees must not overlap! "
+                    f"src: {p.origin_src_root_dataset}, dst: {p.origin_dst_root_dataset}"
+                )
 
         re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         exclude_regexes = self.dataset_regexes(p.args.exclude_dataset or []) + (p.args.exclude_dataset_regex or [])

@@ -402,7 +402,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--skip-missing-snapshots** *[{fail,dataset,continue}]*
 
 *  During replication, handle source datasets that include no snapshots
-    as follows:
+    (and no relevant bookmarks) as follows:
 
     a) 'fail': Abort with an error.
 
@@ -835,7 +835,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--zfs-program** *STRING*
 
 *  The name or path to the 'zfs' executable (optional). Default is
-    'zfs'. Use '-' to disable the use of this program.
+    'zfs'.
 
 <!-- -->
 
@@ -859,8 +859,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     match. The default is to include no environment variables, i.e. to
     make no exceptions to --exclude-envvar-regex. Example that retains
     at least these three env vars: `--include-envvar-regex
-    wbackup_zfs_log_dir --include-envvar-regex
-    wbackup_zfs_mbuffer_program_opts --include-envvar-regex
+    wbackup_zfs_min_sleep_secs --include-envvar-regex
+    wbackup_zfs_max_sleep_secs --include-envvar-regex
     wbackup_zfs_max_elapsed_secs`. Example that retains all environment
     variables without tightened security: `'.*'`
 
@@ -869,8 +869,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--exclude-envvar-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-envvar-regex (see above) except that the
-    default is to exclude no environment variables. Examples:
-    `wbackup_zfs_.*_opts.*`, `wbackup_zfs_.*`
+    default is to exclude no environment variables. Example:
+    `wbackup_zfs_.*`
 
 <!-- -->
 
