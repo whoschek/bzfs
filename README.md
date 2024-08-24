@@ -48,16 +48,16 @@ snapshot found on the destination are auto-skipped.
 
 wbackup-zfs does not create or delete ZFS snapshots on the source - it
 assumes you have a ZFS snapshot management tool to do so, for example
-policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, manual zfs
-snapshot/destroy, etc. wbackup-zfs treats the source as read-only, thus
-the source remains unmodified. With the --dry-run flag, wbackup-zfs
-also treats the destination as read-only. In normal operation,
-wbackup-zfs treats the destination as append-only. Optional CLI flags
-are available to delete destination snapshots and destination datasets
-as directed, for example to make the destination identical to the source
-if the two have somehow diverged in unforeseen ways. This easily enables
-(re)synchronizing the backup from the production state, as well as
-restoring the production state from backup.
+policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup,
+manual zfs snapshot/destroy, etc. wbackup-zfs treats the source as
+read-only, thus the source remains unmodified. With the --dry-run flag,
+wbackup-zfs also treats the destination as read-only. In normal
+operation, wbackup-zfs treats the destination as append-only. Optional
+CLI flags are available to delete destination snapshots and destination
+datasets as directed, for example to make the destination identical to
+the source if the two have somehow diverged in unforeseen ways. This
+easily enables (re)synchronizing the backup from the production state,
+as well as restoring the production state from backup.
 
 The source 'pushes to' the destination whereas the destination 'pulls
 from' the source. wbackup-zfs is installed and executed on the

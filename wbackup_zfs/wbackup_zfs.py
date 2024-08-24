@@ -42,12 +42,7 @@ die_status = 3
 if sys.version_info < (3, 7):
     print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
     sys.exit(die_status)
-zfs_send_program_opts_default = "--props --raw --compressed"
-zfs_recv_program_opts_default = "-u"
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp datasets by default
-max_retries_default = 0
-ssh_private_key_file_default = ".ssh/id_rsa"
-ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
 disable_prg = "-"
 env_var_prefix = "wbackup_zfs_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
@@ -74,8 +69,8 @@ the source since the last run. Source ZFS snapshots older than the most recent c
 destination are auto-skipped.
 
 {prog_name} does not create or delete ZFS snapshots on the source - it assumes you have a ZFS snapshot
-management tool to do so, for example policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, manual zfs
-snapshot/destroy, etc. {prog_name} treats the source as read-only, thus the source remains unmodified.
+management tool to do so, for example policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup, 
+manual zfs snapshot/destroy, etc. {prog_name} treats the source as read-only, thus the source remains unmodified.
 With the --dry-run flag, {prog_name} also treats the destination as read-only.
 In normal operation, {prog_name} treats the destination as append-only. Optional CLI flags are available to
 delete destination snapshots and destination datasets as directed, for example to make the destination
@@ -225,12 +220,14 @@ feature.
         "--force-once", "--f1", action="store_true",
         help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
               "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
+    zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
         help=("Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
               f"Default is '{zfs_send_program_opts_default}'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
               "and https://github.com/openzfs/zfs/issues/13024\n\n"))
+    zfs_recv_program_opts_default = "-u"
     parser.add_argument(
         "--zfs-receive-program-opts", type=str, default=zfs_recv_program_opts_default, metavar="STRING",
         help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
@@ -254,6 +251,7 @@ feature.
               "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
               "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
               "has at least one descendant that includes a snapshot.\n\n"))
+    max_retries_default = 0
     parser.add_argument(
         "--max-retries", type=int, min=0, default=max_retries_default, action=CheckRange, metavar="INT",
         help=(f"The number of times a retryable replication step shall be retried if it fails, for example because "
@@ -407,12 +405,20 @@ feature.
     parser.add_argument(
         "--ssh-config-file", type=str, metavar="FILE",
         help="Path to SSH ssh_config(5) file (optional); will be passed into ssh -F CLI.\n\n")
+
+    ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
+    # for speed with confidentiality and integrity
+    # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done
+    # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
+    # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
     parser.add_argument(
         "--ssh-cipher", type=str, default=ssh_cipher_default, metavar="STRING",
         help=f"SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
              f"keyword in ssh_config(5) for more information: "
              f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
+
+    ssh_private_key_file_default = ".ssh/id_rsa"
     parser.add_argument(
         "--ssh-src-private-key", type=str, metavar="FILE",
         help=f"Path to SSH private key file on local host to connect to source (optional); will be passed into "
@@ -480,7 +486,7 @@ feature.
         "--pv-program", default="pv", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("pv") + msg)
     pv_program_opts_default = ("--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 "
-                               "--width=120 --buffer-size=1M")
+                               "--width=120 --buffer-size=2M")
     parser.add_argument(
         "--pv-program-opts", default=pv_program_opts_default, metavar="STRING",
         help=f"The options to be passed to the 'pv' program (optional). Default: '{pv_program_opts_default}'.\n\n")
@@ -608,6 +614,7 @@ class Params:
         self.ssh_config_file = self.validate_arg(args.ssh_config_file)
         self.ssh_src_private_key_file = self.validate_arg(args.ssh_src_private_key)
         self.ssh_dst_private_key_file = self.validate_arg(args.ssh_dst_private_key)
+        self.ssh_cipher = self.validate_arg(args.ssh_cipher)
         self.ssh_src_user = args.ssh_src_user
         self.ssh_dst_user = args.ssh_dst_user
         self.ssh_src_host = args.ssh_src_host
@@ -632,10 +639,6 @@ class Params:
         for extra_opt in args.ssh_dst_extra_opt:
             self.ssh_dst_extra_opts += self.split_args(extra_opt)
         self.ssh_socket_enabled = self.getenv_bool("ssh_socket_enabled", True)
-        self.ssh_cipher = self.validate_arg(args.ssh_cipher)  # for speed with confidentiality and integrity
-        # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done
-        # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
-        # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
 
         self.zfs_program = self.program_name(self.validate_arg(args.zfs_program))
         self.zpool_program = self.program_name(self.validate_arg(args.zpool_program))
