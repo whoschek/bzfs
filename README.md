@@ -216,16 +216,17 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--skip-replication] [--delete-missing-snapshots]
                    [--delete-missing-datasets] [--no-privilege-elevation]
                    [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
-                   [--bwlimit STRING] [--dry-run] [--verbose] [--quiet]
+                   [--dry-run] [--verbose] [--quiet] [--logdir DIR]
                    [--ssh-config-file FILE] [--ssh-cipher STRING]
                    [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
                    [--ssh-src-user STRING] [--ssh-dst-user STRING]
                    [--ssh-src-host STRING] [--ssh-dst-host STRING]
                    [--ssh-src-port INT] [--ssh-dst-port INT]
                    [--ssh-src-extra-opt STRING] [--ssh-dst-extra-opt STRING]
-                   [--compression-program STRING]
+                   [--bwlimit STRING] [--compression-program STRING]
                    [--compression-program-opts STRING]
-                   [--mbuffer-program STRING] [--pv-program STRING]
+                   [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
+                   [--pv-program STRING] [--pv-program-opts STRING]
                    [--shell-program STRING] [--ssh-program STRING]
                    [--sudo-program STRING] [--zfs-program STRING]
                    [--zpool-program STRING]
@@ -630,14 +631,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--bwlimit** *STRING*
-
-*  Sets 'pv' bandwidth rate limit for zfs send/receive data transfer
-    (optional). Example: `100m` to cap throughput at 100 MB/sec.
-    Default is unlimited. Also see https://linux.die.net/man/1/pv
-
-<!-- -->
-
 **--dry-run**, **-n**
 
 *  Do a dry-run (aka 'no-op') to print what operations would happen
@@ -660,6 +653,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--quiet**, **-q**
 
 *  Suppress non-error, info, debug, and trace output.
+
+<!-- -->
+
+**--logdir** *DIR*
+
+*  Path to log output directory (optional). Default is
+    $HOME/wbackup-zfs-logs
 
 <!-- -->
 
@@ -757,6 +757,14 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--bwlimit** *STRING*
+
+*  Sets 'pv' bandwidth rate limit for zfs send/receive data transfer
+    (optional). Example: `100m` to cap throughput at 100 MB/sec.
+    Default is unlimited. Also see https://linux.die.net/man/1/pv
+
+<!-- -->
+
 **--compression-program** *STRING*
 
 *  The name or path to the 'zstd' executable (optional). Default is
@@ -779,10 +787,25 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--mbuffer-program-opts** *STRING*
+
+*  Options to be passed to 'mbuffer' program (optional). Default:
+    '-q -m 128M'.
+
+<!-- -->
+
 **--pv-program** *STRING*
 
 *  The name or path to the 'pv' executable (optional). Default is
     'pv'. Use '-' to disable the use of this program.
+
+<!-- -->
+
+**--pv-program-opts** *STRING*
+
+*  The options to be passed to the 'pv' program (optional). Default:
+    '--progress --timer --eta --fineta --rate --average-rate
+    --bytes --interval=1 --width=120 --buffer-size=1M'.
 
 <!-- -->
 

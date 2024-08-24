@@ -46,8 +46,6 @@ zfs_send_program_opts_default = "--props --raw --compressed"
 zfs_recv_program_opts_default = "-u"
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp datasets by default
 max_retries_default = 0
-compression_program_default = "zstd"
-compression_program_opts_default = "-1"
 ssh_private_key_file_default = ".ssh/id_rsa"
 ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
 disable_prg = "-"
@@ -389,10 +387,6 @@ feature.
               f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
               "bookmarks currently exist, if any.\n\n"))
     parser.add_argument(
-        "--bwlimit", type=str, metavar="STRING",
-        help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
-              "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n"))
-    parser.add_argument(
         "--dry-run", "-n", action="store_true",
         help=("Do a dry-run (aka 'no-op') to print what operations would happen if the command were to be executed "
               "for real. This option treats both the ZFS source and destination as read-only.\n\n"))
@@ -406,6 +400,9 @@ feature.
     parser.add_argument(
         "--quiet", "-q", action="store_true",
         help="Suppress non-error, info, debug, and trace output.\n\n")
+    parser.add_argument(
+        "--logdir", type=str, metavar="DIR",
+        help=f"Path to log output directory (optional). Default is $HOME/{prog_name}-logs\n\n")
     parser.add_argument(
         "--ssh-config-file", type=str, metavar="FILE",
         help="Path to SSH ssh_config(5) file (optional); will be passed into ssh -F CLI.\n\n")
@@ -455,24 +452,37 @@ feature.
         help=("Additional option to be passed to ssh CLI when connecting to destination host (optional). This option "
               "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
               "debug ssh config issues.\n\n"))
+    parser.add_argument(
+        "--bwlimit", type=str, metavar="STRING",
+        help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
+              "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n"))
 
     def hlp(program: str) -> str:
         return f"The name or path to the '{program}' executable (optional). Default is '{program}'. "
 
     msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
     parser.add_argument(
-        "--compression-program", default=compression_program_default, action=NonEmptyStringAction,
-        metavar="STRING", help=hlp(compression_program_default) + "Examples: 'lz4', 'pigz', '/opt/bin/zstd' " + msg)
+        "--compression-program", default="zstd", action=NonEmptyStringAction,
+        metavar="STRING", help=hlp("zstd") + "Examples: 'lz4', 'pigz', '/opt/bin/zstd' " + msg)
     parser.add_argument(
-        "--compression-program-opts", default=compression_program_opts_default, metavar="STRING",
+        "--compression-program-opts", default="-1", metavar="STRING",
         help=f"The options to be passed to the compression program on the compression step (optional). "
-             f"Default is '{compression_program_opts_default}'.")
+             f"Default is '-1'.")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("mbuffer") + msg)
+    mbuffer_program_opts_default = "-q -m 128M"
+    parser.add_argument(
+        "--mbuffer-program-opts", default=mbuffer_program_opts_default, metavar="STRING",
+        help=f"Options to be passed to 'mbuffer' program (optional). Default: '{mbuffer_program_opts_default}'.\n\n")
     parser.add_argument(
         "--pv-program", default="pv", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("pv") + msg)
+    pv_program_opts_default = ("--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 "
+                               "--width=120 --buffer-size=1M")
+    parser.add_argument(
+        "--pv-program-opts", default=pv_program_opts_default, metavar="STRING",
+        help=f"The options to be passed to the 'pv' program (optional). Default: '{pv_program_opts_default}'.\n\n")
     parser.add_argument(
         "--shell-program", default="sh", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("sh") + msg)
@@ -577,24 +587,18 @@ class Params:
         self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
         self.timestamp = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         self.home_dir = get_home_directory()
-        self.log_dir = self.validate_arg(self.getenv("log_dir", f"{self.home_dir}/{prog_name}-logs"))
+        self.log_dir = self.validate_arg(args.logdir if args.logdir else f"{self.home_dir}/{prog_name}-logs")
         os.makedirs(self.log_dir, exist_ok=True)
         fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
         fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
         self.pv_program = self.program_name(self.validate_arg(args.pv_program))
-        self.pv_program_opts = self.split_args(
-            self.getenv(
-                "pv_program_opts",
-                "--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 "
-                "--buffer-size=1M",
-            )
-        )
+        self.pv_program_opts = self.split_args(args.pv_program_opts)
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
         self.mbuffer_program = self.program_name(self.validate_arg(args.mbuffer_program))
-        self.mbuffer_program_opts = self.split_args(self.getenv("mbuffer_program_opts", "-q -m 128M"))
+        self.mbuffer_program_opts = self.split_args(args.mbuffer_program_opts)
         self.compression_program = self.program_name(self.validate_arg(args.compression_program))
         self.compression_program_opts = self.split_args(args.compression_program_opts)
         # no point trying to be fancy for smaller data transfers:
