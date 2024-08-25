@@ -768,8 +768,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--compression-program** *STRING*
 
 *  The name or path to the 'zstd' executable (optional). Default is
-    'zstd'. Examples: 'lz4', 'pigz', '/opt/bin/zstd' Use '-'
-    to disable the use of this program.
+    'zstd'. Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'.
+    Use '-' to disable the use of this program.
 
 <!-- -->
 

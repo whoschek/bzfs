@@ -213,7 +213,7 @@ class WBackupTestCase(ParametrizedTestCase):
         elif params and params.get("ssh_mode") == "pull-push":
             args = args + src_host + dst_host + src_port + dst_port
             if params and "min_transfer_size" in params and int(params["min_transfer_size"]) == 0:
-                args = args + src_user + src_private_key + src_ssh_config_file + ["--ssh-cipher", ""]
+                args = args + src_user + src_private_key + src_ssh_config_file + ["--ssh-cipher="]
             args = args + ["--bwlimit=10000m"]
         elif params and params.get("ssh_mode", "local") != "local":
             raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])
@@ -253,7 +253,9 @@ class WBackupTestCase(ParametrizedTestCase):
             if dataset_exists(dst_pool_name):
                 run_cmd(cmd)
 
-        args = args + ["--ssh-program=" + ssh_program]
+        if ssh_program != "ssh" and "--ssh-program" not in args and "--ssh-program=" not in args:
+            args = args + ["--ssh-program=" + ssh_program]
+
         if ssh_program == "hpnssh":
             # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
             args = args + ["--ssh-src-extra-opt=-oFallback=no"]
@@ -347,6 +349,16 @@ class WBackupTestCase(ParametrizedTestCase):
 
 #############################################################################
 class LocalTestCase(WBackupTestCase):
+
+    def test_program_name_must_not_contain_whitespace(self):
+        self.run_wbackup(src_root_dataset, dst_root_dataset, "--zfs-program=zfs zfs", expected_status=die_status)
+
+    def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self):
+        if not self.param or self.param.get("ssh_mode", "local") == "local" or ssh_program != "ssh":
+            self.skipTest("ssh is only required in nonlocal mode")
+        self.run_wbackup(
+            src_root_dataset, dst_root_dataset, "--ssh-program=" + wbackup_zfs.disable_prg, expected_status=die_status
+        )
 
     def test_basic_replication_flat_nothing_todo(self):
         for i in range(0, 2):
@@ -1842,6 +1854,9 @@ class MinimalRemoteTestCase(WBackupTestCase):
 #############################################################################
 class FullRemoteTestCase(MinimalRemoteTestCase):
 
+    def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self):
+        LocalTestCase(param=self.param).test_ssh_program_must_not_be_disabled_in_nonlocal_mode()
+
     def test_basic_replication_flat_nothing_todo(self):
         LocalTestCase(param=self.param).test_basic_replication_flat_nothing_todo()
 
@@ -2363,6 +2378,12 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             params.validate_arg("foo" + "\t")
 
+    def test_validate_program_name_must_not_be_empty(self):
+        args = wbackup_zfs.argument_parser().parse_args(args=["src", "dst"])
+        setattr(args, "zfs_program", "")
+        with self.assertRaises(SystemExit):
+            wbackup_zfs.Params(args)
+
 
 #############################################################################
 class TestArgumentParser(unittest.TestCase):
@@ -2391,10 +2412,10 @@ class TestArgumentParser(unittest.TestCase):
             parser.parse_args(["src_dataset"])  # Each SRC_DATASET must have a corresponding DST_DATASET
         self.assertEqual(2, e.exception.code)
 
-    def test_zfs_program_must_not_be_disabled(self):
+    def test_program_must_not_be_empty_string(self):
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
-            parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])  # --zfs-program must not be empty str
+            parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])
         self.assertEqual(2, e.exception.code)
 
 

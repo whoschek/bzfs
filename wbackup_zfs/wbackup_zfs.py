@@ -470,7 +470,7 @@ feature.
     msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
     parser.add_argument(
         "--compression-program", default="zstd", action=NonEmptyStringAction,
-        metavar="STRING", help=hlp("zstd") + "Examples: 'lz4', 'pigz', '/opt/bin/zstd' " + msg)
+        metavar="STRING", help=hlp("zstd") + "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg)
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help=f"The options to be passed to the compression program on the compression step (optional). "
@@ -1536,7 +1536,7 @@ class Job:
             and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != "")
             and self.is_program_available("zstd", loc)
         ):
-            return f"{p.compression_program} -d"
+            return f"{p.compression_program} -dc"
         else:
             return "cat"
 
@@ -1591,7 +1591,7 @@ class Job:
         ssh_cmd = []  # pool is on local host
         if ssh_user_host != "":  # pool is on remote host
             if params.ssh_program == disable_prg:
-                die(f"ssh CLI is not available on host: {params.ssh_user_host or 'localhost'}")
+                die(f"ssh CLI is not available on host: {ssh_user_host or 'localhost'}")
             ssh_cmd = [params.ssh_program] + ssh_extra_opts
             if params.ssh_config_file:
                 ssh_cmd += ["-F", params.ssh_config_file]
@@ -1708,14 +1708,14 @@ class Job:
 
     def maybe_inject_delete(self, location=None, dataset=None, delete_trigger=None):
         """For testing only"""
-        if delete_trigger:
-            counter = self.delete_injection_triggers.get("before")
-            if counter and counter[delete_trigger] > 0:
-                counter[delete_trigger] -= 1
-                p = self.params
-                sudo = p.src_sudo if location == "src" else p.dst_sudo
-                cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
-                self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
+        assert delete_trigger
+        counter = self.delete_injection_triggers.get("before")
+        if counter and counter[delete_trigger] > 0:
+            counter[delete_trigger] -= 1
+            p = self.params
+            sudo = p.src_sudo if location == "src" else p.dst_sudo
+            cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
+            self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
     def cquote(self, arg: str) -> str:
         return shlex.quote(arg)
