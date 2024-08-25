@@ -2365,7 +2365,7 @@ class TestHelperFunctions(unittest.TestCase):
 
 
 #############################################################################
-class TestCLI(unittest.TestCase):
+class TestArgumentParser(unittest.TestCase):
 
     def test_help(self):
         parser = wbackup_zfs.argument_parser()
@@ -2892,21 +2892,21 @@ def main():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCLI))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
     suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {"verbose": True}))
 
+    # for ssh_mode in ["pull-push"]:
+    # for ssh_mode in ["local", "pull-push"]:
+    # for min_transfer_size in [0, 1024 ** 2]:
     # for ssh_mode in []:
     for ssh_mode in ["local"]:
-        # for ssh_mode in ["pull-push"]:
-        # for ssh_mode in ["local", "pull-push"]:
-        # for min_transfer_size in [0, 1024 ** 2]:
         for min_transfer_size in [1024**2]:
+            # for affix in [".  -"]:
+            # for affix in ["", ".  -"]:
             for affix in [""]:
-                # for affix in [".  -"]:
-                # for affix in ["", ".  -"]:
-                #     no_privilege_elevation_modes = []
+                # no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
                 if os.geteuid() != 0:
                     no_privilege_elevation_modes.append(True)
@@ -2928,15 +2928,15 @@ def main():
                         # suite.addTest(ParametrizedTestCase.parametrize(IsolatedTestCase, params))
                         suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
 
-    # for ssh_mode in []:
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local"]:
+    # for ssh_mode in ["local", "pull-push", "push", "pull"]:
+    # for ssh_mode in []:
     for ssh_mode in ["local", "pull-push"]:
-        # for ssh_mode in ["local", "pull-push", "push", "pull"]:
-        #     for min_transfer_size in [1024 ** 2]:
+        # for min_transfer_size in [1024 ** 2]:
         for min_transfer_size in [0, 1024**2]:
-            #     for affix in [""]:
-            #     for affix in [".  -"]:
+            # for affix in [""]:
+            # for affix in [".  -"]:
             for affix in ["", ".  -"]:
                 no_privilege_elevation_modes = [False]
                 # no_privilege_elevation_modes = []
@@ -2960,8 +2960,8 @@ def main():
             for min_transfer_size in [0]:
                 for affix in [""]:
                     for no_privilege_elevation in [True]:
+                        # for encrypted_dataset in []:
                         for encrypted_dataset in [False]:
-                            # for encrypted_dataset in []:
                             params = {
                                 "ssh_mode": ssh_mode,
                                 "verbose": False,

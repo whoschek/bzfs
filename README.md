@@ -805,7 +805,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  The options to be passed to the 'pv' program (optional). Default:
     '--progress --timer --eta --fineta --rate --average-rate
-    --bytes --interval=1 --width=120 --buffer-size=1M'.
+    --bytes --interval=1 --width=120 --buffer-size=2M'.
 
 <!-- -->
 
