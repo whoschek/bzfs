@@ -8,7 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by azpplicable law or agreed to in writing, software
+# Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
@@ -530,7 +530,7 @@ feature.
         help="Display version information and exit.\n\n")
     parser.add_argument(
         "--help, -h", action="help",
-        help="show this help message and exit.\n\n")
+        help="Show this help message and exit.\n\n")
     return parser
 # fmt: on
 
@@ -600,13 +600,13 @@ class Params:
         os.close(fd)
         fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
-        self.pv_program = self.program_name(self.validate_arg(args.pv_program))
+        self.pv_program = self.program_name(args.pv_program)
         self.pv_program_opts = self.split_args(args.pv_program_opts)
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
-        self.mbuffer_program = self.program_name(self.validate_arg(args.mbuffer_program))
+        self.mbuffer_program = self.program_name(args.mbuffer_program)
         self.mbuffer_program_opts = self.split_args(args.mbuffer_program_opts)
-        self.compression_program = self.program_name(self.validate_arg(args.compression_program))
+        self.compression_program = self.program_name(args.compression_program)
         self.compression_program_opts = self.split_args(args.compression_program_opts)
         # no point trying to be fancy for smaller data transfers:
         self.min_transfer_size = int(self.getenv("min_transfer_size", 1024 * 1024))
@@ -640,12 +640,12 @@ class Params:
             self.ssh_dst_extra_opts += self.split_args(extra_opt)
         self.ssh_socket_enabled = self.getenv_bool("ssh_socket_enabled", True)
 
-        self.zfs_program = self.program_name(self.validate_arg(args.zfs_program))
-        self.zpool_program = self.program_name(self.validate_arg(args.zpool_program))
-        self.ssh_program = self.program_name(self.validate_arg(args.ssh_program))
-        self.sudo_program = self.program_name(self.validate_arg(args.sudo_program))
+        self.zfs_program = self.program_name(args.zfs_program)
+        self.zpool_program = self.program_name(args.zpool_program)
+        self.ssh_program = self.program_name(args.ssh_program)
+        self.sudo_program = self.program_name(args.sudo_program)
         self.shell_program_local = "sh"
-        self.shell_program = self.program_name(self.validate_arg(args.shell_program))
+        self.shell_program = self.program_name(args.shell_program)
         self.uname_program = self.program_name("uname")
 
         self.skip_on_error = args.skip_on_error
@@ -701,6 +701,7 @@ class Params:
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
+        self.validate_arg(program)
         if not program:
             die(f"Program name must not be the empty string")
         if self.inject_params.get("inject_unavailable_" + program, False):
@@ -991,11 +992,11 @@ class Job:
                     if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
                         skip_src_dataset = src_dataset
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit) as e:
+                    failed = True
                     if p.skip_on_error == "fail":
                         raise
                     elif p.skip_on_error == "tree" or not self.dst_dataset_exists[dst_dataset]:
                         skip_src_dataset = src_dataset
-                    failed = True
                     self.first_exception = self.first_exception or e
                     self.all_exceptions.append(str(e))
                     error(str(e))
@@ -1542,7 +1543,7 @@ class Job:
 
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
         """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
-        Progress can be viewed via "tail -f $pv_log_file" aka current.pv or similar"""
+        Progress can be viewed via "tail -f $pv_log_file" aka ~/wbackup-zfs-logs/current.pv or similar"""
         p = self.params
         if size_estimate_bytes >= p.min_transfer_size and self.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
@@ -1584,7 +1585,7 @@ class Job:
         ssh_user: str,
         ssh_host: str,
         ssh_user_host: str,
-        ssh_port: str,
+        ssh_port: int,
         ssh_extra_opts: List[str],
     ) -> List[str]:
         params = self.params
@@ -2113,7 +2114,7 @@ class Job:
         command -v {params.uname_program} > /dev/null && printf uname- && {params.uname_program} -a || true
         """
 
-    def detect_available_programs_remote(self, location: str, available_programs: Dict, ssh_user_host):
+    def detect_available_programs_remote(self, location: str, available_programs: Dict, ssh_user_host: str):
         p = self.params
         available_programs_minimum = {"zpool": None, "sudo": None}
         available_programs[location] = {}
@@ -2168,7 +2169,7 @@ class Job:
             self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions ...")
             available_programs[location].update(available_programs_minimum)
 
-    def is_solaris_zfs(self, location: str):
+    def is_solaris_zfs(self, location: str) -> bool:
         return self.params.available_programs[location].get("zfs") == "notOpenZFS"
 
     def detect_zpool_features(self, location: str, pool: str) -> None:
@@ -2222,7 +2223,7 @@ def die(*items):
     raise ex
 
 
-def cut(field: int = -1, separator="\t", lines: List[str] = None) -> List[str]:
+def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
     """Retain only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command"""
     if field == 1:
         return [line[0 : line.index(separator)] for line in lines]
@@ -2264,7 +2265,7 @@ def is_included(
     return True
 
 
-def compile_regexes(regexes: List[str], suffix="") -> List[Tuple[re.Pattern, bool]]:
+def compile_regexes(regexes: List[str], suffix: str = "") -> List[Tuple[re.Pattern, bool]]:
     compiled_regexes = []
     for regex in regexes:
         is_negation = regex.startswith("!")
@@ -2295,7 +2296,7 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     return regex
 
 
-def isorted(iterable: Iterable[str], reverse=False) -> List[str]:
+def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
     """case-insensitive sort (A < a < B < b and so on)"""
     return sorted(iterable, key=str.casefold, reverse=reverse)
 
@@ -2316,7 +2317,7 @@ def current_time() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def replace_prefix(line, s1, s2):
+def replace_prefix(line: str, s1: str, s2: str):
     """In a line, replace a leading s1 string with s2. Assumes the leading string is present."""
     return s2 + line.rstrip()[len(s1) :]
 
@@ -2339,7 +2340,7 @@ def get_home_directory() -> str:
     return home
 
 
-def create_symlink(src, dst_dir, dst):
+def create_symlink(src: str, dst_dir: str, dst: str):
     """For parallel usage, ensure there is no time window when the symlink does not exist; uses atomic os.rename()"""
     uniq = f".tmp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex}"
     fd, temp_link = tempfile.mkstemp(suffix=".tmp", prefix=uniq, dir=dst_dir)
@@ -2372,7 +2373,7 @@ def stderr_to_str(stderr):
     return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
-def parse_dataset_locator(input_text, validate=True, user=None, host=None, port=None):
+def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
     user_undefined = user is None
     if user is None:
         user = ""
@@ -2411,7 +2412,7 @@ def parse_dataset_locator(input_text, validate=True, user=None, host=None, port=
     return user, host, user_host, pool, dataset
 
 
-def validate_dataset_name(dataset, input_text):
+def validate_dataset_name(dataset: str, input_text: str):
     # 'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc.
     # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
@@ -2437,17 +2438,17 @@ def validate_dataset_name(dataset, input_text):
         die(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
-def validate_user_name(user, input_text):
+def validate_user_name(user: str, input_text: str):
     if user and any(char.isspace() or char == '"' or char == "'" for char in user):
         die(f"Illegal user name: '{user}' for: '{input_text}'")
 
 
-def validate_host_name(host, input_text):
+def validate_host_name(host: str, input_text: str):
     if host and any(char.isspace() or char == "@" or char == '"' or char == "'" for char in host):
         die(f"Illegal host name: '{host}' for: '{input_text}'")
 
 
-def validate_port(port, message):
+def validate_port(port: int, message: str):
     if isinstance(port, int):
         port = str(port)
     if port and not port.isdigit():

@@ -371,7 +371,7 @@ jobs:
         run: |
           cp -r */badges ./
           PYTHONPATH=. .github-workflow-scripts/generate_badges.py merge
-      - name: Upload coverage report to workflow run page
+      - name: Upload combined coverage report to workflow run page
         uses: ./.github/workflows/coverage-upload
 
 
