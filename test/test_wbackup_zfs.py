@@ -19,6 +19,7 @@ import itertools
 import logging
 import platform
 import pwd
+import random
 import traceback
 import unittest
 import os
@@ -220,9 +221,9 @@ class WBackupTestCase(ParametrizedTestCase):
 
         if params and params.get("ssh_mode", "local") != "local":
             args = args + [
-                "--ssh-src-extra-opt",
+                "--ssh-src-extra-opts",
                 "-o StrictHostKeyChecking=no",
-                "--ssh-dst-extra-opt",
+                "--ssh-dst-extra-opts",
                 "-o StrictHostKeyChecking=no",
             ]
 
@@ -450,6 +451,8 @@ class LocalTestCase(WBackupTestCase):
                     self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_basic_replication_flat_send_recv_flags(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
         self.setup_basic()
@@ -464,7 +467,14 @@ class LocalTestCase(WBackupTestCase):
                     "-v",
                     "-v",
                     "--zfs-send-program-opts=-v --dryrun" + extra_opt,
-                    "--zfs-receive-program-opts=--verbose -n -u",
+                    "--zfs-receive-program-opts=--verbose -n",
+                    "--zfs-receive-program-opt=-u",
+                    "--zfs-receive-program-opt=",
+                    "--zfs-receive-program-opt=-o",
+                    "--zfs-receive-program-opt=compression=off",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt=mountpoint=/tmp/dir with  spaces-"
+                    f"{os.getpid()}-{random.SystemRandom().randint(0, 999_999_999_999)}",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
@@ -1960,8 +1970,8 @@ class IsolatedTestCase(WBackupTestCase):
     # def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
     #     LocalTestCase(param=self.param).test_delete_missing_snapshots_with_injected_dataset_deletes()
 
-    def test_basic_replication_flat_simple_with_multiple_datasets(self):
-        LocalTestCase(param=self.param).test_basic_replication_flat_simple_with_multiple_datasets()
+    def test_basic_replication_flat_send_recv_flags(self):
+        LocalTestCase(param=self.param).test_basic_replication_flat_send_recv_flags()
 
     # def basic_replication_flat_simple_with_retries_on_error_injection(self):
     #     LocalTestCase(param=self.param).basic_replication_flat_simple_with_retries_on_error_injection()
@@ -2366,17 +2376,25 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_validate_quoting(self):
         params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
+        params.validate_quoting("")
         params.validate_quoting("foo")
         with self.assertRaises(SystemExit):
             params.validate_quoting('foo"')
         with self.assertRaises(SystemExit):
             params.validate_quoting("foo'")
 
+    def test_validate_arg(self):
+        params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
+        params.validate_arg("")
         params.validate_arg("foo")
         with self.assertRaises(SystemExit):
             params.validate_arg("foo ")
         with self.assertRaises(SystemExit):
             params.validate_arg("foo" + "\t")
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo" + "\t", allow_spaces=True)
+        params.validate_arg("foo bar", allow_spaces=True)
+        params.validate_arg(" foo  bar ", allow_spaces=True)
 
     def test_validate_program_name_must_not_be_empty(self):
         args = wbackup_zfs.argument_parser().parse_args(args=["src", "dst"])

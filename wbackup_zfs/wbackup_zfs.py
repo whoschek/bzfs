@@ -224,6 +224,7 @@ feature.
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
         help=("Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
+              f"The value is split on runs of one or more whitespace characters. "
               f"Default is '{zfs_send_program_opts_default}'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
               "and https://github.com/openzfs/zfs/issues/13024\n\n"))
@@ -231,9 +232,16 @@ feature.
     parser.add_argument(
         "--zfs-receive-program-opts", type=str, default=zfs_recv_program_opts_default, metavar="STRING",
         help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
+              f"The value is split on runs of one or more whitespace characters. "
               f"Default is '{zfs_recv_program_opts_default}'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
+    parser.add_argument(
+        "--zfs-receive-program-opt", action="append", default=[], metavar="STRING",
+        help=("Parameter to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
+              "The value can contain spaces and is not split. This option can be specified multiple times. Example: `"
+              "--zfs-receive-program-opt=-o "
+              "--zfs-receive-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n"))
     parser.add_argument(
         "--skip-parent", action="store_true",
         help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
@@ -441,10 +449,16 @@ feature.
             help=f"Remote SSH port of {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
+            f"--ssh-{loc}-extra-opts", type=str, default="", metavar="STRING",
+            help=(f"Additional options to be passed to ssh CLI when connecting to {loc} host (optional). "
+                  "The value is split on runs of one or more whitespace characters. "
+                  f"Example: `--ssh-{loc}-extra-opts='-v -v'` to debug ssh config issues.\n\n"))
+        parser.add_argument(
             f"--ssh-{loc}-extra-opt", action="append", default=[], metavar="STRING",
-            help=(f"Additional options to be passed to ssh CLI when connecting to {loc} host (optional). This option "
-                  f"can be specified multiple times. Example: `--ssh-{loc}-extra-opts='-v -v'` to "
-                  "debug ssh config issues.\n\n"))
+            help=(f"Additional option to be passed to ssh CLI when connecting to {loc} host (optional). The value "
+                  "can contain spaces and is not split. This option can be specified multiple times. "
+                  f"Example: `--ssh-{loc}-extra-opts='-oProxyCommand=nc %%h %%p'` to disable the TCP_NODELAY "
+                  "socket option for OpenSSH.\n\n"))
     parser.add_argument(
         "--bwlimit", type=str, metavar="STRING",
         help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
@@ -571,7 +585,10 @@ class Params:
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.zfs_send_program_opts: List[str] = self.fix_send_recv_opts(self.split_args(args.zfs_send_program_opts))
         self.current_zfs_send_program_opts: List[str] = []
-        self.zfs_recv_program_opts: List[str] = self.fix_send_recv_opts(self.split_args(args.zfs_receive_program_opts))
+        self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_receive_program_opts)
+        for extra_opt in args.zfs_receive_program_opt:
+            xappend(self.zfs_recv_program_opts, self.validate_arg(extra_opt, allow_spaces=True))
+        self.zfs_recv_program_opts = self.fix_send_recv_opts(self.zfs_recv_program_opts)
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
@@ -586,7 +603,7 @@ class Params:
         os.close(fd)
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
-        if args.bwlimit:
+        if args.bwlimit and args.bwlimit.strip():
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
         self.mbuffer_program: str = self.program_name(args.mbuffer_program)
         self.mbuffer_program_opts: List[str] = self.split_args(args.mbuffer_program_opts)
@@ -620,10 +637,12 @@ class Params:
         self.ssh_default_opts: List[str] = ["-o", "ServerAliveInterval=0"]
         self.ssh_src_extra_opts: List[str] = ["-x", "-T"]
         self.ssh_dst_extra_opts: List[str] = self.ssh_src_extra_opts.copy()
+        self.ssh_src_extra_opts += self.split_args(args.ssh_src_extra_opts)
         for extra_opt in args.ssh_src_extra_opt:
-            self.ssh_src_extra_opts += self.split_args(extra_opt)
+            xappend(self.ssh_src_extra_opts, self.validate_arg(extra_opt, allow_spaces=True))
+        self.ssh_dst_extra_opts += self.split_args(args.ssh_dst_extra_opts)
         for extra_opt in args.ssh_dst_extra_opt:
-            self.ssh_dst_extra_opts += self.split_args(extra_opt)
+            xappend(self.ssh_dst_extra_opts, self.validate_arg(extra_opt, allow_spaces=True))
         self.ssh_socket_enabled: bool = self.getenv_bool("ssh_socket_enabled", True)
 
         self.zfs_program: str = self.program_name(args.zfs_program)
@@ -654,34 +673,37 @@ class Params:
         self.platform_version: str = platform.version()
         self.platform_platform: str = platform.platform()
 
-    def getenv(self, key: str, default=None):
+    def getenv(self, key: str, default=None) -> str:
         # All shell environment variable names used for configuration start with this prefix
         return os.getenv(env_var_prefix + key, default)
 
-    def getenv_bool(self, key: str, default=False):
+    def getenv_bool(self, key: str, default=False) -> bool:
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items) -> List[str]:
         """split option string on runs of one or more whitespace into an option list"""
-        opts = xappend(self.one_or_more_whitespace_regex.split(text.strip()), items)
+        text = text.strip()
+        opts = self.one_or_more_whitespace_regex.split(text) if text else []
+        xappend(opts, items)
         for opt in opts:
             self.validate_quoting(opt)
         return opts
 
-    def validate_arg(self, opt: str):
+    def validate_arg(self, opt: str, allow_spaces=False) -> str:
         if opt is None:
             return opt
-        if any(char.isspace() for char in opt):
-            die(f"Option must not contain a whitespace character: {opt}")
-        return self.validate_quoting(opt)
+        if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
+            die(f"Option must not contain a whitespace character {'other thank space' if allow_spaces else ''}: {opt}")
+        self.validate_quoting(opt)
+        return opt
 
     @staticmethod
     def validate_quoting(opt: str):
         if "'" in opt or '"' in opt:
             die(f"Option must not contain a single quote or a double quote character: {opt}")
-        return opt
 
-    def fix_send_recv_opts(self, opts: List[str]):
+    @staticmethod
+    def fix_send_recv_opts(opts: List[str]) -> List[str]:
         """These opts are instead managed via wbackup CLI args --dry-run and --verbose"""
         return [opt for opt in opts if opt not in ["--dryrun", "-n", "--verbose", "-v"]]
 

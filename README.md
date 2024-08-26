@@ -210,7 +210,8 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--exclude-snapshot-regex REGEX [REGEX ...]] [--force]
                    [--force-unmount] [--force-once]
                    [--zfs-send-program-opts STRING]
-                   [--zfs-receive-program-opts STRING] [--skip-parent]
+                   [--zfs-receive-program-opts STRING]
+                   [--zfs-receive-program-opt STRING] [--skip-parent]
                    [--skip-missing-snapshots [{fail,dataset,continue}]]
                    [--max-retries INT] [--skip-on-error [{fail,tree,dataset}]]
                    [--skip-replication] [--delete-missing-snapshots]
@@ -222,7 +223,8 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--ssh-src-user STRING] [--ssh-dst-user STRING]
                    [--ssh-src-host STRING] [--ssh-dst-host STRING]
                    [--ssh-src-port INT] [--ssh-dst-port INT]
-                   [--ssh-src-extra-opt STRING] [--ssh-dst-extra-opt STRING]
+                   [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
+                   [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
                    [--bwlimit STRING] [--compression-program STRING]
                    [--compression-program-opts STRING]
                    [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
@@ -372,7 +374,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--zfs-send-program-opts** *STRING*
 
 *  Parameters to fine-tune 'zfs send' behaviour (optional); will be
-    passed into 'zfs send' CLI. Default is '--props --raw
+    passed into 'zfs send' CLI. The value is split on runs of one or
+    more whitespace characters. Default is '--props --raw
     --compressed'. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html
     and https://github.com/openzfs/zfs/issues/13024
@@ -382,10 +385,22 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--zfs-receive-program-opts** *STRING*
 
 *  Parameters to fine-tune 'zfs receive' behaviour (optional); will
-    be passed into 'zfs receive' CLI. Default is '-u'. See
+    be passed into 'zfs receive' CLI. The value is split on runs of
+    one or more whitespace characters. Default is '-u'. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html
     and
     https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
+
+<!-- -->
+
+**--zfs-receive-program-opt** *STRING*
+
+*  Parameter to fine-tune 'zfs receive' behaviour (optional); will be
+    passed into 'zfs receive' CLI. The value can contain spaces and is
+    not split. This option can be specified multiple times. Example:
+    `--zfs-receive-program-opt=-o
+    --zfs-receive-program-opt='org.zfsbootmenu:commandline=ro debug
+    zswap.enabled=1'`
 
 <!-- -->
 
@@ -683,7 +698,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--ssh-src-private-key** *FILE*
 
-*  Path to SSH private key file on local host to connect to source
+*  Path to SSH private key file on local host to connect to src
     (optional); will be passed into ssh -i CLI. default:
     $HOME/.ssh/id_rsa
 
@@ -691,7 +706,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--ssh-dst-private-key** *FILE*
 
-*  Path to SSH private key file on local host to connect to destination
+*  Path to SSH private key file on local host to connect to dst
     (optional); will be passed into ssh -i CLI. default:
     $HOME/.ssh/id_rsa
 
@@ -699,61 +714,79 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--ssh-src-user** *STRING*
 
-*  Remote SSH username of source host to connect to (optional).
-    Overrides username given in SRC_DATASET.
+*  Remote SSH username of src host to connect to (optional). Overrides
+    username given in SRC_DATASET.
 
 <!-- -->
 
 **--ssh-dst-user** *STRING*
 
-*  Remote SSH username of destination host to connect to (optional).
-    Overrides username given in DST_DATASET.
+*  Remote SSH username of dst host to connect to (optional). Overrides
+    username given in DST_DATASET.
 
 <!-- -->
 
 **--ssh-src-host** *STRING*
 
-*  Remote SSH hostname of source host to connect to (optional). Can
-    also be an IPv4 or IPv6 address. Overrides hostname given in
-    SRC_DATASET.
+*  Remote SSH hostname of src host to connect to (optional). Can also
+    be an IPv4 or IPv6 address. Overrides hostname given in SRC_DATASET.
 
 <!-- -->
 
 **--ssh-dst-host** *STRING*
 
-*  Remote SSH hostname of destination host to connect to (optional).
-    Can also be an IPv4 or IPv6 address. Overrides hostname given in
-    DST_DATASET.
+*  Remote SSH hostname of dst host to connect to (optional). Can also
+    be an IPv4 or IPv6 address. Overrides hostname given in DST_DATASET.
 
 <!-- -->
 
 **--ssh-src-port** *INT*
 
-*  Remote SSH port of source host to connect to (optional).
+*  Remote SSH port of src host to connect to (optional).
 
 <!-- -->
 
 **--ssh-dst-port** *INT*
 
-*  Remote SSH port of destination host to connect to (optional).
+*  Remote SSH port of dst host to connect to (optional).
+
+<!-- -->
+
+**--ssh-src-extra-opts** *STRING*
+
+*  Additional options to be passed to ssh CLI when connecting to src
+    host (optional). The value is split on runs of one or more
+    whitespace characters. Example: `--ssh-src-extra-opts='-v -v'`
+    to debug ssh config issues.
 
 <!-- -->
 
 **--ssh-src-extra-opt** *STRING*
 
-*  Additional option to be passed to ssh CLI when connecting to source
-    host (optional). This option can be specified multiple times.
-    Example: `--ssh-src-extra-opt='-v -v'` to debug ssh config
-    issues.
+*  Additional option to be passed to ssh CLI when connecting to src
+    host (optional). The value can contain spaces and is not split. This
+    option can be specified multiple times. Example:
+    `--ssh-src-extra-opts='-oProxyCommand=nc %h %p'` to disable the
+    TCP_NODELAY socket option for OpenSSH.
+
+<!-- -->
+
+**--ssh-dst-extra-opts** *STRING*
+
+*  Additional options to be passed to ssh CLI when connecting to dst
+    host (optional). The value is split on runs of one or more
+    whitespace characters. Example: `--ssh-dst-extra-opts='-v -v'`
+    to debug ssh config issues.
 
 <!-- -->
 
 **--ssh-dst-extra-opt** *STRING*
 
-*  Additional option to be passed to ssh CLI when connecting to
-    destination host (optional). This option can be specified multiple
-    times. Example: `--ssh-dst-extra-opt='-v -v'` to debug ssh
-    config issues.
+*  Additional option to be passed to ssh CLI when connecting to dst
+    host (optional). The value can contain spaces and is not split. This
+    option can be specified multiple times. Example:
+    `--ssh-dst-extra-opts='-oProxyCommand=nc %h %p'` to disable the
+    TCP_NODELAY socket option for OpenSSH.
 
 <!-- -->
 
