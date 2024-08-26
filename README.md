@@ -882,4 +882,4 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--help, -h**
 
-*  show this help message and exit.
+*  Show this help message and exit.

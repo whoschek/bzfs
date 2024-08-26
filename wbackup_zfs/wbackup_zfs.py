@@ -558,10 +558,8 @@ class Params:
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
         self.skip_parent: bool = args.skip_parent
-        self.force: bool = args.force
         self.force_once: bool = args.force_once
-        if self.force_once:
-            self.force = True
+        self.force: bool = args.force or args.force_once
         self.force_unmount: str = "-f" if args.force_unmount else ""
         self.force_hard: str = "-R" if args.force_hard else ""
         self.skip_missing_snapshots: str = args.skip_missing_snapshots
@@ -770,7 +768,7 @@ class Job:
                     self.validate_once()
                     self.all_exceptions = []
                     self.first_exception = None
-                    for i, (src_root_dataset, dst_root_dataset) in enumerate(p.root_dataset_pairs):
+                    for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                         p.src_root_dataset = p.origin_src_root_dataset = src_root_dataset
                         p.dst_root_dataset = p.origin_dst_root_dataset = dst_root_dataset
                         p.current_zfs_send_program_opts = p.zfs_send_program_opts.copy()
