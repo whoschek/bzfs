@@ -473,8 +473,8 @@ feature.
         metavar="STRING", help=hlp("zstd") + "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg)
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
-        help=f"The options to be passed to the compression program on the compression step (optional). "
-             f"Default is '-1'.\n\n")
+        help="The options to be passed to the compression program on the compression step (optional). "
+             "Default is '-1'.\n\n")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("mbuffer") + msg)
@@ -503,8 +503,8 @@ feature.
         "--zfs-program", default="zfs", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("zfs") + "\n\n")
     parser.add_argument(
-        "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING"
-        , help=hlp("zpool") + msg)
+        "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("zpool") + msg)
     parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("On program startup, unset all Unix environment variables for which the full environment variable "
@@ -544,129 +544,131 @@ class Params:
         inject_params: Optional[Dict[str, bool]] = None,
     ):
         assert args is not None
-        self.args = args
-        self.sys_argv = sys_argv if sys_argv is not None else []
-        self.inject_params = inject_params if inject_params is not None else {}  # for testing only
+        self.args: argparse.Namespace = args
+        self.sys_argv: List[str] = sys_argv if sys_argv is not None else []
+        self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
         self.unset_matching_env_vars(args)
-        self.one_or_more_whitespace_regex = re.compile(r"\s+")
+        self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         assert len(args.root_dataset_pairs) > 0
-        self.root_dataset_pairs = args.root_dataset_pairs
-        self.src_root_dataset = None  # deferred until run_main()
-        self.dst_root_dataset = None  # deferred until run_main()
-        self.origin_src_root_dataset = None  # deferred until run_main()
-        self.origin_dst_root_dataset = None  # deferred until run_main()
-        self.recursive = args.recursive
-        self.recursive_flag = "-r" if args.recursive else ""
-        self.skip_parent = args.skip_parent
-        self.force = args.force
-        self.force_once = args.force_once
+        self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
+        self.src_root_dataset: str = ""  # deferred until run_main()
+        self.dst_root_dataset: str = ""  # deferred until run_main()
+        self.origin_src_root_dataset: str = ""  # deferred until run_main()
+        self.origin_dst_root_dataset: str = ""  # deferred until run_main()
+        self.recursive: bool = args.recursive
+        self.recursive_flag: str = "-r" if args.recursive else ""
+        self.skip_parent: bool = args.skip_parent
+        self.force: bool = args.force
+        self.force_once: bool = args.force_once
         if self.force_once:
             self.force = True
-        self.force_unmount = "-f" if args.force_unmount else ""
-        self.force_hard = "-R" if args.force_hard else ""
-        self.skip_missing_snapshots = args.skip_missing_snapshots
-        self.create_bookmark = not args.no_create_bookmark
-        self.use_bookmark = not args.no_use_bookmark
-        self.no_stream = args.no_stream
-        self.delete_missing_datasets = args.delete_missing_datasets
-        self.delete_empty_datasets = args.delete_missing_datasets
-        self.delete_missing_snapshots = args.delete_missing_snapshots
-        self.skip_replication = args.skip_replication
-        self.dry_run = args.dry_run
-        self.dry_run_recv = "-n" if args.dry_run else ""
-        self.dry_run_destroy = self.dry_run_recv
-        self.verbose = "-v" if args.verbose >= 1 else ""
-        self.verbose_zfs = True if args.verbose >= 2 else False
-        self.quiet = "" if args.quiet else "-v"
-        self.verbose_destroy = self.quiet
-        self.verbose_trace = True if args.verbose >= 2 else False
-        self.enable_privilege_elevation = not args.no_privilege_elevation
-        self.exclude_dataset_regexes = None  # deferred to validate() phase
-        self.include_dataset_regexes = None  # deferred to validate() phase
-        self.exclude_snapshot_regexes = None  # deferred to validate() phase
-        self.include_snapshot_regexes = None  # deferred to validate() phase
-        self.zfs_send_program_opts = self.sanitize_send_recv_opts(self.split_args(args.zfs_send_program_opts))
-        self.current_zfs_send_program_opts = None
-        self.zfs_recv_program_opts = self.sanitize_send_recv_opts(self.split_args(args.zfs_receive_program_opts))
+        self.force_unmount: str = "-f" if args.force_unmount else ""
+        self.force_hard: str = "-R" if args.force_hard else ""
+        self.skip_missing_snapshots: str = args.skip_missing_snapshots
+        self.create_bookmark: bool = not args.no_create_bookmark
+        self.use_bookmark: bool = not args.no_use_bookmark
+        self.no_stream: bool = args.no_stream
+        self.delete_missing_datasets: bool = args.delete_missing_datasets
+        self.delete_empty_datasets: bool = args.delete_missing_datasets
+        self.delete_missing_snapshots: bool = args.delete_missing_snapshots
+        self.skip_replication: bool = args.skip_replication
+        self.dry_run: bool = args.dry_run
+        self.dry_run_recv: str = "-n" if args.dry_run else ""
+        self.dry_run_destroy: str = self.dry_run_recv
+        self.verbose: str = "-v" if args.verbose >= 1 else ""
+        self.verbose_zfs: bool = True if args.verbose >= 2 else False
+        self.quiet: str = "" if args.quiet else "-v"
+        self.verbose_destroy: str = self.quiet
+        self.verbose_trace: bool = True if args.verbose >= 2 else False
+        self.enable_privilege_elevation: bool = not args.no_privilege_elevation
+        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.zfs_send_program_opts: List[str] = self.fix_send_recv_opts(self.split_args(args.zfs_send_program_opts))
+        self.current_zfs_send_program_opts: List[str] = []
+        self.zfs_recv_program_opts: List[str] = self.fix_send_recv_opts(self.split_args(args.zfs_receive_program_opts))
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
-        self.zfs_full_recv_opts = self.zfs_recv_program_opts.copy()
-        self.timestamp = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        self.home_dir = get_home_directory()
-        self.log_dir = self.validate_arg(args.logdir if args.logdir else f"{self.home_dir}/{prog_name}-logs")
+        self.zfs_full_recv_opts: List[str] = self.zfs_recv_program_opts.copy()
+        self.timestamp: str = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
+        self.home_dir: str = get_home_directory()
+        self.log_dir: str = self.validate_arg(args.logdir if args.logdir else f"{self.home_dir}/{prog_name}-logs")
         os.makedirs(self.log_dir, exist_ok=True)
         fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
         fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
-        self.pv_program = self.program_name(args.pv_program)
-        self.pv_program_opts = self.split_args(args.pv_program_opts)
+        self.pv_program: str = self.program_name(args.pv_program)
+        self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
         if args.bwlimit:
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
-        self.mbuffer_program = self.program_name(args.mbuffer_program)
-        self.mbuffer_program_opts = self.split_args(args.mbuffer_program_opts)
-        self.compression_program = self.program_name(args.compression_program)
-        self.compression_program_opts = self.split_args(args.compression_program_opts)
+        self.mbuffer_program: str = self.program_name(args.mbuffer_program)
+        self.mbuffer_program_opts: List[str] = self.split_args(args.mbuffer_program_opts)
+        self.compression_program: str = self.program_name(args.compression_program)
+        self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
         # no point trying to be fancy for smaller data transfers:
-        self.min_transfer_size = int(self.getenv("min_transfer_size", 1024 * 1024))
+        self.min_transfer_size: int = int(self.getenv("min_transfer_size", 1024 * 1024))
 
-        self.ssh_config_file = self.validate_arg(args.ssh_config_file)
-        self.ssh_src_private_key_file = self.validate_arg(args.ssh_src_private_key)
-        self.ssh_dst_private_key_file = self.validate_arg(args.ssh_dst_private_key)
-        self.ssh_cipher = self.validate_arg(args.ssh_cipher)
-        self.ssh_src_user = args.ssh_src_user
-        self.ssh_dst_user = args.ssh_dst_user
-        self.ssh_src_host = args.ssh_src_host
-        self.ssh_dst_host = args.ssh_dst_host
-        self.ssh_src_port = args.ssh_src_port
-        self.ssh_dst_port = args.ssh_dst_port
-        self.ssh_src_user_host = None
-        self.ssh_dst_user_host = None
-        self.ssh_src_cmd = None
-        self.ssh_dst_cmd = None
+        self.ssh_config_file: str = self.validate_arg(args.ssh_config_file)
+        self.ssh_src_private_key_file: str = self.validate_arg(args.ssh_src_private_key)
+        self.ssh_dst_private_key_file: str = self.validate_arg(args.ssh_dst_private_key)
+        self.ssh_cipher: str = self.validate_arg(args.ssh_cipher)
+        self.ssh_src_user: str = args.ssh_src_user
+        self.ssh_dst_user: str = args.ssh_dst_user
+        self.ssh_src_host: str = args.ssh_src_host
+        self.ssh_dst_host: str = args.ssh_dst_host
+        self.ssh_src_port: int = args.ssh_src_port
+        self.ssh_dst_port: int = args.ssh_dst_port
+        self.ssh_src_user_host: str = ""
+        self.ssh_dst_user_host: str = ""
+        self.ssh_src_cmd: List[str] = []
+        self.ssh_dst_cmd: List[str] = []
 
-        self.src_pool = None
-        self.dst_pool = None
-        self.src_sudo = None
-        self.dst_sudo = None
+        self.src_pool: str = ""
+        self.dst_pool: str = ""
+        self.src_sudo: str = ""
+        self.dst_sudo: str = ""
+        self.src_use_zfs_delegation: bool = False
+        self.dst_use_zfs_delegation: bool = False
 
-        self.ssh_default_opts = ["-o", "ServerAliveInterval=0"]
-        self.ssh_src_extra_opts = ["-x", "-T"]
-        self.ssh_dst_extra_opts = self.ssh_src_extra_opts.copy()
+        self.ssh_default_opts: List[str] = ["-o", "ServerAliveInterval=0"]
+        self.ssh_src_extra_opts: List[str] = ["-x", "-T"]
+        self.ssh_dst_extra_opts: List[str] = self.ssh_src_extra_opts.copy()
         for extra_opt in args.ssh_src_extra_opt:
             self.ssh_src_extra_opts += self.split_args(extra_opt)
         for extra_opt in args.ssh_dst_extra_opt:
             self.ssh_dst_extra_opts += self.split_args(extra_opt)
-        self.ssh_socket_enabled = self.getenv_bool("ssh_socket_enabled", True)
+        self.ssh_socket_enabled: bool = self.getenv_bool("ssh_socket_enabled", True)
 
-        self.zfs_program = self.program_name(args.zfs_program)
-        self.zpool_program = self.program_name(args.zpool_program)
-        self.ssh_program = self.program_name(args.ssh_program)
-        self.sudo_program = self.program_name(args.sudo_program)
-        self.shell_program_local = "sh"
-        self.shell_program = self.program_name(args.shell_program)
-        self.uname_program = self.program_name("uname")
+        self.zfs_program: str = self.program_name(args.zfs_program)
+        self.zpool_program: str = self.program_name(args.zpool_program)
+        self.ssh_program: str = self.program_name(args.ssh_program)
+        self.sudo_program: str = self.program_name(args.sudo_program)
+        self.shell_program_local: str = "sh"
+        self.shell_program: str = self.program_name(args.shell_program)
+        self.uname_program: str = self.program_name("uname")
 
-        self.skip_on_error = args.skip_on_error
-        self.max_retries = args.max_retries
-        self.min_sleep_secs = float(self.getenv("min_sleep_secs", 0.125))
-        self.max_sleep_secs = float(self.getenv("max_sleep_secs", 5 * 60))
-        self.max_elapsed_secs = float(self.getenv("max_elapsed_secs", 60 * 60))
-        self.min_sleep_nanos = int(self.min_sleep_secs * 1000_000_000)
-        self.max_sleep_nanos = int(self.max_sleep_secs * 1000_000_000)
-        self.max_elapsed_nanos = int(self.max_elapsed_secs * 1000_000_000)
+        self.skip_on_error: str = args.skip_on_error
+        self.max_retries: int = args.max_retries
+        self.min_sleep_secs: float = float(self.getenv("min_sleep_secs", 0.125))
+        self.max_sleep_secs: float = float(self.getenv("max_sleep_secs", 5 * 60))
+        self.max_elapsed_secs: float = float(self.getenv("max_elapsed_secs", 60 * 60))
+        self.min_sleep_nanos: int = int(self.min_sleep_secs * 1000_000_000)
+        self.max_sleep_nanos: int = int(self.max_sleep_secs * 1000_000_000)
+        self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1000_000_000)
         self.min_sleep_nanos = max(1, self.min_sleep_nanos)
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
 
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
 
-        self.os_geteuid = os.geteuid()
-        self.prog_version = __version__
-        self.python_version = sys.version
-        self.platform_version = platform.version()
-        self.platform_platform = platform.platform()
+        self.os_geteuid: int = os.geteuid()
+        self.prog_version: str = __version__
+        self.python_version: str = sys.version
+        self.platform_version: str = platform.version()
+        self.platform_platform: str = platform.platform()
 
     def getenv(self, key: str, default=None):
         # All shell environment variable names used for configuration start with this prefix
@@ -695,7 +697,7 @@ class Params:
             die(f"Option must not contain a single quote or a double quote character: {opt}")
         return opt
 
-    def sanitize_send_recv_opts(self, opts: List[str]):
+    def fix_send_recv_opts(self, opts: List[str]):
         """These opts are instead managed via wbackup CLI args --dry-run and --verbose"""
         return [opt for opt in opts if opt not in ["--dryrun", "-n", "--verbose", "-v"]]
 
@@ -737,17 +739,17 @@ def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
 #############################################################################
 class Job:
     def __init__(self):
-        self.params = None
-        self.dst_dataset_exists = None
-        self.recordsizes = None
-        self.mbuffer_current_opts = None
-        self.all_exceptions = []
-        self.first_exception = None
+        self.params: Params
+        self.dst_dataset_exists: Dict[str, bool] = {}
+        self.recordsizes: Dict[str, int] = {}
+        self.mbuffer_current_opts: List[str] = []
+        self.all_exceptions: List[str] = []
+        self.first_exception: Optional[Exception] = None
 
-        self.is_test_mode = False  # for testing only
+        self.is_test_mode: bool = False  # for testing only
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
-        self.inject_params = {}  # for testing only
+        self.inject_params: Dict[str, bool] = {}  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
         try:
