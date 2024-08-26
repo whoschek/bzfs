@@ -419,46 +419,32 @@ feature.
              f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
 
     ssh_private_key_file_default = ".ssh/id_rsa"
-    parser.add_argument(
-        "--ssh-src-private-key", type=str, metavar="FILE",
-        help=f"Path to SSH private key file on local host to connect to source (optional); will be passed into "
-             f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
-    parser.add_argument(
-        "--ssh-dst-private-key", type=str, metavar="FILE",
-        help=f"Path to SSH private key file on local host to connect to destination (optional); will be passed into "
-             f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
-    parser.add_argument(
-        "--ssh-src-user", type=str, metavar="STRING",
-        help="Remote SSH username of source host to connect to (optional). Overrides username given in "
-             "SRC_DATASET.\n\n")
-    parser.add_argument(
-        "--ssh-dst-user", type=str, metavar="STRING",
-        help="Remote SSH username of destination host to connect to (optional). Overrides username given in "
-             "DST_DATASET.\n\n")
-    parser.add_argument(
-        "--ssh-src-host", type=str, metavar="STRING",
-        help="Remote SSH hostname of source host to connect to (optional). Can also be an IPv4 or IPv6 address. "
-             "Overrides hostname given in SRC_DATASET.\n\n")
-    parser.add_argument(
-        "--ssh-dst-host", type=str, metavar="STRING",
-        help="Remote SSH hostname of destination host to connect to (optional). Can also be an IPv4 or IPv6 address. "
-             "Overrides hostname given in DST_DATASET.\n\n")
-    parser.add_argument(
-        "--ssh-src-port", type=int, metavar="INT",
-        help="Remote SSH port of source host to connect to (optional).\n\n")
-    parser.add_argument(
-        "--ssh-dst-port", type=int, metavar="INT",
-        help="Remote SSH port of destination host to connect to (optional).\n\n")
-    parser.add_argument(
-        "--ssh-src-extra-opt", action="append", default=[], metavar="STRING",
-        help=("Additional option to be passed to ssh CLI when connecting to source host (optional). This option "
-              "can be specified multiple times. Example: `--ssh-src-extra-opt='-v -v'` to "
-              "debug ssh config issues.\n\n"))
-    parser.add_argument(
-        "--ssh-dst-extra-opt", action="append", default=[], metavar="STRING",
-        help=("Additional option to be passed to ssh CLI when connecting to destination host (optional). This option "
-              "can be specified multiple times. Example: `--ssh-dst-extra-opt='-v -v'` to "
-              "debug ssh config issues.\n\n"))
+    locations = ["src", "dst"]
+    for loc in locations:
+        parser.add_argument(
+            f"--ssh-{loc}-private-key", type=str, metavar="FILE",
+            help=f"Path to SSH private key file on local host to connect to {loc} (optional); will be passed into "
+                 f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
+    for loc in locations:
+        parser.add_argument(
+            f"--ssh-{loc}-user", type=str, metavar="STRING",
+            help=f"Remote SSH username of {loc} host to connect to (optional). Overrides username given in "
+                 f"{loc.upper()}_DATASET.\n\n")
+    for loc in locations:
+        parser.add_argument(
+            f"--ssh-{loc}-host", type=str, metavar="STRING",
+            help=f"Remote SSH hostname of {loc} host to connect to (optional). Can also be an IPv4 or IPv6 address. "
+                 f"Overrides hostname given in {loc.upper()}_DATASET.\n\n")
+    for loc in locations:
+        parser.add_argument(
+            f"--ssh-{loc}-port", type=int, metavar="INT",
+            help=f"Remote SSH port of {loc} host to connect to (optional).\n\n")
+    for loc in locations:
+        parser.add_argument(
+            f"--ssh-{loc}-extra-opt", action="append", default=[], metavar="STRING",
+            help=(f"Additional options to be passed to ssh CLI when connecting to {loc} host (optional). This option "
+                  f"can be specified multiple times. Example: `--ssh-{loc}-extra-opts='-v -v'` to "
+                  "debug ssh config issues.\n\n"))
     parser.add_argument(
         "--bwlimit", type=str, metavar="STRING",
         help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
