@@ -2419,23 +2419,22 @@ def validate_dataset_name(dataset: str, input_text: str):
     # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
     # and (by now nomore accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
-    ds = dataset
     if (
-        ds in ["", ".", ".."]
-        or "//" in ds
-        or ds.startswith("/")
-        or ds.endswith("/")
-        or ds.startswith("./")
-        or ds.startswith("../")
-        or ds.endswith("/.")
-        or ds.endswith("/..")
-        or "@" in ds
-        or "#" in ds
-        or '"' in ds
-        or "'" in ds
-        or "%" in ds
-        or any(char.isspace() and char != " " for char in ds)
-        or not ds[0].isalpha()
+        dataset in ["", ".", ".."]
+        or "//" in dataset
+        or dataset.startswith("/")
+        or dataset.endswith("/")
+        or dataset.startswith("./")
+        or dataset.startswith("../")
+        or dataset.endswith("/.")
+        or dataset.endswith("/..")
+        or "@" in dataset
+        or "#" in dataset
+        or '"' in dataset
+        or "'" in dataset
+        or "%" in dataset
+        or any(char.isspace() and char != " " for char in dataset)
+        or not dataset[0].isalpha()
     ):
         die(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
 
