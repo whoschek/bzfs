@@ -1616,7 +1616,7 @@ class Job:
                     # replace any whitespace, /, $, \, @ with a ~ tilde char
                     name = re.sub(r"[\s\\/@$]", "~", name)
                     # Remove characters not in the allowed set
-                    name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$%^&*+=_-]", "", name)
+                    name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
                     return name
 
                 unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
