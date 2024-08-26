@@ -82,7 +82,7 @@ jobs:
       shell: bash
       run: |
         pip install mypy
-        mypy wbackup_zfs/wbackup_zfs.py || true  # see https://mypy.readthedocs.io
+        mypy --check-untyped-defs wbackup_zfs/wbackup_zfs.py || true  # see https://mypy.readthedocs.io
     - name: Lint with flake8
       shell: bash
       run: |

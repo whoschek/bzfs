@@ -69,7 +69,7 @@ the source since the last run. Source ZFS snapshots older than the most recent c
 destination are auto-skipped.
 
 {prog_name} does not create or delete ZFS snapshots on the source - it assumes you have a ZFS snapshot
-management tool to do so, for example policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup, 
+management tool to do so, for example policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup,
 manual zfs snapshot/destroy, etc. {prog_name} treats the source as read-only, thus the source remains unmodified.
 With the --dry-run flag, {prog_name} also treats the destination as read-only.
 In normal operation, {prog_name} treats the destination as append-only. Optional CLI flags are available to
@@ -705,7 +705,7 @@ class Params:
         """For testing: help simulate errors caused by external programs"""
         self.validate_arg(program)
         if not program:
-            die(f"Program name must not be the empty string")
+            die("Program name must not be the empty string")
         if self.inject_params.get("inject_unavailable_" + program, False):
             return program + "-xxx"  # substitute a program that cannot be found on the PATH
         if self.inject_params.get("inject_failing_" + program, False):
@@ -744,7 +744,7 @@ class Job:
         self.recordsizes: Dict[str, int] = {}
         self.mbuffer_current_opts: List[str] = []
         self.all_exceptions: List[str] = []
-        self.first_exception: Optional[Exception] = None
+        self.first_exception: Optional[BaseException] = None
 
         self.is_test_mode: bool = False  # for testing only
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
