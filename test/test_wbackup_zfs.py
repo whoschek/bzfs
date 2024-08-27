@@ -2777,19 +2777,19 @@ class TestFileOrLiteralAction(unittest.TestCase):
         self.assertEqual(args.input, ["literalvalue"])
 
     def test_file_input(self):
-        with patch("builtins.open", mock_open(read_data="file content line 1\nfile content line 2  \n")):
+        with patch("builtins.open", mock_open(read_data="line 1\nline 2  \n")):
             args = self.parser.parse_args(["--input", "+testfile"])
-            self.assertEqual(args.input, ["file content line 1", "file content line 2  "])
+            self.assertEqual(args.input, ["line 1", "line 2  "])
 
     def test_mixed_input(self):
-        with patch("builtins.open", mock_open(read_data="file content line 1\nfile content line 2")):
+        with patch("builtins.open", mock_open(read_data="line 1\nline 2")):
             args = self.parser.parse_args(["--input", "literalvalue", "+testfile"])
-            self.assertEqual(args.input, ["literalvalue", "file content line 1", "file content line 2"])
+            self.assertEqual(args.input, ["literalvalue", "line 1", "line 2"])
 
-    def test_skip_empty_lines(self):
-        with patch("builtins.open", mock_open(read_data="file content line 1\n\n\nfile content line 2\n")):
+    def test_skip_comments_and_empty_lines(self):
+        with patch("builtins.open", mock_open(read_data="\n\n#comment\nline 1\n\n\nline 2\n")):
             args = self.parser.parse_args(["--input", "+testfile"])
-            self.assertEqual(args.input, ["file content line 1", "file content line 2"])
+            self.assertEqual(args.input, ["line 1", "line 2"])
 
     def test_file_not_found(self):
         with patch("builtins.open", side_effect=FileNotFoundError):

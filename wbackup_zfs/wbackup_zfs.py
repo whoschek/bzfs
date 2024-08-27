@@ -2544,8 +2544,8 @@ class FileOrLiteralAction(argparse.Action):
                 try:
                     with open(value[1:], "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
-                            if not line.strip():
-                                continue  # skip empty lines
+                            if not line.strip() or line.startswith("#"):
+                                continue  # skip empty lines and comment lines
                             current_values.append(line)
                 except FileNotFoundError:
                     parser.error(f"File not found: {value[1:]}")
