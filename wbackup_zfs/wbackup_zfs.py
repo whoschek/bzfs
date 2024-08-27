@@ -144,7 +144,10 @@ feature.
             "Local dataset examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` "
             "Remote dataset examples: `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`, "
             "`root@host:tank`, `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`. "
-            "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`.\n\n"
+            "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`. "
+            "If the option starts with a `+` prefix then dataset names are read from the UTF-8 text file given "
+            "after the `+` prefix, with each line in the file containing a SRC_DATASET and a DST_DATASET, "
+            "separated by a tab character. Example: `+root_dataset_names.txt`, `+/path/to/root_dataset_names.txt`\n\n"
             "DST_DATASET: "
             "Destination ZFS dataset for replication. Has same naming format as SRC_DATASET. During replication, "
             "destination datasets that do not yet exist are created as necessary, along with their parent and "
@@ -162,10 +165,10 @@ feature.
               "is `tank`. "
               "This option is automatically translated to an --include-dataset-regex (see below) and can be "
               "specified multiple times. "
-              "If the option starts with a `@` prefix then dataset names are read from the newline-separated "
-              "UTF-8 file given after the `@` prefix. "
+              "If the option starts with a `+` prefix then dataset names are read from the newline-separated "
+              "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file. "
               "Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), "
-              "`@dataset_names.txt`, `@/path/to/dataset_names.txt`\n\n"))
+              "`+dataset_names.txt`, `+/path/to/dataset_names.txt`\n\n"))
     parser.add_argument(
         "--exclude-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
         help=("Same syntax as --include-dataset (see above) except that the option is automatically translated to an "
@@ -673,11 +676,11 @@ class Params:
         self.platform_version: str = platform.version()
         self.platform_platform: str = platform.platform()
 
-    def getenv(self, key: str, default=None):
+    def getenv(self, key: str, default=None) -> str:
         # All shell environment variable names used for configuration start with this prefix
         return os.getenv(env_var_prefix + key, default)
 
-    def getenv_bool(self, key: str, default=False):
+    def getenv_bool(self, key: str, default=False) -> bool:
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items) -> List[str]:
@@ -689,7 +692,7 @@ class Params:
             self.validate_quoting(opt)
         return opts
 
-    def validate_arg(self, opt: str, allow_spaces=False):
+    def validate_arg(self, opt: str, allow_spaces=False) -> str:
         if opt is None:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
@@ -2500,9 +2503,30 @@ class NonEmptyStringAction(argparse.Action):
 #############################################################################
 class DatasetPairsAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        if len(values) % 2 != 0:
+        datasets = []
+        for value in values:
+            if not value.startswith("+"):
+                datasets.append(value)
+            else:
+                try:
+                    with open(value[1:], "r", encoding="utf-8") as fd:
+                        for line in fd.read().splitlines():
+                            if not line.strip() or line.startswith("#"):
+                                continue  # skip empty lines and comment lines
+                            splits = line.split("\t", 1)
+                            if len(splits) <= 1:
+                                parser.error("Line must contain tab separated SRC_DATASET and DST_DATASET: " + line)
+                            src_root_dataset, dst_root_dataset = splits
+                            if not src_root_dataset.strip() or not dst_root_dataset.strip():
+                                parser.error("SRC_DATASET and DST_DATASET must not be whitespace-only: " + line)
+                            datasets.append(src_root_dataset)
+                            datasets.append(dst_root_dataset)
+                except FileNotFoundError:
+                    parser.error(f"File not found: {value[1:]}")
+
+        if len(datasets) % 2 != 0:
             parser.error("Each SRC_DATASET must have a corresponding DST_DATASET.")
-        pairs = [(values[i], values[i + 1]) for i in range(0, len(values), 2)]
+        pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
         setattr(namespace, self.dest, pairs)
 
 
@@ -2513,13 +2537,15 @@ class FileOrLiteralAction(argparse.Action):
         if current_values is None:
             current_values = []
         for value in values:
-            if not value.startswith("@"):
+            if not value.startswith("+"):
                 current_values.append(value)
             else:
                 try:
                     with open(value[1:], "r", encoding="utf-8") as fd:
-                        for line in fd:
-                            current_values.append(line.strip())
+                        for line in fd.read().splitlines():
+                            if not line.strip():
+                                continue  # skip empty lines
+                            current_values.append(line)
                 except FileNotFoundError:
                     parser.error(f"File not found: {value[1:]}")
         setattr(namespace, self.dest, current_values)

@@ -256,7 +256,12 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`,
     `root@host:tank`, `root@host.example.com:tank1/foo/bar`,
     `user@127.0.0.1:tank1/foo/bar:baz:boo`. The first component of the
-    ZFS dataset name is the ZFS pool name, here `tank1`.
+    ZFS dataset name is the ZFS pool name, here `tank1`. If the option
+    starts with a `+` prefix then dataset names are read from the
+    UTF-8 text file given after the `+` prefix, with each line in the
+    file containing a SRC_DATASET and a DST_DATASET, separated by a tab
+    character. Example: `+root_dataset_names.txt`,
+    `+/path/to/root_dataset_names.txt`
 
     DST_DATASET: Destination ZFS dataset for replication. Has same
     naming format as SRC_DATASET. During replication, destination
@@ -283,11 +288,11 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     name is relative wrt. source and destination, e.g. `baz/tmp` if
     the source is `tank`. This option is automatically translated to
     an --include-dataset-regex (see below) and can be specified
-    multiple times. If the option starts with a `@` prefix then
-    dataset names are read from the newline-separated UTF-8 file given
-    after the `@` prefix. Examples: `/tank/baz/tmp` (absolute),
-    `baz/tmp` (relative), `@dataset_names.txt`,
-    `@/path/to/dataset_names.txt`
+    multiple times. If the option starts with a `+` prefix then
+    dataset names are read from the newline-separated UTF-8 text file
+    given after the `+` prefix, one dataset per line inside of the
+    text file. Examples: `/tank/baz/tmp` (absolute), `baz/tmp`
+    (relative), `+dataset_names.txt`, `+/path/to/dataset_names.txt`
 
 <!-- -->
 

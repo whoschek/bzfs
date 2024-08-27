@@ -2689,30 +2689,98 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
 
 #############################################################################
+class TestDatasetPairsAction(unittest.TestCase):
+
+    def setUp(self):
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--input", nargs="+", action=wbackup_zfs.DatasetPairsAction)
+
+    def test_direct_value(self):
+        args = self.parser.parse_args(["--input", "src1", "dst1"])
+        self.assertEqual(args.input, [("src1", "dst1")])
+
+    def test_direct_value_without_corresponding_dst(self):
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--input", "src1"])
+
+    def test_file_input(self):
+        with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
+            args = self.parser.parse_args(["--input", "+testfile"])
+            self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
+
+    def test_file_input_without_trailing_newline(self):
+        with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2")):
+            args = self.parser.parse_args(["--input", "+testfile"])
+            self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
+
+    def test_mixed_input(self):
+        with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
+            args = self.parser.parse_args(["--input", "src0", "dst0", "+testfile"])
+            self.assertEqual(args.input, [("src0", "dst0"), ("src1", "dst1"), ("src2", "dst2")])
+
+    def test_file_skip_comments_and_empty_lines(self):
+        with patch("builtins.open", mock_open(read_data="\n\n#comment\nsrc1\tdst1\nsrc2\tdst2\n")):
+            args = self.parser.parse_args(["--input", "+testfile"])
+            self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
+
+    def test_file_skip_stripped_empty_lines(self):
+        with patch("builtins.open", mock_open(read_data=" \t \nsrc1\tdst1")):
+            args = self.parser.parse_args(["--input", "+testfile"])
+            self.assertEqual(args.input, [("src1", "dst1")])
+
+    def test_file_missing_tab(self):
+        with patch("builtins.open", mock_open(read_data="src1\nsrc2")):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+testfile"])
+
+    def test_file_whitespace_only(self):
+        with patch("builtins.open", mock_open(read_data=" \tdst1")):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+testfile"])
+
+        with patch("builtins.open", mock_open(read_data="src1\t ")):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+testfile"])
+
+        with patch("builtins.open", side_effect=FileNotFoundError):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+nonexistentfile"])
+
+    def test_option_not_specified(self):
+        args = self.parser.parse_args([])
+        self.assertIsNone(args.input)
+
+
+#############################################################################
 class TestFileOrLiteralAction(unittest.TestCase):
 
     def setUp(self):
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--input", nargs="+", action=wbackup_zfs.FileOrLiteralAction)
 
-    def test_file_input(self):
-        with patch("builtins.open", mock_open(read_data="file content line 1\nfile content line 2\n")):
-            args = self.parser.parse_args(["--input", "@testfile"])
-            self.assertEqual(args.input, ["file content line 1", "file content line 2"])
-
     def test_direct_value(self):
         args = self.parser.parse_args(["--input", "literalvalue"])
         self.assertEqual(args.input, ["literalvalue"])
 
+    def test_file_input(self):
+        with patch("builtins.open", mock_open(read_data="file content line 1\nfile content line 2  \n")):
+            args = self.parser.parse_args(["--input", "+testfile"])
+            self.assertEqual(args.input, ["file content line 1", "file content line 2  "])
+
     def test_mixed_input(self):
-        with patch("builtins.open", mock_open(read_data="file content line 1\nfile content line 2\n")):
-            args = self.parser.parse_args(["--input", "literalvalue", "@testfile"])
+        with patch("builtins.open", mock_open(read_data="file content line 1\nfile content line 2")):
+            args = self.parser.parse_args(["--input", "literalvalue", "+testfile"])
             self.assertEqual(args.input, ["literalvalue", "file content line 1", "file content line 2"])
+
+    def test_skip_empty_lines(self):
+        with patch("builtins.open", mock_open(read_data="file content line 1\n\n\nfile content line 2\n")):
+            args = self.parser.parse_args(["--input", "+testfile"])
+            self.assertEqual(args.input, ["file content line 1", "file content line 2"])
 
     def test_file_not_found(self):
         with patch("builtins.open", side_effect=FileNotFoundError):
             with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "@nonexistentfile"])
+                self.parser.parse_args(["--input", "+nonexistentfile"])
 
     def test_option_not_specified(self):
         args = self.parser.parse_args([])
@@ -2936,6 +3004,7 @@ def main():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
     suite.addTest(TestParseDatasetLocator())
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
