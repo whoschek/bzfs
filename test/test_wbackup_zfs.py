@@ -278,7 +278,7 @@ class WBackupTestCase(ParametrizedTestCase):
             os.environ[qq + "min_transfer_size"] = str(int(params["min_transfer_size"]))
 
         if dry_run:
-            args = args + ["--dry-run"]
+            args = args + ["--dryrun"]
 
         if no_create_bookmark:
             args = args + ["--no-create-bookmark"]

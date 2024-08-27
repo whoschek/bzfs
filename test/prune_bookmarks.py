@@ -37,7 +37,7 @@ def main():
                         help="Minimum number of bookmarks to retain per dataset (default: 100).")
     parser.add_argument("--snapshot", "-s", action="store_true",
                         help="Actually delete snapshots instead of bookmarks.")
-    parser.add_argument("--dry-run", "-n", action="store_true",
+    parser.add_argument("--dryrun", "-n", action="store_true",
                         help="Include this flag to print what would happen if the command were to be run for real.")
     # fmt: on
 
@@ -67,7 +67,7 @@ def main():
             for bookmark in [bm for ts, bm in sorted(bookmarks) if ts <= int(time.time()) - args.days * 86400][0:n]:
                 msg = "Would delete" if args.dry_run else "Deleting"
                 print(f"{msg} {kind}: {bookmark} ...")
-                if not args.dry_run:
+                if not args.dryrun:
                     subprocess.run(["sudo", "zfs", "destroy", bookmark], check=True)
     print("Success. Goodbye!")
 

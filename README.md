@@ -50,7 +50,7 @@ wbackup-zfs does not create or delete ZFS snapshots on the source - it
 assumes you have a ZFS snapshot management tool to do so, for example
 policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup,
 manual zfs snapshot/destroy, etc. wbackup-zfs treats the source as
-read-only, thus the source remains unmodified. With the --dry-run flag,
+read-only, thus the source remains unmodified. With the --dryrun flag,
 wbackup-zfs also treats the destination as read-only. In normal
 operation, wbackup-zfs treats the destination as append-only. Optional
 CLI flags are available to delete destination snapshots and destination
@@ -219,7 +219,7 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--skip-replication] [--delete-missing-snapshots]
                    [--delete-missing-datasets] [--no-privilege-elevation]
                    [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
-                   [--dry-run] [--verbose] [--quiet] [--logdir DIR]
+                   [--dryrun] [--verbose] [--quiet] [--logdir DIR]
                    [--ssh-config-file FILE] [--ssh-cipher STRING]
                    [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
                    [--ssh-src-user STRING] [--ssh-dst-user STRING]
@@ -654,7 +654,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--dry-run**, **-n**
+**--dryrun**, **-n**
 
 *  Do a dry-run (aka 'no-op') to print what operations would happen
     if the command were to be executed for real. This option treats both
@@ -667,7 +667,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Print verbose information. This option can be specified multiple
     times to increase the level of verbosity. To print what ZFS/SSH
     operation exactly is happening (or would happen), add the `-v -v`
-    flag, maybe along with --dry-run. ERROR, WARN, INFO, DEBUG, TRACE
+    flag, maybe along with --dryrun. ERROR, WARN, INFO, DEBUG, TRACE
     output lines are identified by [E], [W], [I], [D], [T]
     prefixes, respectively.
 

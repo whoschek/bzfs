@@ -71,7 +71,7 @@ destination are auto-skipped.
 {prog_name} does not create or delete ZFS snapshots on the source - it assumes you have a ZFS snapshot
 management tool to do so, for example policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup,
 manual zfs snapshot/destroy, etc. {prog_name} treats the source as read-only, thus the source remains unmodified.
-With the --dry-run flag, {prog_name} also treats the destination as read-only.
+With the --dryrun flag, {prog_name} also treats the destination as read-only.
 In normal operation, {prog_name} treats the destination as append-only. Optional CLI flags are available to
 delete destination snapshots and destination datasets as directed, for example to make the destination
 identical to the source if the two have somehow diverged in unforeseen ways. This easily enables
@@ -398,14 +398,14 @@ feature.
               f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
               "bookmarks currently exist, if any.\n\n"))
     parser.add_argument(
-        "--dry-run", "-n", action="store_true",
+        "--dryrun", "-n", action="store_true",
         help=("Do a dry-run (aka 'no-op') to print what operations would happen if the command were to be executed "
               "for real. This option treats both the ZFS source and destination as read-only.\n\n"))
     parser.add_argument(
         "--verbose", "-v", action="count", default=0,
         help=("Print verbose information. This option can be specified multiple times to increase the level of "
               "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
-              "flag, maybe along with --dry-run. "
+              "flag, maybe along with --dryrun. "
               "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
               "respectively.\n\n"))
     parser.add_argument(
@@ -574,8 +574,8 @@ class Params:
         self.delete_empty_datasets: bool = args.delete_missing_datasets
         self.delete_missing_snapshots: bool = args.delete_missing_snapshots
         self.skip_replication: bool = args.skip_replication
-        self.dry_run: bool = args.dry_run
-        self.dry_run_recv: str = "-n" if args.dry_run else ""
+        self.dry_run: bool = args.dryrun
+        self.dry_run_recv: str = "-n" if args.dryrun else ""
         self.dry_run_destroy: str = self.dry_run_recv
         self.verbose: str = "-v" if args.verbose >= 1 else ""
         self.verbose_zfs: bool = True if args.verbose >= 2 else False
@@ -708,7 +708,7 @@ class Params:
 
     @staticmethod
     def fix_send_recv_opts(opts: List[str]) -> List[str]:
-        """These opts are instead managed via wbackup CLI args --dry-run and --verbose"""
+        """These opts are instead managed via wbackup CLI args --dryrun and --verbose"""
         return [opt for opt in opts if opt not in ["--dryrun", "-n", "--verbose", "-v"]]
 
     def program_name(self, program: str) -> str:
@@ -1273,7 +1273,7 @@ class Job:
                     )  # delete all dst snapshots in a batch
                     self.run_ssh_command("dst", self.debug, cmd=cmd, print_stdout=True)
                 if params.dry_run:
-                    # As we're in --dry-run (--force) mode this conflict resolution step (see above) wasn't really
+                    # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really
                     # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
                     # subsequent 'zfs receive' to fail with "cannot receive new filesystem stream: destination has
                     # snapshots; must destroy them to overwrite it". So we skip the zfs send/receive step and keep on
