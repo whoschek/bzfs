@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import re
 import sys
 import subprocess
 import os
@@ -29,8 +29,7 @@ def main():
     pip install argparse-manpage
     argparse-manpage --pyfile wbackup_zfs/wbackup_zfs.py --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
-    sed -i.bak -e 's/\\\([`#-_|>\[\*]\)/\1/g' -e "s/\\\'/'/g" -e "s/\\\]/\]/g" -e 's/# OPTIONS//g' -e 's/:   /*  /g' /tmp/manpage.md
-    Then take that output and replace certain sections of README.md with it, as shown below:
+    Then take that output, clean it and replace certain sections of README.md with it, as shown below:
     """
     if len(sys.argv) != 3:
         print(f"Usage: {os.path.basename(sys.argv[0])} /path/to/wbackup_zfs.py path/to/README.md")
@@ -50,25 +49,18 @@ def main():
     subprocess.run(cmd, check=True)
 
     # Step 3: Clean up markdown file
-    cmd = [
-        "sed",
-        "-i.bak",
-        "-e",
-        r"s/\\\([`#-_|>\[\*]\)/\1/g",
-        "-e",
-        r"s/\\\'/'/g",
-        "-e",
-        r"s/\\\]/\]/g",
-        "-e",
-        r"s/# OPTIONS//g",
-        "-e",
-        r"s/:   /*  /g",
-        tmp_manpage_md_path,
-    ]
-    subprocess.run(cmd, check=True)
+    with open(tmp_manpage_md_path, "r", encoding="utf-8") as file:
+        content = file.read()
+    content = re.sub(r"\\([`#-_|>\[\*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
+    content = re.sub(r"\\'", r"'", content)  # s/\\\'/'/g
+    content = re.sub(r"\\\]", r"\]", content)  # s/\\\]/\]/g
+    content = re.sub(r"# OPTIONS", "", content)  # s/# OPTIONS//g
+    content = re.sub(r":   ", r"*  ", content)  # s/:   /*  /g
+    with open(tmp_manpage_md_path, "w", encoding="utf-8") as file:
+        file.write(content)
 
     # Read the cleaned markdown file
-    with open(tmp_manpage_md_path, "r") as f:
+    with open(tmp_manpage_md_path, "r", encoding="utf-8") as f:
         manpage_lines = f.readlines()
 
     # Extract replacement_text from cleaned markdown
@@ -89,7 +81,7 @@ def main():
         print(f"Markers {description_marker} or {src_dataset_marker} not found in the cleaned markdown.")
         sys.exit(1)
 
-    with open(readme_file, "r") as f:
+    with open(readme_file, "r", encoding="utf-8") as f:
         readme_lines = f.readlines()
 
     # processing to replace text between '<!-- DESCRIPTION BEGIN -->' and 'How To Install, Run and Test' in README.md
@@ -108,13 +100,13 @@ def main():
 
     if start_wbackup is not None and start_install is not None:
         updated_lines = readme_lines[: start_wbackup + 1] + [replacement_text + "\n\n"] + readme_lines[start_install:]
-        with open(readme_file, "w") as f:
+        with open(readme_file, "w", encoding="utf-8") as f:
             f.writelines(updated_lines)
     else:
         print(f"Markers {wbackup_marker} or {install_marker} not found in " + readme_file)
         sys.exit(1)
 
-    with open(readme_file, "r") as f:
+    with open(readme_file, "r", encoding="utf-8") as f:
         readme_lines = f.readlines()
 
     start_index1 = next((i for i, line in enumerate(manpage_lines) if src_dataset_marker in line), None)
@@ -129,7 +121,7 @@ def main():
     # Retain lines before and including the marker in readme_file and replace the rest
     updated_lines = readme_lines[: start_index2 + 1] + extracted_lines
 
-    with open(readme_file, "w") as f:
+    with open(readme_file, "w", encoding="utf-8") as f:
         f.writelines(updated_lines)
 
     # os.remove(tmp_manpage1_path)
