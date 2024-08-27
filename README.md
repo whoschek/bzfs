@@ -27,7 +27,7 @@
 [![python](https://whoschek.github.io/wbackup-zfs/badges/python-badge.svg)](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-<!-- DESCRIPTION BEGIN -->
+<!-- BEGIN DESCRIPTION SECTION -->
 *wbackup-zfs is a backup command line tool that reliably replicates ZFS
 snapshots from a (local or remote) source ZFS dataset (ZFS filesystem or
 ZFS volume) and its descendant datasets to a (local or remote)
@@ -133,6 +133,7 @@ have drastically diverged:
 '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key
 /root/.ssh/id_rsa`
 
+<!-- END DESCRIPTION SECTION -->
 # How To Install and Run
 
 ```
@@ -145,6 +146,7 @@ cd wbackup-zfs
 ./wbackup-zfs --help # Run the CLI
 sudo cp wbackup-zfs /usr/local/bin/ # Optional system installation
 ```
+
 
 # How To Run Unit Tests
 ```
@@ -242,7 +244,7 @@ usage: wbackup-zfs [-h] [--recursive]
 Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update README.md below, like so:
 ./test/update-readme.py wbackup_zfs/wbackup_zfs.py README.md
 -->
-
+<!-- BEGIN HELP DETAIL SECTION -->
 **SRC_DATASET DST_DATASET**
 
 *  SRC_DATASET: Source ZFS dataset (and its descendants) that will be
@@ -392,7 +394,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Parameters to fine-tune 'zfs receive' behaviour (optional); will
     be passed into 'zfs receive' CLI. The value is split on runs of
     one or more whitespace characters. Default is '-u'. Example: '-u
-    -o canmount=off -o readonly=on -x canmount -x readonly''. See
+    -o canmount=off -o readonly=on -x canmount -x readonly'. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html
     and
     https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html

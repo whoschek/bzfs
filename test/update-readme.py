@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import re
 import sys
 import subprocess
@@ -29,7 +30,7 @@ def main():
     pip install argparse-manpage
     argparse-manpage --pyfile wbackup_zfs/wbackup_zfs.py --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
-    Then take that output, clean it and replace certain sections of README.md with it, as shown below:
+    Then take that output, auto-clean it and auto-replace certain sections of README.md with it, as shown below:
     """
     if len(sys.argv) != 3:
         print(f"Usage: {os.path.basename(sys.argv[0])} /path/to/wbackup_zfs.py path/to/README.md")
@@ -48,78 +49,80 @@ def main():
     cmd = ["pandoc", "-s", "-t", "markdown", tmp_manpage1_path, "-o", tmp_manpage_md_path]
     subprocess.run(cmd, check=True)
 
-    # Step 3: Clean up markdown file
+    # Step 3: Clean up generated markdown file
     with open(tmp_manpage_md_path, "r", encoding="utf-8") as file:
         content = file.read()
-    content = re.sub(r"\\([`#-_|>\[\*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
+    content = re.sub(r"\\([`#-_|>\[*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
     content = re.sub(r"\\'", r"'", content)  # s/\\\'/'/g
-    content = re.sub(r"\\\]", r"\]", content)  # s/\\\]/\]/g
+    content = re.sub(r"\\]", r"\]", content)  # s/\\\]/\]/g
     content = re.sub(r"# OPTIONS", "", content)  # s/# OPTIONS//g
-    content = re.sub(r":   ", r"*  ", content)  # s/:   /*  /g
+    content = re.sub(r": {3}", r"*  ", content)  # s/:   /*  /g
     with open(tmp_manpage_md_path, "w", encoding="utf-8") as file:
         file.write(content)
 
-    # Read the cleaned markdown file
+    # Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
+    begin_desc_markdown_tag = "# DESCRIPTION"
+    begin_help_markdown_tag = "**SRC_DATASET"
     with open(tmp_manpage_md_path, "r", encoding="utf-8") as f:
-        manpage_lines = f.readlines()
-
-    # Extract replacement_text from cleaned markdown
-    src_dataset_marker = "**SRC_DATASET"
-    description_marker = "# DESCRIPTION"
-    start_description = next((i for i, line in enumerate(manpage_lines) if line.startswith(description_marker)), None)
-    start_src_dataset = next(
+        manpage = f.readlines()  # Read the cleaned markdown file
+    begin_desc_markdown_idx = next(
+        (i for i, line in enumerate(manpage) if line.startswith(begin_desc_markdown_tag)), None
+    )
+    begin_help_markdown_idx = next(
         (
             i
-            for i, line in enumerate(manpage_lines[start_description:], start=start_description)
-            if src_dataset_marker in line
+            for i, line in enumerate(manpage[begin_desc_markdown_idx:], start=begin_desc_markdown_idx)
+            if begin_help_markdown_tag in line
         ),
         None,
     )
-    if start_description is not None and start_src_dataset is not None:
-        replacement_text = "".join(manpage_lines[start_description + 1 : start_src_dataset]).strip()
+    if begin_desc_markdown_idx is not None and begin_help_markdown_idx is not None:
+        replacement = "".join(manpage[begin_desc_markdown_idx + 1 : begin_help_markdown_idx]).strip()
     else:
-        print(f"Markers {description_marker} or {src_dataset_marker} not found in the cleaned markdown.")
+        print(f"Markers {begin_desc_markdown_tag} or {begin_help_markdown_tag} not found in the cleaned markdown.")
         sys.exit(1)
 
+    # replace text between '<!-- DESCRIPTION BEGIN -->' and '<!-- END DESCRIPTION SECTION -->' in README.md
+    begin_desc_readme_tag = "<!-- BEGIN DESCRIPTION SECTION -->"
+    end_desc_readme_tag = "<!-- END DESCRIPTION SECTION -->"
     with open(readme_file, "r", encoding="utf-8") as f:
-        readme_lines = f.readlines()
-
-    # processing to replace text between '<!-- DESCRIPTION BEGIN -->' and 'How To Install, Run and Test' in README.md
-    wbackup_marker = "<!-- DESCRIPTION BEGIN -->"
-    install_marker = "# How To Install and Run"
-
-    start_wbackup = next((i for i, line in enumerate(readme_lines) if line.strip() == wbackup_marker), None)
-    start_install = next(
+        readme = f.readlines()
+    begin_desc_readme_idx = next((i for i, line in enumerate(readme) if line.strip() == begin_desc_readme_tag), None)
+    end_desc_readme_idx = next(
         (
             i
-            for i, line in enumerate(readme_lines[start_wbackup:], start=start_wbackup)
-            if line.strip().startswith(install_marker)
+            for i, line in enumerate(readme[begin_desc_readme_idx:], start=begin_desc_readme_idx)
+            if line.strip().startswith(end_desc_readme_tag)
         ),
         None,
     )
 
-    if start_wbackup is not None and start_install is not None:
-        updated_lines = readme_lines[: start_wbackup + 1] + [replacement_text + "\n\n"] + readme_lines[start_install:]
+    if begin_desc_readme_idx is not None and end_desc_readme_idx is not None:
+        updated_lines = readme[: begin_desc_readme_idx + 1] + [replacement + "\n\n"] + readme[end_desc_readme_idx:]
         with open(readme_file, "w", encoding="utf-8") as f:
             f.writelines(updated_lines)
     else:
-        print(f"Markers {wbackup_marker} or {install_marker} not found in " + readme_file)
+        print(f"Markers {begin_desc_readme_tag} or {end_desc_readme_tag} not found in " + readme_file)
         sys.exit(1)
 
-    with open(readme_file, "r", encoding="utf-8") as f:
-        readme_lines = f.readlines()
+    begin_help_markdown_idx = next((i for i, line in enumerate(manpage) if begin_help_markdown_tag in line), None)
+    if begin_help_markdown_idx is None:
+        print(f"Marker {begin_help_markdown_tag} not found in cleaned markdown.")
+        sys.exit(1)
 
-    start_index1 = next((i for i, line in enumerate(manpage_lines) if src_dataset_marker in line), None)
-    start_index2 = next((i for i, line in enumerate(readme_lines) if src_dataset_marker in line), None)
-    if start_index1 is None or start_index2 is None:
-        print(f"Marker {src_dataset_marker} not found in one of the files.")
+    begin_help_readme_tag = "<!-- BEGIN HELP DETAIL SECTION -->"
+    with open(readme_file, "r", encoding="utf-8") as f:
+        readme = f.readlines()
+    begin_help_readme_idx = next((i for i, line in enumerate(readme) if begin_help_readme_tag in line), None)
+    if begin_help_readme_idx is None:
+        print(f"Marker {begin_help_readme_tag} not found in README.md.")
         sys.exit(1)
 
     # Extract lines after the marker from wbackup_zfs.py
-    extracted_lines = manpage_lines[start_index1 + 1 :]
+    extracted_lines = manpage[begin_help_markdown_idx:]
 
     # Retain lines before and including the marker in readme_file and replace the rest
-    updated_lines = readme_lines[: start_index2 + 1] + extracted_lines
+    updated_lines = readme[: begin_help_readme_idx + 1] + extracted_lines
 
     with open(readme_file, "w", encoding="utf-8") as f:
         f.writelines(updated_lines)

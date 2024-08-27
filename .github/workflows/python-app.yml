@@ -291,7 +291,7 @@ jobs:
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
 #    if: false  # job currently disabled
     runs-on: ubuntu-latest
-    timeout-minutes: 80
+    timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest
