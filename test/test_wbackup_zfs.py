@@ -2410,6 +2410,20 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             wbackup_zfs.Params(args)
 
+    def test_split_args(self):
+        params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
+        self.assertEqual([], params.split_args(""))
+        self.assertEqual([], params.split_args("  "))
+        self.assertEqual(["foo", "bar", "baz"], params.split_args("foo  bar baz"))
+        self.assertEqual(["foo", "bar", "baz"], params.split_args(" foo  bar\tbaz "))
+        self.assertEqual(["foo", "bar", "baz"], params.split_args("foo", "bar", "baz"))
+        self.assertEqual(["foo", "baz"], params.split_args("foo", "", "baz"))
+        self.assertEqual(["foo", "bar", "baz"], params.split_args("foo", ["bar", "", "baz"]))
+        with self.assertRaises(SystemExit):
+            params.split_args("'foo'")
+        with self.assertRaises(SystemExit):
+            params.split_args('"foo"')
+
 
 #############################################################################
 class TestArgumentParser(unittest.TestCase):
