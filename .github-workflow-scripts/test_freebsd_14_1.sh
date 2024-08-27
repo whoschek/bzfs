@@ -15,7 +15,7 @@
 # limitations under the License.
 
 set -e # Exit immediately if a cmd returns a non-zero status
-pkg install -y python3 sudo zstd pv mbuffer devel/py-coverage
+pkg install -y python3 sudo zstd pv mbuffer netcat devel/py-coverage
 id -u -n
 uname -a
 zfs --version || true

@@ -673,11 +673,11 @@ class Params:
         self.platform_version: str = platform.version()
         self.platform_platform: str = platform.platform()
 
-    def getenv(self, key: str, default=None) -> str:
+    def getenv(self, key: str, default=None):
         # All shell environment variable names used for configuration start with this prefix
         return os.getenv(env_var_prefix + key, default)
 
-    def getenv_bool(self, key: str, default=False) -> bool:
+    def getenv_bool(self, key: str, default=False):
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items) -> List[str]:
@@ -689,7 +689,7 @@ class Params:
             self.validate_quoting(opt)
         return opts
 
-    def validate_arg(self, opt: str, allow_spaces=False) -> str:
+    def validate_arg(self, opt: str, allow_spaces=False):
         if opt is None:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):

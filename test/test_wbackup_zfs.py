@@ -20,6 +20,7 @@ import logging
 import platform
 import pwd
 import random
+import shutil
 import traceback
 import unittest
 import os
@@ -50,6 +51,7 @@ os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
 os.write(ssh_config_file_fd, "# Empty ssh_config file".encode())
 
 keylocation = f"file://{zfs_encryption_key}"
+has_netcat_program = shutil.which("nc") is not None
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
@@ -226,6 +228,12 @@ class WBackupTestCase(ParametrizedTestCase):
                 "--ssh-dst-extra-opts",
                 "-o StrictHostKeyChecking=no",
             ]
+            if ssh_program == "ssh" and has_netcat_program:
+                r = random.randint(0, 2)
+                if r % 3 == 0:
+                    args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
+                elif r % 3 == 1:
+                    args = args + ["--ssh-dst-extra-opt=-oProxyCommand=nc %h %p"]
 
         if params and "skip_missing_snapshots" in params:
             i = find_match(args, lambda arg: arg.startswith("-"))
