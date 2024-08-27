@@ -391,7 +391,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  Parameters to fine-tune 'zfs receive' behaviour (optional); will
     be passed into 'zfs receive' CLI. The value is split on runs of
-    one or more whitespace characters. Default is '-u'. See
+    one or more whitespace characters. Default is '-u'. Example: '-u
+    -o canmount=off -o readonly=on -x canmount -x readonly''. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html
     and
     https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html

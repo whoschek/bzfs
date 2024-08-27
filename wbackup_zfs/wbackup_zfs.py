@@ -237,6 +237,7 @@ feature.
         help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
               f"The value is split on runs of one or more whitespace characters. "
               f"Default is '{zfs_recv_program_opts_default}'. "
+              f"Example: '-u -o canmount=off -o readonly=on -x canmount -x readonly''. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
     parser.add_argument(
@@ -680,7 +681,7 @@ class Params:
         # All shell environment variable names used for configuration start with this prefix
         return os.getenv(env_var_prefix + key, default)
 
-    def getenv_bool(self, key: str, default=False) -> bool:
+    def getenv_bool(self, key: str, default: bool = False) -> bool:
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items) -> List[str]:
@@ -692,7 +693,7 @@ class Params:
             self.validate_quoting(opt)
         return opts
 
-    def validate_arg(self, opt: str, allow_spaces=False) -> str:
+    def validate_arg(self, opt: str, allow_spaces: bool = False) -> str:
         if opt is None:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
