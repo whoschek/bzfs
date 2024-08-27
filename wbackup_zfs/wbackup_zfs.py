@@ -2519,7 +2519,7 @@ class DatasetPairsAction(argparse.Action):
                                 parser.error("Line must contain tab separated SRC_DATASET and DST_DATASET: " + line)
                             src_root_dataset, dst_root_dataset = splits
                             if not src_root_dataset.strip() or not dst_root_dataset.strip():
-                                parser.error("SRC_DATASET and DST_DATASET must not be whitespace-only: " + line)
+                                parser.error("SRC_DATASET and DST_DATASET must not be empty or whitespace-only:" + line)
                             datasets.append(src_root_dataset)
                             datasets.append(dst_root_dataset)
                 except FileNotFoundError:
