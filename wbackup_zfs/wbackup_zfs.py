@@ -1409,8 +1409,8 @@ class Job:
         error_trigger: Optional[str] = None,
     ):
         params = self.params
-        send_cmd = " ".join([self.cquote(item) for item in send_cmd])
-        recv_cmd = " ".join([self.cquote(item) for item in recv_cmd])
+        send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
+        recv_cmd = " ".join([shlex.quote(item) for item in recv_cmd])
 
         _compress_cmd = self.compress_cmd("src", size_estimate_bytes)
         _decompress_cmd = self.decompress_cmd("dst", size_estimate_bytes)
@@ -1465,7 +1465,7 @@ class Job:
         if local_pipe.startswith(" |"):
             local_pipe = local_pipe[2:]  # strip leading ' |' part
         if local_pipe != "":
-            # local_pipe = self.cquote(local_pipe)
+            # local_pipe = shlex.quote(local_pipe)
             local_pipe = f'| {params.shell_program_local} -c "{local_pipe}"'
 
         # assemble pipeline running on destination leg
@@ -1501,8 +1501,8 @@ class Job:
 
         src_pipe = self.dquote(params.ssh_src_cmd, src_pipe)
         dst_pipe = self.dquote(params.ssh_dst_cmd, dst_pipe)
-        src_cmd = " ".join([self.cquote(item) for item in params.ssh_src_cmd])
-        dst_cmd = " ".join([self.cquote(item) for item in params.ssh_dst_cmd])
+        src_cmd = " ".join([shlex.quote(item) for item in params.ssh_src_cmd])
+        dst_cmd = " ".join([shlex.quote(item) for item in params.ssh_dst_cmd])
 
         cmd = [params.shell_program_local, "-c", f"{src_cmd} {src_pipe} {local_pipe} | {dst_cmd} {dst_pipe}"]
         msg = "Would execute:" if is_dry_send_receive else "Executing:"
@@ -1735,11 +1735,8 @@ class Job:
             cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
             self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
-    def cquote(self, arg: str) -> str:
-        return shlex.quote(arg)
-
     def dquote(self, ssh_cmd, arg: str) -> str:
-        return arg if len(ssh_cmd) == 0 else self.cquote(arg)
+        return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
 
     def filter_datasets(self, datasets: List[str], root_dataset: str) -> List[str]:
         """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
