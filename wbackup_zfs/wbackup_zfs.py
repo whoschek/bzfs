@@ -1525,7 +1525,7 @@ class Job:
             )
             and self.is_program_available("mbuffer", loc)
         ):
-            return f"{p.mbuffer_program} {' '.join(self.mbuffer_current_opts)} 2> /dev/null"
+            return f"{p.mbuffer_program} {' '.join(self.mbuffer_current_opts)}"
         else:
             return "cat"
 
