@@ -209,11 +209,11 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--include-dataset-regex REGEX [REGEX ...]]
                    [--exclude-dataset-regex REGEX [REGEX ...]]
                    [--include-snapshot-regex REGEX [REGEX ...]]
-                   [--exclude-snapshot-regex REGEX [REGEX ...]] [--force]
-                   [--force-unmount] [--force-once]
+                   [--exclude-snapshot-regex REGEX [REGEX ...]]
                    [--zfs-send-program-opts STRING]
                    [--zfs-receive-program-opts STRING]
-                   [--zfs-receive-program-opt STRING] [--skip-parent]
+                   [--zfs-receive-program-opt STRING] [--force]
+                   [--force-unmount] [--force-once] [--skip-parent]
                    [--skip-missing-snapshots [{fail,dataset,continue}]]
                    [--max-retries INT] [--skip-on-error [{fail,tree,dataset}]]
                    [--skip-replication] [--delete-missing-snapshots]
@@ -349,35 +349,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--force**
-
-*  Before replication, delete destination ZFS snapshots that are more
-    recent than the most recent common snapshot included on the source
-    ('conflicting snapshots') and rollback the destination dataset
-    correspondingly before starting replication. Also, if no common
-    snapshot is included then delete all destination snapshots before
-    starting replication. Without the --force flag, the destination
-    dataset is treated as append-only, hence no destination snapshot
-    that already exists is deleted, and instead the operation is aborted
-    with an error when encountering a conflicting snapshot.
-
-<!-- -->
-
-**--force-unmount**
-
-*  On destination, --force will also forcibly unmount file systems via
-    'zfs rollback -f' and 'zfs destroy -f'.
-
-<!-- -->
-
-**--force-once**, **--f1**
-
-*  Use the --force option at most once to resolve a conflict, then
-    abort with an error on any subsequent conflict. This helps to
-    interactively resolve conflicts, one conflict at a time.
-
-<!-- -->
-
 **--zfs-send-program-opts** *STRING*
 
 *  Parameters to fine-tune 'zfs send' behaviour (optional); will be
@@ -409,6 +380,35 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     `--zfs-receive-program-opt=-o
     --zfs-receive-program-opt='org.zfsbootmenu:commandline=ro debug
     zswap.enabled=1'`
+
+<!-- -->
+
+**--force**
+
+*  Before replication, delete destination ZFS snapshots that are more
+    recent than the most recent common snapshot included on the source
+    ('conflicting snapshots') and rollback the destination dataset
+    correspondingly before starting replication. Also, if no common
+    snapshot is included then delete all destination snapshots before
+    starting replication. Without the --force flag, the destination
+    dataset is treated as append-only, hence no destination snapshot
+    that already exists is deleted, and instead the operation is aborted
+    with an error when encountering a conflicting snapshot.
+
+<!-- -->
+
+**--force-unmount**
+
+*  On destination, --force will also forcibly unmount file systems via
+    'zfs rollback -f' and 'zfs destroy -f'.
+
+<!-- -->
+
+**--force-once**, **--f1**
+
+*  Use the --force option at most once to resolve a conflict, then
+    abort with an error on any subsequent conflict. This helps to
+    interactively resolve conflicts, one conflict at a time.
 
 <!-- -->
 

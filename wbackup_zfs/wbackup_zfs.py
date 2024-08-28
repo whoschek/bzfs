@@ -201,28 +201,6 @@ feature.
         "--exclude-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
-    parser.add_argument(
-        "--force", action="store_true",
-        help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
-              "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
-              "correspondingly before starting replication. Also, if no common snapshot is included then delete all "
-              "destination snapshots before starting replication. Without the --force flag, the destination dataset is "
-              "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
-              "operation is aborted with an error when encountering a conflicting snapshot.\n\n"))
-    parser.add_argument(
-        "--force-unmount", action="store_true",
-        help=("On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' "
-              "and 'zfs destroy -f'. \n\n"))
-    parser.add_argument(
-        "--force-hard", action="store_true",
-        # help=("On destination, --force will also delete dependents such as clones and bookmarks via "
-        #       "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you
-        #       want!\n\n"))
-        help=argparse.SUPPRESS)
-    parser.add_argument(
-        "--force-once", "--f1", action="store_true",
-        help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
-              "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -246,6 +224,28 @@ feature.
               "The value can contain spaces and is not split. This option can be specified multiple times. Example: `"
               "--zfs-receive-program-opt=-o "
               "--zfs-receive-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n"))
+    parser.add_argument(
+        "--force", action="store_true",
+        help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
+              "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
+              "correspondingly before starting replication. Also, if no common snapshot is included then delete all "
+              "destination snapshots before starting replication. Without the --force flag, the destination dataset is "
+              "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
+              "operation is aborted with an error when encountering a conflicting snapshot.\n\n"))
+    parser.add_argument(
+        "--force-unmount", action="store_true",
+        help=("On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' "
+              "and 'zfs destroy -f'. \n\n"))
+    parser.add_argument(
+        "--force-hard", action="store_true",
+        # help=("On destination, --force will also delete dependents such as clones and bookmarks via "
+        #       "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you
+        #       want!\n\n"))
+        help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--force-once", "--f1", action="store_true",
+        help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
+              "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
     parser.add_argument(
         "--skip-parent", action="store_true",
         help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
