@@ -207,7 +207,7 @@ class WBackupTestCase(ParametrizedTestCase):
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
         src_user = ["--ssh-src-user", os_username()]
         private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
-        src_private_key = ["--ssh-src-private-key", private_key_file]
+        src_private_key = ["--ssh-src-private-key", private_key_file, "--ssh-src-private-key", private_key_file]
         src_ssh_config_file = ["--ssh-config-file", ssh_config_file]
         params = self.param
         if params and params.get("ssh_mode") == "push":

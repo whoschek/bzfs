@@ -707,16 +707,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--ssh-src-private-key** *FILE*
 
 *  Path to SSH private key file on local host to connect to src
-    (optional); will be passed into ssh -i CLI. default:
-    $HOME/.ssh/id_rsa
+    (optional); will be passed into ssh -i CLI. This option can be
+    specified multiple times. default: $HOME/.ssh/id_rsa
 
 <!-- -->
 
 **--ssh-dst-private-key** *FILE*
 
 *  Path to SSH private key file on local host to connect to dst
-    (optional); will be passed into ssh -i CLI. default:
-    $HOME/.ssh/id_rsa
+    (optional); will be passed into ssh -i CLI. This option can be
+    specified multiple times. default: $HOME/.ssh/id_rsa
 
 <!-- -->
 

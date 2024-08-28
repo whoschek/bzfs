@@ -435,9 +435,10 @@ feature.
     locations = ["src", "dst"]
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-private-key", type=str, metavar="FILE",
+            f"--ssh-{loc}-private-key", action="append", default=[], metavar="FILE",
             help=f"Path to SSH private key file on local host to connect to {loc} (optional); will be passed into "
-                 f"ssh -i CLI. default: $HOME/{ssh_private_key_file_default}\n\n")
+                 "ssh -i CLI. This option can be specified multiple times. "
+                 f"default: $HOME/{ssh_private_key_file_default}\n\n")
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-user", type=str, metavar="STRING",
@@ -618,8 +619,8 @@ class Params:
         self.min_transfer_size: int = int(self.getenv("min_transfer_size", 1024 * 1024))
 
         self.ssh_config_file: str = self.validate_arg(args.ssh_config_file)
-        self.ssh_src_private_key_file: str = self.validate_arg(args.ssh_src_private_key)
-        self.ssh_dst_private_key_file: str = self.validate_arg(args.ssh_dst_private_key)
+        self.ssh_src_private_key_files: List[str] = [self.validate_arg(key) for key in args.ssh_src_private_key]
+        self.ssh_dst_private_key_files: List[str] = [self.validate_arg(key) for key in args.ssh_dst_private_key]
         self.ssh_cipher: str = self.validate_arg(args.ssh_cipher)
         self.ssh_src_user: str = args.ssh_src_user
         self.ssh_dst_user: str = args.ssh_dst_user
@@ -876,7 +877,7 @@ class Job:
         params.dst_sudo, params.dst_use_zfs_delegation = self.sudo_cmd(params.ssh_dst_user_host, params.ssh_dst_user)
 
         p.ssh_src_cmd = self.ssh_command(
-            p.ssh_src_private_key_file,
+            p.ssh_src_private_key_files,
             p.ssh_src_user,
             p.ssh_src_host,
             p.ssh_src_user_host,
@@ -884,7 +885,7 @@ class Job:
             p.ssh_default_opts + p.ssh_src_extra_opts,
         )
         p.ssh_dst_cmd = self.ssh_command(
-            p.ssh_dst_private_key_file,
+            p.ssh_dst_private_key_files,
             p.ssh_dst_user,
             p.ssh_dst_host,
             p.ssh_dst_user_host,
@@ -1602,7 +1603,7 @@ class Job:
 
     def ssh_command(
         self,
-        ssh_private_key_file: str,
+        ssh_private_key_files: List[str],
         ssh_user: str,
         ssh_host: str,
         ssh_user_host: str,
@@ -1617,7 +1618,7 @@ class Job:
             ssh_cmd = [params.ssh_program] + ssh_extra_opts
             if params.ssh_config_file:
                 ssh_cmd += ["-F", params.ssh_config_file]
-            if ssh_private_key_file:
+            for ssh_private_key_file in ssh_private_key_files:
                 ssh_cmd += ["-i", ssh_private_key_file]
             if params.ssh_cipher:
                 ssh_cmd += ["-c", params.ssh_cipher]
