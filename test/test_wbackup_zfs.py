@@ -2419,6 +2419,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar", "baz"], params.split_args("foo", "bar", "baz"))
         self.assertEqual(["foo", "baz"], params.split_args("foo", "", "baz"))
         self.assertEqual(["foo", "bar", "baz"], params.split_args("foo", ["bar", "", "baz"]))
+        self.assertEqual(["foo"], params.split_args("foo", []))
         with self.assertRaises(SystemExit):
             params.split_args("'foo'")
         with self.assertRaises(SystemExit):
