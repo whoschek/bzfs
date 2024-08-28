@@ -1892,7 +1892,8 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_pipe_error("inject_src_pipe_fail")
 
     def test_inject_dst_pipe_fail(self):
-        self.inject_pipe_error("inject_dst_pipe_fail", expected_error=die_status)
+        expected_status = 1 if is_solaris_zfs() else die_status
+        self.inject_pipe_error("inject_dst_pipe_fail", expected_error=expected_status)
 
     def test_inject_src_pipe_garble(self):
         self.inject_pipe_error("inject_src_pipe_garble")
@@ -2428,8 +2429,12 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_xprint(self):
         wbackup_zfs.xprint("foo")
+        wbackup_zfs.xprint("foo", run=True)
+        wbackup_zfs.xprint("foo", run=False)
         wbackup_zfs.xprint("foo", file=sys.stdout)
         wbackup_zfs.xprint("")
+        wbackup_zfs.xprint("", run=True)
+        wbackup_zfs.xprint("", run=False)
         wbackup_zfs.xprint(None)
 
 

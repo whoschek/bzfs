@@ -34,7 +34,7 @@ from collections import defaultdict, Counter
 from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import List, Dict, Any, Tuple, Optional, Iterable, Set, Literal
+from typing import List, Dict, Any, Tuple, Optional, Iterable, Set
 
 __version__ = "0.9.0-dev"
 prog_name = "wbackup-zfs"
@@ -892,10 +892,8 @@ class Job:
             p.ssh_default_opts + p.ssh_dst_extra_opts,
         )
 
-        try:
-            self.detect_available_programs()
-        finally:
-            self.trace("Validated Param values:", pprint.pformat(vars(params)))
+        self.detect_available_programs()
+        self.trace("Validated Param values:", pprint.pformat(vars(params)))
 
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", p.src_pool)
         if self.try_ssh_command("src", self.trace, cmd=cmd) is None:
@@ -1650,7 +1648,7 @@ class Job:
         return ssh_cmd
 
     def run_ssh_command(
-        self, target="src", level=info, is_dry=False, check=True, stderr=None, print_stdout=False, cmd=None
+        self, target="src", level=info, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
     ):
         assert cmd is not None and len(cmd) > 0
         p = self.params
@@ -1669,45 +1667,40 @@ class Job:
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
                 ssh_cmd_trimmed = ssh_cmd[0:-1]  # remove trailing $ssh_user_host
                 ssh_socket_cmd = xappend(ssh_cmd_trimmed.copy(), "-O", "check", ssh_user_host)
-                if subprocess_run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:
+                if subprocess.run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:
                     self.trace("ssh socket is alive:", " ".join(ssh_socket_cmd))
                 else:
                     self.trace("ssh socket is not yet alive:", " ".join(ssh_socket_cmd))
                     ssh_socket_cmd = xappend(ssh_cmd[0:-1], "-M", "-o", "ControlPersist=60s", ssh_user_host, "exit")
                     self.debug("Executing:", " ".join(ssh_socket_cmd))
-                    if subprocess_run(ssh_socket_cmd, stdout=PIPE, text=True).returncode != 0:
+                    process = subprocess.run(ssh_socket_cmd, stderr=PIPE, text=True)
+                    if process.returncode != 0:
+                        error(process.stderr.strip())
                         die(
                             f"Cannot ssh into remote host via {ssh_socket_cmd}. "
                             f"Fix ssh configuration first, considering diagnostic log file output from running "
-                            f"{prog_name} with: -v -v --ssh-src-extra-opt='-v -v' --ssh-dst-extra-opt='-v -v'"
+                            f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                         )
 
         msg = "Would execute:" if is_dry else "Executing:"
         level(msg, " ".join(ssh_cmd + cmd))
         if not is_dry:
-            std_check = False if check is None else check
-            if stderr != PIPE:
-                stderr = sys.stderr if check else PIPE
-            process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=stderr, text=True, check=std_check)
-
-            def print_str(value: str, print_value: bool) -> str:
-                if print_value:
-                    print(value, end="")
-                return value
-
-            if check is not None:
-                return print_str(process.stdout, print_stdout)
+            try:
+                process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                if not isinstance(e, UnicodeDecodeError):
+                    xprint(stderr_to_str(e.stdout), run=print_stdout, end="")
+                    xprint(stderr_to_str(e.stderr), run=print_stderr, end="")
+                raise
             else:
-                # The value of subprocess_run(stdout=subprocess.PIPE, ...).stdout is an empty string if the process
-                # exits with a nonzero return code. Here we turn that empty string into None to indicate to the caller
-                # a nonzero return code vs a process success with empty string result, e.g. to differentiate between
-                # 'zfs list' on an empty dataset vs a non-existing dataset.
-                return print_str(process.stdout, print_stdout) if process.returncode == 0 else None
+                xprint(process.stdout, run=print_stdout, end="")
+                xprint(process.stderr, run=print_stderr, end="")
+                return process.stdout
 
     def try_ssh_command(self, target="src", level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-            return self.run_ssh_command(target=target, level=level, is_dry=is_dry, check=True, stderr=PIPE, cmd=cmd)
+            return self.run_ssh_command(target=target, level=level, is_dry=is_dry, check=True, cmd=cmd)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
                 stderr = stderr_to_str(e.stderr)
@@ -1867,9 +1860,8 @@ class Job:
             if not self.dst_dataset_exists[parent]:
                 cmd = p.split_args(f"{p.dst_sudo} {p.zfs_program} create -p", no_mount, parent)
                 try:
-                    self.run_ssh_command("dst", self.debug, stderr=PIPE, print_stdout=True, cmd=cmd)
+                    self.run_ssh_command("dst", self.debug, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
-                    print(e.stderr, file=sys.stderr, end="")
                     # ignore harmless error caused by 'zfs create' without the -u flag
                     if (
                         "filesystem successfully created, but it may only be mounted by root" not in e.stderr
@@ -1886,9 +1878,7 @@ class Job:
             if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active("src"):
                 cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
                 try:
-                    self.run_ssh_command(
-                        "src", self.debug, is_dry=p.dry_run, check=True, stderr=PIPE, print_stdout=True, cmd=cmd
-                    )
+                    self.run_ssh_command("src", self.debug, is_dry=p.dry_run, check=True, print_stderr=False, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
                     if ": bookmark exists" not in e.stderr:
@@ -2062,12 +2052,12 @@ class Job:
     def detect_available_programs(self) -> None:
         p = params = self.params
         available_programs = params.available_programs
+        cmd = [p.shell_program_local, "-c", self.find_available_programs()]
         available_programs["local"] = dict.fromkeys(
-            subprocess_run(
-                [p.shell_program_local, "-c", self.find_available_programs()], stdout=PIPE, text=True, check=False
-            ).stdout.splitlines()
+            subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True, check=False).stdout.splitlines()
         )
-        if subprocess_run([params.shell_program_local, "-c", "exit"], stdout=PIPE, text=True).returncode != 0:
+        cmd = [p.shell_program_local, "-c", "exit"]
+        if subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
             self.disable_program_internal("sh", "local")
 
         # check if we can ssh into the remote hosts at all
@@ -2149,7 +2139,7 @@ class Job:
             # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
             # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
             # option is not known there
-            lines = self.run_ssh_command(location, self.debug, stderr=PIPE, cmd=[p.zfs_program, "--version"])
+            lines = self.run_ssh_command(location, self.debug, print_stderr=False, cmd=[p.zfs_program, "--version"])
             assert lines
         except (FileNotFoundError, PermissionError):  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
@@ -2157,7 +2147,6 @@ class Job:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
                 available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4.0 zfs does not know --version flag
             elif not e.stdout.startswith("zfs-"):
-                print(e.stderr, file=sys.stderr, end="")
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
             else:
                 lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
@@ -2229,14 +2218,6 @@ class Job:
 
 
 #############################################################################
-def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
-    if ("stderr" not in kwargs or kwargs["stderr"] is not subprocess.PIPE) and (
-        "capture_output" not in kwargs or kwargs["capture_output"] is False
-    ):
-        kwargs["stderr"] = sys.stderr  # redirect stderr of subprocess to log file unless directed otherwise
-    return subprocess.run(*args, **kwargs)
-
-
 def error(*items):
     print(f"{current_time()} [E] ERROR: {' '.join(items)}", file=sys.stderr)
 
@@ -2398,9 +2379,9 @@ def stderr_to_str(stderr):
     return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
-def xprint(value, file=None) -> None:
-    if value:
-        print(value, file=file)
+def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
+    if run and value:
+        print(value, end=end, file=file)
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
