@@ -51,6 +51,7 @@ os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
 os.write(ssh_config_file_fd, "# Empty ssh_config file".encode())
 
 keylocation = f"file://{zfs_encryption_key}"
+rng = random.Random(12345)
 has_netcat_program = shutil.which("nc") is not None
 logging.basicConfig(
     level=logging.INFO,
@@ -229,7 +230,7 @@ class WBackupTestCase(ParametrizedTestCase):
                 "-o StrictHostKeyChecking=no",
             ]
             if ssh_program == "ssh" and has_netcat_program:
-                r = random.randint(0, 2)
+                r = rng.randint(0, 2)
                 if r % 3 == 0:
                     args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
                 elif r % 3 == 1:
