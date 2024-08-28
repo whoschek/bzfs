@@ -1450,7 +1450,7 @@ class Job:
         else:
             src_pipe = send_cmd
 
-        # assemble pipeline running on middle leg between source and destination
+        # assemble pipeline running on middle leg between source and destination. only enabled for pull-push mode
         local_pipe = ""
         if local_buffer != "cat":
             local_pipe = f"{local_buffer}"
@@ -1519,7 +1519,7 @@ class Job:
         if (
             size_estimate_bytes >= p.min_transfer_size
             and (
-                (loc == "src" and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != ""))
+                (loc == "src")
                 or (loc == "dst" and (p.ssh_src_user_host != "" or p.ssh_dst_user_host != ""))
                 or (loc == "local" and p.ssh_src_user_host != "" and p.ssh_dst_user_host != "")
             )
