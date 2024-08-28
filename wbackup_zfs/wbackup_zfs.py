@@ -33,7 +33,8 @@ import uuid
 from collections import defaultdict, Counter
 from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
-from typing import List, Dict, Any, Tuple, Optional, Iterable, Set
+from subprocess import CalledProcessError, TimeoutExpired
+from typing import List, Dict, Any, Tuple, Optional, Iterable, Set, Literal
 
 __version__ = "0.9.0-dev"
 prog_name = "wbackup-zfs"
@@ -792,7 +793,7 @@ class Job:
                         try:
                             self.validate()
                             self.run_main_action()
-                        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit) as e:
+                        except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                             error(str(e))
                             if p.skip_on_error == "fail":
                                 raise
@@ -813,6 +814,11 @@ class Job:
                 except SystemExit as e:
                     error(f"Exiting with status code: {e.code}")
                     raise
+                except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                    error(f"Exiting with status code: {die_status}")
+                    ex = SystemExit(e)
+                    ex.code = die_status
+                    raise ex
                 finally:
                     self.info_raw("Log file was: " + p.log_file)
 
@@ -1003,7 +1009,7 @@ class Job:
                 try:
                     if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
                         skip_src_dataset = src_dataset
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit) as e:
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                     failed = True
                     if p.skip_on_error == "fail":
                         raise
@@ -1506,11 +1512,16 @@ class Job:
         if not is_dry_send_receive:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-                subprocess_run(cmd, stdout=PIPE, stderr=PIPE, check=True)
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                process = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 # op isn't idempotent so retries regather current state from the start of replicate_flat_dataset()
-                self.warn(stderr_to_str(e.stderr))
+                if not isinstance(e, UnicodeDecodeError):
+                    xprint(stderr_to_str(e.stdout), file=sys.stdout)
+                    self.warn(stderr_to_str(e.stderr))
                 raise RetryableError("Subprocess failed") from e
+            else:
+                xprint(process.stdout, file=sys.stdout)
+                xprint(process.stderr, file=sys.stderr)
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If mbuffer command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
@@ -1697,16 +1708,17 @@ class Job:
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
             return self.run_ssh_command(target=target, level=level, is_dry=is_dry, check=True, stderr=PIPE, cmd=cmd)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            stderr = stderr_to_str(e.stderr)
-            if (
-                ": dataset does not exist" in stderr
-                or ": filesystem does not exist" in stderr  # solaris 11.4.0
-                or ": does not exist" in stderr  # solaris 11.4.0 'zfs send' with missing snapshot
-                or ": no such pool" in stderr
-            ):
-                return None
-            self.warn(stderr)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+            if not isinstance(e, UnicodeDecodeError):
+                stderr = stderr_to_str(e.stderr)
+                if (
+                    ": dataset does not exist" in stderr
+                    or ": filesystem does not exist" in stderr  # solaris 11.4.0
+                    or ": does not exist" in stderr  # solaris 11.4.0 'zfs send' with missing snapshot
+                    or ": no such pool" in stderr
+                ):
+                    return None
+                self.warn(stderr)
             raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None):
@@ -2382,7 +2394,13 @@ def append_if_absent(lst: List, *items):
 
 
 def stderr_to_str(stderr):
+    """workaround for https://github.com/python/cpython/issues/87597"""
     return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
+
+
+def xprint(value, file=None) -> None:
+    if value:
+        print(value, file=file)
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):

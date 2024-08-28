@@ -1892,7 +1892,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_pipe_error("inject_src_pipe_fail")
 
     def test_inject_dst_pipe_fail(self):
-        self.inject_pipe_error("inject_dst_pipe_fail")
+        self.inject_pipe_error("inject_dst_pipe_fail", expected_error=die_status)
 
     def test_inject_src_pipe_garble(self):
         self.inject_pipe_error("inject_src_pipe_garble")
@@ -2425,6 +2425,12 @@ class TestHelperFunctions(unittest.TestCase):
             params.split_args("'foo'")
         with self.assertRaises(SystemExit):
             params.split_args('"foo"')
+
+    def test_xprint(self):
+        wbackup_zfs.xprint("foo")
+        wbackup_zfs.xprint("foo", file=sys.stdout)
+        wbackup_zfs.xprint("")
+        wbackup_zfs.xprint(None)
 
 
 #############################################################################
@@ -3031,7 +3037,6 @@ def main():
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
-    # for min_transfer_size in [0, 1024 ** 2]:
     # for ssh_mode in []:
     for ssh_mode in ["local"]:
         for min_transfer_size in [1024**2]:
