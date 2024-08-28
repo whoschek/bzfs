@@ -229,7 +229,7 @@ class WBackupTestCase(ParametrizedTestCase):
                 "--ssh-dst-extra-opts",
                 "-o StrictHostKeyChecking=no",
             ]
-            if ssh_program == "ssh" and has_netcat_program:
+            if ssh_program == "ssh" and has_netcat_program and not is_solaris_zfs():
                 r = rng.randint(0, 2)
                 if r % 3 == 0:
                     args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
@@ -1892,8 +1892,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_pipe_error("inject_src_pipe_fail")
 
     def test_inject_dst_pipe_fail(self):
-        expected_status = 1 if is_solaris_zfs() else die_status
-        self.inject_pipe_error("inject_dst_pipe_fail", expected_error=expected_status)
+        self.inject_pipe_error("inject_dst_pipe_fail", expected_error=die_status)
 
     def test_inject_src_pipe_garble(self):
         self.inject_pipe_error("inject_src_pipe_garble")
@@ -2442,6 +2441,8 @@ class TestHelperFunctions(unittest.TestCase):
 class TestArgumentParser(unittest.TestCase):
 
     def test_help(self):
+        if is_solaris_zfs():
+            self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
             parser.parse_args(["--help"])

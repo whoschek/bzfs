@@ -1436,7 +1436,8 @@ class Job:
         # assemble pipeline running on source leg
         src_pipe = ""
         if self.inject_params.get("inject_src_pipe_fail", False):
-            src_pipe = f"{src_pipe} | head -c 64 && false"  # for testing; initially forward some bytes and then fail
+            # for testing; initially forward some bytes and then fail
+            src_pipe = f"{src_pipe} | dd bs=64 count=1 2>/dev/null && false"
         if self.inject_params.get("inject_src_pipe_garble", False):
             src_pipe = f"{src_pipe} | base64"  # for testing; forward garbled bytes
         if pv_src_cmd != "" and pv_src_cmd != "cat":
@@ -1478,7 +1479,8 @@ class Job:
         if pv_dst_cmd != "" and pv_dst_cmd != "cat":
             dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
         if self.inject_params.get("inject_dst_pipe_fail", False):
-            dst_pipe = f"{dst_pipe} | head -c 64 && false"  # for testing; initially forward some bytes and then fail
+            # for testing; initially forward some bytes and then fail
+            dst_pipe = f"{dst_pipe} | dd bs=64 count=1 2>/dev/null && false"
         if self.inject_params.get("inject_dst_pipe_garble", False):
             dst_pipe = f"{dst_pipe} | base64"  # for testing; forward garbled bytes
         if dst_pipe.startswith(" |"):
