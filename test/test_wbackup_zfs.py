@@ -811,7 +811,7 @@ class LocalTestCase(WBackupTestCase):
         create_filesystem(dst_root_dataset)
 
         # inject failures for this many tries. only after that finally succeed the operation
-        counter = Counter(zfs_list_snapshot_dst=2, full_zfs_send=2, incremental_zfs_send=2)
+        counter = Counter(zfs_list_snapshot_dst=2, full_zfs_send=2, incr_zfs_send=2)
 
         self.run_wbackup(
             src_root_dataset,
@@ -822,7 +822,7 @@ class LocalTestCase(WBackupTestCase):
         )
         self.assertEqual(0, counter["zfs_list_snapshot_dst"])  # i.e, it took 2-0=2 retries to succeed
         self.assertEqual(0, counter["full_zfs_send"])
-        self.assertEqual(0, counter["incremental_zfs_send"])
+        self.assertEqual(0, counter["incr_zfs_send"])
         if expected_status == 0:
             self.assertSnapshots(dst_root_dataset, 3, "s")
 

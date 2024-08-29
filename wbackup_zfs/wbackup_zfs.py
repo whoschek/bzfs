@@ -590,7 +590,7 @@ class Params:
         self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.zfs_send_program_opts: List[str] = self.fix_send_recv_opts(self.split_args(args.zfs_send_program_opts))
-        self.current_zfs_send_program_opts: List[str] = []
+        self.curr_zfs_send_program_opts: List[str] = []
         self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_receive_program_opts)
         for extra_opt in args.zfs_receive_program_opt:
             xappend(self.zfs_recv_program_opts, self.validate_arg(extra_opt, allow_spaces=True))
@@ -641,7 +641,7 @@ class Params:
         self.dst_use_zfs_delegation: bool = False
 
         self.ssh_default_opts: List[str] = ["-o", "ServerAliveInterval=0"]
-        self.ssh_src_extra_opts: List[str] = ["-x", "-T"]
+        self.ssh_src_extra_opts: List[str] = ["-x", "-T"]  # disable X11 forwarding, disable pseudo-terminal allocation
         self.ssh_dst_extra_opts: List[str] = self.ssh_src_extra_opts.copy()
         self.ssh_src_extra_opts += self.split_args(args.ssh_src_extra_opts)
         for extra_opt in args.ssh_src_extra_opt:
@@ -785,7 +785,7 @@ class Job:
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                         p.src_root_dataset = p.origin_src_root_dataset = src_root_dataset
                         p.dst_root_dataset = p.origin_dst_root_dataset = dst_root_dataset
-                        p.current_zfs_send_program_opts = p.zfs_send_program_opts.copy()
+                        p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
                         self.info(
                             "ZFS source --> destination:",
@@ -918,7 +918,7 @@ class Job:
                 f"Manually enable it via 'sudo zpool set delegation=on {p.dst_pool}'"
             )
 
-        zfs_send_program_opts = p.current_zfs_send_program_opts
+        zfs_send_program_opts = p.curr_zfs_send_program_opts
         if self.is_zpool_feature_enabled_or_active("dst", "feature@large_blocks"):
             append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4.0 does not have this feature
 
@@ -929,7 +929,7 @@ class Job:
             zfs_send_program_opts = ["-w" if opt == "--raw" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = ["compress" if opt == "--compressed" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
-        p.current_zfs_send_program_opts = zfs_send_program_opts
+        p.curr_zfs_send_program_opts = zfs_send_program_opts
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
         is_root = True
@@ -1295,10 +1295,10 @@ class Job:
                         elif dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
 
-                size_estimate_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
-                size_estimate_human = human_readable_bytes(size_estimate_bytes)
+                size_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
+                size_human = human_readable_bytes(size_bytes)
                 send_cmd = p.split_args(
-                    f"{p.src_sudo} {p.zfs_program} send", p.current_zfs_send_program_opts, oldest_src_snapshot
+                    f"{p.src_sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, oldest_src_snapshot
                 )
                 recv_opts = p.zfs_full_recv_opts.copy()
                 if p.getenv_bool("preserve_recordsize", False):
@@ -1308,16 +1308,10 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{p.dst_sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset
                 )
-                self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_estimate_human}) ...")
+                self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
                 self.run_zfs_send_receive(
-                    send_cmd,
-                    recv_cmd,
-                    size_estimate_bytes,
-                    size_estimate_human,
-                    is_dry_send_receive,
-                    error_trigger="full_zfs_send",
+                    send_cmd, recv_cmd, size_bytes, size_human, is_dry_send_receive, error_trigger="full_zfs_send"
                 )
-
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not is_dry_send_receive and not params.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
@@ -1366,35 +1360,25 @@ class Job:
                     origin_src_snapshots_with_guids, src_snapshots_guids
                 )
                 self.trace("steps_todo:", "; ".join([self.replication_step_to_str(step) for step in steps_todo]))
-            for i, (incr_flag, start_snapshot, end_snapshot) in enumerate(steps_todo):
-                size_estimate_bytes = self.estimate_zfs_send_size(incr_flag, start_snapshot, end_snapshot)
-                size_estimate_human = human_readable_bytes(size_estimate_bytes)
+            for i, (incr_flag, start_snap, end_snap) in enumerate(steps_todo):
+                size_bytes = self.estimate_zfs_send_size(incr_flag, start_snap, end_snap)
+                size_human = human_readable_bytes(size_bytes)
                 send_cmd = p.split_args(
-                    f"{p.src_sudo} {p.zfs_program} send",
-                    p.current_zfs_send_program_opts,
-                    incr_flag,
-                    start_snapshot,
-                    end_snapshot,
+                    f"{p.src_sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, incr_flag, start_snap, end_snap
                 )
                 recv_cmd = p.split_args(
                     f"{p.dst_sudo} {p.zfs_program} receive", p.dry_run_recv, p.zfs_recv_program_opts, dst_dataset
                 )
                 self.info(
-                    f"Incremental zfs send: {incr_flag}",
-                    f"{start_snapshot} {end_snapshot} --> {dst_dataset} ({size_estimate_human}) ...",
+                    f"Incremental zfs send: {incr_flag}", f"{start_snap} {end_snap} --> {dst_dataset} ({size_human})..."
                 )
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
                     is_dry_send_receive = True
                 self.run_zfs_send_receive(
-                    send_cmd,
-                    recv_cmd,
-                    size_estimate_bytes,
-                    size_estimate_human,
-                    is_dry_send_receive,
-                    error_trigger="incremental_zfs_send",
+                    send_cmd, recv_cmd, size_bytes, size_human, is_dry_send_receive, error_trigger="incr_zfs_send"
                 )
                 if i == len(steps_todo) - 1:
-                    self.create_zfs_bookmark(end_snapshot, src_dataset)
+                    self.create_zfs_bookmark(end_snap, src_dataset)
         return True
 
     def run_zfs_send_receive(
@@ -1652,15 +1636,15 @@ class Job:
     def run_ssh_command(
         self, target="src", level=info, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
     ):
-        assert cmd is not None and len(cmd) > 0
+        assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p = self.params
-        ssh_cmd = p.ssh_src_cmd
-        ssh_user_host = p.ssh_src_user_host
+        ssh_cmd: List[str] = p.ssh_src_cmd
+        ssh_user_host: str = p.ssh_src_user_host
         if target == "dst":
             ssh_cmd = p.ssh_dst_cmd
             ssh_user_host = p.ssh_dst_user_host
         if len(ssh_cmd) > 0:
-            if "ssh" not in p.available_programs["local"]:
+            if not self.is_program_available("ssh", "local"):
                 die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
             cmd = [shlex.quote(arg) for arg in cmd]
             if p.ssh_socket_enabled:
@@ -1738,7 +1722,7 @@ class Job:
             cmd = p.split_args(f"{sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
             self.run_ssh_command(location, self.debug, print_stdout=True, cmd=cmd)
 
-    def dquote(self, ssh_cmd, arg: str) -> str:
+    def dquote(self, ssh_cmd: List[str], arg: str) -> str:
         return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
 
     def filter_datasets(self, datasets: List[str], root_dataset: str) -> List[str]:
@@ -1890,7 +1874,7 @@ class Job:
         if self.is_solaris_zfs("src"):
             return 0  # solaris-11.4.0 does not have a --parsable equivalent
         p = self.params
-        zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.current_zfs_send_program_opts]
+        zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
         cmd = p.split_args(f"{p.src_sudo} {p.zfs_program} send", zfs_send_program_opts, items)
         lines = self.try_ssh_command("src", self.trace, cmd=cmd)
@@ -2107,9 +2091,8 @@ class Job:
             die(f"{params.sudo_program} CLI is not available on dst host: {params.ssh_dst_user_host or 'localhost'}")
 
     def disable_program(self, program: str):
-        self.disable_program_internal(program, "src")
-        self.disable_program_internal(program, "dst")
-        self.disable_program_internal(program, "local")
+        for location in ["src", "dst", "local"]:
+            self.disable_program_internal(program, location)
 
     def disable_program_internal(self, program: str, location: str):
         self.params.available_programs[location].pop(program, None)
