@@ -1518,7 +1518,7 @@ class Job:
                 # op isn't idempotent so retries regather current state from the start of replicate_flat_dataset()
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(stderr_to_str(e.stdout), file=sys.stdout)
-                    self.warn(stderr_to_str(e.stderr))
+                    self.warn(stderr_to_str(e.stderr).rstrip())
                 raise RetryableError("Subprocess failed") from e
             else:
                 xprint(process.stdout, file=sys.stdout)
@@ -1678,7 +1678,7 @@ class Job:
                     self.debug("Executing:", " ".join(ssh_socket_cmd))
                     process = subprocess.run(ssh_socket_cmd, stderr=PIPE, text=True)
                     if process.returncode != 0:
-                        error(process.stderr.strip())
+                        error(process.stderr.rstrip())
                         die(
                             f"Cannot ssh into remote host via {ssh_socket_cmd}. "
                             f"Fix ssh configuration first, considering diagnostic log file output from running "
@@ -1714,7 +1714,7 @@ class Job:
                     or ": no such pool" in stderr
                 ):
                     return None
-                self.warn(stderr)
+                self.warn(stderr.rstrip())
             raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None):
