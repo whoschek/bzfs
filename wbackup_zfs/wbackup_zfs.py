@@ -898,14 +898,11 @@ class Job:
 
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", p.src_pool)
         if self.try_ssh_command("src", self.trace, cmd=cmd) is None:
-            die(f"Pool does not exist for source dataset: {p.origin_src_root_dataset}. Manually create the pool first!")
+            die(f"Pool does not exist for src dataset: {p.origin_src_root_dataset}. Manually create the pool first!")
 
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", p.dst_pool)
         if self.try_ssh_command("dst", self.trace, cmd=cmd) is None:
-            die(
-                f"Pool does not exist for destination dataset: {p.origin_dst_root_dataset}. "
-                f"Manually create the pool first!"
-            )
+            die(f"Pool does not exist for dst dataset: {p.origin_dst_root_dataset}. Manually create the pool first!")
 
         self.detect_zpool_features("src", p.src_pool)
         self.detect_zpool_features("dst", p.dst_pool)
@@ -1224,7 +1221,7 @@ class Job:
                 src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids))
             )
             self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
-            # self.debug('latest_dst_snapshot:', latest_dst_snapshot)
+            self.trace("latest_dst_snapshot:", latest_dst_snapshot)
 
             if latest_common_src_snapshot:
                 # common snapshot was found. rollback dst to that common snapshot
@@ -1252,7 +1249,7 @@ class Job:
                 return True
 
         self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
-        # self.debug('latest_dst_snapshot:', latest_dst_snapshot)
+        self.trace("latest_dst_snapshot:", latest_dst_snapshot)
 
         is_dry_send_receive = False
         if not latest_common_src_snapshot:
@@ -1612,42 +1609,44 @@ class Job:
         ssh_port: int,
         ssh_extra_opts: List[str],
     ) -> List[str]:
+        if ssh_user_host == "":
+            return []  # dataset is on local host - don't use ssh
+
+        # dataset is on remote host
         params = self.params
-        ssh_cmd = []  # pool is on local host
-        if ssh_user_host != "":  # pool is on remote host
-            if params.ssh_program == disable_prg:
-                die(f"ssh CLI is not available on host: {ssh_user_host or 'localhost'}")
-            ssh_cmd = [params.ssh_program] + ssh_extra_opts
-            if params.ssh_config_file:
-                ssh_cmd += ["-F", params.ssh_config_file]
-            for ssh_private_key_file in ssh_private_key_files:
-                ssh_cmd += ["-i", ssh_private_key_file]
-            if params.ssh_cipher:
-                ssh_cmd += ["-c", params.ssh_cipher]
-            if ssh_port:
-                ssh_cmd += ["-p", str(ssh_port)]
-            if params.ssh_socket_enabled:
-                # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
-                # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-                # generate unique private socket file name in user's home dir
-                socket_dir = os.path.join(params.home_dir, ".ssh", "wbackup-zfs")
-                os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
-                os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # chmod u=rwx,go=
+        if params.ssh_program == disable_prg:
+            die(f"Cannot talk to remote host because ssh CLI is disabled.")
+        ssh_cmd = [params.ssh_program] + ssh_extra_opts
+        if params.ssh_config_file:
+            ssh_cmd += ["-F", params.ssh_config_file]
+        for ssh_private_key_file in ssh_private_key_files:
+            ssh_cmd += ["-i", ssh_private_key_file]
+        if params.ssh_cipher:
+            ssh_cmd += ["-c", params.ssh_cipher]
+        if ssh_port:
+            ssh_cmd += ["-p", str(ssh_port)]
+        if params.ssh_socket_enabled:
+            # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
+            # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
+            # generate unique private socket file name in user's home dir
+            socket_dir = os.path.join(params.home_dir, ".ssh", "wbackup-zfs")
+            os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
+            os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # chmod u=rwx,go=
 
-                def sanitize(name):
-                    # replace any whitespace, /, $, \, @ with a ~ tilde char
-                    name = re.sub(r"[\s\\/@$]", "~", name)
-                    # Remove characters not in the allowed set
-                    name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
-                    return name
+            def sanitize(name):
+                # replace any whitespace, /, $, \, @ with a ~ tilde char
+                name = re.sub(r"[\s\\/@$]", "~", name)
+                # Remove characters not in the allowed set
+                name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
+                return name
 
-                unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
-                if self.is_test_mode:
-                    unique = "x$#^&*(x"  # faster for running large numbers of short unit tests, also tests quoting
-                socket_name = f"{os.getpid()}@{unique}@{sanitize(ssh_host)[:45]}@{sanitize(ssh_user)}"
-                socket_file = os.path.join(socket_dir, socket_name)[: max(100, len(socket_dir) + 10)]
-                ssh_cmd += ["-S", socket_file]
-            ssh_cmd += [ssh_user_host]
+            unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
+            if self.is_test_mode:
+                unique = "x$#^&*(x"  # faster for running large numbers of short unit tests, also tests quoting
+            socket_name = f"{os.getpid()}@{unique}@{sanitize(ssh_host)[:45]}@{sanitize(ssh_user)}"
+            socket_file = os.path.join(socket_dir, socket_name)[: max(100, len(socket_dir) + 10)]
+            ssh_cmd += ["-S", socket_file]
+        ssh_cmd += [ssh_user_host]
         return ssh_cmd
 
     def run_ssh_command(
@@ -1663,18 +1662,19 @@ class Job:
         if len(ssh_cmd) > 0:
             if "ssh" not in p.available_programs["local"]:
                 die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
-            cmd = [self.dquote(ssh_cmd, arg) for arg in cmd]
+            cmd = [shlex.quote(arg) for arg in cmd]
             if p.ssh_socket_enabled:
                 # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
                 # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
-                ssh_cmd_trimmed = ssh_cmd[0:-1]  # remove trailing $ssh_user_host
-                ssh_socket_cmd = xappend(ssh_cmd_trimmed.copy(), "-O", "check", ssh_user_host)
+                ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                ssh_socket_cmd += ["-O", "check", ssh_user_host]
                 if subprocess.run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:
                     self.trace("ssh socket is alive:", " ".join(ssh_socket_cmd))
                 else:
                     self.trace("ssh socket is not yet alive:", " ".join(ssh_socket_cmd))
-                    ssh_socket_cmd = xappend(ssh_cmd[0:-1], "-M", "-o", "ControlPersist=60s", ssh_user_host, "exit")
+                    ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                    ssh_socket_cmd += ["-M", "-o", "ControlPersist=60s", ssh_user_host, "exit"]
                     self.debug("Executing:", " ".join(ssh_socket_cmd))
                     process = subprocess.run(ssh_socket_cmd, stderr=PIPE, text=True)
                     if process.returncode != 0:
