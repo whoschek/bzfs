@@ -876,10 +876,7 @@ class Job:
 
         for remote in [src, dst]:
             r, loc = remote, remote.location
-            cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-            if self.try_ssh_command(remote, self.trace, cmd=cmd) is None:
-                die(f"Pool does not exist for {loc} dataset: {r.origin_root_dataset}. Manually create the pool first!")
-            self.detect_zpool_features(remote, r.pool)
+            self.detect_zpool_features(remote)
             if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
                 die(
                     f"Permission denied as ZFS delegation is disabled for {loc} dataset: {r.origin_root_dataset}. "
@@ -2118,28 +2115,29 @@ class Job:
     def is_solaris_zfs(self, remote: Remote) -> bool:
         return self.params.available_programs[remote.location].get("zfs") == "notOpenZFS"
 
-    def detect_zpool_features(self, remote: Remote, pool: str) -> None:
-        params = self.params
-        location = remote.location
+    def detect_zpool_features(self, remote: Remote) -> None:
+        p = params = self.params
+        r, loc = remote, remote.location
         features = {}
-        if self.is_program_available("zpool", location):
-            cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", pool)
+        lines = []
+        if self.is_program_available("zpool", loc):
+            cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
             try:
                 lines = self.run_ssh_command(remote, self.trace, check=False, cmd=cmd).splitlines()
             except (FileNotFoundError, PermissionError) as e:
                 if e.filename != params.zpool_program:
                     raise
-                lines = []
-            if len(lines) == 0:
-                self.warn(
-                    f"Failed to detect zpool features on {location}: {pool}. "
-                    f"Continuing with minimal assumptions ..."
-                )
-            props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
-            features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
-            str_features = "\n".join([f"{k}: {v}" for k, v in sorted(features.items())])
-            self.trace(f"{location} zpool features:", str_features)
-        params.zpool_features[location] = features
+                self.warn(f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions...")
+            else:
+                props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
+                features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
+                str_features = "\n".join([f"{k}: {v}" for k, v in sorted(features.items())])
+                self.trace(f"{loc} zpool features:", str_features)
+        if len(lines) == 0:
+            cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
+            if self.try_ssh_command(remote, self.trace, cmd=cmd) is None:
+                die(f"Pool does not exist for {loc} dataset: {r.origin_root_dataset}. Manually create the pool first!")
+        params.zpool_features[loc] = features
 
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
         value = self.params.zpool_features[remote.location].get(feature, None)
