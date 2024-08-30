@@ -774,7 +774,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Additional option to be passed to ssh CLI when connecting to src
     host (optional). The value can contain spaces and is not split. This
     option can be specified multiple times. Example:
-    `--ssh-src-extra-opts='-oProxyCommand=nc %h %p'` to disable the
+    `--ssh-src-extra-opt='-oProxyCommand=nc %h %p'` to disable the
     TCP_NODELAY socket option for OpenSSH.
 
 <!-- -->
@@ -793,7 +793,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Additional option to be passed to ssh CLI when connecting to dst
     host (optional). The value can contain spaces and is not split. This
     option can be specified multiple times. Example:
-    `--ssh-dst-extra-opts='-oProxyCommand=nc %h %p'` to disable the
+    `--ssh-dst-extra-opt='-oProxyCommand=nc %h %p'` to disable the
     TCP_NODELAY socket option for OpenSSH.
 
 <!-- -->

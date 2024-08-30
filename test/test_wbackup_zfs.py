@@ -21,6 +21,7 @@ import platform
 import pwd
 import random
 import shutil
+import time
 import traceback
 import unittest
 import os
@@ -29,6 +30,7 @@ import sys
 import tempfile
 from collections import defaultdict, Counter
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import patch, mock_open
 from .zfs_util import *
 from wbackup_zfs.wbackup_zfs import CheckRange
@@ -2435,6 +2437,26 @@ class TestHelperFunctions(unittest.TestCase):
         wbackup_zfs.xprint("", run=True)
         wbackup_zfs.xprint("", run=False)
         wbackup_zfs.xprint(None)
+
+    def test_delete_stale_ssh_socket_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            new_socket_file = os.path.join(tmpdir, "s_new_socket_file")
+            Path(new_socket_file).touch()
+            stale_socket_file = os.path.join(tmpdir, "s_stale_socket_file")
+            Path(stale_socket_file).touch()
+            one_hundred_days_ago = time.time() - 100 * 24 * 60 * 60
+            os.utime(stale_socket_file, (one_hundred_days_ago, one_hundred_days_ago))
+            dir = os.path.join(tmpdir, "s_dir")
+            os.mkdir(dir)
+            non_socket_file = os.path.join(tmpdir, "f")
+            Path(non_socket_file).touch()
+
+            wbackup_zfs.delete_stale_ssh_socket_files(tmpdir, "s")
+
+            self.assertTrue(os.path.exists(new_socket_file))
+            self.assertFalse(os.path.exists(stale_socket_file))
+            self.assertTrue(os.path.exists(dir))
+            self.assertTrue(os.path.exists(non_socket_file))
 
 
 #############################################################################

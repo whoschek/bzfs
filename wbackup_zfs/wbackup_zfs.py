@@ -463,7 +463,7 @@ feature.
             f"--ssh-{loc}-extra-opt", action="append", default=[], metavar="STRING",
             help=(f"Additional option to be passed to ssh CLI when connecting to {loc} host (optional). The value "
                   "can contain spaces and is not split. This option can be specified multiple times. "
-                  f"Example: `--ssh-{loc}-extra-opts='-oProxyCommand=nc %%h %%p'` to disable the TCP_NODELAY "
+                  f"Example: `--ssh-{loc}-extra-opt='-oProxyCommand=nc %%h %%p'` to disable the TCP_NODELAY "
                   "socket option for OpenSSH.\n\n"))
     parser.add_argument(
         "--bwlimit", type=str, metavar="STRING",
@@ -1563,6 +1563,8 @@ class Job:
             socket_dir = os.path.join(params.home_dir, ".ssh", "wbackup-zfs")
             os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
             os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # chmod u=rwx,go=
+            prefix = "s"
+            delete_stale_ssh_socket_files(socket_dir, prefix)
 
             def sanitize(name):
                 # replace any whitespace, /, $, \, @ with a ~ tilde char
@@ -1574,7 +1576,7 @@ class Job:
             unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
             if self.is_test_mode:
                 unique = "x$#^&*(x"  # faster for running large numbers of short unit tests, also tests quoting
-            socket_name = f"{os.getpid()}@{unique}@{sanitize(remote.ssh_host)[:45]}@{sanitize(remote.ssh_user)}"
+            socket_name = f"{prefix}{os.getpid()}@{unique}@{sanitize(remote.ssh_host)[:45]}@{sanitize(remote.ssh_user)}"
             socket_file = os.path.join(socket_dir, socket_name)[: max(100, len(socket_dir) + 10)]
             ssh_cmd += ["-S", socket_file]
         ssh_cmd += [remote.ssh_user_host]
@@ -2223,6 +2225,16 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
             regex = f"{regex[0:i]}(?:{regex[i + 1:]}"
         i -= 1
     return regex
+
+
+def delete_stale_ssh_socket_files(socket_dir: str, prefix: str):
+    """Clean up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash"""
+    secs = 30 * 24 * 60 * 60
+    now = time.time()
+    for filename in os.listdir(socket_dir):
+        file = os.path.join(socket_dir, filename)
+        if filename.startswith(prefix) and not os.path.isdir(file) and now - os.path.getmtime(file) >= secs:
+            os.remove(file)
 
 
 def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
