@@ -874,15 +874,6 @@ class Job:
         self.detect_available_programs()
         self.trace("Validated Param values:", pprint.pformat(vars(params)))
 
-        for remote in [src, dst]:
-            r, loc = remote, remote.location
-            self.detect_zpool_features(remote)
-            if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
-                die(
-                    f"Permission denied as ZFS delegation is disabled for {loc} dataset: {r.origin_root_dataset}. "
-                    f"Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
-                )
-
         zfs_send_program_opts = p.curr_zfs_send_program_opts
         if self.is_zpool_feature_enabled_or_active(dst, "feature@large_blocks"):
             append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4.0 does not have this feature
@@ -1616,7 +1607,7 @@ class Job:
                     if process.returncode != 0:
                         error(process.stderr.rstrip())
                         die(
-                            f"Cannot ssh into remote host via {ssh_socket_cmd}. "
+                            f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. "
                             f"Fix ssh configuration first, considering diagnostic log file output from running "
                             f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                         )
@@ -1996,10 +1987,13 @@ class Job:
             self.disable_program_internal("sh", "local")
 
         for r in [p.src, p.dst]:
-            if len(r.ssh_cmd) > 0:
-                self.run_ssh_command(r, self.debug, cmd=["exit"])  # check if we can ssh into the remote hosts at all
-            # if 'sh' and 'echo' are available on remote hosts then detect available programs there
+            self.detect_zpool_features(r)
             self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
+            if r.use_zfs_delegation and p.zpool_features[r.location].get("delegation") == "off":
+                die(
+                    f"Permission denied as ZFS delegation is disabled for {r.location} "
+                    f"dataset: {r.origin_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
+                )
 
         if not ("zstd" in available_programs["src"] and "zstd" in available_programs["dst"]):
             self.disable_program("zstd")  # no compression is used if source and dst do not both support compression
@@ -2097,20 +2091,18 @@ class Job:
         self.trace(f"available_programs[{location}][zfs]:", available_programs[location]["zfs"])
 
         try:
-            cmd = [p.shell_program, "-c", "echo hello world"]
-            if self.run_ssh_command(remote, level=self.trace, check=False, cmd=cmd) == "hello world\n":
-                cmd = [p.shell_program, "-c", self.find_available_programs()]
-                available_programs[location].update(
-                    dict.fromkeys(self.run_ssh_command(remote, self.trace, cmd=cmd).splitlines())
-                )
-            else:
-                self.warn(f"Failed to run {p.shell_program} on {location}. Continuing with minimal assumptions ...")
-                available_programs[location].update(available_programs_minimum)
+            cmd = [p.shell_program, "-c", self.find_available_programs()]
+            available_programs[location].update(
+                dict.fromkeys(self.run_ssh_command(remote, self.trace, cmd=cmd).splitlines())
+            )
+            return
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
             if e.filename != p.shell_program:
                 raise
-            self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions ...")
-            available_programs[location].update(available_programs_minimum)
+        except subprocess.CalledProcessError:
+            pass
+        self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions ...")
+        available_programs[location].update(available_programs_minimum)
 
     def is_solaris_zfs(self, remote: Remote) -> bool:
         return self.params.available_programs[remote.location].get("zfs") == "notOpenZFS"
@@ -2120,7 +2112,7 @@ class Job:
         r, loc = remote, remote.location
         features = {}
         lines = []
-        if self.is_program_available("zpool", loc):
+        if params.zpool_program != disable_prg:
             cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
             try:
                 lines = self.run_ssh_command(remote, self.trace, check=False, cmd=cmd).splitlines()
