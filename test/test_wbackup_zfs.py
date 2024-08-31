@@ -2642,6 +2642,8 @@ class TestParseDatasetLocator(unittest.TestCase):
         self.run_test("../tank", "", "", "../tank", "", True)
         self.run_test("tank/..", "", "", "tank/..", "", True)
         self.run_test("tank/.", "", "", "tank/.", "", True)
+        self.run_test("tank/fo$o", "", "", "tank/fo$o", "", True)
+        self.run_test("tank/fo\\o", "", "", "tank/fo\\o", "", True)
         self.run_test(
             "user@host.example.com:tank1/foo@bar",
             "user",

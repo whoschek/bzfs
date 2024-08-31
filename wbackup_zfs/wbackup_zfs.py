@@ -1629,7 +1629,7 @@ class Job:
                 xprint(process.stderr, run=print_stderr, end="")
                 return process.stdout
 
-    def try_ssh_command(self, remote, level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
+    def try_ssh_command(self, remote: Remote, level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
             return self.run_ssh_command(remote, level=level, is_dry=is_dry, check=True, cmd=cmd)
@@ -2353,7 +2353,7 @@ def parse_dataset_locator(input_text: str, validate: bool = True, user: str = No
     if validate:
         validate_user_name(user, input_text)
         validate_host_name(host, input_text)
-        validate_port(port, f"Illegal port number: '{port}' for: '{input_text}' - ")
+        validate_port(port, f"Invalid port number: '{port}' for: '{input_text}' - ")
         validate_dataset_name(dataset, input_text)
 
     return user, host, user_host, pool, dataset
@@ -2378,20 +2378,22 @@ def validate_dataset_name(dataset: str, input_text: str):
         or '"' in dataset
         or "'" in dataset
         or "%" in dataset
+        or "$" in dataset
+        or "\\" in dataset
         or any(char.isspace() and char != " " for char in dataset)
         or not dataset[0].isalpha()
     ):
-        die(f"Illegal ZFS dataset name: '{dataset}' for: '{input_text}'")
+        die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
 def validate_user_name(user: str, input_text: str):
     if user and any(char.isspace() or char == '"' or char == "'" for char in user):
-        die(f"Illegal user name: '{user}' for: '{input_text}'")
+        die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
 def validate_host_name(host: str, input_text: str):
     if host and any(char.isspace() or char == "@" or char == '"' or char == "'" for char in host):
-        die(f"Illegal host name: '{host}' for: '{input_text}'")
+        die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
 def validate_port(port: int, message: str):
