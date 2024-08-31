@@ -472,6 +472,17 @@ class LocalTestCase(WBackupTestCase):
                 extra_opt = ""
                 if is_zpool_feature_enabled_or_active("src", "feature@large_blocks"):
                     extra_opt = " --large-block"
+                props = [
+                    ("compression", "off"),
+                    ("mountpoint", "/tmp/dir with  spaces and $ dollar sign-" + str(os.getpid())),
+                    ("wbackup-zfs:prop1", "/tmp/dir` ~!@#$%^&*()_+-={}[]|;:<>?,./"),  # test escaping
+                    ("wbackup-zfs:prop2", "/tmp/foo'bar"),
+                    ("wbackup-zfs:prop3", '/tmp/foo"bar'),
+                    ("wbackup-zfs:prop4", "/tmp/foo'ba\"rbaz"),
+                    ("wbackup-zfs:prop5", '/tmp/foo"ba\'r"baz'),
+                    ("wbackup-zfs:prop6", "/tmp/foo  bar\t\t\nbaz\n\n\n"),
+                    ("wbackup-zfs:prop7", "/tmp/foo\\bar"),
+                ]
                 self.run_wbackup(
                     src_root_dataset + "/foo/a",
                     dst_root_dataset + "/foo/a",
@@ -482,17 +493,40 @@ class LocalTestCase(WBackupTestCase):
                     "--zfs-receive-program-opt=-u",
                     "--zfs-receive-program-opt=",
                     "--zfs-receive-program-opt=-o",
-                    "--zfs-receive-program-opt=compression=off",
+                    f"--zfs-receive-program-opt={props[0][0]}={props[0][1]}",
                     "--zfs-receive-program-opt=-o",
-                    f"--zfs-receive-program-opt=mountpoint=/tmp/dir with  spaces-"
-                    f"{os.getpid()}-{random.SystemRandom().randint(0, 999_999_999_999)}",
+                    f"--zfs-receive-program-opt={props[1][0]}={props[1][1]}",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt={props[2][0]}={props[2][1]}",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt={props[3][0]}={props[3][1]}",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt={props[4][0]}={props[4][1]}",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt={props[5][0]}={props[5][1]}",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt={props[6][0]}={props[6][1]}",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt={props[7][0]}={props[7][1]}",
+                    "--zfs-receive-program-opt=-o",
+                    f"--zfs-receive-program-opt={props[8][0]}={props[8][1]}",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    foo_a = dst_root_dataset + "/foo/a"
+                    self.assertSnapshots(foo_a, 3, "u")
+                    self.assertEqual(props[0][1], dataset_property(foo_a, props[0][0]))
+                    self.assertEqual(props[1][1], dataset_property(foo_a, props[1][0], splitlines=False))
+                    self.assertEqual(props[2][1], dataset_property(foo_a, props[2][0]))
+                    self.assertEqual(props[3][1], dataset_property(foo_a, props[3][0]))
+                    self.assertEqual(props[4][1], dataset_property(foo_a, props[4][0]))
+                    self.assertEqual(props[5][1], dataset_property(foo_a, props[5][0]))
+                    self.assertEqual(props[6][1], dataset_property(foo_a, props[6][0]))
+                    self.assertEqual(props[7][1], dataset_property(foo_a, props[7][0], splitlines=False))
+                    self.assertEqual(props[8][1], dataset_property(foo_a, props[8][0]))
 
     def test_basic_replication_flat_no_snapshot_dont_create_parents(self):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
@@ -1887,6 +1921,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_complex_replication_flat_use_bookmarks(self):
         LocalTestCase(param=self.param).test_complex_replication_flat_use_bookmarks()
 
+    def test_basic_replication_flat_send_recv_flags(self):
+        LocalTestCase(param=self.param).test_basic_replication_flat_send_recv_flags()
+
     def test_basic_replication_dataset_with_spaces(self):
         LocalTestCase(param=self.param).test_basic_replication_dataset_with_spaces()
 
@@ -2393,6 +2430,8 @@ class TestHelperFunctions(unittest.TestCase):
             params.validate_quoting('foo"')
         with self.assertRaises(SystemExit):
             params.validate_quoting("foo'")
+        with self.assertRaises(SystemExit):
+            params.validate_quoting("foo`")
 
     def test_validate_arg(self):
         params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
@@ -2405,7 +2444,28 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             params.validate_arg("foo" + "\t", allow_spaces=True)
         params.validate_arg("foo bar", allow_spaces=True)
+        with self.assertRaises(SystemExit):
+            params.validate_arg(" foo  bar ", allow_spaces=False)
         params.validate_arg(" foo  bar ", allow_spaces=True)
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo'bar")
+        params.validate_arg("foo'bar", allow_all=True)
+        with self.assertRaises(SystemExit):
+            params.validate_arg('foo"bar')
+        params.validate_arg('foo"bar', allow_all=True)
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo\tbar")
+        params.validate_arg("foo\tbar", allow_all=True)
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo`bar")
+        params.validate_arg("foo`bar", allow_all=True)
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo\nbar")
+        params.validate_arg("foo\nbar", allow_all=True)
+        with self.assertRaises(SystemExit):
+            params.validate_arg("foo\rbar")
+        params.validate_arg("foo\rbar", allow_all=True)
+        params.validate_arg(" foo  bar ", allow_all=True)
 
     def test_validate_program_name_must_not_be_empty(self):
         args = wbackup_zfs.argument_parser().parse_args(args=["src", "dst"])
@@ -2425,8 +2485,14 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo"], params.split_args("foo", []))
         with self.assertRaises(SystemExit):
             params.split_args("'foo'")
+        self.assertEqual(["'foo'"], params.split_args("'foo'", allow_all=True))
         with self.assertRaises(SystemExit):
             params.split_args('"foo"')
+        self.assertEqual(['"foo"'], params.split_args('"foo"', allow_all=True))
+        self.assertEqual(["foo", "bar baz"], params.split_args("foo", "bar baz"))
+        self.assertEqual(["foo", "bar\tbaz"], params.split_args("foo", "bar\tbaz"))
+        self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
+        self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
     def test_xprint(self):
         wbackup_zfs.xprint("foo")
@@ -2642,30 +2708,27 @@ class TestParseDatasetLocator(unittest.TestCase):
         self.run_test("../tank", "", "", "../tank", "", True)
         self.run_test("tank/..", "", "", "tank/..", "", True)
         self.run_test("tank/.", "", "", "tank/.", "", True)
+        self.run_test("tank/fo`o", "", "", "tank/fo`o", "", True)
         self.run_test("tank/fo$o", "", "", "tank/fo$o", "", True)
         self.run_test("tank/fo\\o", "", "", "tank/fo\\o", "", True)
+        self.run_test("u`ser@localhost:tank1/foo/bar", "u`ser", "localhost", "tank1/foo/bar", "u`ser@localhost", True)
+        self.run_test("u'ser@localhost:tank1/foo/bar", "u'ser", "localhost", "tank1/foo/bar", "u'ser@localhost", True)
+        self.run_test('u"ser@localhost:tank1/foo/bar', 'u"ser', "localhost", "tank1/foo/bar", 'u"ser@localhost', True)
+        self.run_test("user@l`ocalhost:tank1/foo/bar", "user", "l`ocalhost", "tank1/foo/bar", "user@l`ocalhost", True)
+        self.run_test("user@l'ocalhost:tank1/foo/bar", "user", "l'ocalhost", "tank1/foo/bar", "user@l'ocalhost", True)
+        self.run_test('user@l"ocalhost:tank1/foo/bar', "user", 'l"ocalhost', "tank1/foo/bar", 'user@l"ocalhost', True)
         self.run_test(
-            "user@host.example.com:tank1/foo@bar",
-            "user",
-            "host.example.com",
-            "tank1/foo@bar",
-            "user@host.example.com",
-            True,
+            "user@host.ex.com:tank1/foo@bar", "user", "host.ex.com", "tank1/foo@bar", "user@host.ex.com", True
         )
         self.run_test(
-            "user@host.example.com:tank1/foo#bar",
-            "user",
-            "host.example.com",
-            "tank1/foo#bar",
-            "user@host.example.com",
-            True,
+            "user@host.ex.com:tank1/foo#bar", "user", "host.ex.com", "tank1/foo#bar", "user@host.ex.com", True
         )
         self.run_test(
-            "whitespace user@host.example.com:tank1/foo/bar",
+            "whitespace user@host.ex.com:tank1/foo/bar",
             "whitespace user",
-            "host.example.com",
+            "host.ex.com",
             "tank1/foo/bar",
-            "whitespace user@host.example.com",
+            "whitespace user@host.ex.com",
             True,
         )
         self.run_test(

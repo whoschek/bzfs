@@ -161,8 +161,9 @@ def bookmark_name(bookmark):
     return bookmark[bookmark.find("#") + 1 :]
 
 
-def dataset_property(dataset=None, prop=None):
-    return zfs_list([dataset], props=[prop], types=["filesystem", "volume"], max_depth=0)[0]
+def dataset_property(dataset=None, prop=None, splitlines=True):
+    result = zfs_list([dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, splitlines=splitlines)
+    return result[0] if splitlines else result
     # return zfs_get([dataset], props=[prop], types=['filesystem', 'volume'], max_depth=0, fields=['value'])[0]
 
 
@@ -170,7 +171,7 @@ def snapshot_property(snapshot, prop):
     return zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0)[0]
 
 
-def zfs_list(names=[], props=["name"], types=[], max_depth=None, parsable=True, sort_props=[]):
+def zfs_list(names=[], props=["name"], types=[], max_depth=None, parsable=True, sort_props=[], splitlines=True):
     cmd = ["zfs", "list"]
     if max_depth is None:
         cmd.append("-r")
@@ -196,7 +197,7 @@ def zfs_list(names=[], props=["name"], types=[], max_depth=None, parsable=True, 
     if names:
         cmd += names
 
-    return run_cmd(cmd)
+    return run_cmd(cmd, splitlines=splitlines)
 
 
 def zfs_get(names=[], props=["all"], types=[], max_depth=None, parsable=True, fields=[], sources=[]):
@@ -288,5 +289,6 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
-def run_cmd(*params):
-    return subprocess.run(*params, stdout=subprocess.PIPE, text=True, check=True).stdout.splitlines()
+def run_cmd(*params, splitlines=True):
+    stdout = subprocess.run(*params, stdout=subprocess.PIPE, text=True, check=True).stdout
+    return stdout.splitlines() if splitlines else stdout[0:-1]  # omit trailing newline char

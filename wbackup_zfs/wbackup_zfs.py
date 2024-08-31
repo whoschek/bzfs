@@ -591,7 +591,7 @@ class Params:
         self.curr_zfs_send_program_opts: List[str] = []
         self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_receive_program_opts)
         for extra_opt in args.zfs_receive_program_opt:
-            self.zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_spaces=True))
+            self.zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
         self.zfs_recv_program_opts = self.fix_send_recv_opts(self.zfs_recv_program_opts)
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
@@ -652,27 +652,29 @@ class Params:
     def getenv_bool(self, key: str, default: bool = False) -> bool:
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
-    def split_args(self, text: str, *items) -> List[str]:
-        """split option string on runs of one or more whitespace into an option list"""
+    def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
+        """split option string on runs of one or more whitespace into an option list."""
         text = text.strip()
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
         xappend(opts, items)
-        for opt in opts:
-            self.validate_quoting(opt)
+        if not allow_all:
+            for opt in opts:
+                self.validate_quoting(opt)
         return opts
 
-    def validate_arg(self, opt: str, allow_spaces: bool = False) -> str:
-        if opt is None:
+    def validate_arg(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str:
+        """allow_all permits all characters, including whitespace and quotes. See squote() and dquote()"""
+        if allow_all or opt is None:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
-            die(f"Option must not contain a whitespace character {'other thank space' if allow_spaces else ''}: {opt}")
+            die(f"Option must not contain a whitespace character {'other than space' if allow_spaces else ''} : {opt}")
         self.validate_quoting(opt)
         return opt
 
     @staticmethod
     def validate_quoting(opt: str):
-        if "'" in opt or '"' in opt:
-            die(f"Option must not contain a single quote or a double quote character: {opt}")
+        if "'" in opt or '"' in opt or "`" in opt:
+            die(f"Option must not contain a single quote or double quote or backtick character: {opt}")
 
     @staticmethod
     def fix_send_recv_opts(opts: List[str]) -> List[str]:
@@ -1261,7 +1263,7 @@ class Job:
                     if recordsize >= 0:
                         recv_opts += ["-o", f"recordsize={recordsize}"]
                 recv_cmd = p.split_args(
-                    f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset
+                    f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
                 self.run_zfs_send_receive(
@@ -1321,8 +1323,9 @@ class Job:
                 send_cmd = p.split_args(
                     f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, incr_flag, start_snap, end_snap
                 )
+                recv_opts = p.zfs_recv_program_opts
                 recv_cmd = p.split_args(
-                    f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, p.zfs_recv_program_opts, dst_dataset
+                    f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 self.info(
                     f"Incremental zfs send: {incr_flag}", f"{start_snap} {end_snap} --> {dst_dataset} ({size_human})..."
@@ -1388,7 +1391,7 @@ class Job:
             send_cmd = f"{send_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if src_pipe != "":
             src_shell_program = params.shell_program if len(params.src.ssh_cmd) > 0 else params.shell_program_local
-            src_pipe = f'{src_shell_program} -c "{send_cmd} | {src_pipe}"'
+            src_pipe = src_shell_program + " -c " + self.dquote(f"{send_cmd} | {src_pipe}")
         else:
             src_pipe = send_cmd
 
@@ -1425,7 +1428,7 @@ class Job:
             recv_cmd = f"{recv_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if dst_pipe != "":
             dst_shell_program = params.shell_program if len(params.dst.ssh_cmd) > 0 else params.shell_program_local
-            dst_pipe = f'{dst_shell_program} -c "{dst_pipe} | {recv_cmd}"'
+            dst_pipe = dst_shell_program + " -c " + self.dquote(f"{dst_pipe} | {recv_cmd}")
         else:
             dst_pipe = recv_cmd
 
@@ -1438,12 +1441,12 @@ class Job:
         if not self.is_program_available("sh", "local"):
             local_pipe = ""
 
-        src_pipe = self.dquote(params.src.ssh_cmd, src_pipe)
-        dst_pipe = self.dquote(params.dst.ssh_cmd, dst_pipe)
-        src_cmd = " ".join([shlex.quote(item) for item in params.src.ssh_cmd])
-        dst_cmd = " ".join([shlex.quote(item) for item in params.dst.ssh_cmd])
+        src_pipe = self.squote(params.src.ssh_cmd, src_pipe)
+        dst_pipe = self.squote(params.dst.ssh_cmd, dst_pipe)
+        src_ssh_cmd = " ".join([shlex.quote(item) for item in params.src.ssh_cmd])
+        dst_ssh_cmd = " ".join([shlex.quote(item) for item in params.dst.ssh_cmd])
 
-        cmd = [params.shell_program_local, "-c", f"{src_cmd} {src_pipe} {local_pipe} | {dst_cmd} {dst_pipe}"]
+        cmd = [params.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
         msg = "Would execute:" if is_dry_send_receive else "Executing:"
         self.debug(msg, " ".join(cmd))
         if not is_dry_send_receive:
@@ -1666,8 +1669,12 @@ class Job:
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
             self.run_ssh_command(remote, self.debug, print_stdout=True, cmd=cmd)
 
-    def dquote(self, ssh_cmd: List[str], arg: str) -> str:
+    def squote(self, ssh_cmd: List[str], arg: str) -> str:
         return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
+
+    def dquote(self, arg: str) -> str:
+        """shell-escape double quotes and backticks, then surround with double quotes"""
+        return '"' + arg.replace('"', '\\"').replace("`", "\\`") + '"'
 
     def filter_datasets(self, datasets: List[str], root_dataset: str) -> List[str]:
         """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
@@ -2377,6 +2384,7 @@ def validate_dataset_name(dataset: str, input_text: str):
         or "#" in dataset
         or '"' in dataset
         or "'" in dataset
+        or "`" in dataset
         or "%" in dataset
         or "$" in dataset
         or "\\" in dataset
@@ -2387,12 +2395,12 @@ def validate_dataset_name(dataset: str, input_text: str):
 
 
 def validate_user_name(user: str, input_text: str):
-    if user and any(char.isspace() or char == '"' or char == "'" for char in user):
+    if user and any(char.isspace() or char == '"' or char == "'" or char == "`" for char in user):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
 def validate_host_name(host: str, input_text: str):
-    if host and any(char.isspace() or char == "@" or char == '"' or char == "'" for char in host):
+    if host and any(char.isspace() or char == "@" or char == '"' or char == "'" or char == "`" for char in host):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
