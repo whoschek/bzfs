@@ -322,12 +322,12 @@ feature.
               "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL.\n\n"
               "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
               "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
-              "user accounts with separate private keys, per the principle of least privilege. Further, "
-              "if you do not plan to use the --force flag or --delete-missing-snapshots or --delete-missing-dataset "
-              "then ZFS permissions 'rollback,destroy' can be omitted. "
-              "If you do not plan to customize the respective ZFS dataset property then "
-              "ZFS permissions 'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be "
-              "omitted, arriving at the absolutely minimal set of required destination permissions: "
+              "user accounts with separate private keys even if both accounts reside on the same machine, per the "
+              "principle of least privilege. Further, if you do not plan to use the --force flag or "
+              "--delete-missing-snapshots or --delete-missing-dataset then ZFS permissions 'rollback,destroy' can "
+              "be omitted. If you do not plan to customize the respective ZFS dataset property then ZFS permissions "
+              "'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be omitted, arriving "
+              "at the absolutely minimal set of required destination permissions: "
               "`mount,create,receive`. Also see "
               "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
               "https://tinyurl.com/9h97kh8n and "
@@ -475,8 +475,9 @@ feature.
 
     msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
     parser.add_argument(
-        "--compression-program", default="zstd", action=NonEmptyStringAction,
-        metavar="STRING", help=hlp("zstd") + "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg)
+        "--compression-program", default="zstd", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("zstd") + "This is auto-disabled if data is transferred locally instead of via the network. "
+                           "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg)
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help="The options to be passed to the compression program on the compression step (optional). "
@@ -795,7 +796,7 @@ class Job:
                         )
                         try:
                             self.validate()
-                            self.run_main_action()
+                            self.run_task()
                         except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                             error(str(e))
                             if p.skip_on_error == "fail":
@@ -880,8 +881,8 @@ class Job:
         if self.is_zpool_feature_enabled_or_active(dst, "feature@large_blocks"):
             append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4.0 does not have this feature
         if self.is_solaris_zfs(dst):
-            self.params.dry_run_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-            self.params.verbose_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -v' flag
+            p.dry_run_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -n' flag
+            p.verbose_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -v' flag
         if self.is_solaris_zfs(src):  # solaris-11.4.0 only knows -w compress
             zfs_send_program_opts = ["-w" if opt == "--raw" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = ["compress" if opt == "--compressed" else opt for opt in zfs_send_program_opts]
@@ -910,7 +911,7 @@ class Job:
         else:
             return "", True
 
-    def run_main_action(self):
+    def run_task(self):
         p = params = self.params
         src, dst = p.src, p.dst
 
@@ -947,7 +948,6 @@ class Job:
                 f"max_retries: {p.max_retries}, min_sleep_secs: {p.min_sleep_secs}, "
                 f"max_sleep_secs: {p.max_sleep_secs}, max_elapsed_secs: {p.max_elapsed_secs}",
             )
-
             skip_src_dataset = ""
             for src_dataset in src_datasets:
                 if f"{src_dataset}/".startswith(f"{skip_src_dataset}/"):
@@ -1635,7 +1635,7 @@ class Job:
     def try_ssh_command(self, remote: Remote, level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-            return self.run_ssh_command(remote, level=level, is_dry=is_dry, check=True, cmd=cmd)
+            return self.run_ssh_command(remote, level=level, is_dry=is_dry, cmd=cmd)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
                 stderr = stderr_to_str(e.stderr)
@@ -1813,7 +1813,7 @@ class Job:
             if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(p.src):
                 cmd = p.split_args(f"{p.src.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
                 try:
-                    self.run_ssh_command(p.src, self.debug, is_dry=p.dry_run, check=True, print_stderr=False, cmd=cmd)
+                    self.run_ssh_command(p.src, self.debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
                     if ": bookmark exists" not in e.stderr:
@@ -2265,7 +2265,7 @@ def current_time() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def replace_prefix(line: str, s1: str, s2: str):
+def replace_prefix(line: str, s1: str, s2: str) -> str:
     """In a line, replace a leading s1 string with s2. Assumes the leading string is present."""
     return s2 + line.rstrip()[len(s1) :]
 
