@@ -476,15 +476,16 @@ feature.
     msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
     parser.add_argument(
         "--compression-program", default="zstd", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("zstd") + "This is auto-disabled if data is transferred locally instead of via the network. "
-                           "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg)
+        help=hlp("zstd") + "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg.rstrip() + " The use is "
+                           "auto-disabled if data is transferred locally instead of via the network.\n\n")
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help="The options to be passed to the compression program on the compression step (optional). "
              "Default is '-1'.\n\n")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("mbuffer") + msg)
+        help=hlp("mbuffer") + msg.rstrip() + " The use on dst is auto-disabled if data is transferred locally "
+                                             "instead of via the network.\n\n")
     mbuffer_program_opts_default = "-q -m 128M"
     parser.add_argument(
         "--mbuffer-program-opts", default=mbuffer_program_opts_default, metavar="STRING",

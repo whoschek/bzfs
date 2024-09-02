@@ -810,9 +810,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--compression-program** *STRING*
 
 *  The name or path to the 'zstd' executable (optional). Default is
-    'zstd'. This is auto-disabled if data is transferred locally
-    instead of via the network. Examples: 'lz4', 'pigz', 'gzip',
-    '/opt/bin/zstd'. Use '-' to disable the use of this program.
+    'zstd'. Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'.
+    Use '-' to disable the use of this program. The use is
+    auto-disabled if data is transferred locally instead of via the
+    network.
 
 <!-- -->
 
@@ -826,7 +827,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--mbuffer-program** *STRING*
 
 *  The name or path to the 'mbuffer' executable (optional). Default
-    is 'mbuffer'. Use '-' to disable the use of this program.
+    is 'mbuffer'. Use '-' to disable the use of this program. The
+    use on dst is auto-disabled if data is transferred locally instead
+    of via the network.
 
 <!-- -->
 
