@@ -212,7 +212,7 @@ feature.
               "and https://github.com/openzfs/zfs/issues/13024\n\n"))
     zfs_recv_program_opts_default = "-u"
     parser.add_argument(
-        "--zfs-receive-program-opts", type=str, default=zfs_recv_program_opts_default, metavar="STRING",
+        "--zfs-recv-program-opts", type=str, default=zfs_recv_program_opts_default, metavar="STRING",
         help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
               f"The value is split on runs of one or more whitespace characters. "
               f"Default is '{zfs_recv_program_opts_default}'. "
@@ -220,11 +220,11 @@ feature.
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
     parser.add_argument(
-        "--zfs-receive-program-opt", action="append", default=[], metavar="STRING",
+        "--zfs-recv-program-opt", action="append", default=[], metavar="STRING",
         help=("Parameter to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
               "The value can contain spaces and is not split. This option can be specified multiple times. Example: `"
-              "--zfs-receive-program-opt=-o "
-              "--zfs-receive-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n"))
+              "--zfs-recv-program-opt=-o "
+              "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n"))
     parser.add_argument(
         "--force", action="store_true",
         help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
@@ -590,8 +590,8 @@ class Params:
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.zfs_send_program_opts: List[str] = self.fix_send_recv_opts(self.split_args(args.zfs_send_program_opts))
         self.curr_zfs_send_program_opts: List[str] = []
-        self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_receive_program_opts)
-        for extra_opt in args.zfs_receive_program_opt:
+        self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
+        for extra_opt in args.zfs_recv_program_opt:
             self.zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
         self.zfs_recv_program_opts = self.fix_send_recv_opts(self.zfs_recv_program_opts)
         if self.verbose_zfs:

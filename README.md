@@ -211,9 +211,9 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--include-snapshot-regex REGEX [REGEX ...]]
                    [--exclude-snapshot-regex REGEX [REGEX ...]]
                    [--zfs-send-program-opts STRING]
-                   [--zfs-receive-program-opts STRING]
-                   [--zfs-receive-program-opt STRING] [--force]
-                   [--force-unmount] [--force-once] [--skip-parent]
+                   [--zfs-recv-program-opts STRING]
+                   [--zfs-recv-program-opt STRING] [--force] [--force-unmount]
+                   [--force-once] [--skip-parent]
                    [--skip-missing-snapshots [{fail,dataset,continue}]]
                    [--max-retries INT] [--skip-on-error [{fail,tree,dataset}]]
                    [--skip-replication] [--delete-missing-snapshots]
@@ -360,7 +360,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--zfs-receive-program-opts** *STRING*
+**--zfs-recv-program-opts** *STRING*
 
 *  Parameters to fine-tune 'zfs receive' behaviour (optional); will
     be passed into 'zfs receive' CLI. The value is split on runs of
@@ -372,13 +372,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--zfs-receive-program-opt** *STRING*
+**--zfs-recv-program-opt** *STRING*
 
 *  Parameter to fine-tune 'zfs receive' behaviour (optional); will be
     passed into 'zfs receive' CLI. The value can contain spaces and is
     not split. This option can be specified multiple times. Example:
-    `--zfs-receive-program-opt=-o
-    --zfs-receive-program-opt='org.zfsbootmenu:commandline=ro debug
+    `--zfs-recv-program-opt=-o
+    --zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug
     zswap.enabled=1'`
 
 <!-- -->
