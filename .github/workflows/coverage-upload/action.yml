@@ -8,6 +8,7 @@ runs:
     with:
       name: coverage-${{ github.job }}
       overwrite: true
+      include-hidden-files: true
       path: |
         htmlcov
         coverage_report.txt
