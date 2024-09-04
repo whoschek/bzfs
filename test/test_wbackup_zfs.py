@@ -358,6 +358,20 @@ class WBackupTestCase(ParametrizedTestCase):
     def is_encryption_mode(self):
         return self.param and self.param.get("encrypted_dataset", False)
 
+    @staticmethod
+    def properties_with_special_characters():
+        return {
+            "compression": "off",
+            "wbackup_zfs:prop0": "/tmp/dir with  spaces and $ dollar sign-" + str(os.getpid()),
+            "wbackup_zfs:prop1": "/tmp/dir` ~!@#$%^&*()_+-={}[]|;:<>?,./",  # test escaping
+            "wbackup_zfs:prop2": "/tmp/foo'bar",
+            "wbackup_zfs:prop3": '/tmp/foo"bar',
+            "wbackup_zfs:prop4": "/tmp/foo'ba\"rbaz",
+            "wbackup_zfs:prop5": '/tmp/foo"ba\'r"baz',
+            "wbackup_zfs:prop6": "/tmp/foo  bar\t\t\nbaz\n\n\n",
+            "wbackup_zfs:prop7": "/tmp/foo\\bar",
+        }
+
 
 #############################################################################
 class LocalTestCase(WBackupTestCase):
@@ -472,17 +486,9 @@ class LocalTestCase(WBackupTestCase):
                 extra_opt = ""
                 if is_zpool_feature_enabled_or_active("src", "feature@large_blocks"):
                     extra_opt = " --large-block"
-                props = [
-                    ("compression", "off"),
-                    ("mountpoint", "/tmp/dir with  spaces and $ dollar sign-" + str(os.getpid())),
-                    ("wbackup-zfs:prop1", "/tmp/dir` ~!@#$%^&*()_+-={}[]|;:<>?,./"),  # test escaping
-                    ("wbackup-zfs:prop2", "/tmp/foo'bar"),
-                    ("wbackup-zfs:prop3", '/tmp/foo"bar'),
-                    ("wbackup-zfs:prop4", "/tmp/foo'ba\"rbaz"),
-                    ("wbackup-zfs:prop5", '/tmp/foo"ba\'r"baz'),
-                    ("wbackup-zfs:prop6", "/tmp/foo  bar\t\t\nbaz\n\n\n"),
-                    ("wbackup-zfs:prop7", "/tmp/foo\\bar"),
-                ]
+                props = self.properties_with_special_characters()
+                opts = [f"{name}={value}" for name, value in props.items()]
+                opts = [f"--zfs-recv-program-opt={item}" for opt in opts for item in ("-o", opt)]
                 self.run_wbackup(
                     src_root_dataset + "/foo/a",
                     dst_root_dataset + "/foo/a",
@@ -491,25 +497,7 @@ class LocalTestCase(WBackupTestCase):
                     "--zfs-send-program-opts=-v --dryrun" + extra_opt,
                     "--zfs-recv-program-opts=--verbose -n",
                     "--zfs-recv-program-opt=-u",
-                    "--zfs-recv-program-opt=",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[0][0]}={props[0][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[1][0]}={props[1][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[2][0]}={props[2][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[3][0]}={props[3][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[4][0]}={props[4][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[5][0]}={props[5][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[6][0]}={props[6][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[7][0]}={props[7][1]}",
-                    "--zfs-recv-program-opt=-o",
-                    f"--zfs-recv-program-opt={props[8][0]}={props[8][1]}",
+                    *opts,
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
@@ -518,15 +506,8 @@ class LocalTestCase(WBackupTestCase):
                 else:
                     foo_a = dst_root_dataset + "/foo/a"
                     self.assertSnapshots(foo_a, 3, "u")
-                    self.assertEqual(props[0][1], dataset_property(foo_a, props[0][0]))
-                    self.assertEqual(props[1][1], dataset_property(foo_a, props[1][0], splitlines=False))
-                    self.assertEqual(props[2][1], dataset_property(foo_a, props[2][0]))
-                    self.assertEqual(props[3][1], dataset_property(foo_a, props[3][0]))
-                    self.assertEqual(props[4][1], dataset_property(foo_a, props[4][0]))
-                    self.assertEqual(props[5][1], dataset_property(foo_a, props[5][0]))
-                    self.assertEqual(props[6][1], dataset_property(foo_a, props[6][0]))
-                    self.assertEqual(props[7][1], dataset_property(foo_a, props[7][0], splitlines=False))
-                    self.assertEqual(props[8][1], dataset_property(foo_a, props[8][0]))
+                    for name, value in props.items():
+                        self.assertEqual(value, dataset_property(foo_a, name))
 
     def test_basic_replication_flat_no_snapshot_dont_create_parents(self):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
@@ -760,6 +741,135 @@ class LocalTestCase(WBackupTestCase):
         self.run_wbackup(src_root_dataset + "/tmp", src_root_dataset, "--recursive", expected_status=die_status)
         self.run_wbackup(dst_root_dataset, dst_root_dataset + "/tmp", "--recursive", expected_status=die_status)
         self.run_wbackup(dst_root_dataset + "/tmp", dst_root_dataset, "--recursive", expected_status=die_status)
+
+    def test_zfs_set(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        job = self.run_wbackup(src_root_dataset, dst_root_dataset, "--skip-replication")
+        props = self.properties_with_special_characters()
+        props_list = [f"{name}={value}" for name, value in props.items()]
+        job.zfs_set([], job.params.dst, dst_root_dataset)
+        job.zfs_set(props_list, job.params.dst, dst_root_dataset)
+        for name, value in props.items():
+            self.assertEqual(value, dataset_property(dst_root_dataset, name))
+
+    def test_zfs_set_via_recv_o(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        self.setup_basic()
+        props = self.properties_with_special_characters()
+        zfs_set([src_root_dataset + "/foo"], props)
+        self.run_wbackup(
+            src_root_dataset + "/foo",
+            dst_root_dataset + "/foo",
+            "--zfs-send-program-opts=",
+            "--zfs-recv-o-include-regex",
+            *list(props.keys()),
+        )
+        for name, value in props.items():
+            self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+
+    def test_zfs_set_via_set_include(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        self.setup_basic()
+        props = self.properties_with_special_characters()
+        zfs_set([src_root_dataset + "/foo"], props)
+        self.run_wbackup(
+            src_root_dataset + "/foo",
+            dst_root_dataset + "/foo",
+            "--zfs-send-program-opts=",
+            "--zfs-set-include-regex",
+            *list(props.keys()),
+        )
+        for name, value in props.items():
+            self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+
+    @staticmethod
+    def zfs_recv_excluded_excludes():
+        if is_solaris_zfs():
+            return ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
+        else:
+            return []
+
+    def test_zfs_recv_include_regex(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        self.setup_basic()
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+
+        included_props = {"include_wbackup_zfs:prop1": "value1", "include_wbackup_zfs:prop2": "value2"}
+        excluded_props = {"exclude_wbackup_zfs:prop3": "value3"}
+        zfs_set([src_root_dataset + "/foo"], included_props)
+        zfs_set([src_root_dataset + "/foo"], excluded_props)
+        zfs_recv_excluded_excludes = ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
+        self.run_wbackup(
+            src_root_dataset + "/foo",
+            dst_root_dataset + "/foo",
+            "--zfs-send-program-opts=",
+            "--zfs-recv-o-targets=full",
+            "--zfs-recv-o-sources=local,inherited",
+            "--zfs-recv-o-include-regex=include_wbackup_zfs.*",
+            "--zfs-recv-x-targets=full,incremental",
+            "--zfs-recv-x-include-regex=.*",
+            "--zfs-recv-x-exclude-regex",
+            "include_wbackup_zfs.*",
+            *self.zfs_recv_excluded_excludes(),
+        )
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t"),
+        for name, value in included_props.items():
+            self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+        for name, value in excluded_props.items():
+            self.assertEqual("-", dataset_property(dst_root_dataset + "/foo", name))
+
+    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        self.setup_basic()
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+
+        included_props = {"include_wbackup_zfs:prop1": "value1", "include_wbackup_zfs:prop2": "value2"}
+        excluded_props = {"exclude_wbackup_zfs:prop3": "value3"}
+        zfs_set([src_root_dataset + "/foo"], included_props)
+        zfs_set([src_root_dataset + "/foo"], excluded_props)
+        zfs_recv_excluded_excludes = ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
+        self.run_wbackup(
+            src_root_dataset + "/foo",
+            dst_root_dataset + "/foo",
+            "--zfs-send-program-opts=--raw",
+            "--zfs-recv-o-include-regex=include_wbackup_zfs.*",
+            "--zfs-recv-x-exclude-regex",
+            ".*",  # will not append include.* as those names already exist in -o options
+            *self.zfs_recv_excluded_excludes(),
+        )
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t"),
+        for name, value in included_props.items():
+            self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+        for name, value in excluded_props.items():
+            self.assertEqual("-", dataset_property(dst_root_dataset + "/foo", name))
+
+    def test_preserve_recordsize(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.tearDownAndSetup()
+                self.setup_basic()
+                self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+
+                old_recordsize = int(dataset_property(dst_root_dataset, "recordsize"))
+                new_recordsize = 8 * 1024
+                assert old_recordsize != new_recordsize
+                zfs_set([src_root_dataset + "/foo"], {"recordsize": new_recordsize})
+                preserve = ["--zfs-recv-o-include-regex=recordsize"] if i > 0 else []
+                self.run_wbackup(
+                    src_root_dataset + "/foo",
+                    dst_root_dataset + "/foo",
+                    *preserve,
+                    "--zfs-send-program-opts=",
+                )
+                expected = old_recordsize if i == 0 else new_recordsize
+                self.assertEqual(str(expected), dataset_property(dst_root_dataset + "/foo", "recordsize"))
 
     def test_basic_replication_with_delegation_disabled(self):
         if not self.is_no_privilege_elevation():
@@ -1927,6 +2037,15 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_basic_replication_dataset_with_spaces(self):
         LocalTestCase(param=self.param).test_basic_replication_dataset_with_spaces()
 
+    def test_zfs_set(self):
+        LocalTestCase(param=self.param).test_zfs_set()
+
+    def test_zfs_set_via_recv_o(self):
+        LocalTestCase(param=self.param).test_zfs_set_via_recv_o()
+
+    def test_zfs_set_via_set_include(self):
+        LocalTestCase(param=self.param).test_zfs_set_via_set_include()
+
     def test_inject_src_pipe_fail(self):
         self.inject_pipe_error("inject_src_pipe_fail")
 
@@ -2015,20 +2134,26 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 #############################################################################
 class IsolatedTestCase(WBackupTestCase):
 
-    # def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
-    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_with_injected_dataset_deletes()
+    def test_zfs_set(self):
+        LocalTestCase(param=self.param).test_zfs_set()
+
+    def test_zfs_set_via_recv_o(self):
+        LocalTestCase(param=self.param).test_zfs_set_via_recv_o()
+
+    def test_zfs_set_via_set_include(self):
+        LocalTestCase(param=self.param).test_zfs_set_via_set_include()
+
+    def test_zfs_recv_include_regex(self):
+        LocalTestCase(param=self.param).test_zfs_recv_include_regex()
 
     def test_basic_replication_flat_send_recv_flags(self):
         LocalTestCase(param=self.param).test_basic_replication_flat_send_recv_flags()
 
-    # def basic_replication_flat_simple_with_retries_on_error_injection(self):
-    #     LocalTestCase(param=self.param).basic_replication_flat_simple_with_retries_on_error_injection()
-    #
-    # def test_complex_replication_flat_use_bookmarks(self):
-    #     LocalTestCase(param=self.param).test_complex_replication_flat_use_bookmarks()
-    #
-    # def test_basic_replication_skip_missing_snapshots(self):
-    #     LocalTestCase(param=self.param).test_basic_replication_skip_missing_snapshots()
+    def test_preserve_recordsize(self):
+        LocalTestCase(param=self.param).test_preserve_recordsize()
+
+    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
+        LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
 
 
 #############################################################################
@@ -2523,6 +2648,58 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertFalse(os.path.exists(stale_socket_file))
             self.assertTrue(os.path.exists(dir))
             self.assertTrue(os.path.exists(non_socket_file))
+
+    def test_recv_option_property_names(self):
+        def names(lst):
+            return wbackup_zfs.Job().recv_option_property_names(lst)
+
+        self.assertSetEqual(set(), names([]))
+        self.assertSetEqual(set(), names(["name1=value1"]))
+        self.assertSetEqual(set(), names(["name1"]))
+        self.assertSetEqual({"name1"}, names(["-o", "name1=value1"]))
+        self.assertSetEqual({"name1"}, names(["-x", "name1"]))
+        self.assertSetEqual({"name1"}, names(["-o", "name1=value1", "-o", "name1=value2", "-x", "name1"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-o", "name1=value1", "-o", "name2=value2"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-o", "name1=value1", "-x", "name2"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2", "-F"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-n", "-o", "name2=value2", "-F"]))
+        self.assertSetEqual({"name1"}, names(["-o", "name1"]))
+        self.assertSetEqual({""}, names(["-o", "=value1"]))
+        self.assertSetEqual({""}, names(["-o", ""]))
+        self.assertSetEqual({"=value1"}, names(["-x", "=value1"]))
+        self.assertSetEqual({""}, names(["-x", ""]))
+        with self.assertRaises(SystemExit):
+            names(["-o"])
+        with self.assertRaises(SystemExit):
+            names(["-o", "name1=value1", "-o"])
+
+    def recv_option_property_names_old(self):
+        def names(lst):
+            return wbackup_zfs.Job().recv_option_property_names(lst)
+
+        self.assertSetEqual(set(), names([]))
+        self.assertSetEqual(set(), names(["name1=value1"]))
+        self.assertSetEqual({"name1"}, names(["-o", "name1=value1"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-o", "name1=value1", "-o", "name2=value2"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2", "-F"]))
+        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-n", "-o", "name2=value2", "-F"]))
+        self.assertSetEqual({"name1"}, names(["-o", "name1"]))
+        self.assertSetEqual({""}, names(["-o", "=value1"]))
+        with self.assertRaises(SystemExit):
+            names(["-o"])
+        with self.assertRaises(SystemExit):
+            names(["-o", "name1=value1", "-o"])
+
+    def test_fix_solaris_raw_mode(self):
+        self.assertListEqual(["-w", "none"], wbackup_zfs.fix_solaris_raw_mode(["-w"]))
+        self.assertListEqual(["-w", "none"], wbackup_zfs.fix_solaris_raw_mode(["--raw"]))
+        self.assertListEqual(["-w", "none"], wbackup_zfs.fix_solaris_raw_mode(["-w", "none"]))
+        self.assertListEqual(["-w", "compress"], wbackup_zfs.fix_solaris_raw_mode(["-w", "compress"]))
+        self.assertListEqual(["-w", "compress"], wbackup_zfs.fix_solaris_raw_mode(["-w", "--compressed"]))
+        self.assertListEqual(["-w", "none", "foo"], wbackup_zfs.fix_solaris_raw_mode(["-w", "foo"]))
+        self.assertListEqual(["-F"], wbackup_zfs.fix_solaris_raw_mode(["-F"]))
 
 
 #############################################################################

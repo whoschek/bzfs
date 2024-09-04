@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import platform
 import re
 import subprocess
 
@@ -161,10 +161,11 @@ def bookmark_name(bookmark):
     return bookmark[bookmark.find("#") + 1 :]
 
 
-def dataset_property(dataset=None, prop=None, splitlines=True):
-    result = zfs_list([dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, splitlines=splitlines)
-    return result[0] if splitlines else result
-    # return zfs_get([dataset], props=[prop], types=['filesystem', 'volume'], max_depth=0, fields=['value'])[0]
+def dataset_property(dataset=None, prop=None):
+    return zfs_list([dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, splitlines=False)
+    # return zfs_get(
+    #     [dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, fields=["value"], splitlines=False
+    # )
 
 
 def snapshot_property(snapshot, prop):
@@ -200,7 +201,7 @@ def zfs_list(names=[], props=["name"], types=[], max_depth=None, parsable=True, 
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_get(names=[], props=["all"], types=[], max_depth=None, parsable=True, fields=[], sources=[]):
+def zfs_get(names=[], props=["all"], types=[], max_depth=None, parsable=True, fields=[], sources=[], splitlines=True):
     cmd = ["zfs", "get"]
     if max_depth is None:
         cmd.append("-r")
@@ -230,7 +231,23 @@ def zfs_get(names=[], props=["all"], types=[], max_depth=None, parsable=True, fi
     if names:
         cmd += names
 
-    return run_cmd(cmd)
+    return run_cmd(cmd, splitlines=splitlines)
+
+
+def zfs_set(names=[], properties={}):
+    def run_zfs_set(props):
+        cmd = sudo_cmd + ["zfs", "set"]
+        for prop in props:
+            cmd.append(prop)
+        if names:
+            cmd += names
+        run_cmd(cmd)
+
+    if is_solaris_zfs():  # solaris-14.0 does not accept multiple properties per CLI call
+        for name, value in properties.items():
+            run_zfs_set([f"{name}={value}"])
+    else:
+        run_zfs_set([f"{name}={value}" for name, value in properties.items()])
 
 
 def dataset_exists(dataset):
@@ -287,6 +304,10 @@ def zfs_version():
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     """Check if the version string is at least the minimum version string."""
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
+
+
+def is_solaris_zfs():
+    return platform.system() == "SunOS"
 
 
 def run_cmd(*params, splitlines=True):

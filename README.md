@@ -80,9 +80,14 @@ wbackup-zfs is written in Python and continously runs a wide set of unit
 tests and integration tests to ensure coverage and compatibility with
 old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
 versions >= 3.7 (including latest stable which is currently
-python-3.12). wbackup-zfs is a stand-alone program, akin to a
-stand-alone shell script, and no additional Python packages are
-required.
+python-3.12).
+
+wbackup-zfs is a stand-alone program with zero required dependencies,
+consisting of a single file, akin to a stand-alone shell script or
+binary executable. No external Python packages are required; indeed no
+Python package management at all is required. You can just copy the file
+wherever you like, for example into /usr/local/bin or similar, and
+simply run it like any stand-alone shell script or binary executable.
 
 Optionally, wbackup-zfs applies bandwidth rate-limiting and progress
 monitoring (via 'pv' CLI) during 'zfs send/receive' data transfers.
@@ -235,7 +240,13 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--sudo-program STRING] [--zfs-program STRING]
                    [--zpool-program STRING]
                    [--include-envvar-regex REGEX [REGEX ...]]
-                   [--exclude-envvar-regex REGEX [REGEX ...]] [--version]
+                   [--exclude-envvar-regex REGEX [REGEX ...]]
+                   [--zfs-recv-o-targets STRING] [--zfs-recv-o-sources STRING]
+                   [--zfs-recv-o-include-regex REGEX [REGEX ...]]
+                   [--zfs-recv-o-exclude-regex REGEX [REGEX ...]]
+                   [--zfs-recv-x-targets STRING] [--zfs-recv-x-sources STRING]
+                   [--zfs-recv-x-include-regex REGEX [REGEX ...]]
+                   [--zfs-recv-x-exclude-regex REGEX [REGEX ...]] [--version]
                    [--help, -h]
                    SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
@@ -290,11 +301,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     name is relative wrt. source and destination, e.g. `baz/tmp` if
     the source is `tank`. This option is automatically translated to
     an --include-dataset-regex (see below) and can be specified
-    multiple times. If the option starts with a `+` prefix then
-    dataset names are read from the newline-separated UTF-8 text file
-    given after the `+` prefix, one dataset per line inside of the
-    text file. Examples: `/tank/baz/tmp` (absolute), `baz/tmp`
-    (relative), `+dataset_names.txt`, `+/path/to/dataset_names.txt`
+    multiple times.
+
+    If the option starts with a `+` prefix then dataset names are read
+    from the newline-separated UTF-8 text file given after the `+`
+    prefix, one dataset per line inside of the text file. Examples:
+    `/tank/baz/tmp` (absolute), `baz/tmp` (relative),
+    `+dataset_names.txt`, `+/path/to/dataset_names.txt`
 
 <!-- -->
 
@@ -312,12 +325,14 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     that is contained within SRC_DATASET if its relative dataset path
     (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given
     include regular expressions but none of the exclude regular
-    expressions. This option can be specified multiple times. A leading
-    `!` character indicates logical negation, i.e. the regex matches
-    if the regex with the leading `!` character removed does not
-    match. Default: `.*` (include all datasets). Examples:
-    `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`,
-    `!public`
+    expressions.
+
+    This option can be specified multiple times. A leading `!`
+    character indicates logical negation, i.e. the regex matches if the
+    regex with the leading `!` character removed does not match.
+
+    Default: `.*` (include all datasets). Examples: `baz/tmp`,
+    `(.*/)?doc[^/]*/(private|confidential).*`, `!public`
 
 <!-- -->
 
@@ -333,12 +348,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  During replication, include any source ZFS snapshot or bookmark that
     has a name (i.e. the part after the '@' and '#') that matches at
     least one of the given include regular expressions but none of the
-    exclude regular expressions. This option can be specified multiple
-    times. A leading `!` character indicates logical negation, i.e.
-    the regex matches if the regex with the leading `!` character
-    removed does not match. Default: `.*` (include all snapshots).
-    Examples: `test_.*`, `!prod_.*`,
-    `.*_(hourly|frequent)`, `!.*_(weekly|daily)`
+    exclude regular expressions.
+
+    This option can be specified multiple times. A leading `!`
+    character indicates logical negation, i.e. the regex matches if the
+    regex with the leading `!` character removed does not match.
+
+    Default: `.*` (include all snapshots). Examples: `test_.*`,
+    `!prod_.*`, `.*_(hourly|frequent)`,
+    `!.*_(weekly|daily)`
 
 <!-- -->
 
@@ -365,7 +383,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Parameters to fine-tune 'zfs receive' behaviour (optional); will
     be passed into 'zfs receive' CLI. The value is split on runs of
     one or more whitespace characters. Default is '-u'. Example: '-u
-    -o canmount=off -o readonly=on -x canmount -x readonly'. See
+    -o canmount=off -o readonly=on -x mounted -x keystatus'. See
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html
     and
     https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html
@@ -547,7 +565,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     permissions
     'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
     can be omitted, arriving at the absolutely minimal set of required
-    destination permissions: `mount,create,receive`. Also see
+    destination permissions: `mount,create,receive`.
+
+    Also see
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES
     and https://tinyurl.com/9h97kh8n and
     https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq
@@ -813,14 +833,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     'zstd'. Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'.
     Use '-' to disable the use of this program. The use is
     auto-disabled if data is transferred locally instead of via the
-    network.
+    network. This option is about transparent compression-on-the-wire,
+    not about compression-at-rest.
 
 <!-- -->
 
 **--compression-program-opts** *STRING*
 
 *  The options to be passed to the compression program on the
-    compression step (optional). Default is '-1'.
+    compression step (optional). Default is '-1' (fastest).
 
 <!-- -->
 
@@ -829,7 +850,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  The name or path to the 'mbuffer' executable (optional). Default
     is 'mbuffer'. Use '-' to disable the use of this program. The
     use on dst is auto-disabled if data is transferred locally instead
-    of via the network.
+    of via the network. This tool is used to smooth out the rate of data
+    flow and prevent bottlenecks caused by network latency or speed
+    fluctuation.
 
 <!-- -->
 
@@ -843,7 +866,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--pv-program** *STRING*
 
 *  The name or path to the 'pv' executable (optional). Default is
-    'pv'. Use '-' to disable the use of this program.
+    'pv'. Use '-' to disable the use of this program. This is used
+    for bandwidth rate-limiting and progress monitoring.
 
 <!-- -->
 
@@ -899,12 +923,14 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     excludes but none of the includes. The purpose is to tighten
     security and help guard against accidental inheritance or malicious
     injection of environment variable values that may have unintended
-    effects. This option can be specified multiple times. A leading
-    `!` character indicates logical negation, i.e. the regex matches
-    if the regex with the leading `!` character removed does not
-    match. The default is to include no environment variables, i.e. to
-    make no exceptions to --exclude-envvar-regex. Example that retains
-    at least these three env vars: `--include-envvar-regex
+    effects.
+
+    This option can be specified multiple times. A leading `!`
+    character indicates logical negation, i.e. the regex matches if the
+    regex with the leading `!` character removed does not match. The
+    default is to include no environment variables, i.e. to make no
+    exceptions to --exclude-envvar-regex. Example that retains at least
+    these three env vars: `--include-envvar-regex
     wbackup_zfs_min_sleep_secs --include-envvar-regex
     wbackup_zfs_max_sleep_secs --include-envvar-regex
     wbackup_zfs_max_elapsed_secs`. Example that retains all environment
@@ -929,3 +955,139 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--help, -h**
 
 *  Show this help message and exit.
+
+# ZFS-RECV-O (EXPERIMENTAL)
+
+The following group of parameters specifies additional zfs receive
+'-o' options that can be used to configure the copying of ZFS dataset
+properties from the source dataset to its corresponding destination
+dataset. The 'zfs-recv-o' group of parameters is applied before the
+'zfs-recv-x' group.
+
+**--zfs-recv-o-targets** *STRING*
+
+*  The zfs send phase or phases during which the extra '-o' options
+    are passed to 'zfs receive'. This is a comma-separated list (no
+    spaces) containing one or more of the following choices: 'full',
+    'incremental'. Default is 'full,incremental'. A 'full' send is
+    sometimes also known as an 'initial' send.
+
+<!-- -->
+
+**--zfs-recv-o-sources** *STRING*
+
+*  The ZFS sources to provide to the 'zfs get -s' CLI in order to
+    fetch the ZFS dataset properties that will be fed into the
+    --zfs-recv-o-include/exclude-regex filter (see below). The sources
+    are in the form of a comma-separated list (no spaces) containing one
+    or more of the following choices: 'local', 'default',
+    'inherited', 'temporary', 'received', 'none', with the
+    default being 'local'. Uses 'zfs get -p -s $zfs-recv-o-sources
+    all $SRC_DATASET' to fetch the properties to copy -
+    https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html.
+    P.S: Note that the existing 'zfs send --props' option does not
+    filter and that --props only reads properties from the 'local'
+    ZFS property source (https://github.com/openzfs/zfs/issues/13024).
+
+<!-- -->
+
+**--zfs-recv-o-include-regex** *REGEX [REGEX ...]*
+
+*  Take the output properties of --zfs-recv-o-sources (see above) and
+    filter them such that we only retain the properties whose name
+    matches at least one of the --include regexes but none of the
+    --exclude regexes. Append each retained property to the list of
+    '-o' options in -zfs-recv-program-opt(s), unless another '-o' or
+    '-x' option with the same name already exists therein. In other
+    words, --zfs-recv-program-opt(s) takes precedence.
+
+    The --zfs-recv-o-include-regex option can be specified multiple
+    times. A leading `!` character indicates logical negation, i.e.
+    the regex matches if the regex with the leading `!` character
+    removed does not match. If the option starts with a `+` prefix
+    then regexes are read from the newline-separated UTF-8 text file
+    given after the `+` prefix, one regex per line inside of the text
+    file.
+
+    The default is to include no properties, thus by default no extra
+    '-o' option is appended. Examples: `.*` (include all
+    properties), `foo bar myapp:.*` (include three regexes)
+    `+zfs-recv-o_regexes.txt`, `+/path/to/zfs-recv-o_regexes.txt`
+
+<!-- -->
+
+**--zfs-recv-o-exclude-regex** *REGEX [REGEX ...]*
+
+*  Same syntax as --zfs-recv-o-include-regex (see above), and the
+    default is to exclude no properties. Example:
+    --zfs-recv-o-exclude-regex encryptionroot keystatus origin
+    volblocksize volsize
+
+# ZFS-RECV-X (EXPERIMENTAL)
+
+The following group of parameters specifies additional zfs receive
+'-x' options that can be used to configure the copying of ZFS dataset
+properties from the source dataset to its corresponding destination
+dataset. The 'zfs-recv-o' group of parameters is applied before the
+'zfs-recv-x' group.
+
+**--zfs-recv-x-targets** *STRING*
+
+*  The zfs send phase or phases during which the extra '-x' options
+    are passed to 'zfs receive'. This is a comma-separated list (no
+    spaces) containing one or more of the following choices: 'full',
+    'incremental'. Default is 'full,incremental'. A 'full' send is
+    sometimes also known as an 'initial' send.
+
+<!-- -->
+
+**--zfs-recv-x-sources** *STRING*
+
+*  The ZFS sources to provide to the 'zfs get -s' CLI in order to
+    fetch the ZFS dataset properties that will be fed into the
+    --zfs-recv-x-include/exclude-regex filter (see below). The sources
+    are in the form of a comma-separated list (no spaces) containing one
+    or more of the following choices: 'local', 'default',
+    'inherited', 'temporary', 'received', 'none', with the
+    default being 'local'. Uses 'zfs get -p -s $zfs-recv-x-sources
+    all $SRC_DATASET' to fetch the properties to copy -
+    https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html.
+    P.S: Note that the existing 'zfs send --props' option does not
+    filter and that --props only reads properties from the 'local'
+    ZFS property source (https://github.com/openzfs/zfs/issues/13024).
+    Thus, -x opts do not benefit from source != 'local' (which is the
+    default already).
+
+<!-- -->
+
+**--zfs-recv-x-include-regex** *REGEX [REGEX ...]*
+
+*  Take the output properties of --zfs-recv-x-sources (see above) and
+    filter them such that we only retain the properties whose name
+    matches at least one of the --include regexes but none of the
+    --exclude regexes. Append each retained property to the list of
+    '-x' options in -zfs-recv-program-opt(s), unless another '-o' or
+    '-x' option with the same name already exists therein. In other
+    words, --zfs-recv-program-opt(s) takes precedence.
+
+    The --zfs-recv-x-include-regex option can be specified multiple
+    times. A leading `!` character indicates logical negation, i.e.
+    the regex matches if the regex with the leading `!` character
+    removed does not match. If the option starts with a `+` prefix
+    then regexes are read from the newline-separated UTF-8 text file
+    given after the `+` prefix, one regex per line inside of the text
+    file.
+
+    The default is to include no properties, thus by default no extra
+    '-x' option is appended. Examples: `.*` (include all
+    properties), `foo bar myapp:.*` (include three regexes)
+    `+zfs-recv-x_regexes.txt`, `+/path/to/zfs-recv-x_regexes.txt`
+
+<!-- -->
+
+**--zfs-recv-x-exclude-regex** *REGEX [REGEX ...]*
+
+*  Same syntax as --zfs-recv-x-include-regex (see above), and the
+    default is to exclude no properties. Example:
+    --zfs-recv-x-exclude-regex encryptionroot keystatus origin
+    volblocksize volsize

@@ -48,6 +48,7 @@ disable_prg = "-"
 env_var_prefix = "wbackup_zfs_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 PIPE = subprocess.PIPE
+zfs_recv_groups = {"zfs_recv_o": {"flag": "-o"}, "zfs_recv_x": {"flag": "-x"}, "zfs_set": {"flag": ""}}
 
 
 # fmt: off
@@ -92,8 +93,12 @@ ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
-versions >= 3.7 (including latest stable which is currently python-3.12). {prog_name} is a stand-alone
-program, akin to a stand-alone shell script, and no additional Python packages are required.
+versions >= 3.7 (including latest stable which is currently python-3.12). 
+
+{prog_name} is a stand-alone program with zero required dependencies, consisting of a single file, akin to a 
+stand-alone shell script or binary executable. No external Python packages are required; indeed no Python package 
+management at all is required. You can just copy the file wherever you like, for example into /usr/local/bin or 
+similar, and simply run it like any stand-alone shell script or binary executable.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
@@ -165,7 +170,7 @@ feature.
               "Otherwise the dataset name is relative wrt. source and destination, e.g. `baz/tmp` if the source "
               "is `tank`. "
               "This option is automatically translated to an --include-dataset-regex (see below) and can be "
-              "specified multiple times. "
+              "specified multiple times.\n\n"
               "If the option starts with a `+` prefix then dataset names are read from the newline-separated "
               "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file. "
               "Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), "
@@ -178,10 +183,10 @@ feature.
         "--include-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
               "if its relative dataset path (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given include "
-              "regular expressions but none of the exclude regular expressions. "
+              "regular expressions but none of the exclude regular expressions.\n\n"
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
-              "leading `!` character removed does not match. "
+              "leading `!` character removed does not match.\n\n"
               "Default: `.*` (include all datasets). "
               "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`\n\n"))
     parser.add_argument(
@@ -192,10 +197,10 @@ feature.
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
               "the '@' and '#') that matches at least one of the given include regular expressions but none of the "
-              "exclude regular expressions. "
+              "exclude regular expressions.\n\n"
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
-              "leading `!` character removed does not match. "
+              "leading `!` character removed does not match.\n\n"
               "Default: `.*` (include all snapshots). "
               "Examples: `test_.*`, `!prod_.*`, `.*_(hourly|frequent)`, `!.*_(weekly|daily)`\n\n"))
     parser.add_argument(
@@ -216,7 +221,7 @@ feature.
         help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
               f"The value is split on runs of one or more whitespace characters. "
               f"Default is '{zfs_recv_program_opts_default}'. "
-              f"Example: '-u -o canmount=off -o readonly=on -x canmount -x readonly'. "
+              f"Example: '-u -o canmount=off -o readonly=on -x mounted -x keystatus'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
     parser.add_argument(
@@ -328,8 +333,8 @@ feature.
               "be omitted. If you do not plan to customize the respective ZFS dataset property then ZFS permissions "
               "'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be omitted, arriving "
               "at the absolutely minimal set of required destination permissions: "
-              "`mount,create,receive`. Also see "
-              "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
+              "`mount,create,receive`.\n\n"
+              "Also see https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
               "https://tinyurl.com/9h97kh8n and "
               "https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq\n\n"))
     parser.add_argument(
@@ -477,22 +482,25 @@ feature.
     parser.add_argument(
         "--compression-program", default="zstd", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("zstd") + "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg.rstrip() + " The use is "
-                           "auto-disabled if data is transferred locally instead of via the network.\n\n")
+                           "auto-disabled if data is transferred locally instead of via the network. This "
+                           "option is about transparent compression-on-the-wire, not about compression-at-rest.\n\n")
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help="The options to be passed to the compression program on the compression step (optional). "
-             "Default is '-1'.\n\n")
+             "Default is '-1' (fastest).\n\n")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("mbuffer") + msg.rstrip() + " The use on dst is auto-disabled if data is transferred locally "
-                                             "instead of via the network.\n\n")
+                                             "instead of via the network. This tool is used to smooth out the rate "
+                                             "of data flow and prevent bottlenecks caused by network latency or "
+                                             "speed fluctuation.\n\n")
     mbuffer_program_opts_default = "-q -m 128M"
     parser.add_argument(
         "--mbuffer-program-opts", default=mbuffer_program_opts_default, metavar="STRING",
         help=f"Options to be passed to 'mbuffer' program (optional). Default: '{mbuffer_program_opts_default}'.\n\n")
     parser.add_argument(
         "--pv-program", default="pv", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("pv") + msg)
+        help=hlp("pv") + msg.rstrip() + " This is used for bandwidth rate-limiting and progress monitoring.\n\n")
     pv_program_opts_default = ("--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 "
                                "--width=120 --buffer-size=2M")
     parser.add_argument(
@@ -518,7 +526,7 @@ feature.
         help=("On program startup, unset all Unix environment variables for which the full environment variable "
               "name matches at least one of the excludes but none of the includes. The purpose is to tighten "
               "security and help guard against accidental inheritance or malicious injection of environment "
-              "variable values that may have unintended effects. "
+              "variable values that may have unintended effects.\n\n"
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
               "leading `!` character removed does not match. "
@@ -533,6 +541,62 @@ feature.
         "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
              f"environment variables. Example: `{env_var_prefix}.*`\n\n")
+
+    for option_name, values in zfs_recv_groups.items():
+        grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
+        flag = "'" + values["flag"] + "'"  # one of -o or -x
+
+        def h(text: str) -> str:
+            return argparse.SUPPRESS if option_name == "zfs_set" else text
+
+        argument_group = parser.add_argument_group(
+            grup + " (Experimental)",
+            description=h(f"The following group of parameters specifies additional zfs receive {flag} options that "
+                          "can be used to configure the copying of ZFS dataset properties from the source dataset to "
+                          "its corresponding destination dataset. The 'zfs-recv-o' group of parameters is applied "
+                          "before the 'zfs-recv-x' group."))
+        target_choices_items = ["full", "incremental"]
+        target_choices_default = ",".join(target_choices_items)
+        target_choices = target_choices_items + [",".join(target_choices_items)]
+        qq = "'"
+        argument_group.add_argument(
+            f"--{grup}-targets", choices=target_choices, default=target_choices_default, metavar="STRING",
+            help=h(f"The zfs send phase or phases during which the extra {flag} options are passed to 'zfs receive'. "
+                   "This is a comma-separated list (no spaces) containing one or more of the following choices: "
+                   f"{', '.join([f'{qq}{x}{qq}' for x in target_choices_items])}. "
+                   f"Default is '{target_choices_default}'. "
+                   "A 'full' send is sometimes also known as an 'initial' send.\n\n"))
+        msg = f"Thus, -x opts do not benefit from source != 'local' (which is the default already)." \
+            if flag == "'-x'" else ""
+        argument_group.add_argument(
+            f"--{grup}-sources", action=NonEmptyStringAction, default="local", metavar="STRING",
+            help=h("The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset properties "
+                   f"that will be fed into the --{grup}-include/exclude-regex filter (see below). The sources are in "
+                   "the form of a comma-separated list (no spaces) containing one or more of the following choices: "
+                   "'local', 'default', 'inherited', 'temporary', 'received', 'none', with the default being 'local'. "
+                   f"Uses 'zfs get -p -s ${grup}-sources all $SRC_DATASET' to fetch the "
+                   "properties to copy - https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note "
+                   "that the existing 'zfs send --props' option does not filter and that --props only reads properties "
+                   f"from the 'local' ZFS property source (https://github.com/openzfs/zfs/issues/13024). {msg}\n\n"))
+        argument_group.add_argument(
+            f"--{grup}-include-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
+            help=h(f"Take the output properties of --{grup}-sources (see above) and filter them such that we only "
+                   "retain the properties whose name matches at least one of the --include regexes but none of the "
+                   f"--exclude regexes. Append each retained property to the list of {flag} options in "
+                   f"-zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same name already exists "
+                   f"therein. In other words, --zfs-recv-program-opt(s) takes precedence.\n\n"
+                   f"The --{grup}-include-regex option can be specified multiple times. "
+                   "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
+                   "leading `!` character removed does not match. "
+                   "If the option starts with a `+` prefix then regexes are read from the newline-separated "
+                   "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file.\n\n"
+                   f"The default is to include no properties, thus by default no extra {flag} option is appended. "
+                   "Examples: `.*` (include all properties), `foo bar myapp:.*` (include three regexes) "
+                   f"`+{grup}_regexes.txt`, `+/path/to/{grup}_regexes.txt`\n\n"))
+        argument_group.add_argument(
+            f"--{grup}-exclude-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
+            help=h(f"Same syntax as --{grup}-include-regex (see above), and the default is to exclude no properties. "
+                   f"Example: --{grup}-exclude-regex encryptionroot keystatus origin volblocksize volsize\n\n"))
     parser.add_argument(
         "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
         help="Display version information and exit.\n\n")
@@ -561,6 +625,8 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.src = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst = Remote("dst", args, self)  # dst dataset, host and ssh options
+        prop_configs = [PropertyConfig(group, vals["flag"], args, self) for group, vals in zfs_recv_groups.items()]
+        self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = prop_configs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
         self.skip_parent: bool = args.skip_parent
@@ -738,6 +804,23 @@ class Remote:
 
 
 #############################################################################
+class PropertyConfig:
+    def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params):
+        # immutable variables:
+        grup = group
+        self.group: str = group
+        self.flag: str = flag
+        sources: str = p.validate_arg(getattr(args, f"{grup}_sources"))
+        self.sources: str = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
+        self.targets: str = p.validate_arg(getattr(args, f"{grup}_targets"))
+        self.include_regexes: List[Tuple[re.Pattern, bool]] = compile_regexes(getattr(args, f"{grup}_include_regex"))
+        self.exclude_regexes: List[Tuple[re.Pattern, bool]] = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
+
+    def __repr__(self):
+        return str(self.__dict__)
+
+
+#############################################################################
 def main():
     """API for command line clients"""
     try:
@@ -885,9 +968,8 @@ class Job:
             p.dry_run_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -n' flag
             p.verbose_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -v' flag
         if self.is_solaris_zfs(src):  # solaris-11.4.0 only knows -w compress
-            zfs_send_program_opts = ["-w" if opt == "--raw" else opt for opt in zfs_send_program_opts]
-            zfs_send_program_opts = ["compress" if opt == "--compressed" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
+            zfs_send_program_opts = fix_solaris_raw_mode(zfs_send_program_opts)
         p.curr_zfs_send_program_opts = zfs_send_program_opts
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
@@ -1150,6 +1232,7 @@ class Job:
         latest_dst_guid = ""
         latest_common_src_snapshot = ""
         latest_common_dst_snapshot = ""
+        props_cache = {}
 
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
@@ -1255,14 +1338,10 @@ class Job:
 
                 size_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
                 size_human = human_readable_bytes(size_bytes)
-                send_cmd = p.split_args(
-                    f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, oldest_src_snapshot
-                )
+                zfs_send_program_opts = p.curr_zfs_send_program_opts.copy()
+                send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", zfs_send_program_opts, oldest_src_snapshot)
                 recv_opts = p.zfs_full_recv_opts.copy()
-                if p.getenv_bool("preserve_recordsize", False):
-                    recordsize = self.recordsizes[src_dataset]
-                    if recordsize >= 0:
-                        recv_opts += ["-o", f"recordsize={recordsize}"]
+                recv_opts, set_opts = self.add_recv_property_options(True, recv_opts, src_dataset, props_cache)
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
@@ -1274,6 +1353,7 @@ class Job:
                 if not is_dry_send_receive and not params.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
                 self.create_zfs_bookmark(oldest_src_snapshot, src_dataset)
+                self.zfs_set(set_opts, dst, dst_dataset)
 
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
@@ -1308,6 +1388,9 @@ class Job:
                 # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
                 # bookmark whose snapshot has been deleted on src.
                 return True  # nothing more tbd
+
+            recv_opts = p.zfs_recv_program_opts.copy()
+            recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
             if p.no_stream:
                 # skip intermediate snapshots
                 steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot)]
@@ -1324,7 +1407,6 @@ class Job:
                 send_cmd = p.split_args(
                     f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, incr_flag, start_snap, end_snap
                 )
-                recv_opts = p.zfs_recv_program_opts
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
@@ -1338,6 +1420,7 @@ class Job:
                 )
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(end_snap, src_dataset)
+            self.zfs_set(set_opts, dst, dst_dataset)
         return True
 
     def run_zfs_send_receive(
@@ -1733,6 +1816,19 @@ class Job:
                     self.debug("Excluding b/c bookmark creation time:", snapshot)
         return results
 
+    def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
+        """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
+        is_debug = self.is_debug_enabled()
+        results = {}
+        for propname, propvalue in props.items():
+            if is_included(propname, include_regexes, exclude_regexes):
+                results[propname] = propvalue
+                if is_debug:
+                    self.debug("Including bc property regex:", propname)
+            elif is_debug:
+                self.debug("Excluding bc property regex:", propname)
+        return results
+
     @staticmethod
     def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
         """For each line in input_list, print the line if input_set contains the first column field of that line."""
@@ -1981,6 +2077,118 @@ class Job:
     def replication_step_to_str(step):
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
+
+    def zfs_set(self, properties: List[str], remote: Remote, dataset: str):
+        """Applies the given property key=value pairs via 'zfs set' CLI to the given dataset on the given remote"""
+
+        def run_zfs_set(props: List[str]):
+            p = self.params
+            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} set") + props + [dataset]
+            self.run_ssh_command(remote, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+
+        if len(properties) > 0:
+            if self.is_solaris_zfs(remote):  # solaris-14.0 does not accept multiple properties per CLI call
+                for prop in properties:
+                    run_zfs_set([prop])
+            else:  # send all properties in a batch
+                run_zfs_set(properties)
+
+    def zfs_get(
+        self,
+        remote: Remote,
+        dataset: str,
+        sources: str,
+        output_columns: str,
+        propnames: str,
+        splitlines: bool,
+        props_cache: Dict[Tuple[str, str, str], Dict[str, str]],
+    ) -> Dict[str, str]:
+        """Returns the results of 'zfs get' CLI on the given dataset on the given remote"""
+        p = self.params
+        props = props_cache.get((sources, output_columns, propnames))
+        if props is None:
+            cmd = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
+            lines = self.run_ssh_command(remote, self.trace, cmd=cmd)
+            props = {}
+            # if not splitlines: omit single trailing newline that was appended by 'zfs get'
+            for line in lines.splitlines() if splitlines else [lines[0:-1]]:
+                if "\t" in line:
+                    propname, propvalue = line.split("\t", 1)
+                    props[propname] = propvalue
+                else:
+                    props[line] = None
+            props_cache[(sources, output_columns, propnames)] = props
+        return props
+
+    def add_recv_property_options(
+        self, full_send: bool, recv_opts: List[str], dataset: str, cache: Dict[Tuple[str, str], Dict[str, str]]
+    ):
+        """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according
+        to CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes
+        successfully"""
+        p = self.params
+        ox_names = self.recv_option_property_names(recv_opts)
+        set_opts = []
+        for config in [p.zfs_recv_o_config, p.zfs_recv_x_config, p.zfs_set_config]:
+            if len(config.include_regexes) == 0:
+                continue
+            if (full_send and "full" in config.targets) or (not full_send and "incremental" in config.targets):
+                # 'zfs get' uses newline as record separator and tab as separator between output columns. A ZFS user
+                # property may contain newline and tab characters (indeed anything). Together, this means that there
+                # is no reliable way to determine where a record ends and the next record starts when listing multiple
+                # arbitrary records in a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for
+                # each ZFS user property.
+                # TODO: on zfs >= 2.3 use json output via zfs get -j to merge all zfs gets into a single 'zfs get' call
+                try:
+                    props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
+                    system_propnames = []
+                    user_propnames = []
+                    for name in props.keys():
+                        lst = user_propnames if ":" in name else system_propnames
+                        lst.append(name)
+                    propnames = "all" if len(user_propnames) == 0 else ",".join(system_propnames)
+                    props = self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, True, cache)
+                    for propnames in user_propnames:
+                        props.update(
+                            self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache)
+                        )
+                    props = self.filter_properties(props, config.include_regexes, config.exclude_regexes)
+                    for propname in sorted(props.keys()):
+                        if config is p.zfs_recv_o_config:
+                            if propname not in ox_names:
+                                recv_opts.append("-o")
+                                recv_opts.append(f"{propname}={props[propname]}")
+                                ox_names.add(propname)
+                        elif config is p.zfs_recv_x_config:
+                            if propname not in ox_names:
+                                recv_opts.append("-x")
+                                recv_opts.append(propname)
+                                ox_names.add(propname)
+                        else:
+                            set_opts.append(f"{propname}={props[propname]}")
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                    raise RetryableError("Subprocess failed") from e
+        return recv_opts, set_opts
+
+    @staticmethod
+    def recv_option_property_names(recv_opts: List[str]) -> Set[str]:
+        """extract -o and -x property names that are already specified on the command line. This can be used to check
+        for dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
+        propnames = set()
+        i = 0
+        n = len(recv_opts)
+        while i < n:
+            stripped = recv_opts[i].strip()
+            if stripped in {"-o", "-x"}:
+                i += 1
+                if i == n:
+                    die(f"Missing value for {stripped} option in --zfs-receive-program-opt(s): {' '.join(recv_opts)}")
+                if stripped == "-o":
+                    propnames.add(recv_opts[i].split("=", 1)[0])
+                else:
+                    propnames.add(recv_opts[i])
+            i += 1
+        return propnames
 
     def is_program_available(self, program: str, location: str) -> bool:
         return program in self.params.available_programs[location]
@@ -2326,6 +2534,17 @@ def stderr_to_str(stderr):
 def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
     if run and value:
         print(value, end=end, file=file)
+
+
+def fix_solaris_raw_mode(lst: List):
+    lst = ["-w" if opt == "--raw" else opt for opt in lst]
+    lst = ["compress" if opt == "--compressed" else opt for opt in lst]
+    i = lst.index("-w") if "-w" in lst else -1
+    if i >= 0:
+        i += 1
+        if i == len(lst) or (lst[i] != "none" and lst[i] != "compress"):
+            lst.insert(i, "none")
+    return lst
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
