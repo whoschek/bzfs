@@ -2673,6 +2673,14 @@ class TestHelperFunctions(unittest.TestCase):
             names(["-o"])
         with self.assertRaises(SystemExit):
             names(["-o", "name1=value1", "-o"])
+        with self.assertRaises(SystemExit):
+            names(["-o", "name1=value1", "-x"])
+        with self.assertRaises(SystemExit):
+            names(["-o", "-o", "name1=value1"])
+        with self.assertRaises(SystemExit):
+            names(["-x", "-x", "name1=value1"])
+        with self.assertRaises(SystemExit):
+            names([" -o ", " -o ", "name1=value1"])
 
     def recv_option_property_names_old(self):
         def names(lst):

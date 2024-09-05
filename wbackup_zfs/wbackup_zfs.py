@@ -221,7 +221,7 @@ feature.
         help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
               f"The value is split on runs of one or more whitespace characters. "
               f"Default is '{zfs_recv_program_opts_default}'. "
-              f"Example: '-u -o canmount=off -o readonly=on -x mounted -x keystatus'. "
+              f"Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. "
               "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
               "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
     parser.add_argument(
@@ -660,6 +660,7 @@ class Params:
         self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             self.zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
+        self.zfs_recv_ox_names: Set[str] = set()
         self.zfs_recv_program_opts = self.fix_send_recv_opts(self.zfs_recv_program_opts)
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
@@ -919,6 +920,7 @@ class Job:
 
     def validate_once(self):
         p = self.params
+        p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
         p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or [".*"])
 
@@ -1194,7 +1196,6 @@ class Job:
                 src_snapshots_and_bookmarks, oldest_dst_snapshot_creation, latest_dst_snapshot_creation
             )
             src_snapshots_and_bookmarks = cut(field=2, lines=src_snapshots_and_bookmarks)
-
         src_snapshots_with_guids = src_snapshots_and_bookmarks
         src_snapshots_and_bookmarks = None
 
@@ -1292,7 +1293,6 @@ class Job:
 
         self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
         self.trace("latest_dst_snapshot:", latest_dst_snapshot)
-
         is_dry_send_receive = False
         if not latest_common_src_snapshot:
             # no common snapshot was found. delete all dst snapshots, if any
@@ -2113,7 +2113,7 @@ class Job:
             lines = self.run_ssh_command(remote, self.trace, cmd=cmd)
             is_name_value_pair = "," in output_columns
             props = {}
-            # if not splitlines: omit single trailing newline that was appended by 'zfs get'
+            # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
             for line in lines.splitlines() if splitlines else [lines[0:-1]]:
                 if is_name_value_pair:
                     propname, propvalue = line.split("\t", 1)
@@ -2130,8 +2130,8 @@ class Job:
         to CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes
         successfully"""
         p = self.params
-        ox_names = self.recv_option_property_names(recv_opts)
         set_opts = []
+        ox_names = p.zfs_recv_ox_names.copy()
         for config in [p.zfs_recv_o_config, p.zfs_recv_x_config, p.zfs_set_config]:
             if len(config.include_regexes) == 0:
                 continue
@@ -2181,7 +2181,7 @@ class Job:
             stripped = recv_opts[i].strip()
             if stripped in {"-o", "-x"}:
                 i += 1
-                if i == n:
+                if i == n or recv_opts[i].strip() in {"-o", "-x"}:
                     die(f"Missing value for {stripped} option in --zfs-receive-program-opt(s): {' '.join(recv_opts)}")
                 propnames.add(recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0])
             i += 1
