@@ -47,8 +47,8 @@ exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp d
 disable_prg = "-"
 env_var_prefix = "wbackup_zfs_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
-PIPE = subprocess.PIPE
 zfs_recv_groups = {"zfs_recv_o": {"flag": "-o"}, "zfs_recv_x": {"flag": "-x"}, "zfs_set": {"flag": ""}}
+PIPE = subprocess.PIPE
 
 
 # fmt: off
@@ -806,6 +806,7 @@ class Remote:
 #############################################################################
 class PropertyConfig:
     def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params):
+        """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; read from ArgumentParser via args"""
         # immutable variables:
         grup = group
         self.group: str = group
@@ -2087,7 +2088,7 @@ class Job:
             self.run_ssh_command(remote, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
         if len(properties) > 0:
-            if self.is_solaris_zfs(remote):  # solaris-14.0 does not accept multiple properties per CLI call
+            if self.is_solaris_zfs(remote):  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
                 for prop in properties:
                     run_zfs_set([prop])
             else:  # send all properties in a batch
@@ -2105,19 +2106,21 @@ class Job:
     ) -> Dict[str, str]:
         """Returns the results of 'zfs get' CLI on the given dataset on the given remote"""
         p = self.params
-        props = props_cache.get((sources, output_columns, propnames))
+        cache_key = (sources, output_columns, propnames)
+        props = props_cache.get(cache_key)
         if props is None:
             cmd = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
             lines = self.run_ssh_command(remote, self.trace, cmd=cmd)
+            is_name_value_pair = "," in output_columns
             props = {}
             # if not splitlines: omit single trailing newline that was appended by 'zfs get'
             for line in lines.splitlines() if splitlines else [lines[0:-1]]:
-                if "\t" in line:
+                if is_name_value_pair:
                     propname, propvalue = line.split("\t", 1)
                     props[propname] = propvalue
                 else:
                     props[line] = None
-            props_cache[(sources, output_columns, propnames)] = props
+            props_cache[cache_key] = props
         return props
 
     def add_recv_property_options(
@@ -2141,33 +2144,30 @@ class Job:
                 # TODO: on zfs >= 2.3 use json output via zfs get -j to merge all zfs gets into a single 'zfs get' call
                 try:
                     props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
-                    system_propnames = []
-                    user_propnames = []
-                    for name in props.keys():
-                        lst = user_propnames if ":" in name else system_propnames
-                        lst.append(name)
+                    user_propnames = [name for name in props.keys() if ":" in name]
+                    system_propnames = [name for name in props.keys() if ":" not in name]
                     propnames = "all" if len(user_propnames) == 0 else ",".join(system_propnames)
                     props = self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, True, cache)
                     for propnames in user_propnames:
                         props.update(
                             self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache)
                         )
-                    props = self.filter_properties(props, config.include_regexes, config.exclude_regexes)
-                    for propname in sorted(props.keys()):
-                        if config is p.zfs_recv_o_config:
-                            if propname not in ox_names:
-                                recv_opts.append("-o")
-                                recv_opts.append(f"{propname}={props[propname]}")
-                                ox_names.add(propname)
-                        elif config is p.zfs_recv_x_config:
-                            if propname not in ox_names:
-                                recv_opts.append("-x")
-                                recv_opts.append(propname)
-                                ox_names.add(propname)
-                        else:
-                            set_opts.append(f"{propname}={props[propname]}")
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                     raise RetryableError("Subprocess failed") from e
+                props = self.filter_properties(props, config.include_regexes, config.exclude_regexes)
+                for propname in sorted(props.keys()):
+                    if config is p.zfs_recv_o_config:
+                        if propname not in ox_names:
+                            recv_opts.append("-o")
+                            recv_opts.append(f"{propname}={props[propname]}")
+                            ox_names.add(propname)
+                    elif config is p.zfs_recv_x_config:
+                        if propname not in ox_names:
+                            recv_opts.append("-x")
+                            recv_opts.append(propname)
+                            ox_names.add(propname)
+                    else:
+                        set_opts.append(f"{propname}={props[propname]}")
         return recv_opts, set_opts
 
     @staticmethod
@@ -2183,10 +2183,7 @@ class Job:
                 i += 1
                 if i == n:
                     die(f"Missing value for {stripped} option in --zfs-receive-program-opt(s): {' '.join(recv_opts)}")
-                if stripped == "-o":
-                    propnames.add(recv_opts[i].split("=", 1)[0])
-                else:
-                    propnames.add(recv_opts[i])
+                propnames.add(recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0])
             i += 1
         return propnames
 
@@ -2519,14 +2516,14 @@ def tail(file, n: int):
         return collections.deque(fd, maxlen=n)
 
 
-def append_if_absent(lst: List, *items):
+def append_if_absent(lst: List, *items) -> List:
     for item in items:
         if item not in lst:
             lst.append(item)
     return lst
 
 
-def stderr_to_str(stderr):
+def stderr_to_str(stderr) -> str:
     """workaround for https://github.com/python/cpython/issues/87597"""
     return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
@@ -2536,7 +2533,7 @@ def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
         print(value, end=end, file=file)
 
 
-def fix_solaris_raw_mode(lst: List):
+def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     lst = ["-w" if opt == "--raw" else opt for opt in lst]
     lst = ["compress" if opt == "--compressed" else opt for opt in lst]
     i = lst.index("-w") if "-w" in lst else -1

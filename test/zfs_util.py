@@ -169,7 +169,7 @@ def dataset_property(dataset=None, prop=None):
 
 
 def snapshot_property(snapshot, prop):
-    return zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0)[0]
+    return zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0, splitlines=False)
 
 
 def zfs_list(names=[], props=["name"], types=[], max_depth=None, parsable=True, sort_props=[], splitlines=True):
@@ -243,7 +243,7 @@ def zfs_set(names=[], properties={}):
             cmd += names
         run_cmd(cmd)
 
-    if is_solaris_zfs():  # solaris-14.0 does not accept multiple properties per CLI call
+    if is_solaris_zfs():  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
         for name, value in properties.items():
             run_zfs_set([f"{name}={value}"])
     else:
