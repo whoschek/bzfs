@@ -798,8 +798,8 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
 
-        included_props = {"include_wbackup_zfs:prop1": "value1", "include_wbackup_zfs:prop2": "value2"}
-        excluded_props = {"exclude_wbackup_zfs:prop3": "value3"}
+        included_props = {"include_wbackup:p1": "value1", "include_wbackup:p2": "value2"}
+        excluded_props = {"exclude_wbackup:p3": "value3"}
         zfs_set([src_root_dataset + "/foo"], included_props)
         zfs_set([src_root_dataset + "/foo"], excluded_props)
         zfs_recv_excluded_excludes = ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
@@ -809,7 +809,7 @@ class LocalTestCase(WBackupTestCase):
             "--zfs-send-program-opts=",
             "--zfs-recv-o-targets=full",
             "--zfs-recv-o-sources=local,inherited",
-            "--zfs-recv-o-include-regex=include_wbackup_zfs.*",
+            "--zfs-recv-o-include-regex=include_wbackup.*",
             "--zfs-recv-x-targets=full,incremental",
             "--zfs-recv-x-include-regex=.*",
             "--zfs-recv-x-exclude-regex",
@@ -828,8 +828,8 @@ class LocalTestCase(WBackupTestCase):
         self.setup_basic()
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
 
-        included_props = {"include_wbackup_zfs:prop1": "value1", "include_wbackup_zfs:prop2": "value2"}
-        excluded_props = {"exclude_wbackup_zfs:prop3": "value3"}
+        included_props = {"include_wbackup:p1": "v1", "include_wbackup:p2": "v2", "include_wbackup:p3": "v3"}
+        excluded_props = {"exclude_wbackup:p4": "v4", "exclude_wbackup:p5": "v5"}
         zfs_set([src_root_dataset + "/foo"], included_props)
         zfs_set([src_root_dataset + "/foo"], excluded_props)
         zfs_recv_excluded_excludes = ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
@@ -837,7 +837,9 @@ class LocalTestCase(WBackupTestCase):
             src_root_dataset + "/foo",
             dst_root_dataset + "/foo",
             "--zfs-send-program-opts=--raw",
-            "--zfs-recv-o-include-regex=include_wbackup_zfs.*",
+            "--zfs-recv-program-opts",
+            "-u -o include_wbackup:p1=v1 -x exclude_wbackup:p4",
+            "--zfs-recv-o-include-regex=include_wbackup.*",
             "--zfs-recv-x-exclude-regex",
             ".*",  # will not append include.* as those names already exist in -o options
             *self.zfs_recv_excluded_excludes(),
