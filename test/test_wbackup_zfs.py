@@ -856,7 +856,6 @@ class LocalTestCase(WBackupTestCase):
                 self.tearDownAndSetup()
                 self.setup_basic()
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
-
                 old_recordsize = int(dataset_property(dst_root_dataset, "recordsize"))
                 new_recordsize = 8 * 1024
                 assert old_recordsize != new_recordsize
@@ -870,6 +869,25 @@ class LocalTestCase(WBackupTestCase):
                 )
                 expected = old_recordsize if i == 0 else new_recordsize
                 self.assertEqual(str(expected), dataset_property(dst_root_dataset + "/foo", "recordsize"))
+
+    def test_recv_program_opts_canmount_and_readonly(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("setting properties via zfs receive -o needs extra permissions")
+        for i in range(0, 3):
+            with stop_on_failure_subtest(i=i):
+                self.tearDownAndSetup()
+                self.setup_basic(volume=not i <= 1)
+                self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
+                if i <= 1:
+                    zfs_set([src_root_dataset + "/foo/a"], {"canmount": "off"})
+                self.run_wbackup(
+                    src_root_dataset + "/foo/a",
+                    dst_root_dataset + "/foo/a",
+                    "--zfs-recv-program-opts",
+                    "-u -o canmount=" + ("off" if i == 0 else "noauto") + " -o readonly=on",
+                )
+                self.assertEqual("off" if i <= 1 else "-", dataset_property(dst_root_dataset + "/foo/a", "canmount"))
+                self.assertEqual("on", dataset_property(dst_root_dataset + "/foo/a", "readonly"))
 
     def test_basic_replication_with_delegation_disabled(self):
         if not self.is_no_privilege_elevation():
@@ -2650,8 +2668,8 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertTrue(os.path.exists(non_socket_file))
 
     def test_recv_option_property_names(self):
-        def names(lst):
-            return wbackup_zfs.Job().recv_option_property_names(lst)
+        def names(lst, src_canmount=""):
+            return wbackup_zfs.Job().recv_option_property_names(lst, src_canmount, None)
 
         self.assertSetEqual(set(), names([]))
         self.assertSetEqual(set(), names(["name1=value1"]))
@@ -2664,11 +2682,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2"]))
         self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2", "-F"]))
         self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-n", "-o", "name2=value2", "-F"]))
-        self.assertSetEqual({"name1"}, names(["-o", "name1"]))
         self.assertSetEqual({""}, names(["-o", "=value1"]))
-        self.assertSetEqual({""}, names(["-o", ""]))
         self.assertSetEqual({"=value1"}, names(["-x", "=value1"]))
         self.assertSetEqual({""}, names(["-x", ""]))
+        with self.assertRaises(SystemExit):
+            self.assertSetEqual({"name1"}, names(["-o", "name1"]))
+        with self.assertRaises(SystemExit):
+            self.assertSetEqual({""}, names(["-o", ""]))
         with self.assertRaises(SystemExit):
             names(["-o"])
         with self.assertRaises(SystemExit):
@@ -2681,6 +2701,8 @@ class TestHelperFunctions(unittest.TestCase):
             names(["-x", "-x", "name1=value1"])
         with self.assertRaises(SystemExit):
             names([" -o ", " -o ", "name1=value1"])
+        self.assertSetEqual({"canmount"}, names(["-o", "canmount=noauto"]))
+        self.assertSetEqual(set(), names(["-o", "canmount=noauto"], src_canmount="-"))
 
     def recv_option_property_names_old(self):
         def names(lst):

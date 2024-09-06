@@ -841,7 +841,7 @@ class Job:
     def __init__(self):
         self.params: Params
         self.dst_dataset_exists: Dict[str, bool] = {}
-        self.recordsizes: Dict[str, int] = {}
+        self.src_properties: Dict[str, Dict[str, str | int]] = {}
         self.mbuffer_current_opts: List[str] = []
         self.all_exceptions: List[str] = []
         self.first_exception: Optional[BaseException] = None
@@ -920,7 +920,7 @@ class Job:
 
     def validate_once(self):
         p = self.params
-        p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
+        self.recv_option_property_names(p.zfs_recv_program_opts, "", None)
         p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or [".*"])
 
@@ -1003,17 +1003,20 @@ class Job:
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
-            f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name",
+            f"{p.zfs_program} list -t filesystem,volume -Hp -o canmount,volblocksize,recordsize,name",
             p.recursive_flag,
             src.root_dataset,
         )
         src_datasets_with_record_sizes = self.try_ssh_command(src, self.debug, cmd=cmd) or ""
         src_datasets_with_record_sizes = src_datasets_with_record_sizes.splitlines()
         src_datasets = []
-        self.recordsizes = {}
+        self.src_properties = {}
         for line in src_datasets_with_record_sizes:
-            volblocksize, recordsize, src_dataset = line.split("\t", 2)
-            self.recordsizes[src_dataset] = int(recordsize) if recordsize != "-" else -int(volblocksize)
+            canmount, volblocksize, recordsize, src_dataset = line.split("\t", 3)
+            self.src_properties[src_dataset] = {
+                "canmount": canmount,
+                "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
+            }
             src_datasets.append(src_dataset)
         src_datasets_with_record_sizes = None  # help gc
 
@@ -1044,7 +1047,7 @@ class Job:
                 self.debug("Replicating:", f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = [
                     "-s",
-                    str(max(128 * 1024, abs(self.recordsizes[src_dataset]))),
+                    str(max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"]))),
                 ] + p.mbuffer_program_opts
                 try:
                     if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
@@ -2124,14 +2127,14 @@ class Job:
         return props
 
     def add_recv_property_options(
-        self, full_send: bool, recv_opts: List[str], dataset: str, cache: Dict[Tuple[str, str], Dict[str, str]]
+        self, full_send: bool, recv_opts: List[str], src_dataset: str, cache: Dict[Tuple[str, str], Dict[str, str]]
     ):
         """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according
         to CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes
         successfully"""
         p = self.params
         set_opts = []
-        ox_names = p.zfs_recv_ox_names.copy()
+        ox_names = self.recv_option_property_names(recv_opts, self.src_properties[src_dataset]["canmount"], src_dataset)
         for config in [p.zfs_recv_o_config, p.zfs_recv_x_config, p.zfs_set_config]:
             if len(config.include_regexes) == 0:
                 continue
@@ -2143,14 +2146,14 @@ class Job:
                 # each ZFS user property.
                 # TODO: on zfs >= 2.3 use json output via zfs get -j to merge all zfs gets into a single 'zfs get' call
                 try:
-                    props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
+                    props = self.zfs_get(p.src, src_dataset, config.sources, "property", "all", True, cache)
                     user_propnames = [name for name in props.keys() if ":" in name]
                     system_propnames = [name for name in props.keys() if ":" not in name]
                     propnames = "all" if len(user_propnames) == 0 else ",".join(system_propnames)
-                    props = self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, True, cache)
+                    props = self.zfs_get(p.src, src_dataset, config.sources, "property,value", propnames, True, cache)
                     for propnames in user_propnames:
                         props.update(
-                            self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache)
+                            self.zfs_get(p.src, src_dataset, config.sources, "property,value", propnames, False, cache)
                         )
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                     raise RetryableError("Subprocess failed") from e
@@ -2170,8 +2173,7 @@ class Job:
                         set_opts.append(f"{propname}={props[propname]}")
         return recv_opts, set_opts
 
-    @staticmethod
-    def recv_option_property_names(recv_opts: List[str]) -> Set[str]:
+    def recv_option_property_names(self, recv_opts: List[str], src_canmount: str, src_dataset: str) -> Set[str]:
         """extract -o and -x property names that are already specified on the command line. This can be used to check
         for dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
         propnames = set()
@@ -2183,7 +2185,30 @@ class Job:
                 i += 1
                 if i == n or recv_opts[i].strip() in {"-o", "-x"}:
                     die(f"Missing value for {stripped} option in --zfs-receive-program-opt(s): {' '.join(recv_opts)}")
-                propnames.add(recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0])
+                if stripped == "-x":
+                    propnames.add(recv_opts[i])
+                elif "=" not in recv_opts[i]:
+                    die(f"Missing '=' for {stripped} name=value in --zfs-receive-program-opt(s): {' '.join(recv_opts)}")
+                else:
+                    propname, propvalue = recv_opts[i].split("=", 1)
+                    if propname == "canmount":
+                        if src_canmount == "-":
+                            # it's a zvol - 'canmount' does not apply to datasets of this type - remove -o canmount=xyz
+                            i -= 1
+                            recv_opts.pop(i)
+                            recv_opts.pop(i)
+                            n -= 2
+                            continue
+                        elif src_canmount == "off" and propvalue == "noauto":
+                            if self.params.getenv_bool("no_upgrade_on_canmount_noauto", True):
+                                self.warn(
+                                    "Found src dataset with 'canmount=off'. Cowardly refusing to upgrade dst "
+                                    "mountability to 'canmount=noauto' as user presumably instead intended to "
+                                    "downgrade from 'canmount=on' to 'canmount=noauto'. Replacing -o canmount=noauto "
+                                    f"with -o canmount=off for this particular dataset: {src_dataset}"
+                                )
+                                recv_opts[i] = "canmount=off"
+                    propnames.add(propname)
             i += 1
         return propnames
 
