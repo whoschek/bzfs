@@ -19,7 +19,7 @@ set -e # Exit immediately if a cmd returns a non-zero status
 id -u -n
 pkg install sudo pv || true
 pkgutil -y -i zstd mbuffer netcat
-pyversion=3.9.19; export ax_cv_c_float_words_bigendian=no
+pyversion=3.9.20; export ax_cv_c_float_words_bigendian=no
 # pyversion=3.8.19; export ax_cv_c_float_words_bigendian=no
 # pyversion=3.7.17 # works fine too
 # pyversion=3.10.14; export ax_cv_c_float_words_bigendian=no # works fine too
