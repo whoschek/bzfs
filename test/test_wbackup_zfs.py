@@ -802,7 +802,6 @@ class LocalTestCase(WBackupTestCase):
         excluded_props = {"exclude_wbackup:p3": "value3"}
         zfs_set([src_root_dataset + "/foo"], included_props)
         zfs_set([src_root_dataset + "/foo"], excluded_props)
-        zfs_recv_excluded_excludes = ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
         self.run_wbackup(
             src_root_dataset + "/foo",
             dst_root_dataset + "/foo",
@@ -832,7 +831,6 @@ class LocalTestCase(WBackupTestCase):
         excluded_props = {"exclude_wbackup:p4": "v4", "exclude_wbackup:p5": "v5"}
         zfs_set([src_root_dataset + "/foo"], included_props)
         zfs_set([src_root_dataset + "/foo"], excluded_props)
-        zfs_recv_excluded_excludes = ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
         self.run_wbackup(
             src_root_dataset + "/foo",
             dst_root_dataset + "/foo",

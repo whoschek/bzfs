@@ -241,10 +241,12 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--zpool-program STRING]
                    [--include-envvar-regex REGEX [REGEX ...]]
                    [--exclude-envvar-regex REGEX [REGEX ...]]
-                   [--zfs-recv-o-targets STRING] [--zfs-recv-o-sources STRING]
+                   [--zfs-recv-o-targets {full|incremental|full,incremental}]
+                   [--zfs-recv-o-sources STRING]
                    [--zfs-recv-o-include-regex REGEX [REGEX ...]]
                    [--zfs-recv-o-exclude-regex REGEX [REGEX ...]]
-                   [--zfs-recv-x-targets STRING] [--zfs-recv-x-sources STRING]
+                   [--zfs-recv-x-targets {full|incremental|full,incremental}]
+                   [--zfs-recv-x-sources STRING]
                    [--zfs-recv-x-include-regex REGEX [REGEX ...]]
                    [--zfs-recv-x-exclude-regex REGEX [REGEX ...]] [--version]
                    [--help, -h]
@@ -339,7 +341,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--exclude-dataset-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-dataset-regex (see above) except that the
-    default is `(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*`
+    default is `(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*`. Example:
+    '' (exclude no dataset)
 
 <!-- -->
 
@@ -965,7 +968,7 @@ properties from the source dataset to its corresponding destination
 dataset. The 'zfs-recv-o' group of parameters is applied before the
 'zfs-recv-x' group.
 
-**--zfs-recv-o-targets** *STRING*
+**--zfs-recv-o-targets** *{full|incremental|full,incremental}*
 
 *  The zfs send phase or phases during which the extra '-o' options
     are passed to 'zfs receive'. This is a comma-separated list (no
@@ -1032,7 +1035,7 @@ properties from the source dataset to its corresponding destination
 dataset. The 'zfs-recv-o' group of parameters is applied before the
 'zfs-recv-x' group.
 
-**--zfs-recv-x-targets** *STRING*
+**--zfs-recv-x-targets** *{full|incremental|full,incremental}*
 
 *  The zfs send phase or phases during which the extra '-x' options
     are passed to 'zfs receive'. This is a comma-separated list (no

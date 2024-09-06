@@ -192,7 +192,7 @@ feature.
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("Same syntax as --include-dataset-regex (see above) except that the default "
-              f"is `{exclude_dataset_regexes_default}`\n\n"))
+              f"is `{exclude_dataset_regexes_default}`. Example: '' (exclude no dataset)\n\n"))
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
@@ -558,9 +558,10 @@ feature.
         target_choices_items = ["full", "incremental"]
         target_choices_default = ",".join(target_choices_items)
         target_choices = target_choices_items + [",".join(target_choices_items)]
+        metavar = "{" + "|".join(target_choices_items + [",".join(target_choices_items)]) + "}"
         qq = "'"
         argument_group.add_argument(
-            f"--{grup}-targets", choices=target_choices, default=target_choices_default, metavar="STRING",
+            f"--{grup}-targets", choices=target_choices, default=target_choices_default, metavar=metavar,
             help=h(f"The zfs send phase or phases during which the extra {flag} options are passed to 'zfs receive'. "
                    "This is a comma-separated list (no spaces) containing one or more of the following choices: "
                    f"{', '.join([f'{qq}{x}{qq}' for x in target_choices_items])}. "
@@ -2088,11 +2089,11 @@ class Job:
             self.run_ssh_command(remote, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
         if len(properties) > 0:
-            if self.is_solaris_zfs(remote):  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
-                for prop in properties:
+            if not self.is_solaris_zfs(remote):
+                run_zfs_set(properties)  # send all properties in a batch
+            else:
+                for prop in properties:  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
                     run_zfs_set([prop])
-            else:  # send all properties in a batch
-                run_zfs_set(properties)
 
     def zfs_get(
         self,

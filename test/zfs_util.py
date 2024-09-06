@@ -244,11 +244,11 @@ def zfs_set(names=[], properties={}):
             cmd += names
         run_cmd(cmd)
 
-    if is_solaris_zfs():  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
+    if not is_solaris_zfs():  # send all properties in a batch
+        run_zfs_set([f"{name}={value}" for name, value in properties.items()])
+    else:  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
         for name, value in properties.items():
             run_zfs_set([f"{name}={value}"])
-    else:
-        run_zfs_set([f"{name}={value}" for name, value in properties.items()])
 
 
 def dataset_exists(dataset):
