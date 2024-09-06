@@ -192,7 +192,7 @@ feature.
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("Same syntax as --include-dataset-regex (see above) except that the default "
-              f"is `{exclude_dataset_regexes_default}`. Example: '' (exclude no dataset)\n\n"))
+              f"is `{exclude_dataset_regexes_default}`. Example: '!.*' (exclude no dataset)\n\n"))
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
@@ -765,8 +765,8 @@ class Params:
 
     @staticmethod
     def unset_matching_env_vars(args):
-        exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex or [])
-        include_envvar_regexes = compile_regexes(args.include_envvar_regex or [])
+        exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
+        include_envvar_regexes = compile_regexes(args.include_envvar_regex)
         for key in list(os.environ.keys()):
             if is_included(key, exclude_envvar_regexes, include_envvar_regexes):
                 os.environ.pop(key, None)
@@ -922,7 +922,7 @@ class Job:
     def validate_once(self):
         p = self.params
         p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
-        p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex or [])
+        p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex)
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or [".*"])
 
     def validate(self):
@@ -955,13 +955,12 @@ class Job:
                 )
 
         re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
-        exclude_regexes = self.dataset_regexes(p.args.exclude_dataset or []) + (p.args.exclude_dataset_regex or [])
-        include_regexes = self.dataset_regexes(p.args.include_dataset or []) + (p.args.include_dataset_regex or [])
-        p.exclude_dataset_regexes = compile_regexes(
-            exclude_regexes or [exclude_dataset_regexes_default], suffix=re_suffix
+        exclude_regexes = self.dataset_regexes(p.args.exclude_dataset) + patch_exclude_dataset_regexes(
+            p.args.exclude_dataset_regex, exclude_dataset_regexes_default
         )
+        include_regexes = self.dataset_regexes(p.args.include_dataset) + p.args.include_dataset_regex
+        p.exclude_dataset_regexes = compile_regexes(exclude_regexes, suffix=re_suffix)
         p.include_dataset_regexes = compile_regexes(include_regexes or [".*"], suffix=re_suffix)
-
         self.detect_available_programs()
         self.trace("Validated Param values:", pprint.pformat(vars(params)))
 
@@ -2439,6 +2438,12 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
             regex = f"{regex[0:i]}(?:{regex[i + 1:]}"
         i -= 1
     return regex
+
+
+def patch_exclude_dataset_regexes(regexes: List[str], default: str) -> List[str]:
+    if len(regexes) == 0:
+        return [default]
+    return [regex for regex in regexes if regex != "" and regex != "!.*"]  # these don't exclude anything
 
 
 def delete_stale_ssh_socket_files(socket_dir: str, prefix: str):

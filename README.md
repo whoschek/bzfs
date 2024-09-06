@@ -342,7 +342,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  Same syntax as --include-dataset-regex (see above) except that the
     default is `(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*`. Example:
-    '' (exclude no dataset)
+    '!.*' (exclude no dataset)
 
 <!-- -->
 
