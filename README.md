@@ -135,7 +135,7 @@ have drastically diverged:
 --exclude-snapshot-regex 'test_.*' --exclude-dataset
 /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash
 --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex
-'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' --ssh-private-key
+'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' ssh-dst-private-key
 /root/.ssh/id_rsa`
 
 <!-- END DESCRIPTION SECTION -->
