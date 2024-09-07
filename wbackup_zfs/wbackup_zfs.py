@@ -81,11 +81,11 @@ identical to the source if the two have somehow diverged in unforeseen ways. Thi
 backup.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
-and executed on the 'coordinator' host which can be either the host that contains the source dataset (push mode),
+and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
 or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required),
 or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' CLI) into
 both the source and destination host (pull-push mode). In Pull-push mode the source 'zfs send's the data stream
-to the coordinator which immediately pipes the stream (without storing anything locally) to the destination
+to the initiator which immediately pipes the stream (without storing anything locally) to the destination
 host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed or executed on either
 source or destination host. Only the underlying 'zfs' CLI must be installed on both source and destination host.
 {prog_name} can run as root or non-root user, in the latter case via a) sudo or b) when granted corresponding
@@ -728,8 +728,7 @@ class Params:
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
         xappend(opts, items)
         if not allow_all:
-            for opt in opts:
-                self.validate_quoting(opt)
+            self.validate_quoting(opts)
         return opts
 
     def validate_arg(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str:
@@ -738,13 +737,14 @@ class Params:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
             die(f"Option must not contain a whitespace character {'other than space' if allow_spaces else ''} : {opt}")
-        self.validate_quoting(opt)
+        self.validate_quoting([opt])
         return opt
 
     @staticmethod
-    def validate_quoting(opt: str):
-        if "'" in opt or '"' in opt or "`" in opt:
-            die(f"Option must not contain a single quote or double quote or backtick character: {opt}")
+    def validate_quoting(opts: List[str]):
+        for opt in opts:
+            if "'" in opt or '"' in opt or "`" in opt:
+                die(f"Option must not contain a single quote or double quote or backtick character: {opt}")
 
     @staticmethod
     def fix_send_recv_opts(opts: List[str]) -> List[str]:
@@ -1007,8 +1007,7 @@ class Job:
             p.recursive_flag,
             src.root_dataset,
         )
-        src_datasets_with_record_sizes = self.try_ssh_command(src, self.debug, cmd=cmd) or ""
-        src_datasets_with_record_sizes = src_datasets_with_record_sizes.splitlines()
+        src_datasets_with_record_sizes = (self.try_ssh_command(src, self.debug, cmd=cmd) or "").splitlines()
         src_datasets = []
         self.recordsizes = {}
         for line in src_datasets_with_record_sizes:
@@ -1088,8 +1087,8 @@ class Job:
                 else:
                     dst_dataset = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
                     cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", dst_dataset)
-                    dst_snapshots_with_guids = self.run_ssh_command(dst, self.trace, check=False, cmd=cmd)
-                    dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids.splitlines())
+                    dst_snapshots_with_guids = self.run_ssh_command(dst, self.trace, check=False, cmd=cmd).splitlines()
+                    dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                         set(cut(1, lines=src_snapshots_with_guids))
                     )
@@ -1339,8 +1338,9 @@ class Job:
 
                 size_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
                 size_human = human_readable_bytes(size_bytes)
-                zfs_send_program_opts = p.curr_zfs_send_program_opts.copy()
-                send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", zfs_send_program_opts, oldest_src_snapshot)
+                send_cmd = p.split_args(
+                    f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, oldest_src_snapshot
+                )
                 recv_opts = p.zfs_full_recv_opts.copy()
                 recv_opts, set_opts = self.add_recv_property_options(True, recv_opts, src_dataset, props_cache)
                 recv_cmd = p.split_args(
@@ -1359,8 +1359,7 @@ class Job:
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
 
-            def replication_candidates(origin_src_snapshots_with_guids, latest_common_src_snapshot):
-                # latest_common_src_snapshot is a snapshot or bookmark
+            def replication_candidates():
                 results = []
                 last_appended_guid = ""
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
@@ -1368,7 +1367,7 @@ class Job:
                     if "@" in snapshot:
                         results.append(snapshot_with_guid)
                         last_appended_guid = guid
-                    if snapshot == latest_common_src_snapshot:
+                    if snapshot == latest_common_src_snapshot:  # latest_common_src_snapshot is a snapshot or bookmark
                         if "@" not in snapshot and guid != last_appended_guid:
                             # we won't incrementally replicate from a bookmark to its own snapshot
                             results.append(snapshot_with_guid)
@@ -1379,9 +1378,7 @@ class Job:
 
             # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
             # (that are not a bookmark) that are more recent than that.
-            origin_src_snapshots_with_guids = replication_candidates(
-                origin_src_snapshots_with_guids, latest_common_src_snapshot
-            )
+            origin_src_snapshots_with_guids = replication_candidates()
             latest_common_src_snapshot = origin_src_snapshots_with_guids[0].split("\t", 1)[1]
 
             if len(origin_src_snapshots_with_guids) == 1:
@@ -1398,10 +1395,8 @@ class Job:
             else:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
-                steps_todo = self.incremental_replication_steps_wrapper(
-                    origin_src_snapshots_with_guids, src_snapshots_guids
-                )
-                self.trace("steps_todo:", "; ".join([self.replication_step_to_str(step) for step in steps_todo]))
+                steps_todo = self.incremental_send_steps_wrapper(origin_src_snapshots_with_guids, src_snapshots_guids)
+                self.trace("steps_todo:", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
             for i, (incr_flag, start_snap, end_snap) in enumerate(steps_todo):
                 size_bytes = self.estimate_zfs_send_size(incr_flag, start_snap, end_snap)
                 size_human = human_readable_bytes(size_bytes)
@@ -1987,7 +1982,7 @@ class Job:
                         )
                     raise retryable_error.__cause__
 
-    def incremental_replication_steps_wrapper(
+    def incremental_send_steps_wrapper(
         self, origin_src_snapshots_with_guids: List[str], included_guids: Set[str]
     ) -> List[Tuple[str, str, str]]:
         src_guids = []
@@ -2002,9 +1997,9 @@ class Job:
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
-        return self.incremental_replication_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
+        return self.incremental_send_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
 
-    def incremental_replication_steps(
+    def incremental_send_steps(
         self, src_snapshots: List[str], guids: List[str], included_guids: Set[str], force_convert_I_to_i: bool
     ) -> List[Tuple[str, str, str]]:
         """Computes steps to incrementally replicate the given src snapshots with the given guids such that we
@@ -2044,7 +2039,7 @@ class Job:
                         # assert start != i
                         if start != i:
                             step = ("-i", src_snapshots[start], src_snapshots[i])
-                            # print(f"r1 {self.replication_step_to_str(step)}")
+                            # print(f"r1 {self.send_step_to_str(step)}")
                             steps.append(step)
                         i -= 1
                 else:
@@ -2053,7 +2048,7 @@ class Job:
                     # assert start != i
                     if start != i:
                         step = ("-I", src_snapshots[start], src_snapshots[i])
-                        # print(f"r2 {self.replication_step_to_str(step)}")
+                        # print(f"r2 {self.send_step_to_str(step)}")
                         if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
                             steps.append(step)
                         else:  # convert -I step to -i steps
@@ -2065,7 +2060,7 @@ class Job:
                 i -= 1
                 if start != i:
                     step = ("-I", src_snapshots[start], src_snapshots[i])
-                    # print(f"r3 {self.replication_step_to_str(step)}")
+                    # print(f"r3 {self.send_step_to_str(step)}")
                     if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
                         steps.append(step)
                     else:  # convert -I step to -i steps
@@ -2075,7 +2070,7 @@ class Job:
         return steps
 
     @staticmethod
-    def replication_step_to_str(step):
+    def send_step_to_str(step):
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
 

@@ -61,13 +61,13 @@ as well as restoring the production state from backup.
 
 The source 'pushes to' the destination whereas the destination 'pulls
 from' the source. wbackup-zfs is installed and executed on the
-'coordinator' host which can be either the host that contains the
-source dataset (push mode), or the destination dataset (pull mode), or
-both datasets (local mode, no network required, no ssh required), or any
+'initiator' host which can be either the host that contains the source
+dataset (push mode), or the destination dataset (pull mode), or both
+datasets (local mode, no network required, no ssh required), or any
 third-party (even non-ZFS OSX) host as long as that host is able to SSH
 (via standard 'ssh' CLI) into both the source and destination host
 (pull-push mode). In Pull-push mode the source 'zfs send's the data
-stream to the coordinator which immediately pipes the stream (without
+stream to the initiator which immediately pipes the stream (without
 storing anything locally) to the destination host that 'zfs receive's
 it. Pull-push mode means that wbackup-zfs need not be installed or
 executed on either source or destination host. Only the underlying
@@ -201,7 +201,7 @@ The script also generates code coverage reports which are published
 [here](https://whoschek.github.io/wbackup-zfs/coverage).
 
 The gist is that it should work on any flavor, with python (3.7 or higher, no additional python packages required)
-only needed on the coordinator host.
+only needed on the initiator host.
 
 
 # Usage

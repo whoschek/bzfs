@@ -2383,32 +2383,32 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
     def test_basic1(self):
         input_snapshots = ["d1", "h1", "d2", "d3", "d4"]
         expected_results = ["d1", "d2", "d3", "d4"]
-        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+        self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic2(self):
         input_snapshots = ["d1", "d2", "h1", "d3", "d4"]
         expected_results = ["d1", "d2", "d3", "d4"]
-        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+        self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic3(self):
         input_snapshots = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
         expected_results = ["d1", "d2", "d3", "d4"]
-        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+        self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic4(self):
         input_snapshots = ["d1"]
         expected_results = ["d1"]
-        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+        self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic5(self):
         input_snapshots = []
         expected_results = []
-        self.validate_incremental_replication_steps(input_snapshots, expected_results)
+        self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_validate_snapshot_series_excluding_hourlies_with_permutations(self):
         for i, testcase in enumerate(self.permute_snapshot_series()):
             with stop_on_failure_subtest(i=i):
-                self.validate_incremental_replication_steps(testcase[None], testcase["d"])
+                self.validate_incremental_send_steps(testcase[None], testcase["d"])
 
     def permute_snapshot_series(self, max_length=9):
         """
@@ -2440,27 +2440,27 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
                     testcases.append(snaps)
         return testcases
 
-    def validate_incremental_replication_steps(self, input_snapshots, expected_results):
+    def validate_incremental_send_steps(self, input_snapshots, expected_results):
         """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input
         snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
         # src_dataset = "s@"
         src_dataset = ""
         for force_convert_I_to_i in [False, True]:
-            steps = self.incremental_replication_steps1(
+            steps = self.incremental_send_steps1(
                 input_snapshots, src_dataset=src_dataset, force_convert_I_to_i=force_convert_I_to_i
             )
             # print(f"input_snapshots:" + ','.join(input_snapshots))
-            # print("steps: " + ','.join([self.replication_step_to_str(step) for step in steps]))
+            # print("steps: " + ','.join([self.send_step_to_str(step) for step in steps]))
             output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
-            output_snapshots += self.apply_incremental_replication_steps(steps, input_snapshots)
+            output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
             # print(f"output_snapshots:" + ','.join(output_snapshots))
             self.assertListEqual(expected_results, output_snapshots)
 
-    def replication_step_to_str(self, step):
+    def send_step_to_str(self, step):
         # return str(step)
         return str(step[1]) + ("-" if step[0] == "-I" else ":") + str(step[2])
 
-    def apply_incremental_replication_steps(self, steps, input_snapshots):
+    def apply_incremental_send_steps(self, steps, input_snapshots):
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
@@ -2474,17 +2474,15 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
                 output_snapshots.append(input_snapshots[end])
         return output_snapshots
 
-    def incremental_replication_steps1(self, input_snapshots, src_dataset=None, force_convert_I_to_i=False):
+    def incremental_send_steps1(self, input_snapshots, src_dataset=None, force_convert_I_to_i=False):
         origin_src_snapshots_with_guids = []
         guid = 1
         for snapshot in input_snapshots:
             origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
             guid += 1
-        return self.incremental_replication_steps2(
-            origin_src_snapshots_with_guids, force_convert_I_to_i=force_convert_I_to_i
-        )
+        return self.incremental_send_steps2(origin_src_snapshots_with_guids, force_convert_I_to_i=force_convert_I_to_i)
 
-    def incremental_replication_steps2(self, origin_src_snapshots_with_guids, force_convert_I_to_i=False):
+    def incremental_send_steps2(self, origin_src_snapshots_with_guids, force_convert_I_to_i=False):
         guids = []
         input_snapshots = []
         included_guids = set()
@@ -2496,7 +2494,7 @@ class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
             snapshot = snapshot[i + 1 :]
             if snapshot[0:1] == "d":
                 included_guids.add(guid)
-        return wbackup_zfs.Job().incremental_replication_steps(
+        return wbackup_zfs.Job().incremental_send_steps(
             input_snapshots, guids, included_guids=included_guids, force_convert_I_to_i=force_convert_I_to_i
         )
 
@@ -2549,14 +2547,14 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_validate_quoting(self):
         params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
-        params.validate_quoting("")
-        params.validate_quoting("foo")
+        params.validate_quoting([""])
+        params.validate_quoting(["foo"])
         with self.assertRaises(SystemExit):
-            params.validate_quoting('foo"')
+            params.validate_quoting(['foo"'])
         with self.assertRaises(SystemExit):
-            params.validate_quoting("foo'")
+            params.validate_quoting(["foo'"])
         with self.assertRaises(SystemExit):
-            params.validate_quoting("foo`")
+            params.validate_quoting(["foo`"])
 
     def test_validate_arg(self):
         params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
