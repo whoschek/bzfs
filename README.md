@@ -220,7 +220,7 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--zfs-recv-program-opt STRING] [--force] [--force-unmount]
                    [--force-once] [--skip-parent]
                    [--skip-missing-snapshots [{fail,dataset,continue}]]
-                   [--max-retries INT] [--skip-on-error [{fail,tree,dataset}]]
+                   [--retries INT] [--skip-on-error [{fail,tree,dataset}]]
                    [--skip-replication] [--delete-missing-snapshots]
                    [--delete-missing-datasets] [--no-privilege-elevation]
                    [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
@@ -464,7 +464,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--max-retries** *INT*
+**--retries** *INT*
 
 *  The number of times a retryable replication step shall be retried if
     it fails, for example because of network hiccups (default: 0). Also
@@ -476,8 +476,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--skip-on-error** *[{fail,tree,dataset}]*
 
-*  During replication, if an error is not retryable, or --max-retries
-    has been exhausted, or --skip-missing-snapshots raises an error,
+*  During replication, if an error is not retryable, or --retries has
+    been exhausted, or --skip-missing-snapshots raises an error,
     proceed as follows:
 
     a) 'fail': Abort the program with an error. This mode is ideal

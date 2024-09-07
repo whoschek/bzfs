@@ -269,16 +269,16 @@ feature.
               "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
               "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
               "has at least one descendant that includes a snapshot.\n\n"))
-    max_retries_default = 0
+    retries_default = 0
     parser.add_argument(
-        "--max-retries", type=int, min=0, default=max_retries_default, action=CheckRange, metavar="INT",
+        "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
         help=(f"The number of times a retryable replication step shall be retried if it fails, for example because "
-              f"of network hiccups (default: {max_retries_default}). "
+              f"of network hiccups (default: {retries_default}). "
               "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
               f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n"))
     parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset", nargs="?",
-        help=("During replication, if an error is not retryable, or --max-retries has been exhausted, "
+        help=("During replication, if an error is not retryable, or --retries has been exhausted, "
               "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
               "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "
               "error reporting, and situations where consistency trumps availability.\n\n"
@@ -696,7 +696,7 @@ class Params:
         self.uname_program: str = self.program_name("uname")
 
         self.skip_on_error: str = args.skip_on_error
-        self.max_retries: int = args.max_retries
+        self.retries: int = args.retries
         self.min_sleep_secs: float = float(self.getenv("min_sleep_secs", 0.125))
         self.max_sleep_secs: float = float(self.getenv("max_sleep_secs", 5 * 60))
         self.max_elapsed_secs: float = float(self.getenv("max_elapsed_secs", 60 * 60))
@@ -1031,7 +1031,7 @@ class Job:
                 die(f"Source dataset does not exist: {src.origin_root_dataset}")
             self.debug(
                 "Retry policy:",
-                f"max_retries: {p.max_retries}, min_sleep_secs: {p.min_sleep_secs}, "
+                f"retries: {p.retries}, min_sleep_secs: {p.min_sleep_secs}, "
                 f"max_sleep_secs: {p.max_sleep_secs}, max_elapsed_secs: {p.max_elapsed_secs}",
             )
             skip_src_dataset = ""
@@ -1971,17 +1971,17 @@ class Job:
                 return func(*args, **kwargs)  # Call the target function with the provided arguments
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
-                if retry_count < params.max_retries and elapsed_nanos < params.max_elapsed_nanos:
+                if retry_count < params.retries and elapsed_nanos < params.max_elapsed_nanos:
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(params.min_sleep_nanos, max_sleep_mark)
-                    self.info(f"Retrying [{retry_count + 1}/{params.max_retries}] soon ...")
+                    self.info(f"Retrying [{retry_count + 1}/{params.retries}] soon ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     retry_count = retry_count + 1
                     max_sleep_mark = min(params.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
-                    if params.max_retries > 0:
+                    if params.retries > 0:
                         error(
-                            f"Giving up because the last [{retry_count}/{params.max_retries}] retries across "
+                            f"Giving up because the last [{retry_count}/{params.retries}] retries across "
                             f"[{elapsed_nanos // 1_000_000_000}/{params.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )

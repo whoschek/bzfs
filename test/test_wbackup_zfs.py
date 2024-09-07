@@ -947,12 +947,12 @@ class LocalTestCase(WBackupTestCase):
         self.assertEqual(0, counter["zfs_list_snapshot_dst"])
 
     def test_basic_replication_flat_simple_with_sufficiently_many_retries_on_error_injection(self):
-        self.basic_replication_flat_simple_with_retries_on_error_injection(max_retries=6, expected_status=0)
+        self.basic_replication_flat_simple_with_retries_on_error_injection(retries=6, expected_status=0)
 
     def test_basic_replication_flat_simple_with_insufficiently_many_retries_on_error_injection(self):
-        self.basic_replication_flat_simple_with_retries_on_error_injection(max_retries=5, expected_status=1)
+        self.basic_replication_flat_simple_with_retries_on_error_injection(retries=5, expected_status=1)
 
-    def basic_replication_flat_simple_with_retries_on_error_injection(self, max_retries=0, expected_status=0):
+    def basic_replication_flat_simple_with_retries_on_error_injection(self, retries=0, expected_status=0):
         self.setup_basic()
         create_filesystem(dst_root_dataset)
 
@@ -962,7 +962,7 @@ class LocalTestCase(WBackupTestCase):
         self.run_wbackup(
             src_root_dataset,
             dst_root_dataset,
-            f"--max-retries={max_retries}",
+            f"--retries={retries}",
             expected_status=expected_status,
             error_injection_triggers={"before": counter},
         )
@@ -2739,7 +2739,7 @@ class TestArgumentParser(unittest.TestCase):
     def test_missing_datasets(self):
         parser = wbackup_zfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
-            parser.parse_args(["--max-retries=1"])
+            parser.parse_args(["--retries=1"])
         self.assertEqual(2, e.exception.code)
 
     def test_missing_dst_dataset(self):
