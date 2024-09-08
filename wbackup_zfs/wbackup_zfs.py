@@ -1206,10 +1206,10 @@ class Job:
         # a snapshot is "true" if it is not a bookmark.
         oldest_src_snapshot = ""
         latest_src_snapshot = ""
-        src_snapshots_guids = set()
+        included_src_guids = set()
         for line in src_snapshots_with_guids:
             guid, snapshot = line.split("\t", 1)
-            src_snapshots_guids.add(guid)
+            included_src_guids.add(guid)
             if "@" in snapshot:
                 latest_src_snapshot = snapshot
                 if oldest_src_snapshot == "":
@@ -1360,28 +1360,31 @@ class Job:
         if latest_common_src_snapshot:
 
             def replication_candidates():
-                results = []
+                result_snapshots = []
+                result_guids = []
                 last_appended_guid = ""
                 for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
                     guid, snapshot = snapshot_with_guid.split("\t", 1)
                     if "@" in snapshot:
-                        results.append(snapshot_with_guid)
+                        result_snapshots.append(snapshot)
+                        result_guids.append(guid)
                         last_appended_guid = guid
                     if snapshot == latest_common_src_snapshot:  # latest_common_src_snapshot is a snapshot or bookmark
                         if "@" not in snapshot and guid != last_appended_guid:
                             # we won't incrementally replicate from a bookmark to its own snapshot
-                            results.append(snapshot_with_guid)
+                            result_snapshots.append(snapshot)
+                            result_guids.append(guid)
                         break
-                results.reverse()
-                assert len(results) > 0
-                return results
+                result_snapshots.reverse()
+                result_guids.reverse()
+                assert len(result_snapshots) > 0
+                assert len(result_guids) > 0
+                return result_guids, result_snapshots
 
             # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
             # (that are not a bookmark) that are more recent than that.
-            origin_src_snapshots_with_guids = replication_candidates()
-            latest_common_src_snapshot = origin_src_snapshots_with_guids[0].split("\t", 1)[1]
-
-            if len(origin_src_snapshots_with_guids) == 1:
+            cand_guids, cand_snapshots = replication_candidates()
+            if len(cand_snapshots) == 1:
                 # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
                 # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
                 # bookmark whose snapshot has been deleted on src.
@@ -1395,7 +1398,7 @@ class Job:
             else:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
-                steps_todo = self.incremental_send_steps_wrapper(origin_src_snapshots_with_guids, src_snapshots_guids)
+                steps_todo = self.incremental_send_steps_wrapper(cand_snapshots, cand_guids, included_src_guids)
                 self.trace("steps_todo:", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
             for i, (incr_flag, start_snap, end_snap) in enumerate(steps_todo):
                 size_bytes = self.estimate_zfs_send_size(incr_flag, start_snap, end_snap)
@@ -1983,15 +1986,8 @@ class Job:
                     raise retryable_error.__cause__
 
     def incremental_send_steps_wrapper(
-        self, origin_src_snapshots_with_guids: List[str], included_guids: Set[str]
+        self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str]
     ) -> List[Tuple[str, str, str]]:
-        src_guids = []
-        src_snapshots = []
-        for line in origin_src_snapshots_with_guids:
-            guid, snapshot = line.split("\t", 1)
-            src_guids.append(guid)
-            src_snapshots.append(snapshot)
-
         force_convert_I_to_i = False
         if self.params.src.use_zfs_delegation and not self.params.getenv_bool("no_force_convert_I_to_i", False):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
@@ -2000,9 +1996,9 @@ class Job:
         return self.incremental_send_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
 
     def incremental_send_steps(
-        self, src_snapshots: List[str], guids: List[str], included_guids: Set[str], force_convert_I_to_i: bool
+        self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], force_convert_I_to_i: bool
     ) -> List[Tuple[str, str, str]]:
-        """Computes steps to incrementally replicate the given src snapshots with the given guids such that we
+        """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
         excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists.
@@ -2015,6 +2011,7 @@ class Job:
         src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
         is a bookmark we convert a -I step to one or more -i steps.
         """
+        guids = src_guids
         assert len(guids) == len(src_snapshots)
         assert len(included_guids) >= 0
         steps = []
