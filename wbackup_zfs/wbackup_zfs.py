@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# /// script
+# requires-python = ">=3.7"
+# dependencies = []
+# ///
+
 import argparse
 import collections
 import operator
