@@ -652,10 +652,10 @@ class Params:
         self.dry_run_recv: str = "-n" if args.dryrun else ""
         self.dry_run_destroy: str = self.dry_run_recv
         self.verbose: str = "-v" if args.verbose >= 1 else ""
-        self.verbose_zfs: bool = True if args.verbose >= 2 else False
+        self.verbose_zfs: bool = args.verbose >= 2
         self.quiet: str = "" if args.quiet else "-v"
         self.verbose_destroy: str = self.quiet
-        self.verbose_trace: bool = True if args.verbose >= 2 else False
+        self.verbose_trace: bool = args.verbose >= 2
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
@@ -1270,26 +1270,23 @@ class Job:
             self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
             self.trace("latest_dst_snapshot:", latest_dst_snapshot)
 
-            if latest_common_src_snapshot:
+            if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
                 # common snapshot was found. rollback dst to that common snapshot
-                if latest_common_guid != latest_dst_guid:
-                    _, latest_common_dst_snapshot = latest_common_snapshot(
-                        dst_snapshots_with_guids, {latest_common_guid}
+                _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
+                if not params.force:
+                    die(
+                        f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
+                        f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
+                        f"for example via --force option."
                     )
-                    if not params.force:
-                        die(
-                            f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
-                            f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
-                            f"for example via --force option."
-                        )
-                    if params.force_once:
-                        params.force = False
-                    self.info("Rolling back dst to most recent common snapshot:", latest_common_dst_snapshot)
-                    cmd = p.split_args(
-                        f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
-                        latest_common_dst_snapshot,
-                    )
-                    self.run_ssh_command(dst, self.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
+                if params.force_once:
+                    params.force = False
+                self.info("Rolling back destination to most recent common snapshot:", latest_common_dst_snapshot)
+                cmd = p.split_args(
+                    f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
+                    latest_common_dst_snapshot,
+                )
+                self.run_ssh_command(dst, self.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
                 self.info("Already up-to-date:", dst_dataset)
