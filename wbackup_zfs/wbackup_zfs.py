@@ -680,25 +680,22 @@ class Params:
         os.close(fd)
         fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
+
+        self.compression_program: str = self.program_name(args.compression_program)
+        self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
+        self.mbuffer_program: str = self.program_name(args.mbuffer_program)
+        self.mbuffer_program_opts: List[str] = self.split_args(args.mbuffer_program_opts)
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
         if args.bwlimit and args.bwlimit.strip():
             self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
-        self.mbuffer_program: str = self.program_name(args.mbuffer_program)
-        self.mbuffer_program_opts: List[str] = self.split_args(args.mbuffer_program_opts)
-        self.compression_program: str = self.program_name(args.compression_program)
-        self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
-        # no point trying to be fancy for smaller data transfers:
-        self.min_transfer_size: int = int(self.getenv("min_transfer_size", 1024 * 1024))
-        self.ssh_socket_enabled: bool = self.getenv_bool("ssh_socket_enabled", True)
-
-        self.zfs_program: str = self.program_name(args.zfs_program)
-        self.zpool_program: str = self.program_name(args.zpool_program)
-        self.ssh_program: str = self.program_name(args.ssh_program)
-        self.sudo_program: str = self.program_name(args.sudo_program)
         self.shell_program_local: str = "sh"
         self.shell_program: str = self.program_name(args.shell_program)
+        self.ssh_program: str = self.program_name(args.ssh_program)
+        self.sudo_program: str = self.program_name(args.sudo_program)
         self.uname_program: str = self.program_name("uname")
+        self.zfs_program: str = self.program_name(args.zfs_program)
+        self.zpool_program: str = self.program_name(args.zpool_program)
 
         self.skip_on_error: str = args.skip_on_error
         self.retries: int = args.retries
@@ -710,6 +707,10 @@ class Params:
         self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1000_000_000)
         self.min_sleep_nanos = max(1, self.min_sleep_nanos)
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
+
+        # no point trying to be fancy for smaller data transfers:
+        self.min_transfer_size: int = int(self.getenv("min_transfer_size", 1024 * 1024))
+        self.ssh_socket_enabled: bool = self.getenv_bool("ssh_socket_enabled", True)
 
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
@@ -1051,7 +1052,7 @@ class Job:
                     str(max(128 * 1024, abs(self.recordsizes[src_dataset]))),
                 ] + p.mbuffer_program_opts
                 try:
-                    if not self.run_with_retries(self.replicate_flat_dataset, src_dataset, dst_dataset):
+                    if not self.run_with_retries(self.replicate_dataset, src_dataset, dst_dataset):
                         skip_src_dataset = src_dataset
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                     failed = True
@@ -1150,7 +1151,7 @@ class Job:
 
                 self.delete_datasets(orphans)
 
-    def replicate_flat_dataset(self, src_dataset: str, dst_dataset: str):
+    def replicate_dataset(self, src_dataset: str, dst_dataset: str):
         """Replicate src_dataset (without handling descendants) to dst_dataset"""
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
@@ -1162,13 +1163,7 @@ class Job:
         dst_snapshots_with_guids = self.try_ssh_command(dst, self.trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
-
-        oldest_dst_snapshot_creation = None
-        latest_dst_snapshot_creation = None
-        if len(dst_snapshots_with_guids) > 0 and use_bookmark:
-            oldest_dst_snapshot_creation = int(dst_snapshots_with_guids[0].split("\t", 1)[0])
-            latest_dst_snapshot_creation = int(dst_snapshots_with_guids[-1].split("\t", 1)[0])
-            dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
+        use_bookmark = use_bookmark and len(dst_snapshots_with_guids) > 0
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -1180,9 +1175,10 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        props = "creation,guid,name"
-        types = "snapshot,bookmark"
-        if oldest_dst_snapshot_creation is None:
+        if use_bookmark:
+            props = "creation,guid,name"
+            types = "snapshot,bookmark"
+        else:
             props = "guid,name"
             types = "snapshot"
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
@@ -1194,12 +1190,15 @@ class Job:
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
 
         # ignore irrelevant bookmarks: ignore src bookmarks if the destination dataset has no snapshot. Ignore any src
-        # bookmark that is older than the oldest destination snapshot or newer than the newest destination snapshot.
-        if oldest_dst_snapshot_creation is not None:
+        # bookmark that is older than the oldest destination snapshot or newer than the latest destination snapshot.
+        if use_bookmark:
             src_snapshots_and_bookmarks = self.filter_bookmarks(
-                src_snapshots_and_bookmarks, oldest_dst_snapshot_creation, latest_dst_snapshot_creation
+                src_snapshots_and_bookmarks,
+                oldest_dst_snapshot_creation=int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
+                latest_dst_snapshot_creation=int(dst_snapshots_with_guids[-1].split("\t", 1)[0]),
             )
             src_snapshots_and_bookmarks = cut(field=2, lines=src_snapshots_and_bookmarks)
+            dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
         src_snapshots_with_guids = src_snapshots_and_bookmarks
         src_snapshots_and_bookmarks = None
 
@@ -1243,12 +1242,12 @@ class Job:
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
-            if latest_dst_snapshot != "" and params.force:
-                self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
-                # rollback just in case the dst dataset was modified since its most recent snapshot
-                cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-                self.run_ssh_command(dst, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-            if latest_src_snapshot == "" and latest_dst_snapshot == "":
+                if params.force:
+                    self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
+                    # rollback just in case the dst dataset was modified since its most recent snapshot
+                    cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
+                    self.run_ssh_command(dst, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            elif latest_src_snapshot == "":
                 self.info("Already-up-to-date:", dst_dataset)
                 return True
 
@@ -1256,8 +1255,8 @@ class Job:
             # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
             # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
             def latest_common_snapshot(snapshots_with_guids: List[str], intersect_guids: Set[str]) -> Tuple[str, str]:
-                """Returns a true snapshot instead of its bookmark with the same GUID, per the sorting order
-                previously used for 'zfs list -s ...'"""
+                """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously
+                used for 'zfs list -s ...'"""
                 for _line in reversed(snapshots_with_guids):
                     _guid, _snapshot = _line.split("\t", 1)
                     if _guid in intersect_guids:
@@ -1373,7 +1372,8 @@ class Job:
                         last_appended_guid = guid
                     if snapshot == latest_common_src_snapshot:  # latest_common_src_snapshot is a snapshot or bookmark
                         if "@" not in snapshot and guid != last_appended_guid:
-                            # we won't incrementally replicate from a bookmark to its own snapshot
+                            # only appends the src bookmark if it has no snapshot. If the bookmark has a snap then that
+                            # snap has already been appended, per the sort order previously used for 'zfs list -s ...'
                             result_snapshots.append(snapshot)
                             result_guids.append(guid)
                         break
@@ -1539,7 +1539,7 @@ class Job:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
                 process = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-                # op isn't idempotent so retries regather current state from the start of replicate_flat_dataset()
+                # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(stderr_to_str(e.stdout), file=sys.stdout)
                     self.warn(stderr_to_str(e.stderr).rstrip())
@@ -1798,7 +1798,7 @@ class Job:
         return results
 
     def filter_bookmarks(
-        self, snapshots_and_bookmarks: List[str], oldest_dst_snapshot_creation: int, newest_dst_snapshot_creation: int
+        self, snapshots_and_bookmarks: List[str], oldest_dst_snapshot_creation: int, latest_dst_snapshot_creation: int
     ) -> List[str]:
         is_debug = self.is_debug_enabled()
         results = []
@@ -1807,11 +1807,11 @@ class Job:
                 results.append(snapshot)  # it's a true snapshot
             else:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
-                # older than the oldest destination snapshot or newer than the newest destination snapshot. So here we
+                # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
                 creation_time = int(snapshot[0 : snapshot.index("\t")])
-                if oldest_dst_snapshot_creation <= creation_time <= newest_dst_snapshot_creation:
+                if oldest_dst_snapshot_creation <= creation_time <= latest_dst_snapshot_creation:
                     results.append(snapshot)
                 elif is_debug:
                     self.debug("Excluding b/c bookmark creation time:", snapshot)
