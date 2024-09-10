@@ -19,20 +19,26 @@ set -e # Exit immediately if a cmd returns a non-zero status
 id -u -n
 pkg install sudo pv || true
 pkgutil -y -i zstd mbuffer netcat
-pyversion=3.9.20; export ax_cv_c_float_words_bigendian=no
-# pyversion=3.8.19; export ax_cv_c_float_words_bigendian=no
-# pyversion=3.7.17 # works fine too
-# pyversion=3.10.14; export ax_cv_c_float_words_bigendian=no # works fine too
-wget https://www.python.org/ftp/python/$pyversion/Python-$pyversion.tgz
-tar -zxf Python-$pyversion.tgz
-cd Python-$pyversion
-pkg install gcc || true
-./configure --prefix=/python3  # --enable-optimizations
-make
-rm -fr /python3
-make install
-
-cd ..
+uname -a
+uname -v
+if [ "$(uname -v)" = "11.4.0.15.0" ]; then
+  pyversion=3.9.20; export ax_cv_c_float_words_bigendian=no
+  # pyversion=3.8.19; export ax_cv_c_float_words_bigendian=no
+  # pyversion=3.7.17 # works fine too
+  # pyversion=3.10.14; export ax_cv_c_float_words_bigendian=no # works fine too
+  wget https://www.python.org/ftp/python/$pyversion/Python-$pyversion.tgz
+  tar -zxf Python-$pyversion.tgz
+  cd Python-$pyversion
+  pkg install gcc || true
+  ./configure --prefix=/python3  # --enable-optimizations
+  make
+  rm -fr /python3
+  make install
+  cd ..
+else  # it's a more recent solaris version and as such has python >= 3.7 preinstalled
+  wget https://bootstrap.pypa.io/pip/3.7/get-pip.py  # see https://github.com/pypa/get-pip
+  sudo python3 get-pip.py  # for coverage.sh only: manually install pip as it is missing in the preinstalled version
+fi
 id -u -n
 uname -a
 zfs help
@@ -45,6 +51,7 @@ zstd --version
 pv --version | head -n 1
 mbuffer --version |& head -n 1
 command -v sh | xargs ls -l
+df -k /tmp
 
 mkdir -p $HOME/.ssh
 rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
