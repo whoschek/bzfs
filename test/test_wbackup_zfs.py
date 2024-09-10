@@ -333,7 +333,10 @@ class WBackupTestCase(ParametrizedTestCase):
                 else:
                     os.environ[qq + "min_transfer_size"] = old_min_transfer_size
 
-        self.assertEqual(expected_status, returncode)
+        if isinstance(expected_status, list):
+            self.assertIn(returncode, expected_status)
+        else:
+            self.assertEqual(expected_status, returncode)
         return job
 
     def assertSnapshotNames(self, dataset, expected_names):
@@ -759,18 +762,24 @@ class LocalTestCase(WBackupTestCase):
     def test_zfs_set_via_recv_o(self):
         if self.is_no_privilege_elevation():
             self.skipTest("setting properties via zfs receive -o needs extra permissions")
-        self.setup_basic()
-        props = self.properties_with_special_characters()
-        zfs_set([src_root_dataset + "/foo"], props)
-        self.run_wbackup(
-            src_root_dataset + "/foo",
-            dst_root_dataset + "/foo",
-            "--zfs-send-program-opts=",
-            "--zfs-recv-o-include-regex",
-            *list(props.keys()),
-        )
-        for name, value in props.items():
-            self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.setup_basic()
+                props = self.properties_with_special_characters()
+                zfs_set([src_root_dataset + "/foo"], props)
+                disable_sh = [] if i == 0 else ["--shell-program=" + wbackup_zfs.disable_prg]
+                self.run_wbackup(
+                    src_root_dataset + "/foo",
+                    dst_root_dataset + "/foo",
+                    "--zfs-send-program-opts=",
+                    "--zfs-recv-o-include-regex",
+                    *list(props.keys()),
+                    *disable_sh,
+                )
+                for name, value in props.items():
+                    self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
 
     def test_zfs_set_via_set_include(self):
         if self.is_no_privilege_elevation():
@@ -2050,7 +2059,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         LocalTestCase(param=self.param).test_zfs_set_via_set_include()
 
     def test_inject_src_pipe_fail(self):
-        self.inject_pipe_error("inject_src_pipe_fail")
+        self.inject_pipe_error("inject_src_pipe_fail", expected_error=[1, die_status])
 
     def test_inject_dst_pipe_fail(self):
         self.inject_pipe_error("inject_dst_pipe_fail", expected_error=die_status)
@@ -2141,7 +2150,7 @@ class IsolatedTestCase(WBackupTestCase):
         LocalTestCase(param=self.param).test_zfs_set()
 
     def test_zfs_set_via_recv_o(self):
-        LocalTestCase(param=self.param).test_zfs_set_via_recv_o()
+        FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
 
     def test_zfs_set_via_set_include(self):
         LocalTestCase(param=self.param).test_zfs_set_via_set_include()
@@ -2157,6 +2166,24 @@ class IsolatedTestCase(WBackupTestCase):
 
     def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
         LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+
+    def test_inject_src_pipe_fail(self):
+        FullRemoteTestCase(param=self.param).test_inject_src_pipe_fail()
+
+    def test_inject_dst_pipe_fail(self):
+        FullRemoteTestCase(param=self.param).test_inject_dst_pipe_fail()
+
+    def test_inject_src_pipe_garble(self):
+        FullRemoteTestCase(param=self.param).test_inject_src_pipe_garble()
+
+    def test_inject_dst_pipe_garble(self):
+        FullRemoteTestCase(param=self.param).test_inject_dst_pipe_garble()
+
+    def test_basic_replication_flat_send_recv_flags(self):
+        FullRemoteTestCase(param=self.param).test_basic_replication_flat_send_recv_flags()
+
+    def test_basic_replication_flat_simple(self):
+        FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
 
 
 #############################################################################

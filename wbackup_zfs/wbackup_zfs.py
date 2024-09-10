@@ -1473,8 +1473,9 @@ class Job:
         if self.inject_params.get("inject_src_send_error", False):
             send_cmd = f"{send_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if src_pipe != "":
-            src_shell_program = params.shell_program if len(params.src.ssh_cmd) > 0 else params.shell_program_local
-            src_pipe = src_shell_program + " -c " + self.dquote(f"{send_cmd} | {src_pipe}")
+            src_pipe = f"{send_cmd} | {src_pipe}"
+            if len(params.src.ssh_cmd) > 0:
+                src_pipe = params.shell_program + " -c " + self.dquote(src_pipe)
         else:
             src_pipe = send_cmd
 
@@ -1489,8 +1490,7 @@ class Job:
         if local_pipe.startswith(" |"):
             local_pipe = local_pipe[2:]  # strip leading ' |' part
         if local_pipe != "":
-            # local_pipe = shlex.quote(local_pipe)
-            local_pipe = f'| {params.shell_program_local} -c "{local_pipe}"'
+            local_pipe = f"| {local_pipe}"
 
         # assemble pipeline running on destination leg
         dst_pipe = ""
@@ -1510,8 +1510,9 @@ class Job:
         if self.inject_params.get("inject_dst_receive_error", False):
             recv_cmd = f"{recv_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if dst_pipe != "":
-            dst_shell_program = params.shell_program if len(params.dst.ssh_cmd) > 0 else params.shell_program_local
-            dst_pipe = dst_shell_program + " -c " + self.dquote(f"{dst_pipe} | {recv_cmd}")
+            dst_pipe = f"{dst_pipe} | {recv_cmd}"
+            if len(params.dst.ssh_cmd) > 0:
+                dst_pipe = params.shell_program + " -c " + self.dquote(dst_pipe)
         else:
             dst_pipe = recv_cmd
 
