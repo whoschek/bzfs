@@ -128,7 +128,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.2.5
+  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.2.6
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:

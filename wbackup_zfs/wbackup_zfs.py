@@ -1222,14 +1222,12 @@ class Job:
             if params.skip_missing_snapshots == "fail":
                 die(
                     f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
-                    f"using --skip-missing-snapshots=dataset"
+                    "using --skip-missing-snapshots=dataset"
                 )
             elif params.skip_missing_snapshots == "dataset":
                 self.warn("Skipping source dataset because it includes no snapshot:", src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and params.recursive:
-                    self.warn(
-                        "Also skipping descendant datasets because destination dataset does not exist:", src_dataset
-                    )
+                    self.warn("Also skipping descendant datasets as destination dataset does not exist:", src_dataset)
                 return self.dst_dataset_exists[dst_dataset]
 
         self.debug("latest_src_snapshot:", latest_src_snapshot)
@@ -1243,7 +1241,7 @@ class Job:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
                 if params.force:
-                    self.info("Rolling back dst to most recent snapshot:", latest_dst_snapshot)
+                    self.info("Rolling back destination to most recent snapshot:", latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
                     self.run_ssh_command(dst, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
@@ -1276,7 +1274,7 @@ class Job:
                     die(
                         f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
                         f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
-                        f"for example via --force option."
+                        "for example via --force option."
                     )
                 if params.force_once:
                     params.force = False
