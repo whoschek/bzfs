@@ -1532,7 +1532,7 @@ class Job:
 
         cmd = [params.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
         msg = "Would execute:" if is_dry_send_receive else "Executing:"
-        self.debug(msg, " ".join(cmd))
+        self.debug(msg, " ".join(cmd[2:]))
         if not is_dry_send_receive:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
@@ -1674,11 +1674,12 @@ class Job:
     ):
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p = self.params
+        msg_cmd = [shlex.quote(arg) for arg in cmd]
         ssh_cmd: List[str] = remote.ssh_cmd
         if len(ssh_cmd) > 0:
             if not self.is_program_available("ssh", "local"):
                 die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
-            cmd = [shlex.quote(arg) for arg in cmd]
+            cmd = msg_cmd
             if p.ssh_socket_enabled:
                 # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
                 # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
@@ -1702,7 +1703,7 @@ class Job:
                         )
 
         msg = "Would execute:" if is_dry else "Executing:"
-        level(msg, " ".join(ssh_cmd + cmd))
+        level(msg, " ".join([shlex.quote(item) for item in ssh_cmd] + msg_cmd))
         if not is_dry:
             try:
                 process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
