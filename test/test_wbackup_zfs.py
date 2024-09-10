@@ -549,10 +549,12 @@ class LocalTestCase(WBackupTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.setup_basic()
-        boo = create_filesystem(src_root_dataset, "goo")
-        take_snapshot(boo, fix("g1"))
+        goo = create_filesystem(src_root_dataset, "goo")
+        take_snapshot(goo, fix("g1"))
         boo = create_filesystem(src_root_dataset, "boo")
         take_snapshot(boo, fix("b1"))
+        moo = create_filesystem(src_root_dataset, "moo")
+        take_snapshot(moo, fix("m1"))
         zoo = create_filesystem(src_root_dataset, "zoo")
         take_snapshot(zoo, fix("z1"))
         for i in range(0, 3):
@@ -579,6 +581,7 @@ class LocalTestCase(WBackupTestCase):
                     self.assertSnapshots(dst_root_dataset, 0)
                 else:
                     self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assertSnapshots(dst_root_dataset + "/moo", 1, "m")
                     self.assertSnapshots(dst_root_dataset + "/zoo", 1, "z")
 
     def test_basic_replication_with_no_datasets_1(self):
