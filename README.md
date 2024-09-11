@@ -1001,8 +1001,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     filter them such that we only retain the properties whose name
     matches at least one of the --include regexes but none of the
     --exclude regexes. Append each retained property to the list of
-    '-o' options in -zfs-recv-program-opt(s), unless another '-o' or
-    '-x' option with the same name already exists therein. In other
+    '-o' options in --zfs-recv-program-opt(s), unless another '-o'
+    or '-x' option with the same name already exists therein. In other
     words, --zfs-recv-program-opt(s) takes precedence.
 
     The --zfs-recv-o-include-regex option can be specified multiple
@@ -1070,8 +1070,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     filter them such that we only retain the properties whose name
     matches at least one of the --include regexes but none of the
     --exclude regexes. Append each retained property to the list of
-    '-x' options in -zfs-recv-program-opt(s), unless another '-o' or
-    '-x' option with the same name already exists therein. In other
+    '-x' options in --zfs-recv-program-opt(s), unless another '-o'
+    or '-x' option with the same name already exists therein. In other
     words, --zfs-recv-program-opt(s) takes precedence.
 
     The --zfs-recv-x-include-regex option can be specified multiple

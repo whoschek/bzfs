@@ -762,20 +762,26 @@ class LocalTestCase(WBackupTestCase):
     def test_zfs_set_via_recv_o(self):
         if self.is_no_privilege_elevation():
             self.skipTest("setting properties via zfs receive -o needs extra permissions")
-        for i in range(0, 2):
+        for i in range(0, 5):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
                 self.setup_basic()
                 props = self.properties_with_special_characters()
                 zfs_set([src_root_dataset + "/foo"], props)
-                disable_sh = [] if i == 0 else ["--shell-program=" + wbackup_zfs.disable_prg]
+                disable_pv = [] if i <= 0 else ["--pv-program=" + wbackup_zfs.disable_prg]
+                disable_mbuffer = [] if i <= 1 else ["--mbuffer-program=" + wbackup_zfs.disable_prg]
+                disable_zstd = [] if i <= 2 else ["--compression-program=" + wbackup_zfs.disable_prg]
+                disable_sh = [] if i <= 3 else ["--shell-program=" + wbackup_zfs.disable_prg]
                 self.run_wbackup(
                     src_root_dataset + "/foo",
                     dst_root_dataset + "/foo",
                     "--zfs-send-program-opts=",
                     "--zfs-recv-o-include-regex",
                     *list(props.keys()),
+                    *disable_pv,
+                    *disable_mbuffer,
+                    *disable_zstd,
                     *disable_sh,
                 )
                 for name, value in props.items():
@@ -2646,6 +2652,18 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\tbaz"], params.split_args("foo", "bar\tbaz"))
         self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
+
+    def test_fix_send_recv_opts(self):
+        params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
+        self.assertEqual([], params.fix_send_recv_opts(["-v"]))
+        self.assertEqual([], params.fix_send_recv_opts(["-n"]))
+        self.assertEqual([], params.fix_send_recv_opts(["-nv"]))
+        self.assertEqual([], params.fix_send_recv_opts(["-vn"]))
+        self.assertEqual([], params.fix_send_recv_opts(["--verbose", "-v", "--dryrun", "-n"]))
+        self.assertEqual(["-h"], params.fix_send_recv_opts(["-vhn"]))
+        self.assertEqual(["--vhn"], params.fix_send_recv_opts(["--vhn"]))
+        self.assertEqual(["foo"], params.fix_send_recv_opts(["foo"]))
+        self.assertEqual(["v", "n"], params.fix_send_recv_opts(["v", "n"]))
 
     def test_xprint(self):
         wbackup_zfs.xprint("foo")

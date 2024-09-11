@@ -589,7 +589,7 @@ feature.
             help=h(f"Take the output properties of --{grup}-sources (see above) and filter them such that we only "
                    "retain the properties whose name matches at least one of the --include regexes but none of the "
                    f"--exclude regexes. Append each retained property to the list of {flag} options in "
-                   f"-zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same name already exists "
+                   f"--zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same name already exists "
                    f"therein. In other words, --zfs-recv-program-opt(s) takes precedence.\n\n"
                    f"The --{grup}-include-regex option can be specified multiple times. "
                    "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
@@ -755,7 +755,8 @@ class Params:
     @staticmethod
     def fix_send_recv_opts(opts: List[str]) -> List[str]:
         """These opts are instead managed via wbackup CLI args --dryrun and --verbose"""
-        return [opt for opt in opts if opt not in ["--dryrun", "-n", "--verbose", "-v"]]
+        opts = [o for o in opts if o not in {"--dryrun", "-n", "--verbose", "-v", "-nv", "-vn"}]
+        return [o if o.startswith("--") or not o.startswith("-") else o.replace("n", "").replace("v", "") for o in opts]
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
@@ -2224,6 +2225,7 @@ class Job:
                 if program.startswith("uname-"):
                     # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
                     # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
+                    # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc
                     # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                     available_programs[key].pop(program)
                     uname = program[len("uname-") :]
@@ -2299,18 +2301,19 @@ class Job:
                 available_programs[location][zfs_version_is_at_least_2_1_0] = True
         self.trace(f"available_programs[{location}][zfs]:", available_programs[location]["zfs"])
 
-        try:
-            cmd = [p.shell_program, "-c", self.find_available_programs()]
-            available_programs[location].update(
-                dict.fromkeys(self.run_ssh_command(remote, self.trace, cmd=cmd).splitlines())
-            )
-            return
-        except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
-            if e.filename != p.shell_program:
-                raise
-        except subprocess.CalledProcessError:
-            pass
-        self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions ...")
+        if p.shell_program != disable_prg:
+            try:
+                cmd = [p.shell_program, "-c", self.find_available_programs()]
+                available_programs[location].update(
+                    dict.fromkeys(self.run_ssh_command(remote, self.trace, cmd=cmd).splitlines())
+                )
+                return
+            except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
+                if e.filename != p.shell_program:
+                    raise
+            except subprocess.CalledProcessError:
+                pass
+            self.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions ...")
         available_programs[location].update(available_programs_minimum)
 
     def is_solaris_zfs(self, remote: Remote) -> bool:
