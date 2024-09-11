@@ -255,7 +255,7 @@ jobs:
 
   test_freebsd_14_1:  # currently uses zfs-2.2.4
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
@@ -272,7 +272,7 @@ jobs:
 
   test_freebsd_13_3:  # currently uses zfs-2.1.14
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
     - uses: actions/checkout@v4
@@ -290,7 +290,7 @@ jobs:
   test_solaris_11_4:
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
 #    if: false  # job currently disabled
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 140
     steps:
     - uses: actions/checkout@v4
