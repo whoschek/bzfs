@@ -669,11 +669,11 @@ class Params:
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
         self.curr_zfs_send_program_opts: List[str] = []
-        self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
+        zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
-            self.zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
+            zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
+        self.zfs_recv_program_opts: List[str] = self.fix_recv_opts(zfs_recv_program_opts)
         self.zfs_recv_ox_names: Set[str] = set()
-        self.zfs_recv_program_opts = self.fix_recv_opts(self.zfs_recv_program_opts)
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
@@ -760,11 +760,11 @@ class Params:
 
     @staticmethod
     def fix_recv_opts(opts: List[str]) -> List[str]:
-        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nvF", {"-o", "-x"})
+        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nv", {"-o", "-x"})
 
     @staticmethod
     def fix_send_opts(opts: List[str]) -> List[str]:
-        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nv", {"-i", "-I"})
+        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "denv", {"-i", "-I"})
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
@@ -2562,7 +2562,7 @@ def fix_send_recv_opts(
                 i += 1
         elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
             if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
-                for char in exclude_short_opts:  # example: "nvF"
+                for char in exclude_short_opts:  # example: "nv"
                     opt = opt.replace(char, "")
                 if opt == "-":
                     continue
