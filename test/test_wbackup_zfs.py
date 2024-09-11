@@ -498,7 +498,7 @@ class LocalTestCase(WBackupTestCase):
                     "-v",
                     "-v",
                     "--zfs-send-program-opts=-v --dryrun" + extra_opt,
-                    "--zfs-recv-program-opts=--verbose -n",
+                    "--zfs-recv-program-opts=-v -n",
                     "--zfs-recv-program-opt=-u",
                     *opts,
                     dry_run=(i == 0),
@@ -2656,24 +2656,21 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_fix_send_recv_opts(self):
         params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
-        self.assertEqual([], params.fix_recv_opts(["-v"]))
         self.assertEqual([], params.fix_recv_opts(["-n"]))
-        self.assertEqual([], params.fix_recv_opts(["-nv"]))
-        self.assertEqual([], params.fix_recv_opts(["-vn"]))
-        self.assertEqual([], params.fix_recv_opts(["--verbose", "-v", "--dryrun", "-n"]))
+        self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"]))
         self.assertEqual([""], params.fix_recv_opts([""]))
         self.assertEqual([], params.fix_recv_opts([]))
         self.assertEqual(["-"], params.fix_recv_opts(["-"]))
-        self.assertEqual(["-h"], params.fix_recv_opts(["-vhn"]))
+        self.assertEqual(["-h"], params.fix_recv_opts(["-hn"]))
+        self.assertEqual(["-h"], params.fix_recv_opts(["-nh"]))
         self.assertEqual(["--Fvhn"], params.fix_recv_opts(["--Fvhn"]))
         self.assertEqual(["foo"], params.fix_recv_opts(["foo"]))
         self.assertEqual(["v", "n", "F"], params.fix_recv_opts(["v", "n", "F"]))
-        self.assertEqual(["-o", "-v"], params.fix_recv_opts(["-o", "-v"]))
-        self.assertEqual(["-o", "-v"], params.fix_recv_opts(["-o", "-v", "-n"]))
-        self.assertEqual(["-x", "--verbose"], params.fix_recv_opts(["-x", "--verbose"]))
-        self.assertEqual(["-x", "--verbose"], params.fix_recv_opts(["-x", "--verbose", "-n"]))
+        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n"]))
+        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n", "-n"]))
+        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun"]))
+        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun", "-n"]))
         self.assertEqual(["-x"], params.fix_recv_opts(["-x"]))
-        self.assertEqual([], params.fix_send_opts(["-nv"]))
 
     def test_xprint(self):
         wbackup_zfs.xprint("foo")

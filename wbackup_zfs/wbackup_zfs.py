@@ -760,11 +760,11 @@ class Params:
 
     @staticmethod
     def fix_recv_opts(opts: List[str]) -> List[str]:
-        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nv", {"-o", "-x"})
+        return fix_send_recv_opts(opts, {"--dryrun"}, "n", {"-o", "-x"})
 
     @staticmethod
     def fix_send_opts(opts: List[str]) -> List[str]:
-        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "denv", {"-i", "-I"})
+        return fix_send_recv_opts(opts, {"--dryrun"}, "den", {"-i", "-I"})
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
@@ -2547,7 +2547,7 @@ def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
 def fix_send_recv_opts(
     opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str, include_arg_opts: Set[str]
 ) -> List[str]:
-    """These opts are instead managed via wbackup CLI args --dryrun and --verbose, etc"""
+    """These opts are instead managed via wbackup CLI args --dryrun, etc"""
     assert "-" not in exclude_short_opts
     results = []
     i = 0
@@ -2562,7 +2562,7 @@ def fix_send_recv_opts(
                 i += 1
         elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
             if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
-                for char in exclude_short_opts:  # example: "nv"
+                for char in exclude_short_opts:  # example: "den"
                     opt = opt.replace(char, "")
                 if opt == "-":
                     continue
