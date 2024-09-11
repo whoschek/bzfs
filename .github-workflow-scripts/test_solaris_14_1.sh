@@ -36,8 +36,9 @@ if [ "$(uname -v)" = "11.4.0.15.0" ]; then
   make install
   cd ..
 else  # it's a more recent solaris version and as such has python >= 3.7 preinstalled
-  wget https://bootstrap.pypa.io/pip/3.7/get-pip.py  # see https://github.com/pypa/get-pip
-  sudo python3 get-pip.py  # for coverage.sh only: manually install pip as it is missing in the preinstalled version
+  pkg install coverage-37  # for coverage.sh only
+  #wget https://bootstrap.pypa.io/pip/3.7/get-pip.py  # see https://github.com/pypa/get-pip
+  #sudo python3 get-pip.py  # for coverage.sh only: manually install pip as it is missing in the preinstalled version
 fi
 id -u -n
 uname -a
