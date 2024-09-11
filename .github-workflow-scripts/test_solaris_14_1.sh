@@ -36,9 +36,16 @@ if [ "$(uname -v)" = "11.4.0.15.0" ]; then
   make install
   cd ..
 else  # it's a more recent solaris version and as such has python >= 3.7 preinstalled
-  pkg install coverage-37  # for coverage.sh only
-  #wget https://bootstrap.pypa.io/pip/3.7/get-pip.py  # see https://github.com/pypa/get-pip
-  #sudo python3 get-pip.py  # for coverage.sh only: manually install pip as it is missing in the preinstalled version
+  if false; then  # 3.7 would work fine too
+    pkg install coverage-37  # for coverage.sh only
+  else
+    pkg install runtime/python-39
+    pkg install coverage-39  # for coverage.sh only
+    mkdir -p /python3/bin
+    ln -s $(command -v python3.9) /python3/bin/python3
+  fi
+  ##wget https://bootstrap.pypa.io/pip/3.7/get-pip.py  # see https://github.com/pypa/get-pip
+  ##sudo python3 get-pip.py  # for coverage.sh only: manually install pip as it is missing in the preinstalled version
 fi
 id -u -n
 uname -a
@@ -85,6 +92,4 @@ sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/wbackup-zfs; .
 echo "wbackup-zfs-testrun-success"
 
 #pkg update --accept; reboot # FIXME: reboot disconnects
-#pkg exact-install runtime/python-37  # FIXME: install fails
-#pkg install runtime/python-39  # FIXME: install fails
 #pkg search python

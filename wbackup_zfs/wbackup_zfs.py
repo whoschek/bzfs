@@ -973,11 +973,11 @@ class Job:
 
         zfs_send_program_opts = p.curr_zfs_send_program_opts
         if self.is_zpool_feature_enabled_or_active(dst, "feature@large_blocks"):
-            append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4.0 does not have this feature
+            append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4 does not have this feature
         if self.is_solaris_zfs(dst):
-            p.dry_run_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -n' flag
-            p.verbose_destroy = ""  # solaris-11.4.0 knows no 'zfs destroy -v' flag
-        if self.is_solaris_zfs(src):  # solaris-11.4.0 only knows -w compress
+            p.dry_run_destroy = ""  # solaris-11.4 knows no 'zfs destroy -n' flag
+            p.verbose_destroy = ""  # solaris-11.4 knows no 'zfs destroy -v' flag
+        if self.is_solaris_zfs(src):  # solaris-11.4 only knows -w compress
             zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = fix_solaris_raw_mode(zfs_send_program_opts)
         p.curr_zfs_send_program_opts = zfs_send_program_opts
@@ -1305,7 +1305,7 @@ class Job:
                 if params.force_once:
                     params.force = False
                 if self.is_solaris_zfs(dst):
-                    # solaris-11.4.0 has no wildcard syntax to delete all snapshots in a single CLI invocation
+                    # solaris-11.4 has no wildcard syntax to delete all snapshots in a single CLI invocation
                     self.delete_snapshots(
                         dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids)
                     )
@@ -1845,7 +1845,7 @@ class Job:
     def delete_snapshots(self, dataset: str, snapshot_tags: List[str] = []) -> None:
         if len(snapshot_tags) > 0:
             if self.is_solaris_zfs(self.params.dst):
-                # solaris-11.4.0 has no syntax to delete multiple snapshots in a single CLI invocation
+                # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
                 for snapshot_tag in reversed(snapshot_tags):
                     self.delete_snapshot(f"{dataset}@{snapshot_tag}")
             else:
@@ -1857,7 +1857,7 @@ class Job:
         cmd = p.split_args(
             f"{p.dst.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete
         )
-        is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4.0 knows no 'zfs destroy -n' flag
+        is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4 knows no 'zfs destroy -n' flag
         self.run_ssh_command(p.dst, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
     def delete_datasets(self, datasets: Iterable[str]) -> None:
@@ -1877,7 +1877,7 @@ class Job:
                     p.dry_run_destroy,
                     dataset,
                 )
-                is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4.0 knows no 'zfs destroy -n' flag
+                is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4 knows no 'zfs destroy -n' flag
                 self.run_ssh_command(p.dst, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
                 last_deleted_dataset = dataset
 
@@ -1923,7 +1923,7 @@ class Job:
         """estimate num bytes to transfer via 'zfs send'"""
         p = self.params
         if self.is_solaris_zfs(p.src):
-            return 0  # solaris-11.4.0 does not have a --parsable equivalent
+            return 0  # solaris-11.4 does not have a --parsable equivalent
         zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
         cmd = p.split_args(f"{p.src.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
@@ -2225,7 +2225,7 @@ class Job:
                 if program.startswith("uname-"):
                     # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
                     # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
-                    # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc
+                    # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc # https://blogs.oracle.com/solaris/post/building-open-source-software-on-oracle-solaris-114-cbe-release
                     # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                     available_programs[key].pop(program)
                     uname = program[len("uname-") :]
@@ -2280,7 +2280,7 @@ class Job:
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         except subprocess.CalledProcessError as e:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-                available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4.0 zfs does not know --version flag
+                available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4 zfs does not know --version flag
             elif not e.stdout.startswith("zfs-"):
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
             else:

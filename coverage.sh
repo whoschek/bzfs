@@ -18,8 +18,8 @@ else
 fi
 
 # see https://coverage.readthedocs.io/
-PYTHONPATH=. coverage run --branch --omit='test/*.py,*/__init__.py' -m test.test_wbackup_zfs
-coverage report | tee coverage_report.txt
-coverage html
+PYTHONPATH=. python3 -m coverage run --branch --omit='test/*.py,*/__init__.py' -m test.test_wbackup_zfs
+python3 -m coverage report | tee coverage_report.txt
+python3 -m coverage html
 
 PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate

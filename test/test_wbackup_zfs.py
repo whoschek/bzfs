@@ -54,7 +54,7 @@ os.write(ssh_config_file_fd, "# Empty ssh_config file".encode())
 
 keylocation = f"file://{zfs_encryption_key}"
 rng = random.Random(12345)
-has_netcat_program = shutil.which("nc") is not None
+has_netcat_prog = shutil.which("nc") is not None
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
@@ -231,7 +231,7 @@ class WBackupTestCase(ParametrizedTestCase):
                 "--ssh-dst-extra-opts",
                 "-o StrictHostKeyChecking=no",
             ]
-            if ssh_program == "ssh" and has_netcat_program and not is_solaris_zfs():
+            if ssh_program == "ssh" and has_netcat_prog and (is_solaris_zfs_at_least_11_4_42() or not is_solaris_zfs()):
                 r = rng.randint(0, 2)
                 if r % 3 == 0:
                     args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
@@ -3343,6 +3343,10 @@ def find_match(lst, condition, start=None, end=None, reverse=False):
 
 def is_solaris_zfs():
     return platform.system() == "SunOS"
+
+
+def is_solaris_zfs_at_least_11_4_42():
+    return is_solaris_zfs() and wbackup_zfs.is_version_at_least(".".join(platform.version().split(".")[0:3]), "11.4.42")
 
 
 @contextmanager

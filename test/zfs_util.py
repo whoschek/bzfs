@@ -286,7 +286,7 @@ def zfs_version():
         assert lines
     except subprocess.CalledProcessError as e:
         if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-            return None  # solaris-11.4.0 zfs does not know --version flag
+            return None  # solaris-11.4 zfs does not know --version flag
         elif not e.stdout.startswith("zfs-"):
             raise
         else:
