@@ -667,17 +667,19 @@ class Params:
         self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+
         self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
         self.curr_zfs_send_program_opts: List[str] = []
         zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
         self.zfs_recv_program_opts: List[str] = self.fix_recv_opts(zfs_recv_program_opts)
-        self.zfs_recv_ox_names: Set[str] = set()
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
         self.zfs_full_recv_opts: List[str] = self.zfs_recv_program_opts.copy()
+        self.zfs_recv_ox_names: Set[str] = set()
+
         self.timestamp: str = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         self.home_dir: str = get_home_directory()
         self.log_dir: str = self.validate_arg(args.logdir if args.logdir else f"{self.home_dir}/{prog_name}-logs")
@@ -760,11 +762,15 @@ class Params:
 
     @staticmethod
     def fix_recv_opts(opts: List[str]) -> List[str]:
-        return fix_send_recv_opts(opts, {"--dryrun"}, "n", {"-o", "-x"})
+        return fix_send_recv_opts(
+            opts=opts, exclude_long_opts={"--dryrun"}, exclude_short_opts="n", include_arg_opts={"-o", "-x"}
+        )
 
     @staticmethod
     def fix_send_opts(opts: List[str]) -> List[str]:
-        return fix_send_recv_opts(opts, {"--dryrun"}, "den", {"-i", "-I"})
+        return fix_send_recv_opts(
+            opts=opts, exclude_long_opts={"--dryrun"}, exclude_short_opts="den", include_arg_opts={"-i", "-I"}
+        )
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
@@ -1125,7 +1131,7 @@ class Job:
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset
             )
             dst_datasets = self.run_ssh_command(dst, self.trace, check=False, cmd=cmd).splitlines()
-            dst_datasets = set(self.filter_datasets(dst_datasets, dst.root_dataset))
+            dst_datasets = set(self.filter_datasets(dst_datasets, dst.root_dataset))  # apply include/exclude policy
             origins = {replace_prefix(src_ds, src.root_dataset, dst.root_dataset) for src_ds in origin_src_datasets}
             to_delete = dst_datasets.difference(origins)
             self.delete_datasets(to_delete)
