@@ -758,27 +758,13 @@ class Params:
             if "'" in opt or '"' in opt or "`" in opt:
                 die(f"Option must not contain a single quote or double quote or backtick character: {opt}")
 
-    def fix_recv_opts(self, opts: List[str]) -> List[str]:
-        return self.fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nvF")
-
-    def fix_send_opts(self, opts: List[str]) -> List[str]:
-        return self.fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nv")
+    @staticmethod
+    def fix_recv_opts(opts: List[str]) -> List[str]:
+        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nvF", {"-o", "-x"})
 
     @staticmethod
-    def fix_send_recv_opts(opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str) -> List[str]:
-        """These opts are instead managed via wbackup CLI args --dryrun and --verbose, etc"""
-        assert "-" not in exclude_short_opts
-        results = []
-        for opt in opts:
-            if opt in exclude_long_opts:
-                continue
-            if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
-                for char in exclude_short_opts:
-                    opt = opt.replace(char, "")
-                if opt == "-":
-                    continue
-            results.append(opt)
-        return results
+    def fix_send_opts(opts: List[str]) -> List[str]:
+        return fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nv", {"-i", "-I"})
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""
@@ -2556,6 +2542,32 @@ def stderr_to_str(stderr) -> str:
 def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
     if run and value:
         print(value, end=end, file=file)
+
+
+def fix_send_recv_opts(
+    opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str, include_arg_opts: Set[str]
+) -> List[str]:
+    """These opts are instead managed via wbackup CLI args --dryrun and --verbose, etc"""
+    assert "-" not in exclude_short_opts
+    results = []
+    i = 0
+    n = len(opts)
+    while i < n:
+        opt = opts[i]
+        i += 1
+        if opt in include_arg_opts:  # example: {"-o", "-x"}
+            results.append(opt)
+            if i < n:
+                results.append(opts[i])
+                i += 1
+        elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
+            if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
+                for char in exclude_short_opts:  # example: "nvF"
+                    opt = opt.replace(char, "")
+                if opt == "-":
+                    continue
+            results.append(opt)
+    return results
 
 
 def fix_solaris_raw_mode(lst: List[str]) -> List[str]:

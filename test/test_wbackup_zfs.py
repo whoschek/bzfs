@@ -2670,6 +2670,11 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["--Fvhn"], params.fix_recv_opts(["--Fvhn"]))
         self.assertEqual(["foo"], params.fix_recv_opts(["foo"]))
         self.assertEqual(["v", "n", "F"], params.fix_recv_opts(["v", "n", "F"]))
+        self.assertEqual(["-o", "-v"], params.fix_recv_opts(["-o", "-v"]))
+        self.assertEqual(["-o", "-v"], params.fix_recv_opts(["-o", "-v", "-n"]))
+        self.assertEqual(["-x", "--verbose"], params.fix_recv_opts(["-x", "--verbose"]))
+        self.assertEqual(["-x", "--verbose"], params.fix_recv_opts(["-x", "--verbose", "-n"]))
+        self.assertEqual(["-x"], params.fix_recv_opts(["-x"]))
         self.assertEqual([], params.fix_send_opts(["-nv"]))
 
     def test_xprint(self):
