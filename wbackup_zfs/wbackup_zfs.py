@@ -767,6 +767,7 @@ class Params:
     @staticmethod
     def fix_send_recv_opts(opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str) -> List[str]:
         """These opts are instead managed via wbackup CLI args --dryrun and --verbose, etc"""
+        assert "-" not in exclude_short_opts
         results = []
         for opt in opts:
             if opt in exclude_long_opts:

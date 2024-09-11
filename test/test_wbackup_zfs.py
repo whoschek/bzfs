@@ -2663,6 +2663,8 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual([], params.fix_recv_opts(["-vn"]))
         self.assertEqual([], params.fix_recv_opts(["-vFn"]))
         self.assertEqual([], params.fix_recv_opts(["--verbose", "-v", "--dryrun", "-n", "-F"]))
+        self.assertEqual([""], params.fix_recv_opts([""]))
+        self.assertEqual([], params.fix_recv_opts([]))
         self.assertEqual(["-"], params.fix_recv_opts(["-"]))
         self.assertEqual(["-h"], params.fix_recv_opts(["-FvhnF"]))
         self.assertEqual(["--Fvhn"], params.fix_recv_opts(["--Fvhn"]))
