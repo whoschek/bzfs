@@ -661,13 +661,13 @@ class Params:
         self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.zfs_send_program_opts: List[str] = self.fix_send_recv_opts(self.split_args(args.zfs_send_program_opts))
+        self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
         self.curr_zfs_send_program_opts: List[str] = []
         self.zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             self.zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
         self.zfs_recv_ox_names: Set[str] = set()
-        self.zfs_recv_program_opts = self.fix_send_recv_opts(self.zfs_recv_program_opts)
+        self.zfs_recv_program_opts = self.fix_recv_opts(self.zfs_recv_program_opts)
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
@@ -752,11 +752,26 @@ class Params:
             if "'" in opt or '"' in opt or "`" in opt:
                 die(f"Option must not contain a single quote or double quote or backtick character: {opt}")
 
+    def fix_recv_opts(self, opts: List[str]) -> List[str]:
+        return self.fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nvF")
+
+    def fix_send_opts(self, opts: List[str]) -> List[str]:
+        return self.fix_send_recv_opts(opts, {"--dryrun", "--verbose"}, "nv")
+
     @staticmethod
-    def fix_send_recv_opts(opts: List[str]) -> List[str]:
-        """These opts are instead managed via wbackup CLI args --dryrun and --verbose"""
-        opts = [o for o in opts if o not in {"--dryrun", "-n", "--verbose", "-v", "-nv", "-vn"}]
-        return [o if o.startswith("--") or not o.startswith("-") else o.replace("n", "").replace("v", "") for o in opts]
+    def fix_send_recv_opts(opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str) -> List[str]:
+        """These opts are instead managed via wbackup CLI args --dryrun and --verbose, etc"""
+        results = []
+        for opt in opts:
+            if opt in exclude_long_opts:
+                continue
+            if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
+                for char in exclude_short_opts:
+                    opt = opt.replace(char, "")
+                if opt == "-":
+                    continue
+            results.append(opt)
+        return results
 
     def program_name(self, program: str) -> str:
         """For testing: help simulate errors caused by external programs"""

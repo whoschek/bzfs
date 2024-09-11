@@ -2655,15 +2655,19 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_fix_send_recv_opts(self):
         params = wbackup_zfs.Params(wbackup_zfs.argument_parser().parse_args(args=["src", "dst"]))
-        self.assertEqual([], params.fix_send_recv_opts(["-v"]))
-        self.assertEqual([], params.fix_send_recv_opts(["-n"]))
-        self.assertEqual([], params.fix_send_recv_opts(["-nv"]))
-        self.assertEqual([], params.fix_send_recv_opts(["-vn"]))
-        self.assertEqual([], params.fix_send_recv_opts(["--verbose", "-v", "--dryrun", "-n"]))
-        self.assertEqual(["-h"], params.fix_send_recv_opts(["-vhn"]))
-        self.assertEqual(["--vhn"], params.fix_send_recv_opts(["--vhn"]))
-        self.assertEqual(["foo"], params.fix_send_recv_opts(["foo"]))
-        self.assertEqual(["v", "n"], params.fix_send_recv_opts(["v", "n"]))
+        self.assertEqual([], params.fix_recv_opts(["-v"]))
+        self.assertEqual([], params.fix_recv_opts(["-n"]))
+        self.assertEqual([], params.fix_recv_opts(["-F"]))
+        self.assertEqual([], params.fix_recv_opts(["-nv"]))
+        self.assertEqual([], params.fix_recv_opts(["-vn"]))
+        self.assertEqual([], params.fix_recv_opts(["-vFn"]))
+        self.assertEqual([], params.fix_recv_opts(["--verbose", "-v", "--dryrun", "-n", "-F"]))
+        self.assertEqual(["-"], params.fix_recv_opts(["-"]))
+        self.assertEqual(["-h"], params.fix_recv_opts(["-FvhnF"]))
+        self.assertEqual(["--Fvhn"], params.fix_recv_opts(["--Fvhn"]))
+        self.assertEqual(["foo"], params.fix_recv_opts(["foo"]))
+        self.assertEqual(["v", "n", "F"], params.fix_recv_opts(["v", "n", "F"]))
+        self.assertEqual([], params.fix_send_opts(["-nv"]))
 
     def test_xprint(self):
         wbackup_zfs.xprint("foo")
