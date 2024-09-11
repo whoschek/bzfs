@@ -217,8 +217,9 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--exclude-snapshot-regex REGEX [REGEX ...]]
                    [--zfs-send-program-opts STRING]
                    [--zfs-recv-program-opts STRING]
-                   [--zfs-recv-program-opt STRING] [--force] [--force-unmount]
-                   [--force-once] [--skip-parent]
+                   [--zfs-recv-program-opt STRING]
+                   [--force-rollback-to-latest-snapshot] [--force]
+                   [--force-unmount] [--force-once] [--skip-parent]
                    [--skip-missing-snapshots [{fail,dataset,continue}]]
                    [--retries INT] [--skip-on-error [{fail,tree,dataset}]]
                    [--skip-replication] [--delete-missing-snapshots]
@@ -405,6 +406,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--force-rollback-to-latest-snapshot**
+
+*  Before replication, rollback the destination dataset to its most
+    recent destination snapshot, via 'zfs rollback', just in case the
+    destination dataset was modified since its most recent snapshot.
+    This is much less invasive than --force (see below).
+
+<!-- -->
+
 **--force**
 
 *  Before replication, delete destination ZFS snapshots that are more
@@ -562,7 +572,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     and the receiving Unix user at the destination should be separate
     Unix user accounts with separate private keys even if both accounts
     reside on the same machine, per the principle of least privilege.
-    Further, if you do not plan to use the --force flag or
+    Further, if you do not plan to use the --force* flags or
     --delete-missing-snapshots or --delete-missing-dataset then ZFS
     permissions 'rollback,destroy' can be omitted. If you do not plan
     to customize the respective ZFS dataset property then ZFS

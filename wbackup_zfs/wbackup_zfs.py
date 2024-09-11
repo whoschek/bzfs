@@ -236,6 +236,11 @@ feature.
               "--zfs-recv-program-opt=-o "
               "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n"))
     parser.add_argument(
+        "--force-rollback-to-latest-snapshot", action="store_true",
+        help=("Before replication, rollback the destination dataset to its most recent destination snapshot, via "
+              "'zfs rollback', just in case the destination dataset was modified since its most recent snapshot. "
+              "This is much less invasive than --force (see below).\n\n"))
+    parser.add_argument(
         "--force", action="store_true",
         help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
               "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
@@ -333,7 +338,7 @@ feature.
               "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
               "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
               "user accounts with separate private keys even if both accounts reside on the same machine, per the "
-              "principle of least privilege. Further, if you do not plan to use the --force flag or "
+              "principle of least privilege. Further, if you do not plan to use the --force* flags or "
               "--delete-missing-snapshots or --delete-missing-dataset then ZFS permissions 'rollback,destroy' can "
               "be omitted. If you do not plan to customize the respective ZFS dataset property then ZFS permissions "
               "'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be omitted, arriving "
@@ -636,6 +641,7 @@ class Params:
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
         self.skip_parent: bool = args.skip_parent
+        self.force_rollback_to_latest_snapshot: bool = args.force_rollback_to_latest_snapshot
         self.force_once: bool = args.force_once
         self.force: bool = args.force or args.force_once
         self.force_unmount: str = "-f" if args.force_unmount else ""
@@ -1256,7 +1262,7 @@ class Job:
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
-                if params.force:
+                if params.force_rollback_to_latest_snapshot or params.force:
                     self.info("Rolling back destination to most recent snapshot:", latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)

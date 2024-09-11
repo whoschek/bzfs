@@ -575,6 +575,7 @@ class LocalTestCase(WBackupTestCase):
                     "--include-dataset=/xxxxxxxxx",
                     "--exclude-dataset=boo/",
                     "--include-dataset=boo",
+                    "--force-rollback-to-latest-snapshot",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
