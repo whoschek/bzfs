@@ -226,15 +226,15 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--delete-missing-datasets] [--no-privilege-elevation]
                    [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
                    [--dryrun [{recv,send}]] [--verbose] [--quiet]
-                   [--logdir DIR] [--ssh-config-file FILE]
-                   [--ssh-cipher STRING] [--ssh-src-private-key FILE]
-                   [--ssh-dst-private-key FILE] [--ssh-src-user STRING]
-                   [--ssh-dst-user STRING] [--ssh-src-host STRING]
-                   [--ssh-dst-host STRING] [--ssh-src-port INT]
-                   [--ssh-dst-port INT] [--ssh-src-extra-opts STRING]
-                   [--ssh-src-extra-opt STRING] [--ssh-dst-extra-opts STRING]
-                   [--ssh-dst-extra-opt STRING] [--bwlimit STRING]
-                   [--compression-program STRING]
+                   [--logdir DIR] [--version] [--help, -h]
+                   [--ssh-config-file FILE] [--ssh-cipher STRING]
+                   [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
+                   [--ssh-src-user STRING] [--ssh-dst-user STRING]
+                   [--ssh-src-host STRING] [--ssh-dst-host STRING]
+                   [--ssh-src-port INT] [--ssh-dst-port INT]
+                   [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
+                   [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
+                   [--bwlimit STRING] [--compression-program STRING]
                    [--compression-program-opts STRING]
                    [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
                    [--pv-program STRING] [--pv-program-opts STRING]
@@ -250,8 +250,7 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--zfs-recv-x-targets {full|incremental|full,incremental}]
                    [--zfs-recv-x-sources STRING]
                    [--zfs-recv-x-include-regex REGEX [REGEX ...]]
-                   [--zfs-recv-x-exclude-regex REGEX [REGEX ...]] [--version]
-                   [--help, -h]
+                   [--zfs-recv-x-exclude-regex REGEX [REGEX ...]]
                    SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 
@@ -734,6 +733,18 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--version**
+
+*  Display version information and exit.
+
+<!-- -->
+
+**--help, -h**
+
+*  Show this help message and exit.
+
+<!-- -->
+
 **--ssh-config-file** *FILE*
 
 *  Path to SSH ssh_config(5) file (optional); will be passed into ssh
@@ -970,18 +981,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Same syntax as --include-envvar-regex (see above) except that the
     default is to exclude no environment variables. Example:
     `wbackup_zfs_.*`
-
-<!-- -->
-
-**--version**
-
-*  Display version information and exit.
-
-<!-- -->
-
-**--help, -h**
-
-*  Show this help message and exit.
 
 # ZFS-RECV-O (EXPERIMENTAL)
 
