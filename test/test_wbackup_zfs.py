@@ -429,6 +429,18 @@ class LocalTestCase(WBackupTestCase):
                     self.assertTrue(job.is_program_available("mbuffer", loc))
                     self.assertTrue(job.is_program_available("pv", loc))
 
+    def test_basic_replication_flat_simple_with_dry_run_no_send(self):
+        self.setup_basic()
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                dry_run_no_send = ["--dryrun=send"] if i == 0 else []
+                self.run_wbackup(src_root_dataset, dst_root_dataset, *dry_run_no_send)
+                if i == 0:
+                    self.assertSnapshots(dst_root_dataset, 0)
+                else:
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+
     def test_basic_replication_flat_simple_with_multiple_datasets(self):
         self.setup_basic()
         for i in range(0, 2):

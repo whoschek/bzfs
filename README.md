@@ -225,15 +225,16 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--skip-replication] [--delete-missing-snapshots]
                    [--delete-missing-datasets] [--no-privilege-elevation]
                    [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
-                   [--dryrun] [--verbose] [--quiet] [--logdir DIR]
-                   [--ssh-config-file FILE] [--ssh-cipher STRING]
-                   [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
-                   [--ssh-src-user STRING] [--ssh-dst-user STRING]
-                   [--ssh-src-host STRING] [--ssh-dst-host STRING]
-                   [--ssh-src-port INT] [--ssh-dst-port INT]
-                   [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
-                   [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
-                   [--bwlimit STRING] [--compression-program STRING]
+                   [--dryrun [{recv,send}]] [--verbose] [--quiet]
+                   [--logdir DIR] [--ssh-config-file FILE]
+                   [--ssh-cipher STRING] [--ssh-src-private-key FILE]
+                   [--ssh-dst-private-key FILE] [--ssh-src-user STRING]
+                   [--ssh-dst-user STRING] [--ssh-src-host STRING]
+                   [--ssh-dst-host STRING] [--ssh-src-port INT]
+                   [--ssh-dst-port INT] [--ssh-src-extra-opts STRING]
+                   [--ssh-src-extra-opt STRING] [--ssh-dst-extra-opts STRING]
+                   [--ssh-dst-extra-opt STRING] [--bwlimit STRING]
+                   [--compression-program STRING]
                    [--compression-program-opts STRING]
                    [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
                    [--pv-program STRING] [--pv-program-opts STRING]
@@ -689,11 +690,23 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--dryrun**, **-n**
+**--dryrun** *[{recv,send}]*, **-n** *[{recv,send}]*
 
-*  Do a dry-run (aka 'no-op') to print what operations would happen
-    if the command were to be executed for real. This option treats both
-    the ZFS source and destination as read-only.
+*  Do a dry run (aka 'no-op') to print what operations would happen
+    if the command were to be executed for real (optional). This option
+    treats both the ZFS source and destination as read-only. Accepts an
+    optional argument for fine tuning that is handled as follows:
+
+    a) 'recv': Send snapshot data via 'zfs send' to the destination
+    host and receive it there via 'zfs receive -n', which discards the
+    received data there. This is the default when specifying --dryrun.
+
+    b) 'send': Do not execute 'zfs send' and do not execute 'zfs
+    receive'. This is a less 'realistic' form of dry run, but much
+    faster, especially for large snapshots and slow networks/disks, as
+    no data is actually transferred between source and destination.
+
+    Examples: --dryrun, --dryrun=send, --dryrun=recv
 
 <!-- -->
 

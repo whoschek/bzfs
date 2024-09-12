@@ -414,9 +414,17 @@ feature.
               f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
               "bookmarks currently exist, if any.\n\n"))
     parser.add_argument(
-        "--dryrun", "-n", action="store_true",
-        help=("Do a dry-run (aka 'no-op') to print what operations would happen if the command were to be executed "
-              "for real. This option treats both the ZFS source and destination as read-only.\n\n"))
+        "--dryrun", "-n", choices=["recv", "send"], default=None, const="recv", nargs="?",
+        help=("Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
+              "for real (optional). This option treats both the ZFS source and destination as read-only. "
+              "Accepts an optional argument for fine tuning that is handled as follows:\n\n"
+              "a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via "
+              "'zfs receive -n', which discards the received data there. This is the default when specifying --dryrun. "
+              "\n\n"
+              "b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less 'realistic' form "
+              "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no data is "
+              "actually transferred between source and destination.\n\n"
+              "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n"))
     parser.add_argument(
         "--verbose", "-v", action="count", default=0,
         help=("Print verbose information. This option can be specified multiple times to increase the level of "
@@ -654,9 +662,10 @@ class Params:
         self.delete_empty_datasets: bool = args.delete_missing_datasets
         self.delete_missing_snapshots: bool = args.delete_missing_snapshots
         self.skip_replication: bool = args.skip_replication
-        self.dry_run: bool = args.dryrun
-        self.dry_run_recv: str = "-n" if args.dryrun else ""
+        self.dry_run: bool = args.dryrun is not None
+        self.dry_run_recv: str = "-n" if self.dry_run else ""
         self.dry_run_destroy: str = self.dry_run_recv
+        self.dry_run_no_send: bool = args.dryrun == "send"
         self.verbose: str = "-v" if args.verbose >= 1 else ""
         self.verbose_zfs: bool = args.verbose >= 2
         self.quiet: str = "" if args.quiet else "-v"
@@ -1361,6 +1370,7 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
+                is_dry_send_receive = is_dry_send_receive or params.dry_run_no_send
                 self.run_zfs_send_receive(
                     send_cmd, recv_cmd, size_bytes, size_human, is_dry_send_receive, error_trigger="full_zfs_send"
                 )
@@ -1429,6 +1439,7 @@ class Job:
                 )
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
                     is_dry_send_receive = True
+                is_dry_send_receive = is_dry_send_receive or params.dry_run_no_send
                 self.run_zfs_send_receive(
                     send_cmd, recv_cmd, size_bytes, size_human, is_dry_send_receive, error_trigger="incr_zfs_send"
                 )
