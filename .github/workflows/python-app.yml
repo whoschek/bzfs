@@ -299,7 +299,8 @@ jobs:
       uses: vmactions/solaris-vm@v1  # see https://github.com/vmactions/solaris-vm
       with:
         release: "11.4"
-        mem: 4096
+        mem: 8192
+        cpu: 4
         run: |
           ./.github-workflow-scripts/test_solaris_14_1.sh
     - name: Upload code coverage report to workflow run page

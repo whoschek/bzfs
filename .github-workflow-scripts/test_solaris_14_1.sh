@@ -59,7 +59,7 @@ zstd --version
 pv --version | head -n 1
 mbuffer --version |& head -n 1
 command -v sh | xargs ls -l
-df -k /tmp
+df -h /tmp
 
 mkdir -p $HOME/.ssh
 rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
