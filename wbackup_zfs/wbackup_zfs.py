@@ -414,16 +414,15 @@ feature.
               f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
               "bookmarks currently exist, if any.\n\n"))
     parser.add_argument(
-        "--dryrun", "-n", choices=["recv", "send"], default=None, const="recv", nargs="?",
+        "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help=("Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
               "for real (optional). This option treats both the ZFS source and destination as read-only. "
               "Accepts an optional argument for fine tuning that is handled as follows:\n\n"
               "a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via "
-              "'zfs receive -n', which discards the received data there. This is the default when specifying --dryrun. "
-              "\n\n"
+              "'zfs receive -n', which discards the received data there.\n\n"
               "b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less 'realistic' form "
               "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no data is "
-              "actually transferred between source and destination.\n\n"
+              "actually transferred between source and destination. This is the default when specifying --dryrun.\n\n"
               "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n"))
     parser.add_argument(
         "--verbose", "-v", action="count", default=0,
