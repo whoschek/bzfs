@@ -1355,7 +1355,7 @@ class Job:
                     if not self.dst_dataset_exists[dst_dataset_parent]:
                         if params.dry_run:
                             is_dry_send_receive = True
-                        elif dst_dataset_parent != "":
+                        if dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
 
                 size_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
@@ -1557,7 +1557,7 @@ class Job:
 
         cmd = [params.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
         msg = "Would execute:" if is_dry_send_receive else "Executing:"
-        self.debug(msg, " ".join(cmd[2:]))
+        self.debug(msg, " ".join(cmd[2:]).lstrip())
         if not is_dry_send_receive:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
@@ -1728,7 +1728,7 @@ class Job:
                         )
 
         msg = "Would execute:" if is_dry else "Executing:"
-        level(msg, " ".join([shlex.quote(item) for item in ssh_cmd] + msg_cmd))
+        level(msg, " ".join([shlex.quote(item) for item in ssh_cmd] + msg_cmd).lstrip())
         if not is_dry:
             try:
                 process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
@@ -1918,7 +1918,7 @@ class Job:
             if not self.dst_dataset_exists[parent]:
                 cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
                 try:
-                    self.run_ssh_command(p.dst, self.debug, print_stdout=True, cmd=cmd)
+                    self.run_ssh_command(p.dst, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless error caused by 'zfs create' without the -u flag
                     if (
@@ -1926,7 +1926,8 @@ class Job:
                         and "filesystem successfully created, but not mounted" not in e.stderr  # SolarisZFS
                     ):
                         raise
-                self.dst_dataset_exists[parent] = True
+                if not p.dry_run:
+                    self.dst_dataset_exists[parent] = True
             parent += "/"
 
     def create_zfs_bookmark(self, src_snapshot: str, src_dataset: str) -> None:
