@@ -421,7 +421,7 @@ feature.
               "a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via "
               "'zfs receive -n', which discards the received data there.\n\n"
               "b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less 'realistic' form "
-              "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no data is "
+              "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no snapshot is "
               "actually transferred between source and destination. This is the default when specifying --dryrun.\n\n"
               "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n"))
     parser.add_argument(
@@ -907,7 +907,7 @@ class Job:
                         p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
                         self.info(
-                            "ZFS source --> destination:",
+                            "Starting task:",
                             f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
                         )
                         try:
@@ -1052,12 +1052,12 @@ class Job:
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not params.skip_replication:
             self.info(
-                "ZFS dataset replication:",
+                "Starting replication task:",
                 f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
             )
             if len(origin_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.origin_root_dataset}")
-            self.debug(
+            self.trace(
                 "Retry policy:",
                 f"retries: {p.retries}, min_sleep_secs: {p.min_sleep_secs}, "
                 f"max_sleep_secs: {p.max_sleep_secs}, max_elapsed_secs: {p.max_elapsed_secs}",
@@ -2299,7 +2299,7 @@ class Job:
             # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
             # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
             # option is not known there
-            lines = self.run_ssh_command(remote, self.debug, print_stderr=False, cmd=[p.zfs_program, "--version"])
+            lines = self.run_ssh_command(remote, self.trace, print_stderr=False, cmd=[p.zfs_program, "--version"])
             assert lines
         except (FileNotFoundError, PermissionError):  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
@@ -2360,8 +2360,6 @@ class Job:
             else:
                 props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
                 features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
-                str_features = "\n".join([f"{k}: {v}" for k, v in sorted(features.items())])
-                self.trace(f"{loc} zpool features:", str_features)
         if len(lines) == 0:
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
             if self.try_ssh_command(remote, self.trace, cmd=cmd) is None:

@@ -251,6 +251,20 @@ def zfs_set(names=[], properties={}):
             run_zfs_set([f"{name}={value}"])
 
 
+def zfs_inherit(names=[], propname=None, recursive=False, revert=False):
+    assert propname
+    cmd = sudo_cmd + ["zfs", "inherit"]
+    if recursive:
+        cmd.append("-r")
+    if revert:
+        cmd.append("-S")
+    cmd.append(propname)
+    if names:
+        cmd += names
+
+    run_cmd(cmd)
+
+
 def dataset_exists(dataset):
     try:
         build(dataset)

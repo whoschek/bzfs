@@ -698,12 +698,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
     a) 'recv': Send snapshot data via 'zfs send' to the destination
     host and receive it there via 'zfs receive -n', which discards the
-    received data there. This is the default when specifying --dryrun.
+    received data there.
 
     b) 'send': Do not execute 'zfs send' and do not execute 'zfs
     receive'. This is a less 'realistic' form of dry run, but much
     faster, especially for large snapshots and slow networks/disks, as
-    no data is actually transferred between source and destination.
+    no snapshot is actually transferred between source and destination.
+    This is the default when specifying --dryrun.
 
     Examples: --dryrun, --dryrun=send, --dryrun=recv
 
