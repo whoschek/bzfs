@@ -871,7 +871,7 @@ class Job:
     def __init__(self):
         self.params: Params
         self.dst_dataset_exists: Dict[str, bool] = {}
-        self.recordsizes: Dict[str, int] = {}
+        self.src_properties: Dict[str, Dict[str, str | int]] = {}
         self.mbuffer_current_opts: List[str] = []
         self.all_exceptions: List[str] = []
         self.first_exception: Optional[BaseException] = None
@@ -1039,10 +1039,12 @@ class Job:
         )
         src_datasets_with_record_sizes = (self.try_ssh_command(src, self.debug, cmd=cmd) or "").splitlines()
         src_datasets = []
-        self.recordsizes = {}
+        self.src_properties = {}
         for line in src_datasets_with_record_sizes:
             volblocksize, recordsize, src_dataset = line.split("\t", 2)
-            self.recordsizes[src_dataset] = int(recordsize) if recordsize != "-" else -int(volblocksize)
+            self.src_properties[src_dataset] = {
+                "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
+            }
             src_datasets.append(src_dataset)
         src_datasets_with_record_sizes = None  # help gc
 
@@ -1073,7 +1075,7 @@ class Job:
                 self.debug("Replicating:", f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = [
                     "-s",
-                    str(max(128 * 1024, abs(self.recordsizes[src_dataset]))),
+                    str(max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"]))),
                 ] + p.mbuffer_program_opts
                 try:
                     if not self.run_with_retries(self.replicate_dataset, src_dataset, dst_dataset):
