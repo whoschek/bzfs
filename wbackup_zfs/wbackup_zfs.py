@@ -807,7 +807,7 @@ class Remote:
         """Option values for either location=='src' or location=='dst'; read from ArgumentParser via args"""
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
-        self.origin_root_dataset: str = ""  # deferred until run_main()
+        self.basis_root_dataset: str = ""  # deferred until run_main()
         self.pool: str = ""
         self.sudo: str = ""
         self.use_zfs_delegation: bool = False
@@ -817,8 +817,8 @@ class Remote:
 
         # immutable variables:
         self.location = loc
-        self.origin_ssh_user: str = getattr(args, f"ssh_{loc}_user")
-        self.origin_ssh_host: str = getattr(args, f"ssh_{loc}_host")
+        self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
+        self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
         self.ssh_user_host: str = ""
         self.ssh_config_file: str = p.validate_arg(args.ssh_config_file)
@@ -903,13 +903,13 @@ class Job:
                     self.first_exception = None
                     src, dst = p.src, p.dst
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
-                        src.root_dataset = src.origin_root_dataset = src_root_dataset
-                        dst.root_dataset = dst.origin_root_dataset = dst_root_dataset
+                        src.root_dataset = src.basis_root_dataset = src_root_dataset
+                        dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                         p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
                         self.info(
                             "Starting task:",
-                            f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
+                            f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                         )
                         try:
                             self.validate()
@@ -922,7 +922,7 @@ class Job:
                             self.all_exceptions.append(str(e))
                             error(
                                 f"#{len(self.all_exceptions)}: ZFS source --> destination:",
-                                f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
+                                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                             )
                     error_count = len(self.all_exceptions)
                     if error_count > 0:
@@ -960,11 +960,11 @@ class Job:
         src, dst = p.src, p.dst
         for remote in [src, dst]:
             r, loc = remote, remote.location
-            validate_user_name(r.origin_ssh_user, f"--ssh-{loc}-user")
-            validate_host_name(r.origin_ssh_host, f"--ssh-{loc}-host")
+            validate_user_name(r.basis_ssh_user, f"--ssh-{loc}-user")
+            validate_host_name(r.basis_ssh_host, f"--ssh-{loc}-host")
             validate_port(r.ssh_port, f"--ssh-{loc}-port ")
             r.ssh_user, r.ssh_host, r.ssh_user_host, r.pool, r.root_dataset = parse_dataset_locator(
-                r.origin_root_dataset, user=r.origin_ssh_user, host=r.origin_ssh_host, port=r.ssh_port
+                r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
             r.sudo, r.use_zfs_delegation = self.sudo_cmd(r.ssh_user_host, r.ssh_user)
             r.ssh_cmd = self.ssh_command(remote)
@@ -973,7 +973,7 @@ class Job:
             if src.root_dataset == dst.root_dataset:
                 die(
                     f"Source and destination dataset must not be the same! "
-                    f"src: {src.origin_root_dataset}, dst: {dst.origin_root_dataset}"
+                    f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
             if p.recursive and (
                 f"{src.root_dataset}/".startswith(f"{dst.root_dataset}/")
@@ -981,7 +981,7 @@ class Job:
             ):
                 die(
                     f"Source and destination dataset trees must not overlap! "
-                    f"src: {src.origin_root_dataset}, dst: {dst.origin_root_dataset}"
+                    f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
 
         re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
@@ -1048,7 +1048,7 @@ class Job:
             src_datasets.append(src_dataset)
         src_datasets_with_record_sizes = None  # help gc
 
-        origin_src_datasets = set(src_datasets)
+        basis_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src_datasets, src.root_dataset))  # apply include/exclude policy
         failed = False
 
@@ -1056,10 +1056,10 @@ class Job:
         if not params.skip_replication:
             self.info(
                 "Starting replication task:",
-                f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
+                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
-            if len(origin_src_datasets) == 0:
-                die(f"Source dataset does not exist: {src.origin_root_dataset}")
+            if len(basis_src_datasets) == 0:
+                die(f"Source dataset does not exist: {src.basis_root_dataset}")
             self.trace(
                 "Retry policy:",
                 f"retries: {p.retries}, min_sleep_secs: {p.min_sleep_secs}, "
@@ -1097,13 +1097,13 @@ class Job:
         if params.delete_missing_snapshots and not failed:
             self.info(
                 "--delete-missing-snapshots:",
-                f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
+                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             skip_src_dataset = ""
             for src_dataset in src_datasets:
                 if f"{src_dataset}/".startswith(f"{skip_src_dataset}/"):
                     # skip_src_dataset has been deleted by some third party while we're running
-                    origin_src_datasets.remove(src_dataset)
+                    basis_src_datasets.remove(src_dataset)
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
@@ -1115,7 +1115,7 @@ class Job:
                 except subprocess.CalledProcessError:
                     self.warn("Third party deleted source:", src_dataset)
                     skip_src_dataset = src_dataset
-                    origin_src_datasets.remove(src_dataset)
+                    basis_src_datasets.remove(src_dataset)
                 else:
                     dst_ds = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
                     cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_ds)
@@ -1136,15 +1136,15 @@ class Job:
         if params.delete_missing_datasets and not failed:
             self.info(
                 "--delete-missing-datasets:",
-                f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
+                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset
             )
             dst_datasets = self.run_ssh_command(dst, self.trace, check=False, cmd=cmd).splitlines()
             dst_datasets = set(self.filter_datasets(dst_datasets, dst.root_dataset))  # apply include/exclude policy
-            origins = {replace_prefix(src_ds, src.root_dataset, dst.root_dataset) for src_ds in origin_src_datasets}
-            to_delete = dst_datasets.difference(origins)
+            others = {replace_prefix(src_ds, src.root_dataset, dst.root_dataset) for src_ds in basis_src_datasets}
+            to_delete = dst_datasets.difference(others)
             self.delete_datasets(to_delete)
 
             # Optionally, delete any existing destination dataset that has no snapshot if all descendants of that
@@ -1156,7 +1156,7 @@ class Job:
             if p.delete_empty_datasets:
                 self.info(
                     "--delete-empty-datasets:",
-                    f"{src.origin_root_dataset} {p.recursive_flag} --> {dst.origin_root_dataset} ...",
+                    f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
 
@@ -1229,7 +1229,7 @@ class Job:
         src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
-        origin_src_snapshots_with_guids = src_snapshots_with_guids
+        basis_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
 
         # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
@@ -1389,7 +1389,7 @@ class Job:
                 result_snapshots = []
                 result_guids = []
                 last_appended_guid = ""
-                for snapshot_with_guid in reversed(origin_src_snapshots_with_guids):
+                for snapshot_with_guid in reversed(basis_src_snapshots_with_guids):
                     guid, snapshot = snapshot_with_guid.split("\t", 1)
                     if "@" in snapshot:
                         result_snapshots.append(snapshot)
@@ -2254,7 +2254,7 @@ class Job:
             if r.use_zfs_delegation and p.zpool_features[r.location].get("delegation") == "off":
                 die(
                     f"Permission denied as ZFS delegation is disabled for {r.location} "
-                    f"dataset: {r.origin_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
+                    f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
                 )
 
         if not ("zstd" in available_programs["src"] and "zstd" in available_programs["dst"]):
@@ -2390,7 +2390,7 @@ class Job:
         if len(lines) == 0:
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
             if self.try_ssh_command(remote, self.trace, cmd=cmd) is None:
-                die(f"Pool does not exist for {loc} dataset: {r.origin_root_dataset}. Manually create the pool first!")
+                die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
         params.zpool_features[loc] = features
 
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
