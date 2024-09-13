@@ -880,6 +880,7 @@ class Job:
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.inject_params: Dict[str, bool] = {}  # for testing only
+        self.max_command_line_bytes: Optional[int] = None  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
         try:
@@ -1114,8 +1115,8 @@ class Job:
                     skip_src_dataset = src_dataset
                     origin_src_datasets.remove(src_dataset)
                 else:
-                    dst_dataset = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
-                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", dst_dataset)
+                    dst_ds = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
+                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_ds)
                     dst_snapshots_with_guids = self.run_ssh_command(dst, self.trace, check=False, cmd=cmd).splitlines()
                     dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
@@ -1123,7 +1124,7 @@ class Job:
                     )
                     missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
                     missing_snapshot_tags = cut(2, separator="@", lines=missing_snapshot_tags)
-                    self.delete_snapshots(dst_dataset, snapshot_tags=missing_snapshot_tags)
+                    self.delete_snapshots(dst_ds, snapshot_tags=missing_snapshot_tags)
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset policy.
@@ -1314,7 +1315,7 @@ class Job:
 
         self.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
         self.trace("latest_dst_snapshot:", latest_dst_snapshot)
-        is_dry_send_receive = False
+        dry_run_no_send = False
         if not latest_common_src_snapshot:
             # no common snapshot was found. delete all dst snapshots, if any
             if latest_dst_snapshot:
@@ -1343,7 +1344,7 @@ class Job:
                     # subsequent 'zfs receive' to fail with "cannot receive new filesystem stream: destination has
                     # snapshots; must destroy them to overwrite it". So we skip the zfs send/receive step and keep on
                     # trucking.
-                    is_dry_send_receive = True
+                    dry_run_no_send = True
 
             # to start with, fully replicate oldest snapshot, which in turn creates a common snapshot
             if params.no_stream:
@@ -1354,7 +1355,7 @@ class Job:
                     dst_dataset_parent = os.path.dirname(dst_dataset)
                     if not self.dst_dataset_exists[dst_dataset_parent]:
                         if params.dry_run:
-                            is_dry_send_receive = True
+                            dry_run_no_send = True
                         if dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
 
@@ -1369,12 +1370,12 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 self.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
-                is_dry_send_receive = is_dry_send_receive or params.dry_run_no_send
+                dry_run_no_send = dry_run_no_send or params.dry_run_no_send
                 self.run_zfs_send_receive(
-                    send_cmd, recv_cmd, size_bytes, size_human, is_dry_send_receive, error_trigger="full_zfs_send"
+                    send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="full_zfs_send"
                 )
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
-                if not is_dry_send_receive and not params.dry_run:
+                if not dry_run_no_send and not params.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
                 self.create_zfs_bookmark(oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
@@ -1437,10 +1438,10 @@ class Job:
                     f"Incremental zfs send: {incr_flag}", f"{start_snap} {end_snap} --> {dst_dataset} ({size_human})..."
                 )
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
-                    is_dry_send_receive = True
-                is_dry_send_receive = is_dry_send_receive or params.dry_run_no_send
+                    dry_run_no_send = True
+                dry_run_no_send = dry_run_no_send or params.dry_run_no_send
                 self.run_zfs_send_receive(
-                    send_cmd, recv_cmd, size_bytes, size_human, is_dry_send_receive, error_trigger="incr_zfs_send"
+                    send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="incr_zfs_send"
                 )
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(end_snap, src_dataset)
@@ -1453,7 +1454,7 @@ class Job:
         recv_cmd: List[str],
         size_estimate_bytes: int,
         size_estimate_human: str,
-        is_dry_send_receive: bool,
+        dry_run_no_send: bool,
         error_trigger: Optional[str] = None,
     ):
         params = self.params
@@ -1556,9 +1557,9 @@ class Job:
         dst_ssh_cmd = " ".join([shlex.quote(item) for item in params.dst.ssh_cmd])
 
         cmd = [params.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
-        msg = "Would execute:" if is_dry_send_receive else "Executing:"
+        msg = "Would execute:" if dry_run_no_send else "Executing:"
         self.debug(msg, " ".join(cmd[2:]).lstrip())
-        if not is_dry_send_receive:
+        if not dry_run_no_send:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
                 process = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
@@ -1867,22 +1868,44 @@ class Job:
         return results
 
     def delete_snapshots(self, dataset: str, snapshot_tags: List[str] = []) -> None:
-        if len(snapshot_tags) > 0:
-            if self.is_solaris_zfs(self.params.dst):
-                # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
-                for snapshot_tag in reversed(snapshot_tags):
-                    self.delete_snapshot(f"{dataset}@{snapshot_tag}")
-            else:
-                self.delete_snapshot(dataset + "@" + ",".join(reversed(snapshot_tags)))
+        if len(snapshot_tags) == 0:
+            return
+        p = self.params
+        if self.is_solaris_zfs(p.dst):
+            # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
+            for snapshot_tag in snapshot_tags:
+                self.delete_snapshot(f"{dataset}@{snapshot_tag}")
+        else:  # delete snapshots in batches, without creating a command line that's too big for the OS to handle
+            max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes("dst"))
+            encoding = sys.getfilesystemencoding()
+            header_bytes = len(" ".join(p.dst.ssh_cmd + self.delete_snapshot_cmd(dataset + "@")).encode(encoding))
+            batch_tags, total_bytes = [], header_bytes
+
+            def flush_batch():
+                if len(batch_tags) > 0:
+                    self.delete_snapshot(dataset + "@" + ",".join(batch_tags))
+
+            for snapshot_tag in snapshot_tags:
+                tag_bytes = len(f",{snapshot_tag}".encode(encoding))
+                if total_bytes + tag_bytes > max_bytes:  # or len(batch_tags) >= 1000:
+                    flush_batch()
+                    batch_tags, total_bytes = [], header_bytes
+                batch_tags.append(snapshot_tag)
+                total_bytes += tag_bytes
+            flush_batch()
 
     def delete_snapshot(self, snaps_to_delete: str) -> None:
         p = self.params
         self.info("Deleting snapshot(s):", snaps_to_delete)
-        cmd = p.split_args(
-            f"{p.dst.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete
-        )
+        cmd = self.delete_snapshot_cmd(snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4 knows no 'zfs destroy -n' flag
         self.run_ssh_command(p.dst, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+
+    def delete_snapshot_cmd(self, snaps_to_delete: str):
+        p = self.params
+        return p.split_args(
+            f"{p.dst.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete
+        )
 
     def delete_datasets(self, datasets: Iterable[str]) -> None:
         """Delete the given datasets via zfs destroy -r"""
@@ -2256,7 +2279,7 @@ class Job:
                     uname = program[len("uname-") :]
                     available_programs[key]["uname"] = uname
                     self.trace(f"available_programs[{key}][uname]:", uname)
-                    available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS
+                    available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
                     self.trace(f"available_programs[{key}][os]:", f"{available_programs[key]['os']}")
 
         for key, value in available_programs.items():
@@ -2374,6 +2397,30 @@ class Job:
         return self.is_zpool_feature_enabled_or_active(
             remote, "feature@bookmark_v2"
         ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
+
+    def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
+        """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
+        os_name = os_name if os_name else self.params.available_programs[location].get("os")
+        if os_name == "Linux":
+            arg_max = 2 * 1024 * 1024
+        elif os_name == "FreeBSD":
+            arg_max = 256 * 1024
+        elif os_name == "SunOS":
+            arg_max = 1 * 1024 * 1024
+        elif os_name == "Darwin":
+            arg_max = 1 * 1024 * 1024
+        elif os_name == "Windows":
+            arg_max = 32 * 1024
+        else:
+            arg_max = 256 * 1024  # unknown
+
+        environ_size = 4 * 1024  # typically is 1-4 KB
+        safety_margin = (8 * 2 * 4 + 4) * 1024 if arg_max >= 1 * 1024 * 1024 else 8 * 1024
+        max_bytes = max(4 * 1024, arg_max - environ_size - safety_margin)
+        if self.max_command_line_bytes is not None:
+            return self.max_command_line_bytes  # for testing only
+        else:
+            return max_bytes
 
 
 #############################################################################

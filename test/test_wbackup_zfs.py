@@ -197,6 +197,7 @@ class WBackupTestCase(ParametrizedTestCase):
         error_injection_triggers=None,
         delete_injection_triggers=None,
         inject_params=None,
+        max_command_line_bytes=None,
     ):
         port = getenv_any(
             "test_ssh_port"
@@ -304,6 +305,9 @@ class WBackupTestCase(ParametrizedTestCase):
 
         if inject_params is not None:
             job.inject_params = inject_params
+
+        if max_command_line_bytes is not None:
+            job.max_command_line_bytes = max_command_line_bytes
 
         returncode = 0
         try:
@@ -760,6 +764,15 @@ class LocalTestCase(WBackupTestCase):
         self.run_wbackup(src_root_dataset + "/tmp", src_root_dataset, "--recursive", expected_status=die_status)
         self.run_wbackup(dst_root_dataset, dst_root_dataset + "/tmp", "--recursive", expected_status=die_status)
         self.run_wbackup(dst_root_dataset + "/tmp", dst_root_dataset, "--recursive", expected_status=die_status)
+
+    def test_max_command_line_bytes(self):
+        job = self.run_wbackup(src_root_dataset, dst_root_dataset, "--skip-replication")
+        self.assertTrue(job.get_max_command_line_bytes("dst", os_name="Linux") > 0)
+        self.assertTrue(job.get_max_command_line_bytes("dst", os_name="FreeBSD") > 0)
+        self.assertTrue(job.get_max_command_line_bytes("dst", os_name="SunOS") > 0)
+        self.assertTrue(job.get_max_command_line_bytes("dst", os_name="Darwin") > 0)
+        self.assertTrue(job.get_max_command_line_bytes("dst", os_name="Windows") > 0)
+        self.assertTrue(job.get_max_command_line_bytes("dst", os_name="unknown") > 0)
 
     def test_zfs_set(self):
         if self.is_no_privilege_elevation():
@@ -1860,17 +1873,30 @@ class LocalTestCase(WBackupTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
 
     def test_delete_missing_snapshots_flat(self):
-        self.setup_basic_with_recursive_replication_done()
-        destroy(snapshots(src_root_dataset)[2])
-        destroy(snapshots(src_root_dataset)[0])
-        src_foo = build(src_root_dataset + "/foo")
-        destroy(snapshots(src_foo)[1])
-        src_foo_a = build(src_root_dataset + "/foo/a")
-        destroy(snapshots(src_foo_a)[2])
-        self.run_wbackup(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-missing-snapshots")
-        self.assertSnapshotNames(dst_root_dataset, ["s2"])
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.setup_basic_with_recursive_replication_done()
+                destroy(snapshots(src_root_dataset)[2])
+                destroy(snapshots(src_root_dataset)[0])
+                src_foo = build(src_root_dataset + "/foo")
+                destroy(snapshots(src_foo)[1])
+                src_foo_a = build(src_root_dataset + "/foo/a")
+                destroy(snapshots(src_foo_a)[2])
+                kwargs = {}
+                if i != 0:
+                    kwargs["max_command_line_bytes"] = 1
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-snapshots",
+                    **kwargs,
+                )
+                self.assertSnapshotNames(dst_root_dataset, ["s2"])
+                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_delete_missing_snapshots_despite_same_name(self):
         self.setup_basic_with_recursive_replication_done()
