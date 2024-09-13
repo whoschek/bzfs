@@ -1839,8 +1839,10 @@ class Job:
                 creation_time = int(snapshot[0 : snapshot.index("\t")])
                 if oldest_dst_snapshot_creation <= creation_time <= latest_dst_snapshot_creation:
                     results.append(snapshot)
+                    if is_debug:
+                        self.debug("Including b/c bookmark time:", snapshot[snapshot.rindex("\t") + 1 :])
                 elif is_debug:
-                    self.debug("Excluding b/c bookmark creation time:", snapshot)
+                    self.debug("Excluding b/c bookmark time:", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
