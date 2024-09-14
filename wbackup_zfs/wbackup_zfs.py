@@ -983,8 +983,8 @@ class Job:
                     f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
             if p.recursive and (
-                f"{src.root_dataset}/".startswith(f"{dst.root_dataset}/")
-                or f"{dst.root_dataset}/".startswith(f"{src.root_dataset}/")
+                is_descendant(src.root_dataset, of_root_dataset=dst.root_dataset)
+                or is_descendant(dst.root_dataset, of_root_dataset=src.root_dataset)
             ):
                 die(
                     f"Source and destination dataset trees must not overlap! "
@@ -1075,7 +1075,7 @@ class Job:
             )
             skip_src_dataset = ""
             for src_dataset in src_datasets:
-                if f"{src_dataset}/".startswith(f"{skip_src_dataset}/"):
+                if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
                     # skip_src_dataset shall be ignored or has been deleted by some third party while we're running
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
@@ -1109,7 +1109,7 @@ class Job:
             )
             skip_src_dataset = ""
             for src_dataset in src_datasets:
-                if f"{src_dataset}/".startswith(f"{skip_src_dataset}/"):
+                if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
                     # skip_src_dataset has been deleted by some third party while we're running
                     basis_src_datasets.remove(src_dataset)
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
@@ -1925,7 +1925,7 @@ class Job:
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
         last_deleted_dataset = ""
         for dataset in isorted(datasets):
-            if not f"{dataset}/".startswith(f"{last_deleted_dataset}/"):
+            if not is_descendant(dataset, of_root_dataset=last_deleted_dataset):
                 self.info("Delete missing dataset tree:", f"{dataset} ...")
                 p = self.params
                 cmd = p.split_args(
@@ -2004,9 +2004,9 @@ class Job:
             if dataset.startswith("/"):
                 # it's an absolute dataset - convert it to a relative dataset
                 dataset = dataset[1:]
-                if f"{dataset}/".startswith(f"{src.root_dataset}/"):
+                if is_descendant(dataset, of_root_dataset=src.root_dataset):
                     dataset = relativize_dataset(dataset, src.root_dataset)
-                elif f"{dataset}/".startswith(f"{dst.root_dataset}/"):
+                elif is_descendant(dataset, of_root_dataset=dst.root_dataset):
                     dataset = relativize_dataset(dataset, dst.root_dataset)
                 else:
                     continue  # ignore datasets that make no difference
@@ -2454,6 +2454,10 @@ def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List
         return [line[line.index(separator) + 1 :] for line in lines]
     else:
         raise ValueError("Unsupported parameter value")
+
+
+def is_descendant(dataset: str, of_root_dataset: str) -> bool:
+    return f"{dataset}/".startswith(f"{of_root_dataset}/")
 
 
 def relativize_dataset(dataset: str, root_dataset: str) -> str:
