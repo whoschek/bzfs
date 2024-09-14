@@ -19,119 +19,119 @@
  under the License.
 -->
 
-# wbackup-zfs
-[![Build](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml)
-[![Coverage](https://whoschek.github.io/wbackup-zfs/badges/coverage-badge.svg)](https://whoschek.github.io/wbackup-zfs/coverage/)
-[![os](https://whoschek.github.io/wbackup-zfs/badges/os-badge.svg)](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml)
-[![zfs](https://whoschek.github.io/wbackup-zfs/badges/zfs-badge.svg)](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml)
-[![python](https://whoschek.github.io/wbackup-zfs/badges/python-badge.svg)](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml)
+# bzfs
+[![Build](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml)
+[![Coverage](https://whoschek.github.io/bzfs/badges/coverage-badge.svg)](https://whoschek.github.io/bzfs/coverage/)
+[![os](https://whoschek.github.io/bzfs/badges/os-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
+[![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
+[![python](https://whoschek.github.io/bzfs/badges/python-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 <!-- BEGIN DESCRIPTION SECTION -->
-*wbackup-zfs is a backup command line tool that reliably replicates ZFS
+*bzfs is a backup command line tool that reliably replicates ZFS
 snapshots from a (local or remote) source ZFS dataset (ZFS filesystem or
 ZFS volume) and its descendant datasets to a (local or remote)
 destination ZFS dataset to make the destination dataset a recursively
 synchronized copy of the source dataset, using zfs
 send/receive/rollback/destroy and ssh tunnel as directed. For example,
-wbackup-zfs can be used to incrementally replicate all ZFS snapshots
-since the most recent common snapshot from source to destination, in
-order to help protect against data loss or ransomware.*
+bzfs can be used to incrementally replicate all ZFS snapshots since the
+most recent common snapshot from source to destination, in order to help
+protect against data loss or ransomware.*
 
-When run for the first time, wbackup-zfs replicates the dataset and all
-its snapshots from the source to the destination. On subsequent runs,
-wbackup-zfs transfers only the data that has changed since the previous
-run, i.e. it incrementally replicates to the destination all
-intermediate snapshots that have been created on the source since the
-last run. Source ZFS snapshots older than the most recent common
-snapshot found on the destination are auto-skipped.
+When run for the first time, bzfs replicates the dataset and all its
+snapshots from the source to the destination. On subsequent runs, bzfs
+transfers only the data that has changed since the previous run, i.e. it
+incrementally replicates to the destination all intermediate snapshots
+that have been created on the source since the last run. Source ZFS
+snapshots older than the most recent common snapshot found on the
+destination are auto-skipped.
 
-wbackup-zfs does not create or delete ZFS snapshots on the source - it
-assumes you have a ZFS snapshot management tool to do so, for example
+bzfs does not create or delete ZFS snapshots on the source - it assumes
+you have a ZFS snapshot management tool to do so, for example
 policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup,
-manual zfs snapshot/destroy, etc. wbackup-zfs treats the source as
-read-only, thus the source remains unmodified. With the --dryrun flag,
-wbackup-zfs also treats the destination as read-only. In normal
-operation, wbackup-zfs treats the destination as append-only. Optional
-CLI flags are available to delete destination snapshots and destination
-datasets as directed, for example to make the destination identical to
-the source if the two have somehow diverged in unforeseen ways. This
-easily enables (re)synchronizing the backup from the production state,
-as well as restoring the production state from backup.
+manual zfs snapshot/destroy, etc. bzfs treats the source as read-only,
+thus the source remains unmodified. With the --dryrun flag, bzfs also
+treats the destination as read-only. In normal operation, bzfs treats
+the destination as append-only. Optional CLI flags are available to
+delete destination snapshots and destination datasets as directed, for
+example to make the destination identical to the source if the two have
+somehow diverged in unforeseen ways. This easily enables
+(re)synchronizing the backup from the production state, as well as
+restoring the production state from backup.
 
 The source 'pushes to' the destination whereas the destination 'pulls
-from' the source. wbackup-zfs is installed and executed on the
-'initiator' host which can be either the host that contains the source
-dataset (push mode), or the destination dataset (pull mode), or both
-datasets (local mode, no network required, no ssh required), or any
-third-party (even non-ZFS OSX) host as long as that host is able to SSH
-(via standard 'ssh' CLI) into both the source and destination host
-(pull-push mode). In Pull-push mode the source 'zfs send's the data
-stream to the initiator which immediately pipes the stream (without
-storing anything locally) to the destination host that 'zfs receive's
-it. Pull-push mode means that wbackup-zfs need not be installed or
-executed on either source or destination host. Only the underlying
-'zfs' CLI must be installed on both source and destination host.
-wbackup-zfs can run as root or non-root user, in the latter case via a)
-sudo or b) when granted corresponding ZFS permissions by administrators
-via 'zfs allow' delegation mechanism.
+from' the source. bzfs is installed and executed on the 'initiator'
+host which can be either the host that contains the source dataset (push
+mode), or the destination dataset (pull mode), or both datasets (local
+mode, no network required, no ssh required), or any third-party (even
+non-ZFS OSX) host as long as that host is able to SSH (via standard
+'ssh' CLI) into both the source and destination host (pull-push mode).
+In Pull-push mode the source 'zfs send's the data stream to the
+initiator which immediately pipes the stream (without storing anything
+locally) to the destination host that 'zfs receive's it. Pull-push
+mode means that bzfs need not be installed or executed on either source
+or destination host. Only the underlying 'zfs' CLI must be installed
+on both source and destination host. bzfs can run as root or non-root
+user, in the latter case via a) sudo or b) when granted corresponding
+ZFS permissions by administrators via 'zfs allow' delegation
+mechanism.
 
-wbackup-zfs is written in Python and continously runs a wide set of unit
-tests and integration tests to ensure coverage and compatibility with
-old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
+bzfs is written in Python and continously runs a wide set of unit tests
+and integration tests to ensure coverage and compatibility with old and
+new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
 versions >= 3.7 (including latest stable which is currently
 python-3.12).
 
-wbackup-zfs is a stand-alone program with zero required dependencies,
+bzfs is a stand-alone program with zero required dependencies,
 consisting of a single file, akin to a stand-alone shell script or
 binary executable. No external Python packages are required; indeed no
 Python package management at all is required. You can just copy the file
 wherever you like, for example into /usr/local/bin or similar, and
 simply run it like any stand-alone shell script or binary executable.
 
-Optionally, wbackup-zfs applies bandwidth rate-limiting and progress
-monitoring (via 'pv' CLI) during 'zfs send/receive' data transfers.
-When run across the network, wbackup-zfs also transparently inserts
-lightweight data compression (via 'zstd -1' CLI) and efficient data
-buffering (via 'mbuffer' CLI) into the pipeline between network
-endpoints during 'zfs send/receive' network transfers. If one of these
-utilities is not installed this is auto-detected, and the operation
-continues reliably without the corresponding auxiliary feature.
+Optionally, bzfs applies bandwidth rate-limiting and progress monitoring
+(via 'pv' CLI) during 'zfs send/receive' data transfers. When run
+across the network, bzfs also transparently inserts lightweight data
+compression (via 'zstd -1' CLI) and efficient data buffering (via
+'mbuffer' CLI) into the pipeline between network endpoints during
+'zfs send/receive' network transfers. If one of these utilities is not
+installed this is auto-detected, and the operation continues reliably
+without the corresponding auxiliary feature.
 
 # Example Usage
 
 * Example in local mode (no network, no ssh) to replicate ZFS dataset
 tank1/foo/bar to tank2/boo/bar:
 
-` wbackup-zfs tank1/foo/bar tank2/boo/bar`
+` bzfs tank1/foo/bar tank2/boo/bar`
 
 * Same example in pull mode:
 
-` wbackup-zfs root@host1.example.com:tank1/foo/bar tank2/boo/bar`
+` bzfs root@host1.example.com:tank1/foo/bar tank2/boo/bar`
 
 * Same example in push mode:
 
-` wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar`
+` bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar`
 
 * Same example in pull-push mode:
 
-` wbackup-zfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
+` bzfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
 
 * Example in local mode (no network, no ssh) to recursively replicate
 ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
 
-` wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive`
+` bzfs tank1/foo/bar tank2/boo/bar --recursive`
 
 * Example that makes destination identical to source even if the two
 have drastically diverged:
 
-` wbackup-zfs tank1/foo/bar tank2/boo/bar --recursive --force
+` bzfs tank1/foo/bar tank2/boo/bar --recursive --force
 --delete-missing-snapshots --delete-missing-datasets`
 
 * Example with further options:
 
-` wbackup-zfs tank1/foo/bar root@host2.example.com:tank2/boo/bar
---recursive --exclude-snapshot-regex '.*_(hourly|frequent)'
+` bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
+--exclude-snapshot-regex '.*_(hourly|frequent)'
 --exclude-snapshot-regex 'test_.*' --exclude-dataset
 /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash
 --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex
@@ -146,10 +146,10 @@ have drastically diverged:
 sudo apt-get -y install zfsutils-linux python3 # ensure zfs and python are installed
 sudo apt-get -y install zstd pv mbuffer # auxiliary helpers are optional
 
-git clone https://github.com/whoschek/wbackup-zfs.git
-cd wbackup-zfs
-./wbackup-zfs --help # Run the CLI
-sudo cp wbackup-zfs /usr/local/bin/ # Optional system installation
+git clone https://github.com/whoschek/bzfs.git
+cd bzfs/bzfs
+./bzfs --help # Run the CLI
+sudo cp bzfs /usr/local/bin/ # Optional system installation
 ```
 
 
@@ -165,26 +165,26 @@ python3 --version
 sudo ls
 
 # set this for unit tests if sshd is on a non-standard port (default is 22)
-# export wbackup_zfs_test_ssh_port=12345
-# export wbackup_zfs_test_ssh_port=22
+# export bzfs_test_ssh_port=12345
+# export bzfs_test_ssh_port=22
 
 # verify user can ssh in passwordless via loopback interface & private key
-ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 echo hello
+ssh -p $bzfs_test_ssh_port 127.0.0.1 echo hello
 
 # verify zfs is on PATH
-ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 zfs --version
+ssh -p $bzfs_test_ssh_port 127.0.0.1 zfs --version
 
 # verify zpool is on PATH
-ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 zpool --version
+ssh -p $bzfs_test_ssh_port 127.0.0.1 zpool --version
 
 # verify zstd is on PATH for compression to become enabled
-ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 zstd --version
+ssh -p $bzfs_test_ssh_port 127.0.0.1 zstd --version
 
 # verify pv is on PATH for progress monitoring to become enabled
-ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 pv --version
+ssh -p $bzfs_test_ssh_port 127.0.0.1 pv --version
 
 # verify mbuffer is on PATH for efficient buffering to become enabled
-ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 mbuffer --version
+ssh -p $bzfs_test_ssh_port 127.0.0.1 mbuffer --version
 
 # Finally, run unit tests
 ./test.sh
@@ -194,11 +194,11 @@ ssh -p $wbackup_zfs_test_ssh_port 127.0.0.1 mbuffer --version
 # Automated Test Runs
 
 Results of automated test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
-[here](https://github.com/whoschek/wbackup-zfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
-by [this script](https://github.com/whoschek/wbackup-zfs/blob/main/.github/workflows/python-app.yml).
+[here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
+by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
 The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, Solaris, etc.
 The script also generates code coverage reports which are published
-[here](https://whoschek.github.io/wbackup-zfs/coverage).
+[here](https://whoschek.github.io/bzfs/coverage).
 
 The gist is that it should work on any flavor, with python (3.7 or higher, no additional python packages required)
 only needed on the initiator host.
@@ -206,58 +206,54 @@ only needed on the initiator host.
 
 # Usage
 
-<!-- Docs: The blurb below is copied from the output of wbackup_zfs/wbackup_zfs.py --help -->
+<!-- Docs: The blurb below is copied from the output of bzfs/bzfs.py --help -->
 ```
-usage: wbackup-zfs [-h] [--recursive]
-                   [--include-dataset DATASET [DATASET ...]]
-                   [--exclude-dataset DATASET [DATASET ...]]
-                   [--include-dataset-regex REGEX [REGEX ...]]
-                   [--exclude-dataset-regex REGEX [REGEX ...]]
-                   [--exclude-dataset-property STRING]
-                   [--include-snapshot-regex REGEX [REGEX ...]]
-                   [--exclude-snapshot-regex REGEX [REGEX ...]]
-                   [--zfs-send-program-opts STRING]
-                   [--zfs-recv-program-opts STRING]
-                   [--zfs-recv-program-opt STRING]
-                   [--force-rollback-to-latest-snapshot] [--force]
-                   [--force-unmount] [--force-once] [--skip-parent]
-                   [--skip-missing-snapshots [{fail,dataset,continue}]]
-                   [--retries INT] [--skip-on-error [{fail,tree,dataset}]]
-                   [--skip-replication] [--delete-missing-snapshots]
-                   [--delete-missing-datasets] [--no-privilege-elevation]
-                   [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
-                   [--dryrun [{recv,send}]] [--verbose] [--quiet]
-                   [--logdir DIR] [--version] [--help, -h]
-                   [--ssh-config-file FILE] [--ssh-cipher STRING]
-                   [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
-                   [--ssh-src-user STRING] [--ssh-dst-user STRING]
-                   [--ssh-src-host STRING] [--ssh-dst-host STRING]
-                   [--ssh-src-port INT] [--ssh-dst-port INT]
-                   [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
-                   [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
-                   [--bwlimit STRING] [--compression-program STRING]
-                   [--compression-program-opts STRING]
-                   [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
-                   [--pv-program STRING] [--pv-program-opts STRING]
-                   [--shell-program STRING] [--ssh-program STRING]
-                   [--sudo-program STRING] [--zfs-program STRING]
-                   [--zpool-program STRING]
-                   [--include-envvar-regex REGEX [REGEX ...]]
-                   [--exclude-envvar-regex REGEX [REGEX ...]]
-                   [--zfs-recv-o-targets {full|incremental|full,incremental}]
-                   [--zfs-recv-o-sources STRING]
-                   [--zfs-recv-o-include-regex REGEX [REGEX ...]]
-                   [--zfs-recv-o-exclude-regex REGEX [REGEX ...]]
-                   [--zfs-recv-x-targets {full|incremental|full,incremental}]
-                   [--zfs-recv-x-sources STRING]
-                   [--zfs-recv-x-include-regex REGEX [REGEX ...]]
-                   [--zfs-recv-x-exclude-regex REGEX [REGEX ...]]
-                   SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
+usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
+            [--exclude-dataset DATASET [DATASET ...]]
+            [--include-dataset-regex REGEX [REGEX ...]]
+            [--exclude-dataset-regex REGEX [REGEX ...]]
+            [--exclude-dataset-property STRING]
+            [--include-snapshot-regex REGEX [REGEX ...]]
+            [--exclude-snapshot-regex REGEX [REGEX ...]]
+            [--zfs-send-program-opts STRING] [--zfs-recv-program-opts STRING]
+            [--zfs-recv-program-opt STRING]
+            [--force-rollback-to-latest-snapshot] [--force] [--force-unmount]
+            [--force-once] [--skip-parent]
+            [--skip-missing-snapshots [{fail,dataset,continue}]]
+            [--retries INT] [--skip-on-error [{fail,tree,dataset}]]
+            [--skip-replication] [--delete-missing-snapshots]
+            [--delete-missing-datasets] [--no-privilege-elevation]
+            [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
+            [--dryrun [{recv,send}]] [--verbose] [--quiet] [--logdir DIR]
+            [--version] [--help, -h] [--ssh-config-file FILE]
+            [--ssh-cipher STRING] [--ssh-src-private-key FILE]
+            [--ssh-dst-private-key FILE] [--ssh-src-user STRING]
+            [--ssh-dst-user STRING] [--ssh-src-host STRING]
+            [--ssh-dst-host STRING] [--ssh-src-port INT] [--ssh-dst-port INT]
+            [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
+            [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
+            [--bwlimit STRING] [--compression-program STRING]
+            [--compression-program-opts STRING] [--mbuffer-program STRING]
+            [--mbuffer-program-opts STRING] [--pv-program STRING]
+            [--pv-program-opts STRING] [--shell-program STRING]
+            [--ssh-program STRING] [--sudo-program STRING]
+            [--zfs-program STRING] [--zpool-program STRING]
+            [--include-envvar-regex REGEX [REGEX ...]]
+            [--exclude-envvar-regex REGEX [REGEX ...]]
+            [--zfs-recv-o-targets {full|incremental|full,incremental}]
+            [--zfs-recv-o-sources STRING]
+            [--zfs-recv-o-include-regex REGEX [REGEX ...]]
+            [--zfs-recv-o-exclude-regex REGEX [REGEX ...]]
+            [--zfs-recv-x-targets {full|incremental|full,incremental}]
+            [--zfs-recv-x-sources STRING]
+            [--zfs-recv-x-include-regex REGEX [REGEX ...]]
+            [--zfs-recv-x-exclude-regex REGEX [REGEX ...]]
+            SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 
 <!--
 Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update README.md below, like so:
-./test/update-readme.py wbackup_zfs/wbackup_zfs.py README.md
+./test/update-readme.py bzfs/bzfs.py README.md
 -->
 <!-- BEGIN HELP DETAIL SECTION -->
 **SRC_DATASET DST_DATASET**
@@ -371,8 +367,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     c) Value is a comma-separated list of fully qualified host names
     (no spaces, for example: 'tiger.example.com,shark.example.com'):
     Include the dataset if the fully qualified host name of the host
-    executing wbackup-zfs is contained in the list, otherwise exclude
-    the dataset and its descendants.
+    executing bzfs is contained in the list, otherwise exclude the
+    dataset and its descendants.
 
     If a dataset is excluded its descendants are automatically excluded
     too, and the property values of the descendants are ignored because
@@ -485,8 +481,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Skip processing of the SRC_DATASET and DST_DATASET and only process
     their descendant datasets, i.e. children, and children of children,
     etc (with --recursive). No dataset is processed unless --recursive
-    is also specified. Analogy: `wbackup-zfs --recursive
-    --skip-parent src dst` is akin to Unix `cp -r src/* dst/`
+    is also specified. Analogy: `bzfs --recursive --skip-parent src
+    dst` is akin to Unix `cp -r src/* dst/`
 
 <!-- -->
 
@@ -515,8 +511,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  The number of times a retryable replication step shall be retried if
     it fails, for example because of network hiccups (default: 0). Also
     consider this option if a periodic pruning script may simultaneously
-    delete a dataset or snapshot or bookmark while wbackup-zfs is
-    running and attempting to access it.
+    delete a dataset or snapshot or bookmark while bzfs is running and
+    attempting to access it.
 
 <!-- -->
 
@@ -641,19 +637,19 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--no-create-bookmark**
 
-*  For increased safety, in normal operation wbackup-zfs behaves as
-    follows wrt. ZFS bookmark creation, if it is autodetected that the
-    source ZFS pool support bookmarks: Whenever it has successfully
-    completed replication of the most recent source snapshot,
-    wbackup-zfs creates a ZFS bookmark of that snapshot and attaches it
-    to the source dataset. Bookmarks exist so an incremental stream can
-    continue to be sent from the source dataset without having to keep
-    the already replicated snapshot around on the source dataset until
-    the next upcoming snapshot has been successfully replicated. This
-    way you can send the snapshot from the source dataset to another
-    host, then bookmark the snapshot on the source dataset, then delete
-    the snapshot from the source dataset to save disk space, and then
-    still incrementally send the next upcoming snapshot from the source
+*  For increased safety, in normal operation bzfs behaves as follows
+    wrt. ZFS bookmark creation, if it is autodetected that the source
+    ZFS pool support bookmarks: Whenever it has successfully completed
+    replication of the most recent source snapshot, bzfs creates a ZFS
+    bookmark of that snapshot and attaches it to the source dataset.
+    Bookmarks exist so an incremental stream can continue to be sent
+    from the source dataset without having to keep the already
+    replicated snapshot around on the source dataset until the next
+    upcoming snapshot has been successfully replicated. This way you can
+    send the snapshot from the source dataset to another host, then
+    bookmark the snapshot on the source dataset, then delete the
+    snapshot from the source dataset to save disk space, and then still
+    incrementally send the next upcoming snapshot from the source
     dataset to the other host by referring to the bookmark.
 
     The --no-create-bookmark option disables this safety feature but is
@@ -680,10 +676,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     while a bookmark allows for its snapshot to be deleted on the source
     after successful replication, it still requires that its snapshot is
     not somehow deleted prematurely on the destination dataset, so be
-    mindful of that. By convention, a bookmark created by wbackup-zfs
-    has the same name as its corresponding snapshot, the only difference
-    being the leading '#' separator instead of the leading '@'
-    separator. wbackup-zfs itself never deletes any bookmark.
+    mindful of that. By convention, a bookmark created by bzfs has the
+    same name as its corresponding snapshot, the only difference being
+    the leading '#' separator instead of the leading '@' separator.
+    bzfs itself never deletes any bookmark.
 
     You can list bookmarks, like so: `zfs list -t bookmark -o
     name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and
@@ -699,13 +695,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     86400)) ] && echo $BOOKMARK; done | xargs -I {} sudo zfs destroy
     {}` A better example starting point can be found in third party
     tools or this script:
-    https://github.com/whoschek/wbackup-zfs/blob/main/test/prune_bookmarks.py
+    https://github.com/whoschek/bzfs/blob/main/test/prune_bookmarks.py
 
 <!-- -->
 
 **--no-use-bookmark**
 
-*  For increased safety, in normal operation wbackup-zfs also looks for
+*  For increased safety, in normal operation bzfs also looks for
     bookmarks (in addition to snapshots) on the source dataset in order
     to find the most recent common snapshot wrt. the destination
     dataset, if it is auto-detected that the source ZFS pool support
@@ -714,15 +710,14 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     ZFS replication can continue even if source and destination dataset
     somehow have no common snapshot anymore.
 
-    Note that it does not matter whether a bookmark was created by
-    wbackup-zfs or a third party script, as only the GUID of the
-    bookmark and the GUID of the snapshot is considered for comparison,
-    and ZFS guarantees that any bookmark of a given snapshot
-    automatically has the same GUID, transaction group number and
-    creation time as the snapshot. Also note that you can create, delete
-    and prune bookmarks any way you like, as wbackup-zfs (without
-    --no-use-bookmark) will happily work with whatever bookmarks
-    currently exist, if any.
+    Note that it does not matter whether a bookmark was created by bzfs
+    or a third party script, as only the GUID of the bookmark and the
+    GUID of the snapshot is considered for comparison, and ZFS
+    guarantees that any bookmark of a given snapshot automatically has
+    the same GUID, transaction group number and creation time as the
+    snapshot. Also note that you can create, delete and prune bookmarks
+    any way you like, as bzfs (without --no-use-bookmark) will happily
+    work with whatever bookmarks currently exist, if any.
 
 <!-- -->
 
@@ -766,8 +761,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--logdir** *DIR*
 
-*  Path to log output directory (optional). Default is
-    $HOME/wbackup-zfs-logs
+*  Path to log output directory (optional). Default is $HOME/bzfs-logs
 
 <!-- -->
 
@@ -1007,10 +1001,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     regex with the leading `!` character removed does not match. The
     default is to include no environment variables, i.e. to make no
     exceptions to --exclude-envvar-regex. Example that retains at least
-    these three env vars: `--include-envvar-regex
-    wbackup_zfs_min_sleep_secs --include-envvar-regex
-    wbackup_zfs_max_sleep_secs --include-envvar-regex
-    wbackup_zfs_max_elapsed_secs`. Example that retains all environment
+    these three env vars: `--include-envvar-regex bzfs_min_sleep_secs
+    --include-envvar-regex bzfs_max_sleep_secs --include-envvar-regex
+    bzfs_max_elapsed_secs`. Example that retains all environment
     variables without tightened security: `'.*'`
 
 <!-- -->
@@ -1019,7 +1012,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  Same syntax as --include-envvar-regex (see above) except that the
     default is to exclude no environment variables. Example:
-    `wbackup_zfs_.*`
+    `bzfs_.*`
 
 # ZFS-RECV-O (EXPERIMENTAL)
 

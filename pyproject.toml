@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bzfs"
+
+description = """
+bzfs is a backup command line tool that reliably replicates ZFS \
+snapshots from a (local or remote) source ZFS dataset (ZFS filesystem or \
+ZFS volume) and its descendant datasets to a (local or remote) \
+destination ZFS dataset to make the destination dataset a recursively \
+synchronized copy of the source dataset, using zfs \
+send/receive/rollback/destroy and ssh tunnel as directed. For example, \
+bzfs can be used to incrementally replicate all ZFS snapshots \
+since the most recent common snapshot from source to destination, in \
+order to help protect against data loss or ransomware."""
+
+authors = [
+  {name = "Wolfgang Hoschek", email = "wolfgang.hoschek@mac.com"},
+]
+maintainers = [
+  {name = "Wolfgang Hoschek", email = "wolfgang.hoschek@mac.com"},
+]
+dynamic = ["version"]  # version = "0.9.0"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+license = {text = "Apache License (2.0)"}
+requires-python = ">= 3.7"
+dependencies = [
+]
+
+[project.urls]
+Homepage = "https://github.com/whoschek/bzfs"
+Repository = "https://github.com/whoschek/bzfs"
+Tests = "https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule"
+Coverage = "https://whoschek.github.io/bzfs/coverage"
+Issues = "https://github.com/whoschek/bzfs/issues"
+Changelog = "https://github.com/whoschek/bzfs/blob/main/CHANGELOG.md"
+Distribution = "https://pypi.org/project/bzfs"
+
+[project.optional-dependencies]
+dev = [
+  "black",
+  "coverage",
+  "mypy",
+  "argparse-manpage",
+  # "pandoc", # instead use this: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "package.__version__"}
+
+[tool.black]
+line_length = 120
+target_version = ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]

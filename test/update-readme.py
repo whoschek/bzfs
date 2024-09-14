@@ -22,27 +22,27 @@ import os
 
 def main():
     """
-    Run this script to update README.md from the help info contained in wbackup_zfs.py.
-    Example usage: cd ~/repos/wbackup-zfs; test/update-readme.py wbackup_zfs/wbackup_zfs.py README.md
+    Run this script to update README.md from the help info contained in bzfs.py.
+    Example usage: cd ~/repos/bzfs; test/update-readme.py bzfs/bzfs.py README.md
     This essentially does the following steps:
     brew install pandoc  # OSX
     sudo apt-get -y install pandoc  # Linux
     pip install argparse-manpage
-    argparse-manpage --pyfile wbackup_zfs/wbackup_zfs.py --function argument_parser > /tmp/manpage.1
+    argparse-manpage --pyfile bzfs/bzfs.py --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
     Then take that output, auto-clean it and auto-replace certain sections of README.md with it, as shown below:
     """
     if len(sys.argv) != 3:
-        print(f"Usage: {os.path.basename(sys.argv[0])} /path/to/wbackup_zfs.py path/to/README.md")
+        print(f"Usage: {os.path.basename(sys.argv[0])} /path/to/bzfs.py path/to/README.md")
         sys.exit(1)
 
-    wbackup_zfs_py_file, readme_file = sys.argv[1], sys.argv[2]
+    bzfs_py_file, readme_file = sys.argv[1], sys.argv[2]
     tmp_manpage1_path = "/tmp/manpage.1"
     tmp_manpage_md_path = "/tmp/manpage.md"
 
     # Step 1: Generate manpage
     with open(tmp_manpage1_path, "w") as fd:
-        cmd = ["argparse-manpage", "--pyfile", wbackup_zfs_py_file, "--function", "argument_parser"]
+        cmd = ["argparse-manpage", "--pyfile", bzfs_py_file, "--function", "argument_parser"]
         subprocess.run(cmd, check=True, stdout=fd)
 
     # Step 2: Convert to markdown using pandoc
@@ -118,7 +118,7 @@ def main():
         print(f"Marker {begin_help_readme_tag} not found in README.md.")
         sys.exit(1)
 
-    # Extract lines after the marker from wbackup_zfs.py
+    # Extract lines after the marker from bzfs.py
     extracted_lines = manpage[begin_help_markdown_idx:]
 
     # Retain lines before and including the marker in readme_file and replace the rest

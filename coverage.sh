@@ -2,7 +2,7 @@
 set -e
 # Use tmpfs (RAM disk) as fast backing storage where available
 if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
-  export TMPDIR="/run/user/$(id -u)/wbackup-zfs" # for Github Action on Linux, etc
+  export TMPDIR="/run/user/$(id -u)/bzfs" # for Github Action on Linux, etc
   mkdir -p "$TMPDIR"
 fi
 echo "TMPDIR: $TMPDIR"
@@ -18,7 +18,7 @@ else
 fi
 
 # see https://coverage.readthedocs.io/
-PYTHONPATH=. python3 -m coverage run --branch --omit='test/*.py,*/__init__.py' -m test.test_wbackup_zfs
+PYTHONPATH=. python3 -m coverage run --branch --omit='test/*.py,*/__init__.py' -m test.test_bzfs
 python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
 

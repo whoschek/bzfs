@@ -85,11 +85,11 @@ chown -R $tuser $thome/.ssh
 cat $HOME/.ssh/id_rsa.pub | sudo -u $tuser tee -a $thome/.ssh/authorized_keys > /dev/null
 chmod go-rwx $thome/.ssh/authorized_keys
 
-cp -rp . $thome/wbackup-zfs # if running with Github Action
-# cp -rp wbackup-zfs $thome/ # if running with https://github.com/vmactions/shell-solaris
-chown -R $tuser $thome/wbackup-zfs
-sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/wbackup-zfs; ./test.sh"
-echo "wbackup-zfs-testrun-success"
+cp -rp . $thome/bzfs # if running with Github Action
+# cp -rp bzfs $thome/ # if running with https://github.com/vmactions/shell-solaris
+chown -R $tuser $thome/bzfs
+sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/bzfs; ./test.sh"
+echo "bzfs-testrun-success"
 
 #pkg update --accept; reboot # FIXME: reboot disconnects
 #pkg search python

@@ -48,7 +48,7 @@ cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $HOME/.ssh/authorized_keys $thome/
 chmod go-rwx "$thome/.ssh/authorized_keys"
 chown -R "$tuser" "$thome/.ssh"
 
-cp -R . "$thome/wbackup-zfs"
-chown -R "$tuser" "$thome/wbackup-zfs"
-sudo -u $tuser sh -c "cd $thome/wbackup-zfs; ./test.sh"
-echo "wbackup-zfs-testrun-success"
+cp -R . "$thome/bzfs"
+chown -R "$tuser" "$thome/bzfs"
+sudo -u $tuser sh -c "cd $thome/bzfs; ./test.sh"
+echo "bzfs-testrun-success"

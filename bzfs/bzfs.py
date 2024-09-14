@@ -43,7 +43,7 @@ from subprocess import CalledProcessError, TimeoutExpired
 from typing import List, Dict, Any, Tuple, Optional, Iterable, Set
 
 __version__ = "0.9.0-dev"
-prog_name = "wbackup-zfs"
+prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
 if sys.version_info < (3, 7):
@@ -51,7 +51,7 @@ if sys.version_info < (3, 7):
     sys.exit(die_status)
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp datasets by default
 disable_prg = "-"
-env_var_prefix = "wbackup_zfs_"
+env_var_prefix = "bzfs_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_recv_groups = {"zfs_recv_o": {"flag": "-o"}, "zfs_recv_x": {"flag": "-x"}, "zfs_set": {"flag": ""}}
 PIPE = subprocess.PIPE
@@ -417,7 +417,7 @@ feature.
               "  [ $CREATION_TIME -le $(($(date +%%s) - days * 86400)) ] && echo $BOOKMARK; "
               "done | xargs -I {} sudo zfs destroy {}` "
               "A better example starting point can be found in third party tools or this script: "
-              "https://github.com/whoschek/wbackup-zfs/blob/main/test/prune_bookmarks.py\n\n"))
+              "https://github.com/whoschek/bzfs/blob/main/test/prune_bookmarks.py\n\n"))
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
@@ -1643,7 +1643,7 @@ class Job:
 
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
         """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
-        Progress can be viewed via "tail -f $pv_log_file" aka ~/wbackup-zfs-logs/current.pv or similar"""
+        Progress can be viewed via "tail -f $pv_log_file" aka ~/bzfs-logs/current.pv or similar"""
         p = self.params
         if size_estimate_bytes >= p.min_transfer_size and self.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
@@ -1700,7 +1700,7 @@ class Job:
             # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
             # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
             # generate unique private socket file name in user's home dir
-            socket_dir = os.path.join(params.home_dir, ".ssh", "wbackup-zfs")
+            socket_dir = os.path.join(params.home_dir, ".ssh", "bzfs")
             os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
             os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # chmod u=rwx,go=
             prefix = "s"
@@ -2685,7 +2685,7 @@ def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
 def fix_send_recv_opts(
     opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str, include_arg_opts: Set[str]
 ) -> List[str]:
-    """These opts are instead managed via wbackup CLI args --dryrun, etc"""
+    """These opts are instead managed via bzfs CLI args --dryrun, etc"""
     assert "-" not in exclude_short_opts
     results = []
     i = 0

@@ -49,8 +49,8 @@ cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $HOME/.ssh/authorized_keys $thome/
 chmod go-rwx "$thome/.ssh/authorized_keys"
 chown -R "$tuser" "$thome/.ssh"
 
-cp -R . "$thome/wbackup-zfs"
-chown -R "$tuser" "$thome/wbackup-zfs"
+cp -R . "$thome/bzfs"
+chown -R "$tuser" "$thome/bzfs"
 chsh -s /bin/sh $tuser  # change shell as default shell on freebsd <= 13 is csh instead of sh
-sudo -u $tuser sh -c "cd $thome/wbackup-zfs; ./test.sh"
-echo "wbackup-zfs-testrun-success"
+sudo -u $tuser sh -c "cd $thome/bzfs; ./test.sh"
+echo "bzfs-testrun-success"
