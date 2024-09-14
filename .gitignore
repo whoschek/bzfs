@@ -138,7 +138,7 @@ pip-selfcheck.json
 !.vscode/extensions.json
 
 
-# End of  https://www.gitignore.io/api/python,pycharm+all,visualstudiocode
+# End of https://www.gitignore.io/api/python,pycharm+all,visualstudiocode
 
 .DS_Store
 /.project

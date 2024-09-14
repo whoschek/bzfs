@@ -51,7 +51,7 @@ if sys.version_info < (3, 7):
     sys.exit(die_status)
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp datasets by default
 disable_prg = "-"
-env_var_prefix = "bzfs_"
+env_var_prefix = prog_name + "_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_recv_groups = {"zfs_recv_o": {"flag": "-o"}, "zfs_recv_x": {"flag": "-x"}, "zfs_set": {"flag": ""}}
 PIPE = subprocess.PIPE
@@ -1072,7 +1072,7 @@ class Job:
         src_datasets_with_record_sizes = None  # help gc
 
         basis_src_datasets = set(src_datasets)
-        src_datasets = isorted(self.filter_datasets(src_datasets, src.root_dataset))  # apply include/exclude policy
+        src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
         failed = False
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
@@ -1167,7 +1167,7 @@ class Job:
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o name -s name", p.recursive_flag, dst.root_dataset
             )
             dst_datasets = self.run_ssh_command(dst, self.trace, check=False, cmd=cmd).splitlines()
-            dst_datasets = set(self.filter_datasets(dst_datasets, dst.root_dataset))  # apply include/exclude policy
+            dst_datasets = set(self.filter_datasets(dst, dst_datasets))  # apply include/exclude policy
             others = {replace_prefix(src_ds, src.root_dataset, dst.root_dataset) for src_ds in basis_src_datasets}
             to_delete = dst_datasets.difference(others)
             self.delete_datasets(to_delete)
@@ -1686,7 +1686,7 @@ class Job:
         # dataset is on remote host
         params = self.params
         if params.ssh_program == disable_prg:
-            die(f"Cannot talk to remote host because ssh CLI is disabled.")
+            die("Cannot talk to remote host because ssh CLI is disabled.")
         ssh_cmd = [params.ssh_program] + remote.ssh_extra_opts
         if remote.ssh_config_file:
             ssh_cmd += ["-F", remote.ssh_config_file]
@@ -1751,7 +1751,7 @@ class Job:
                         error(process.stderr.rstrip())
                         die(
                             f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. "
-                            f"Fix ssh configuration first, considering diagnostic log file output from running "
+                            "Fix ssh configuration first, considering diagnostic log file output from running "
                             f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                         )
 
@@ -1814,7 +1814,7 @@ class Job:
         """shell-escape double quotes and backticks, then surround with double quotes"""
         return '"' + arg.replace('"', '\\"').replace("`", "\\`") + '"'
 
-    def filter_datasets(self, datasets: List[str], root_dataset: str) -> List[str]:
+    def filter_datasets(self, remote: Remote, datasets: List[str]) -> List[str]:
         """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
         exclude regexes."""
         params = self.params
@@ -1822,7 +1822,7 @@ class Job:
         for i, dataset in enumerate(datasets):
             if i == 0 and params.skip_parent:
                 continue
-            rel_dataset = relativize_dataset(dataset, root_dataset)
+            rel_dataset = relativize_dataset(dataset, remote.root_dataset)
             if rel_dataset.startswith("/"):
                 rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
             if is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
@@ -1831,30 +1831,29 @@ class Job:
             else:
                 self.debug("Excluding b/c dataset regex:", dataset)
         if params.exclude_dataset_property:
-            # Optionally, exclude datasets that are marked with a user property value that, in effect, says 'skip me'
-            results = self.filter_datasets_by_exclude_property(results)
+            results = self.filter_datasets_by_exclude_property(remote, results)
         return results
 
-    def filter_datasets_by_exclude_property(self, src_datasets: List[str]) -> List[str]:
+    def filter_datasets_by_exclude_property(self, remote: Remote, datasets: List[str]) -> List[str]:
         """Exclude datasets that are marked with a user property value that, in effect, says 'skip me'"""
         p = self.params
         results = []
         localhostname = None
-        skip_src_dataset = ""
-        for src_dataset in src_datasets:
-            if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
-                # skip_src_dataset shall be ignored or has been deleted by some third party while we're running
-                continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
-            skip_src_dataset = ""
+        skip_dataset = ""
+        for dataset in datasets:
+            if is_descendant(dataset, of_root_dataset=skip_dataset):
+                # skip_dataset shall be ignored or has been deleted by some third party while we're running
+                continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
+            skip_dataset = ""
             # TODO: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
             cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", src_dataset
+                f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset
             )
-            self.maybe_inject_delete(p.src, dataset=src_dataset, delete_trigger="zfs_list_exclude_property")
-            property_value = self.try_ssh_command(p.src, self.trace, cmd=cmd)
+            self.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
+            property_value = self.try_ssh_command(remote, self.trace, cmd=cmd)
             if property_value is None:
-                self.warn("Third party deleted source:", src_dataset)
-                skip_src_dataset = src_dataset
+                self.warn(f"Third party deleted {remote.location}:", dataset)
+                skip_dataset = dataset
             else:
                 reason = ""
                 property_value = property_value.strip()
@@ -1868,11 +1867,11 @@ class Job:
                     reason = f", localhostname: {localhostname}, hostnames: {property_value}"
 
                 if sync:
-                    results.append(src_dataset)
-                    self.debug("Including b/c dataset prop:", src_dataset + reason)
+                    results.append(dataset)
+                    self.debug("Including b/c dataset prop:", dataset + reason)
                 else:
-                    skip_src_dataset = src_dataset
-                    self.debug("Excluding b/c dataset prop:", src_dataset + reason)
+                    skip_dataset = dataset
+                    self.debug("Excluding b/c dataset prop:", dataset + reason)
         return results
 
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
@@ -1983,22 +1982,23 @@ class Job:
         """Delete the given datasets via zfs destroy -r"""
         # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
+        p = self.params
         last_deleted_dataset = ""
         for dataset in isorted(datasets):
-            if not is_descendant(dataset, of_root_dataset=last_deleted_dataset):
-                self.info("Delete missing dataset tree:", f"{dataset} ...")
-                p = self.params
-                cmd = p.split_args(
-                    f"{p.dst.sudo} {p.zfs_program} destroy -r",
-                    p.force_unmount,
-                    p.force_hard,
-                    p.verbose_destroy,
-                    p.dry_run_destroy,
-                    dataset,
-                )
-                is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4 knows no 'zfs destroy -n' flag
-                self.run_ssh_command(p.dst, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
-                last_deleted_dataset = dataset
+            if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
+                continue
+            self.info("Delete missing dataset tree:", f"{dataset} ...")
+            cmd = p.split_args(
+                f"{p.dst.sudo} {p.zfs_program} destroy -r",
+                p.force_unmount,
+                p.force_hard,
+                p.verbose_destroy,
+                p.dry_run_destroy,
+                dataset,
+            )
+            is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4 knows no 'zfs destroy -n' flag
+            self.run_ssh_command(p.dst, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+            last_deleted_dataset = dataset
 
     def create_filesystem(self, filesystem: str) -> None:
         # zfs create -p -u $filesystem
@@ -2347,6 +2347,7 @@ class Job:
                     # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
                     # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc # https://blogs.oracle.com/solaris/post/building-open-source-software-on-oracle-solaris-114-cbe-release
                     # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
+                    # uname-Darwin foo 23.6.0 Darwin Kernel Version 23.6.0: Mon Jul 29 21:13:04 PDT 2024; root:xnu-10063.141.2~1/RELEASE_ARM64_T6020 arm64
                     available_programs[key].pop(program)
                     uname = program[len("uname-") :]
                     available_programs[key]["uname"] = uname
