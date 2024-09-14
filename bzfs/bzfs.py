@@ -457,12 +457,6 @@ feature.
         "--logdir", type=str, metavar="DIR",
         help=f"Path to log output directory (optional). Default is $HOME/{prog_name}-logs\n\n")
     parser.add_argument(
-        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
-        help="Display version information and exit.\n\n")
-    parser.add_argument(
-        "--help, -h", action="help",
-        help="Show this help message and exit.\n\n")
-    parser.add_argument(
         "--ssh-config-file", type=str, metavar="FILE",
         help="Path to SSH ssh_config(5) file (optional); will be passed into ssh -F CLI.\n\n")
 
@@ -642,6 +636,12 @@ feature.
             f"--{grup}-exclude-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
             help=h(f"Same syntax as --{grup}-include-regex (see above), and the default is to exclude no properties. "
                    f"Example: --{grup}-exclude-regex encryptionroot keystatus origin volblocksize volsize\n\n"))
+    parser.add_argument(
+        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
+        help="Display version information and exit.\n\n")
+    parser.add_argument(
+        "--help, -h", action="help",
+        help="Show this help message and exit.\n\n")
     return parser
 # fmt: on
 
