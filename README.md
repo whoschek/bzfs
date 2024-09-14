@@ -299,12 +299,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  During replication, include any ZFS dataset (and its descendants)
     that is contained within SRC_DATASET if its dataset name is one of
     the given include dataset names but none of the exclude dataset
-    names. A dataset name is absolute if the specified dataset is
-    prefixed by `/`, e.g. `/tank/baz/tmp`. Otherwise the dataset
-    name is relative wrt. source and destination, e.g. `baz/tmp` if
-    the source is `tank`. This option is automatically translated to
-    an --include-dataset-regex (see below) and can be specified
-    multiple times.
+    names. If a dataset is excluded its descendants are automatically
+    excluded too, and this decision is never reconsidered even for the
+    descendants because exclude takes precedence over include.
+
+    A dataset name is absolute if the specified dataset is prefixed by
+    `/`, e.g. `/tank/baz/tmp`. Otherwise the dataset name is
+    relative wrt. source and destination, e.g. `baz/tmp` if the source
+    is `tank`. This option is automatically translated to an
+    --include-dataset-regex (see below) and can be specified multiple
+    times.
 
     If the option starts with a `+` prefix then dataset names are read
     from the newline-separated UTF-8 text file given after the `+`
@@ -328,7 +332,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     that is contained within SRC_DATASET if its relative dataset path
     (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given
     include regular expressions but none of the exclude regular
-    expressions.
+    expressions. If a dataset is excluded its descendants are
+    automatically excluded too, and this decision is never reconsidered
+    even for the descendants because exclude takes precedence over
+    include.
 
     This option can be specified multiple times. A leading `!`
     character indicates logical negation, i.e. the regex matches if the
@@ -352,7 +359,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  During replication, include any source ZFS snapshot or bookmark that
     has a name (i.e. the part after the '@' and '#') that matches at
     least one of the given include regular expressions but none of the
-    exclude regular expressions.
+    exclude regular expressions. If a snapshot is excluded this decision
+    is never reconsidered because exclude takes precedence over include.
 
     This option can be specified multiple times. A leading `!`
     character indicates logical negation, i.e. the regex matches if the
@@ -959,10 +967,11 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  On program startup, unset all Unix environment variables for which
     the full environment variable name matches at least one of the
-    excludes but none of the includes. The purpose is to tighten
-    security and help guard against accidental inheritance or malicious
-    injection of environment variable values that may have unintended
-    effects.
+    excludes but none of the includes. If an environment variable is
+    included this decision is never reconsidered because include takes
+    precedence over exclude. The purpose is to tighten security and help
+    guard against accidental inheritance or malicious injection of
+    environment variable values that may have unintended effects.
 
     This option can be specified multiple times. A leading `!`
     character indicates logical negation, i.e. the regex matches if the
@@ -1023,10 +1032,12 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
 *  Take the output properties of --zfs-recv-o-sources (see above) and
     filter them such that we only retain the properties whose name
     matches at least one of the --include regexes but none of the
-    --exclude regexes. Append each retained property to the list of
-    '-o' options in --zfs-recv-program-opt(s), unless another '-o'
-    or '-x' option with the same name already exists therein. In other
-    words, --zfs-recv-program-opt(s) takes precedence.
+    --exclude regexes. If a property is excluded this decision is never
+    reconsidered because exclude takes precedence over include. Append
+    each retained property to the list of '-o' options in
+    --zfs-recv-program-opt(s), unless another '-o' or '-x' option
+    with the same name already exists therein. In other words,
+    --zfs-recv-program-opt(s) takes precedence.
 
     The --zfs-recv-o-include-regex option can be specified multiple
     times. A leading `!` character indicates logical negation, i.e.
@@ -1092,10 +1103,12 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
 *  Take the output properties of --zfs-recv-x-sources (see above) and
     filter them such that we only retain the properties whose name
     matches at least one of the --include regexes but none of the
-    --exclude regexes. Append each retained property to the list of
-    '-x' options in --zfs-recv-program-opt(s), unless another '-o'
-    or '-x' option with the same name already exists therein. In other
-    words, --zfs-recv-program-opt(s) takes precedence.
+    --exclude regexes. If a property is excluded this decision is never
+    reconsidered because exclude takes precedence over include. Append
+    each retained property to the list of '-x' options in
+    --zfs-recv-program-opt(s), unless another '-o' or '-x' option
+    with the same name already exists therein. In other words,
+    --zfs-recv-program-opt(s) takes precedence.
 
     The --zfs-recv-x-include-regex option can be specified multiple
     times. A leading `!` character indicates logical negation, i.e.

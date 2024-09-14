@@ -171,6 +171,8 @@ feature.
         "--include-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
         help=("During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
               "if its dataset name is one of the given include dataset names but none of the exclude dataset names. "
+              "If a dataset is excluded its descendants are automatically excluded too, and this decision is never "
+              "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
               "A dataset name is absolute if the specified dataset is prefixed by `/`, e.g. `/tank/baz/tmp`. "
               "Otherwise the dataset name is relative wrt. source and destination, e.g. `baz/tmp` if the source "
               "is `tank`. "
@@ -188,7 +190,9 @@ feature.
         "--include-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
               "if its relative dataset path (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given include "
-              "regular expressions but none of the exclude regular expressions.\n\n"
+              "regular expressions but none of the exclude regular expressions. "
+              "If a dataset is excluded its descendants are automatically excluded too, and this decision is never "
+              "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
               "leading `!` character removed does not match.\n\n"
@@ -202,7 +206,8 @@ feature.
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
               "the '@' and '#') that matches at least one of the given include regular expressions but none of the "
-              "exclude regular expressions.\n\n"
+              "exclude regular expressions. If a snapshot is excluded this decision is never reconsidered because "
+              "exclude takes precedence over include.\n\n"
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
               "leading `!` character removed does not match.\n\n"
@@ -547,9 +552,10 @@ feature.
     parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("On program startup, unset all Unix environment variables for which the full environment variable "
-              "name matches at least one of the excludes but none of the includes. The purpose is to tighten "
-              "security and help guard against accidental inheritance or malicious injection of environment "
-              "variable values that may have unintended effects.\n\n"
+              "name matches at least one of the excludes but none of the includes. If an environment variable is "
+              "included this decision is never reconsidered because include takes precedence over exclude. "
+              "The purpose is to tighten security and help guard against accidental inheritance or malicious "
+              "injection of environment variable values that may have unintended effects.\n\n"
               "This option can be specified multiple times. "
               "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
               "leading `!` character removed does not match. "
@@ -606,9 +612,10 @@ feature.
             f"--{grup}-include-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
             help=h(f"Take the output properties of --{grup}-sources (see above) and filter them such that we only "
                    "retain the properties whose name matches at least one of the --include regexes but none of the "
-                   f"--exclude regexes. Append each retained property to the list of {flag} options in "
-                   f"--zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same name already exists "
-                   f"therein. In other words, --zfs-recv-program-opt(s) takes precedence.\n\n"
+                   "--exclude regexes. If a property is excluded this decision is never reconsidered because exclude "
+                   f"takes precedence over include. Append each retained property to the list of {flag} options in "
+                   "--zfs-recv-program-opt(s), unless another '-o' or '-x' option with the same name already exists "
+                   "therein. In other words, --zfs-recv-program-opt(s) takes precedence.\n\n"
                    f"The --{grup}-include-regex option can be specified multiple times. "
                    "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
                    "leading `!` character removed does not match. "
@@ -643,8 +650,8 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.src = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst = Remote("dst", args, self)  # dst dataset, host and ssh options
-        prop_configs = [PropertyConfig(group, vals["flag"], args, self) for group, vals in zfs_recv_groups.items()]
-        self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = prop_configs
+        cpconfigs = [CopyPropertiesConfig(group, vals["flag"], args, self) for group, vals in zfs_recv_groups.items()]
+        self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
         self.skip_parent: bool = args.skip_parent
@@ -835,7 +842,7 @@ class Remote:
 
 
 #############################################################################
-class PropertyConfig:
+class CopyPropertiesConfig:
     def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params):
         """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; read from ArgumentParser via args"""
         # immutable variables:
@@ -2763,7 +2770,7 @@ class NonEmptyStringAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         values = values.strip()
         if values == "":
-            parser.error(f"{option_string}: Empty string is not allowed")
+            parser.error(f"{option_string}: Empty string is not valid")
         setattr(namespace, self.dest, values)
 
 
