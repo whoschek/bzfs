@@ -213,6 +213,7 @@ usage: wbackup-zfs [-h] [--recursive]
                    [--exclude-dataset DATASET [DATASET ...]]
                    [--include-dataset-regex REGEX [REGEX ...]]
                    [--exclude-dataset-regex REGEX [REGEX ...]]
+                   [--exclude-dataset-property STRING]
                    [--include-snapshot-regex REGEX [REGEX ...]]
                    [--exclude-snapshot-regex REGEX [REGEX ...]]
                    [--zfs-send-program-opts STRING]
@@ -351,6 +352,33 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Same syntax as --include-dataset-regex (see above) except that the
     default is `(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*`. Example:
     '!.*' (exclude no dataset)
+
+<!-- -->
+
+**--exclude-dataset-property** *STRING*
+
+*  The name of a ZFS dataset user property (optional). If this option
+    is specified, the effective value (potentially inherited) of that
+    user property is read via 'zfs list' for each included source
+    dataset to determine whether the dataset will be included or
+    excluded, as follows:
+
+    a) Value is 'true' or '-' or empty string or the property is
+    missing: Include the dataset.
+
+    b) Value is 'false': Exclude the dataset and its descendants.
+
+    c) Value is a comma-separated list of fully qualified host names
+    (no spaces, for example: 'tiger.example.com,shark.example.com'):
+    Include the dataset if the fully qualified host name of the host
+    executing wbackup-zfs is contained in the list, otherwise exclude
+    the dataset and its descendants.
+
+    If a dataset is excluded its descendants are automatically excluded
+    too, and the property values of the descendants are ignored because
+    exclude takes precedence over include.
+
+    Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'
 
 <!-- -->
 
@@ -551,12 +579,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     --delete-missing-snapshots step, if any, delete existing
     destination datasets that do not exist within the source dataset if
     they are included via --{include|exclude}-dataset-regex
-    --{include|exclude}-dataset policy. Also delete an existing
-    destination dataset that has no snapshot if all descendants of that
-    dataset do not have a snapshot either (again, only if the existing
-    destination dataset is included via
+    --{include|exclude}-dataset --exclude-dataset-property policy.
+    Also delete an existing destination dataset that has no snapshot if
+    all descendants of that dataset do not have a snapshot either
+    (again, only if the existing destination dataset is included via
     --{include|exclude}-dataset-regex --{include|exclude}-dataset
-    policy). Does not recurse without --recursive.
+    --exclude-dataset-property policy). Does not recurse without
+    --recursive.
 
 <!-- -->
 

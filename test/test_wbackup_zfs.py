@@ -21,6 +21,7 @@ import platform
 import pwd
 import random
 import shutil
+import socket
 import time
 import traceback
 import unittest
@@ -603,6 +604,74 @@ class LocalTestCase(WBackupTestCase):
                     self.assertSnapshots(dst_root_dataset, 3, "s")
                     self.assertSnapshots(dst_root_dataset + "/moo", 1, "m")
                     self.assertSnapshots(dst_root_dataset + "/zoo", 1, "z")
+
+    def test_basic_replication_recursive_with_exclude_property(self):
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+        self.setup_basic()
+        goo = create_filesystem(src_root_dataset, "goo")
+        take_snapshot(goo, fix("g1"))
+        goo_child = create_filesystem(src_root_dataset, "goo/child")
+        take_snapshot(goo_child, fix("c1"))
+        boo = create_filesystem(src_root_dataset, "boo")
+        take_snapshot(boo, fix("b1"))
+        moo = create_filesystem(src_root_dataset, "moo")
+        take_snapshot(moo, fix("m1"))
+        zoo = create_filesystem(src_root_dataset, "zoo")
+        take_snapshot(zoo, fix("z1"))
+        xoo = create_filesystem(src_root_dataset, "xoo")
+        take_snapshot(xoo, fix("x1"))
+        sync_false = {"synchoid:sync": "false"}
+        sync_true = {"synchoid:sync": "true"}
+        sync_true_empty = {"synchoid:sync": ""}
+        sync_host_match = {"synchoid:sync": f"xxx.example.com,{socket.getfqdn()}"}
+        sync_host_mismatch = {"synchoid:sync": "xxx.example.com"}
+        zfs_set([src_root_dataset + "/foo"], sync_false)
+        zfs_set([src_root_dataset + "/goo"], sync_false)
+        zfs_set([src_root_dataset + "/boo"], sync_host_mismatch)
+        zfs_set([src_root_dataset + "/moo"], sync_true)
+        zfs_set([src_root_dataset + "/zoo"], sync_true_empty)
+        zfs_set([src_root_dataset + "/xoo"], sync_host_match)
+        for i in range(0, 3):
+            with stop_on_failure_subtest(i=i):
+                self.run_wbackup(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--exclude-dataset-property=synchoid:sync",
+                    "--recursive",
+                    "--force-rollback-to-latest-snapshot",
+                    dry_run=(i == 0),
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+                self.assertFalse(dataset_exists(dst_root_dataset + "/goo"))
+                self.assertFalse(dataset_exists(dst_root_dataset + "/boo"))
+                if i == 0:
+                    self.assertSnapshots(dst_root_dataset, 0)
+                else:
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assertSnapshots(dst_root_dataset + "/moo", 1, "m")
+                    self.assertSnapshots(dst_root_dataset + "/zoo", 1, "z")
+                    self.assertSnapshots(dst_root_dataset + "/xoo", 1, "x")
+
+    def test_basic_replication_recursive_with_exclude_property_with_injected_dataset_deletes(self):
+        self.setup_basic()
+        moo = create_filesystem(src_root_dataset, "moo")
+        take_snapshot(moo, fix("m1"))
+        sync_true = {"synchoid:sync": "true"}
+        zfs_set([src_root_dataset + "/moo"], sync_true)
+        destroy(dst_root_dataset, recursive=True)
+
+        # inject deletes for this many times. only after that stop deleting datasets
+        counter = Counter(zfs_list_exclude_property=1)
+        self.run_wbackup(
+            src_root_dataset,
+            dst_root_dataset,
+            "--exclude-dataset-property=synchoid:sync",
+            "--recursive",
+            delete_injection_triggers={"before": counter},
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.assertEqual(0, counter["zfs_list_exclude_property"])
 
     def test_basic_replication_with_no_datasets_1(self):
         self.setup_basic()

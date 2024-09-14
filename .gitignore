@@ -144,7 +144,7 @@ pip-selfcheck.json
 /.project
 /.pydevproject
 /.settings
-
+*.sublime-*
 /.python-version
 
 trained_model.*

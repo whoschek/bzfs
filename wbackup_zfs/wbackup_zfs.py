@@ -29,6 +29,7 @@ import pwd
 import re
 import random
 import shlex
+import socket
 import stat
 import subprocess
 import sys
@@ -203,6 +204,19 @@ feature.
         help=("Same syntax as --include-dataset-regex (see above) except that the default "
               f"is `{exclude_dataset_regexes_default}`. Example: '!.*' (exclude no dataset)\n\n"))
     parser.add_argument(
+        "--exclude-dataset-property", default=None, action=NonEmptyStringAction, metavar="STRING",
+        help="The name of a ZFS dataset user property (optional). If this option is specified, the effective value "
+             "(potentially inherited) of that user property is read via 'zfs list' for each included source dataset "
+             "to determine whether the dataset will be included or excluded, as follows:\n\n"
+             "a) Value is 'true' or '-' or empty string or the property is missing: Include the dataset.\n\n"
+             "b) Value is 'false': Exclude the dataset and its descendants.\n\n"
+             "c) Value is a comma-separated list of fully qualified host names (no spaces, for example: "
+             "'tiger.example.com,shark.example.com'): Include the dataset if the fully qualified host name of the host "
+             f"executing {prog_name} is contained in the list, otherwise exclude the dataset and its descendants.\n\n"
+             "If a dataset is excluded its descendants are automatically excluded too, and the property values of the "
+             "descendants are ignored because exclude takes precedence over include.\n\n"
+             "Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'\n\n")
+    parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
               "the '@' and '#') that matches at least one of the given include regular expressions but none of the "
@@ -325,10 +339,10 @@ feature.
         "--delete-missing-datasets", action="store_true",
         help=("After successful replication step and successful --delete-missing-snapshots step, if any, delete "
               "existing destination datasets that do not exist within the source dataset if they are included via "
-              "--{include|exclude}-dataset-regex --{include|exclude}-dataset policy. "
+              "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy. "
               "Also delete an existing destination dataset that has no snapshot if all descendants of that dataset do "
               "not have a snapshot either (again, only if the existing destination dataset is included via "
-              "--{include|exclude}-dataset-regex --{include|exclude}-dataset policy). "
+              "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy). "
               "Does not recurse without --recursive.\n\n"))
     parser.add_argument(
         "--no-privilege-elevation", "-p", action="store_true",
@@ -678,6 +692,7 @@ class Params:
         self.verbose_destroy: str = self.quiet
         self.verbose_trace: bool = args.verbose >= 2
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
+        self.exclude_dataset_property: str = args.exclude_dataset_property
         self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
@@ -1040,7 +1055,7 @@ class Job:
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
-            f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name",
+            f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name -s name",
             p.recursive_flag,
             src.root_dataset,
         )
@@ -1101,7 +1116,8 @@ class Job:
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex and the destination
-        # dataset is included via --{include|exclude}-dataset-regex --{include|exclude}-dataset policy
+        # dataset is included via --{include|exclude}-dataset-regex --{include|exclude}-dataset
+        # --exclude-dataset-property policy
         if params.delete_missing_snapshots and not failed:
             self.info(
                 "--delete-missing-snapshots:",
@@ -1137,17 +1153,18 @@ class Job:
                     self.delete_snapshots(dst_ds, snapshot_tags=missing_snapshot_tags)
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
-        # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset policy.
+        # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
         # Also delete an existing destination dataset that has no snapshot if all descendants of that dataset do not
         # have a snapshot either (again, only if the existing destination dataset is included via
-        # --{include|exclude}-dataset-regex --{include|exclude}-dataset policy). Does not recurse without --recursive.
+        # --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy). Does not
+        # recurse without --recursive.
         if params.delete_missing_datasets and not failed:
             self.info(
                 "--delete-missing-datasets:",
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset
+                f"{p.zfs_program} list -t filesystem,volume -Hp -o name -s name", p.recursive_flag, dst.root_dataset
             )
             dst_datasets = self.run_ssh_command(dst, self.trace, check=False, cmd=cmd).splitlines()
             dst_datasets = set(self.filter_datasets(dst_datasets, dst.root_dataset))  # apply include/exclude policy
@@ -1813,6 +1830,49 @@ class Job:
                 self.debug("Including b/c dataset regex:", dataset)
             else:
                 self.debug("Excluding b/c dataset regex:", dataset)
+        if params.exclude_dataset_property:
+            # Optionally, exclude datasets that are marked with a user property value that, in effect, says 'skip me'
+            results = self.filter_datasets_by_exclude_property(results)
+        return results
+
+    def filter_datasets_by_exclude_property(self, src_datasets: List[str]) -> List[str]:
+        """Exclude datasets that are marked with a user property value that, in effect, says 'skip me'"""
+        p = self.params
+        results = []
+        localhostname = None
+        skip_src_dataset = ""
+        for src_dataset in src_datasets:
+            if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
+                # skip_src_dataset shall be ignored or has been deleted by some third party while we're running
+                continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
+            skip_src_dataset = ""
+            # TODO: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
+            cmd = p.split_args(
+                f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", src_dataset
+            )
+            self.maybe_inject_delete(p.src, dataset=src_dataset, delete_trigger="zfs_list_exclude_property")
+            property_value = self.try_ssh_command(p.src, self.trace, cmd=cmd)
+            if property_value is None:
+                self.warn("Third party deleted source:", src_dataset)
+                skip_src_dataset = src_dataset
+            else:
+                reason = ""
+                property_value = property_value.strip()
+                if not property_value or property_value == "-" or property_value.lower() == "true":
+                    sync = True
+                elif property_value.lower() == "false":
+                    sync = False
+                else:
+                    localhostname = localhostname or socket.getfqdn()
+                    sync = any(localhostname == hostname.strip() for hostname in property_value.split(","))
+                    reason = f", localhostname: {localhostname}, hostnames: {property_value}"
+
+                if sync:
+                    results.append(src_dataset)
+                    self.debug("Including b/c dataset prop:", src_dataset + reason)
+                else:
+                    skip_src_dataset = src_dataset
+                    self.debug("Excluding b/c dataset prop:", src_dataset + reason)
         return results
 
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
@@ -2196,7 +2256,7 @@ class Job:
                 # is no reliable way to determine where a record ends and the next record starts when listing multiple
                 # arbitrary records in a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for
                 # each ZFS user property.
-                # TODO: on zfs >= 2.3 use json output via zfs get -j to merge all zfs gets into a single 'zfs get' call
+                # TODO: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
                 try:
                     props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
                     user_propnames = [name for name in props.keys() if ":" in name]
