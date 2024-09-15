@@ -846,8 +846,8 @@ class Remote:
         self.ssh_config_file: str = p.validate_arg(args.ssh_config_file)
         self.ssh_cipher: str = p.validate_arg(args.ssh_cipher)
         self.ssh_private_key_files: List[str] = [p.validate_arg(key) for key in getattr(args, f"ssh_{loc}_private_key")]
-        self.ssh_default_opts: List[str] = ["-o", "ServerAliveInterval=0"]
-        self.ssh_extra_opts: List[str] = ["-x", "-T"]  # disable X11 forwarding, disable pseudo-terminal allocation
+        # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
+        self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"]
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
             self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
