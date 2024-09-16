@@ -899,7 +899,7 @@ class LocalTestCase(BZFSTestCase):
             self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
 
     @staticmethod
-    def zfs_recv_excluded_excludes():
+    def zfs_recv_x_excludes():
         if is_solaris_zfs():
             return ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
         else:
@@ -926,7 +926,7 @@ class LocalTestCase(BZFSTestCase):
             "--zfs-recv-x-include-regex=.*",
             "--zfs-recv-x-exclude-regex",
             "include_bzfs.*",
-            *self.zfs_recv_excluded_excludes(),
+            *self.zfs_recv_x_excludes(),
         )
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t"),
         for name, value in included_props.items():
@@ -952,7 +952,9 @@ class LocalTestCase(BZFSTestCase):
             "-u -o include_bzfs:p1=v1 -x exclude_bzfs:p4",
             "--zfs-recv-o-include-regex=include_bzfs.*",
             "--zfs-recv-x-include-regex=.*",  # will not append include.* as those names already exist in -o options
-            *self.zfs_recv_excluded_excludes(),
+            "--zfs-recv-x-exclude-regex",
+            "xxxxxx",
+            *self.zfs_recv_x_excludes(),
         )
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t"),
         for name, value in included_props.items():
