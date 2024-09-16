@@ -53,7 +53,7 @@ exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp d
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
-zfs_recv_groups = {"zfs_recv_o": {"flag": "-o"}, "zfs_recv_x": {"flag": "-x"}, "zfs_set": {"flag": ""}}
+zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 PIPE = subprocess.PIPE
 
 
@@ -201,8 +201,8 @@ feature.
               "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`\n\n"))
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help=("Same syntax as --include-dataset-regex (see above) except that the default "
-              f"is `{exclude_dataset_regexes_default}`. Example: '!.*' (exclude no dataset)\n\n"))
+        help=("Same syntax as --include-dataset-regex (see above) except that the default is "
+              f"`{exclude_dataset_regexes_default}` (exclude tmp datasets). Example: '!.*' (exclude no dataset)\n\n"))
     parser.add_argument(
         "--exclude-dataset-property", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="The name of a ZFS dataset user property (optional). If this option is specified, the effective value "
@@ -579,9 +579,9 @@ feature.
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
              f"environment variables. Example: `{env_var_prefix}.*`\n\n")
 
-    for option_name, values in zfs_recv_groups.items():
+    for option_name, flag in zfs_recv_groups.items():
         grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
-        flag = "'" + values["flag"] + "'"  # one of -o or -x
+        flag = "'" + flag + "'"  # one of -o or -x
 
         def h(text: str) -> str:
             return argparse.SUPPRESS if option_name == "zfs_set" else text
@@ -664,7 +664,7 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.src = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst = Remote("dst", args, self)  # dst dataset, host and ssh options
-        cpconfigs = [CopyPropertiesConfig(group, vals["flag"], args, self) for group, vals in zfs_recv_groups.items()]
+        cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in zfs_recv_groups.items()]
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
@@ -863,7 +863,7 @@ class CopyPropertiesConfig:
         # immutable variables:
         grup = group
         self.group: str = group
-        self.flag: str = flag
+        self.flag: str = flag  # one of -o or -x
         sources: str = p.validate_arg(getattr(args, f"{grup}_sources"))
         self.sources: str = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
         self.targets: str = p.validate_arg(getattr(args, f"{grup}_targets"))
@@ -911,12 +911,12 @@ class Job:
             error(str(e))
             raise
 
-        create_symlink(p.log_file, p.log_dir, "current.log")
         self.info_raw("Log file is: " + p.log_file)
+        create_symlink(p.log_file, p.log_dir, "current.log")
         create_symlink(p.pv_log_file, p.log_dir, "current.pv")
 
-        with open(p.log_file, "a", encoding="utf-8") as log_fileFD:
-            with redirect_stdout(Tee(log_fileFD, sys.stdout)), redirect_stderr(Tee(log_fileFD, sys.stderr)):
+        with open(p.log_file, "a", encoding="utf-8") as log_file_fd:
+            with redirect_stdout(Tee(log_file_fd, sys.stdout)), redirect_stderr(Tee(log_file_fd, sys.stderr)):
                 self.info("CLI arguments:", " ".join(p.sys_argv), f"[euid: {os.geteuid()}]")
                 self.debug("Parsed CLI arguments:", str(p.args))
                 try:
@@ -943,8 +943,8 @@ class Job:
                             self.first_exception = self.first_exception or e
                             self.all_exceptions.append(str(e))
                             error(
-                                f"#{len(self.all_exceptions)}: ZFS source --> destination:",
-                                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
+                                f"#{len(self.all_exceptions)}: Done with task:",
+                                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}",
                             )
                     error_count = len(self.all_exceptions)
                     if error_count > 0:
@@ -1112,7 +1112,7 @@ class Job:
                     self.first_exception = self.first_exception or e
                     self.all_exceptions.append(str(e))
                     error(str(e))
-                    error(f"#{len(self.all_exceptions)}: Replicating:", f"{src_dataset} --> {dst_dataset}")
+                    error(f"#{len(self.all_exceptions)}: Done replicating:", f"{src_dataset} --> {dst_dataset}")
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex and the destination
@@ -1368,7 +1368,7 @@ class Job:
                 if params.dry_run:
                     # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really
                     # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
-                    # subsequent 'zfs receive' to fail with "cannot receive new filesystem stream: destination has
+                    # subsequent 'zfs receive -n' to fail with "cannot receive new filesystem stream: destination has
                     # snapshots; must destroy them to overwrite it". So we skip the zfs send/receive step and keep on
                     # trucking.
                     dry_run_no_send = True
@@ -2463,7 +2463,7 @@ class Job:
         params.zpool_features[loc] = features
 
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
-        value = self.params.zpool_features[remote.location].get(feature, None)
+        value = self.params.zpool_features[remote.location].get(feature)
         return value == "active" or value == "enabled"
 
     def is_zpool_bookmarks_feature_enabled_or_active(self, remote: Remote) -> bool:
@@ -2854,7 +2854,7 @@ class DatasetPairsAction(argparse.Action):
                                 continue  # skip empty lines and comment lines
                             splits = line.split("\t", 1)
                             if len(splits) <= 1:
-                                parser.error("Line must contain tab separated SRC_DATASET and DST_DATASET: " + line)
+                                parser.error("Line must contain tab-separated SRC_DATASET and DST_DATASET: " + line)
                             src_root_dataset, dst_root_dataset = splits
                             if not src_root_dataset.strip() or not dst_root_dataset.strip():
                                 parser.error("SRC_DATASET and DST_DATASET must not be empty or whitespace-only:" + line)
