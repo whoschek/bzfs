@@ -220,7 +220,7 @@ class BZFSTestCase(ParametrizedTestCase):
             args = args + src_host + src_port
         elif params and params.get("ssh_mode") == "pull-push":
             args = args + src_host + dst_host + src_port + dst_port
-            if params and "min_transfer_size" in params and int(params["min_transfer_size"]) == 0:
+            if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
                 args = args + src_user + src_private_key + src_ssh_config_file + ["--ssh-cipher="]
             args = args + ["--bwlimit=10000m"]
         elif params and params.get("ssh_mode", "local") != "local":
@@ -278,9 +278,9 @@ class BZFSTestCase(ParametrizedTestCase):
         if params and params.get("verbose", None):
             args = args + ["--verbose"]
 
-        if params and "min_transfer_size" in params:
-            old_min_transfer_size = os.environ.get(qq + "min_transfer_size")
-            os.environ[qq + "min_transfer_size"] = str(int(params["min_transfer_size"]))
+        if params and "min_pipe_transfer_size" in params:
+            old_min_pipe_transfer_size = os.environ.get(qq + "min_pipe_transfer_size")
+            os.environ[qq + "min_pipe_transfer_size"] = str(int(params["min_pipe_transfer_size"]))
 
         if dry_run:
             args = args + ["--dryrun=recv"]
@@ -332,11 +332,11 @@ class BZFSTestCase(ParametrizedTestCase):
                 if dataset_exists(dst_pool_name):
                     run_cmd(cmd)
 
-            if params and "min_transfer_size" in params:
-                if old_min_transfer_size is None:
-                    os.environ.pop(qq + "min_transfer_size", None)
+            if params and "min_pipe_transfer_size" in params:
+                if old_min_pipe_transfer_size is None:
+                    os.environ.pop(qq + "min_pipe_transfer_size", None)
                 else:
-                    os.environ[qq + "min_transfer_size"] = old_min_transfer_size
+                    os.environ[qq + "min_pipe_transfer_size"] = old_min_pipe_transfer_size
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
@@ -2207,7 +2207,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_inject_unavailable_mbuffer(self):
         self.inject_unavailable_program("inject_unavailable_mbuffer")
-        if self.param and self.param.get("ssh_mode") != "local" and self.param.get("min_transfer_size", -1) == 0:
+        if self.param and self.param.get("ssh_mode") != "local" and self.param.get("min_pipe_transfer_size", -1) == 0:
             self.tearDownAndSetup()
             self.inject_unavailable_program("inject_failing_mbuffer", expected_error=1)
 
@@ -3487,7 +3487,7 @@ def main():
     # for ssh_mode in ["local", "pull-push"]:
     # for ssh_mode in []:
     for ssh_mode in ["local"]:
-        for min_transfer_size in [1024**2]:
+        for min_pipe_transfer_size in [1024**2]:
             # for affix in [".  -"]:
             # for affix in ["", ".  -"]:
             for affix in [""]:
@@ -3501,13 +3501,12 @@ def main():
                         params = {
                             "ssh_mode": ssh_mode,
                             "verbose": True,
-                            "min_transfer_size": min_transfer_size,
+                            "min_pipe_transfer_size": min_pipe_transfer_size,
                             "affix": affix,
                             "skip_missing_snapshots": "continue",
                             "no_privilege_elevation": no_privilege_elevation,
                             "encrypted_dataset": encrypted_dataset,
                         }
-                        # params = {"ssh_mode": "pull-push", "verbose": True, "min_transfer_size": min_transfer_size}
                         # params = {"verbose": True}
                         # params = None
                         # suite.addTest(ParametrizedTestCase.parametrize(IsolatedTestCase, params))
@@ -3518,8 +3517,8 @@ def main():
     # for ssh_mode in ["local", "pull-push", "push", "pull"]:
     # for ssh_mode in []:
     for ssh_mode in ["local", "pull-push"]:
-        # for min_transfer_size in [1024 ** 2]:
-        for min_transfer_size in [0, 1024**2]:
+        # for min_pipe_transfer_size in [1024 ** 2]:
+        for min_pipe_transfer_size in [0, 1024**2]:
             # for affix in [""]:
             # for affix in [".  -"]:
             for affix in ["", ".  -"]:
@@ -3532,7 +3531,7 @@ def main():
                         params = {
                             "ssh_mode": ssh_mode,
                             "verbose": True,
-                            "min_transfer_size": min_transfer_size,
+                            "min_pipe_transfer_size": min_pipe_transfer_size,
                             "affix": affix,
                             "skip_missing_snapshots": "continue",
                             "no_privilege_elevation": no_privilege_elevation,
@@ -3542,7 +3541,7 @@ def main():
 
     if os.geteuid() != 0:
         for ssh_mode in ["pull-push", "pull", "push"]:
-            for min_transfer_size in [0]:
+            for min_pipe_transfer_size in [0]:
                 for affix in [""]:
                     for no_privilege_elevation in [True]:
                         # for encrypted_dataset in []:
@@ -3550,7 +3549,7 @@ def main():
                             params = {
                                 "ssh_mode": ssh_mode,
                                 "verbose": False,
-                                "min_transfer_size": min_transfer_size,
+                                "min_pipe_transfer_size": min_pipe_transfer_size,
                                 "affix": affix,
                                 "skip_missing_snapshots": "continue",
                                 "no_privilege_elevation": no_privilege_elevation,

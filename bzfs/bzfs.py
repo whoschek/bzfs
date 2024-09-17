@@ -570,9 +570,9 @@ feature.
               "The default is to include no environment variables, i.e. to make no exceptions to "
               "--exclude-envvar-regex. "
               f"Example that retains at least these three env vars: "
-              f"`--include-envvar-regex {env_var_prefix}min_sleep_secs "
-              f"--include-envvar-regex {env_var_prefix}max_sleep_secs "
-              f"--include-envvar-regex {env_var_prefix}max_elapsed_secs`. "
+              f"`--include-envvar-regex {env_var_prefix}retry_min_sleep_secs "
+              f"--include-envvar-regex {env_var_prefix}retry_max_sleep_secs "
+              f"--include-envvar-regex {env_var_prefix}retry_max_elapsed_secs`. "
               "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
     parser.add_argument(
         "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
@@ -692,7 +692,7 @@ class Params:
         self.verbose_destroy: str = self.quiet
         self.verbose_trace: bool = args.verbose >= 2
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
-        self.exclude_dataset_property: str = args.exclude_dataset_property
+        self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
         self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
@@ -737,18 +737,18 @@ class Params:
 
         self.skip_on_error: str = args.skip_on_error
         self.retries: int = args.retries
-        self.min_sleep_secs: float = float(self.getenv("min_sleep_secs", 0.125))
-        self.max_sleep_secs: float = float(self.getenv("max_sleep_secs", 5 * 60))
-        self.max_elapsed_secs: float = float(self.getenv("max_elapsed_secs", 60 * 60))
-        self.min_sleep_nanos: int = int(self.min_sleep_secs * 1000_000_000)
-        self.max_sleep_nanos: int = int(self.max_sleep_secs * 1000_000_000)
-        self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1000_000_000)
-        self.min_sleep_nanos = max(1, self.min_sleep_nanos)
-        self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
+        self.retry_min_sleep_secs: float = float(self.getenv("retry_min_sleep_secs", 0.125))
+        self.retry_max_sleep_secs: float = float(self.getenv("retry_max_sleep_secs", 5 * 60))
+        self.retry_max_elapsed_secs: float = float(self.getenv("retry_max_elapsed_secs", 60 * 60))
+        self.retry_min_sleep_nanos: int = int(self.retry_min_sleep_secs * 1000_000_000)
+        self.retry_max_sleep_nanos: int = int(self.retry_max_sleep_secs * 1000_000_000)
+        self.retry_max_elapsed_nanos: int = int(self.retry_max_elapsed_secs * 1000_000_000)
+        self.retry_min_sleep_nanos = max(1, self.retry_min_sleep_nanos)
+        self.retry_max_sleep_nanos = max(self.retry_min_sleep_nanos, self.retry_max_sleep_nanos)
 
         # no point trying to be fancy for smaller data transfers:
-        self.min_transfer_size: int = int(self.getenv("min_transfer_size", 1024 * 1024))
-        self.ssh_socket_enabled: bool = self.getenv_bool("ssh_socket_enabled", True)
+        self.min_pipe_transfer_size: int = int(self.getenv("min_pipe_transfer_size", 1024 * 1024))
+        self.ssh_socket_reuse_enabled: bool = self.getenv_bool("ssh_socket_reuse_enabled", True)
 
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
@@ -838,6 +838,7 @@ class Remote:
         self.ssh_host: str = ""
 
         # immutable variables:
+        assert loc == "src" or loc == "dst"
         self.location = loc
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
@@ -1085,8 +1086,8 @@ class Job:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             self.trace(
                 "Retry policy:",
-                f"retries: {p.retries}, min_sleep_secs: {p.min_sleep_secs}, "
-                f"max_sleep_secs: {p.max_sleep_secs}, max_elapsed_secs: {p.max_elapsed_secs}",
+                f"retries: {p.retries}, retry_min_sleep_secs: {p.retry_min_sleep_secs}, "
+                f"retry_max_sleep_secs: {p.retry_max_sleep_secs}, retry_max_elapsed_secs: {p.retry_max_elapsed_secs}",
             )
             skip_src_dataset = ""
             for src_dataset in src_datasets:
@@ -1430,7 +1431,7 @@ class Job:
                 result_snapshots.reverse()
                 result_guids.reverse()
                 assert len(result_snapshots) > 0
-                assert len(result_guids) > 0
+                assert len(result_snapshots) == len(result_guids)
                 return result_guids, result_snapshots
 
             # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
@@ -1484,7 +1485,7 @@ class Job:
         dry_run_no_send: bool,
         error_trigger: Optional[str] = None,
     ):
-        params = self.params
+        p = self.params
         send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
         recv_cmd = " ".join([shlex.quote(item) for item in recv_cmd])
 
@@ -1497,9 +1498,9 @@ class Job:
         pv_src_cmd = ""
         pv_dst_cmd = ""
         pv_loc_cmd = ""
-        if params.src.ssh_user_host == "":
+        if p.src.ssh_user_host == "":
             pv_src_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)
-        elif params.dst.ssh_user_host == "":
+        elif p.dst.ssh_user_host == "":
             pv_dst_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)
         elif _compress_cmd == "cat":
             pv_loc_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)  # compression disabled
@@ -1527,8 +1528,8 @@ class Job:
             send_cmd = f"{send_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if src_pipe != "":
             src_pipe = f"{send_cmd} | {src_pipe}"
-            if len(params.src.ssh_cmd) > 0:
-                src_pipe = params.shell_program + " -c " + self.dquote(src_pipe)
+            if len(p.src.ssh_cmd) > 0:
+                src_pipe = p.shell_program + " -c " + self.dquote(src_pipe)
         else:
             src_pipe = send_cmd
 
@@ -1564,8 +1565,8 @@ class Job:
             recv_cmd = f"{recv_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if dst_pipe != "":
             dst_pipe = f"{dst_pipe} | {recv_cmd}"
-            if len(params.dst.ssh_cmd) > 0:
-                dst_pipe = params.shell_program + " -c " + self.dquote(dst_pipe)
+            if len(p.dst.ssh_cmd) > 0:
+                dst_pipe = p.shell_program + " -c " + self.dquote(dst_pipe)
         else:
             dst_pipe = recv_cmd
 
@@ -1578,12 +1579,12 @@ class Job:
         if not self.is_program_available("sh", "local"):
             local_pipe = ""
 
-        src_pipe = self.squote(params.src.ssh_cmd, src_pipe)
-        dst_pipe = self.squote(params.dst.ssh_cmd, dst_pipe)
-        src_ssh_cmd = " ".join([shlex.quote(item) for item in params.src.ssh_cmd])
-        dst_ssh_cmd = " ".join([shlex.quote(item) for item in params.dst.ssh_cmd])
+        src_pipe = self.squote(p.src.ssh_cmd, src_pipe)
+        dst_pipe = self.squote(p.dst.ssh_cmd, dst_pipe)
+        src_ssh_cmd = " ".join([shlex.quote(item) for item in p.src.ssh_cmd])
+        dst_ssh_cmd = " ".join([shlex.quote(item) for item in p.dst.ssh_cmd])
 
-        cmd = [params.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
+        cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
         msg = "Would execute:" if dry_run_no_send else "Executing:"
         self.debug(msg, " ".join(cmd[2:]).lstrip())
         if not dry_run_no_send:
@@ -1605,7 +1606,7 @@ class Job:
         smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
         p = self.params
         if (
-            size_estimate_bytes >= p.min_transfer_size
+            size_estimate_bytes >= p.min_pipe_transfer_size
             and (
                 (loc == "src")
                 or (loc == "dst" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
@@ -1622,7 +1623,7 @@ class Job:
         reduce network bottlenecks by sending compressed data."""
         p = self.params
         if (
-            size_estimate_bytes >= p.min_transfer_size
+            size_estimate_bytes >= p.min_pipe_transfer_size
             and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != "")
             and self.is_program_available("zstd", loc)
         ):
@@ -1633,7 +1634,7 @@ class Job:
     def decompress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         p = self.params
         if (
-            size_estimate_bytes >= p.min_transfer_size
+            size_estimate_bytes >= p.min_pipe_transfer_size
             and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != "")
             and self.is_program_available("zstd", loc)
         ):
@@ -1645,7 +1646,7 @@ class Job:
         """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka ~/bzfs-logs/current.pv or similar."""
         p = self.params
-        if size_estimate_bytes >= p.min_transfer_size and self.is_program_available("pv", loc):
+        if size_estimate_bytes >= p.min_pipe_transfer_size and self.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
             if disable_progress_bar:
                 size = ""
@@ -1686,10 +1687,10 @@ class Job:
             return []  # dataset is on local host - don't use ssh
 
         # dataset is on remote host
-        params = self.params
-        if params.ssh_program == disable_prg:
+        p = self.params
+        if p.ssh_program == disable_prg:
             die("Cannot talk to remote host because ssh CLI is disabled.")
-        ssh_cmd = [params.ssh_program] + remote.ssh_extra_opts
+        ssh_cmd = [p.ssh_program] + remote.ssh_extra_opts
         if remote.ssh_config_file:
             ssh_cmd += ["-F", remote.ssh_config_file]
         for ssh_private_key_file in remote.ssh_private_key_files:
@@ -1698,11 +1699,11 @@ class Job:
             ssh_cmd += ["-c", remote.ssh_cipher]
         if remote.ssh_port:
             ssh_cmd += ["-p", str(remote.ssh_port)]
-        if params.ssh_socket_enabled:
+        if p.ssh_socket_reuse_enabled:
             # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
             # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
             # generate unique private socket file name in user's home dir
-            socket_dir = os.path.join(params.home_dir, ".ssh", "bzfs")
+            socket_dir = os.path.join(p.home_dir, ".ssh", "bzfs")
             os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
             os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # chmod u=rwx,go=
             prefix = "s"
@@ -1737,7 +1738,7 @@ class Job:
             if not self.is_program_available("ssh", "local"):
                 die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
             cmd = quoted_cmd
-            if p.ssh_socket_enabled:
+            if p.ssh_socket_reuse_enabled:
                 # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
                 # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
@@ -1822,20 +1823,20 @@ class Job:
     def filter_datasets(self, remote: Remote, datasets: List[str]) -> List[str]:
         """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
         exclude regexes."""
-        params = self.params
+        p = self.params
         results = []
         for i, dataset in enumerate(datasets):
-            if i == 0 and params.skip_parent:
+            if i == 0 and p.skip_parent:
                 continue
             rel_dataset = relativize_dataset(dataset, remote.root_dataset)
             if rel_dataset.startswith("/"):
                 rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
-            if is_included(rel_dataset, params.include_dataset_regexes, params.exclude_dataset_regexes):
+            if is_included(rel_dataset, p.include_dataset_regexes, p.exclude_dataset_regexes):
                 results.append(dataset)
                 self.debug("Including b/c dataset regex:", dataset)
             else:
                 self.debug("Excluding b/c dataset regex:", dataset)
-        if params.exclude_dataset_property:
+        if p.exclude_dataset_property:
             results = self.filter_datasets_by_exclude_property(remote, results)
         return results
 
@@ -1946,7 +1947,6 @@ class Job:
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str] = []) -> None:
         if len(snapshot_tags) == 0:
             return
-        p = self.params
         if self.is_solaris_zfs(remote):
             # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
             for snapshot_tag in snapshot_tags:
@@ -2092,8 +2092,8 @@ class Job:
 
     def run_with_retries(self, func, *args, **kwargs) -> Any:
         """Run the given function with the given arguments, and retry on failure as indicated by params."""
-        params = self.params
-        max_sleep_mark = params.min_sleep_nanos
+        p = self.params
+        max_sleep_mark = p.retry_min_sleep_nanos
         retry_count = 0
         start_time_nanos = time.time_ns()
         while True:
@@ -2101,18 +2101,18 @@ class Job:
                 return func(*args, **kwargs)  # Call the target function with the provided arguments
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
-                if retry_count < params.retries and elapsed_nanos < params.max_elapsed_nanos:
-                    # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
-                    sleep_nanos = random.randint(params.min_sleep_nanos, max_sleep_mark)
-                    self.info(f"Retrying [{retry_count + 1}/{params.retries}] soon ...")
+                if retry_count < p.retries and elapsed_nanos < p.retry_max_elapsed_nanos:
+                    # pick a random sleep duration within the range [retry_min_sleep_nanos, max_sleep_mark] as delay
+                    sleep_nanos = random.randint(p.retry_min_sleep_nanos, max_sleep_mark)
+                    self.info(f"Retrying [{retry_count + 1}/{p.retries}] soon ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     retry_count = retry_count + 1
-                    max_sleep_mark = min(params.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
+                    max_sleep_mark = min(p.retry_max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
-                    if params.retries > 0:
+                    if p.retries > 0:
                         error(
-                            f"Giving up because the last [{retry_count}/{params.retries}] retries across "
-                            f"[{elapsed_nanos // 1_000_000_000}/{params.max_elapsed_nanos // 1_000_000_000}] "
+                            f"Giving up because the last [{retry_count}/{p.retries}] retries across "
+                            f"[{elapsed_nanos // 1_000_000_000}/{p.retry_max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )
                     raise retryable_error.__cause__
@@ -2969,4 +2969,4 @@ class CheckRange(argparse.Action):
 
 #############################################################################
 if __name__ == "__main__":
-    main()  # pragma: no cover
+    main()
