@@ -776,7 +776,7 @@ class Params:
         return opts
 
     def validate_arg(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str:
-        """allow_all permits all characters, including whitespace and quotes. See squote() and dquote()"""
+        """allow_all permits all characters, including whitespace and quotes. See squote() and dquote()."""
         if allow_all or opt is None:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
@@ -826,7 +826,7 @@ class Params:
 #############################################################################
 class Remote:
     def __init__(self, loc: str, args: argparse.Namespace, p: Params):
-        """Option values for either location=='src' or location=='dst'; read from ArgumentParser via args"""
+        """Option values for either location=='src' or location=='dst'; read from ArgumentParser via args."""
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
         self.basis_root_dataset: str = ""  # deferred until run_main()
@@ -859,7 +859,7 @@ class Remote:
 #############################################################################
 class CopyPropertiesConfig:
     def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params):
-        """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; read from ArgumentParser via args"""
+        """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; read from ArgumentParser via args."""
         # immutable variables:
         grup = group
         self.group: str = group
@@ -876,7 +876,7 @@ class CopyPropertiesConfig:
 
 #############################################################################
 def main():
-    """API for command line clients"""
+    """API for command line clients."""
     try:
         run_main(argument_parser().parse_args(), sys.argv)
     except subprocess.CalledProcessError as e:
@@ -884,7 +884,7 @@ def main():
 
 
 def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
-    """API for Python clients; visible for testing; may become a public API eventually"""
+    """API for Python clients; visible for testing; may become a public API eventually."""
     Job().run_main(args, sys_argv)
 
 
@@ -1203,7 +1203,7 @@ class Job:
                 self.delete_datasets(dst, orphans)
 
     def replicate_dataset(self, src_dataset: str, dst_dataset: str):
-        """Replicate src_dataset (without handling descendants) to dst_dataset"""
+        """Replicate src_dataset (without handling descendants) to dst_dataset."""
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         p = params = self.params
@@ -1602,7 +1602,7 @@ class Job:
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If mbuffer command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
-        smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation"""
+        smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
         p = self.params
         if (
             size_estimate_bytes >= p.min_transfer_size
@@ -1643,7 +1643,7 @@ class Job:
 
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
         """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
-        Progress can be viewed via "tail -f $pv_log_file" aka ~/bzfs-logs/current.pv or similar"""
+        Progress can be viewed via "tail -f $pv_log_file" aka ~/bzfs-logs/current.pv or similar."""
         p = self.params
         if size_estimate_bytes >= p.min_transfer_size and self.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
@@ -1816,7 +1816,7 @@ class Job:
         return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
 
     def dquote(self, arg: str) -> str:
-        """shell-escape double quotes and backticks, then surround with double quotes"""
+        """shell-escape double quotes and backticks, then surround with double quotes."""
         return '"' + arg.replace('"', '\\"').replace("`", "\\`") + '"'
 
     def filter_datasets(self, remote: Remote, datasets: List[str]) -> List[str]:
@@ -1840,7 +1840,7 @@ class Job:
         return results
 
     def filter_datasets_by_exclude_property(self, remote: Remote, datasets: List[str]) -> List[str]:
-        """Exclude datasets that are marked with a user property value that, in effect, says 'skip me'"""
+        """Exclude datasets that are marked with a user property value that, in effect, says 'skip me'."""
         p = self.params
         results = []
         localhostname = None
@@ -2049,7 +2049,7 @@ class Job:
                         raise
 
     def estimate_zfs_send_size(self, *items) -> int:
-        """estimate num bytes to transfer via 'zfs send'"""
+        """estimate num bytes to transfer via 'zfs send'."""
         p = self.params
         if self.is_solaris_zfs(p.src):
             return 0  # solaris-11.4 does not have a --parsable equivalent
@@ -2091,7 +2091,7 @@ class Job:
         return results
 
     def run_with_retries(self, func, *args, **kwargs) -> Any:
-        """Run the given function with the given arguments, and retry on failure as indicated by params"""
+        """Run the given function with the given arguments, and retry on failure as indicated by params."""
         params = self.params
         max_sleep_mark = params.min_sleep_nanos
         retry_count = 0
@@ -2202,7 +2202,7 @@ class Job:
         return str(step)
 
     def zfs_set(self, properties: List[str], remote: Remote, dataset: str):
-        """Applies the given property key=value pairs via 'zfs set' CLI to the given dataset on the given remote"""
+        """Applies the given property key=value pairs via 'zfs set' CLI to the given dataset on the given remote."""
 
         def run_zfs_set(props: List[str]):
             p = self.params
@@ -2226,7 +2226,7 @@ class Job:
         splitlines: bool,
         props_cache: Dict[Tuple[str, str, str], Dict[str, str]],
     ) -> Dict[str, str]:
-        """Returns the results of 'zfs get' CLI on the given dataset on the given remote"""
+        """Returns the results of 'zfs get' CLI on the given dataset on the given remote."""
         p = self.params
         cache_key = (sources, output_columns, propnames)
         props = props_cache.get(cache_key)
@@ -2250,7 +2250,7 @@ class Job:
     ):
         """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according
         to CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes
-        successfully"""
+        successfully."""
         p = self.params
         set_opts = []
         ox_names = p.zfs_recv_ox_names.copy()
@@ -2515,7 +2515,7 @@ def die(*items):
 
 
 def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
-    """Retain only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command"""
+    """Retain only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
     if field == 1:
         return [line[0 : line.index(separator)] for line in lines]
     elif field == 2:
@@ -2598,7 +2598,7 @@ def patch_exclude_dataset_regexes(regexes: List[str], default: str) -> List[str]
 
 
 def delete_stale_ssh_socket_files(socket_dir: str, prefix: str):
-    """Clean up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash"""
+    """Clean up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash."""
     secs = 30 * 24 * 60 * 60
     now = time.time()
     for filename in os.listdir(socket_dir):
@@ -2608,7 +2608,7 @@ def delete_stale_ssh_socket_files(socket_dir: str, prefix: str):
 
 
 def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
-    """case-insensitive sort (A < a < B < b and so on)"""
+    """case-insensitive sort (A < a < B < b and so on)."""
     return sorted(iterable, key=str.casefold, reverse=reverse)
 
 
@@ -2643,7 +2643,7 @@ def human_readable_bytes(size: int) -> str:
 
 
 def get_home_directory() -> str:
-    """reliably detect home dir even if HOME env var is undefined"""
+    """reliably detect home dir even if HOME env var is undefined."""
     home = os.getenv("HOME")
     if not home:
         # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
@@ -2652,7 +2652,7 @@ def get_home_directory() -> str:
 
 
 def create_symlink(src: str, dst_dir: str, dst: str):
-    """For parallel usage, ensure there is no time window when the symlink does not exist; uses atomic os.rename()"""
+    """For parallel usage, ensure there is no time window when the symlink does not exist; uses atomic os.rename()."""
     uniq = f".tmp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex}"
     fd, temp_link = tempfile.mkstemp(suffix=".tmp", prefix=uniq, dir=dst_dir)
     os.close(fd)
@@ -2693,7 +2693,7 @@ def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
 def fix_send_recv_opts(
     opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str, include_arg_opts: Set[str]
 ) -> List[str]:
-    """These opts are instead managed via bzfs CLI args --dryrun, etc"""
+    """These opts are instead managed via bzfs CLI args --dryrun, etc."""
     assert "-" not in exclude_short_opts
     results = []
     i = 0
@@ -2813,7 +2813,7 @@ def validate_port(port: int, message: str):
 
 #############################################################################
 class RetryableError(Exception):
-    """Indicates that the task that caused the underlying exception can be retried and might eventually succeed"""
+    """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
 
     def __init__(self, message):
         super().__init__(message)
