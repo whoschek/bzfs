@@ -1386,7 +1386,7 @@ class Job:
                         if dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
 
-                size_bytes = self.estimate_zfs_send_size(oldest_src_snapshot)
+                size_bytes = self.estimate_zfs_send_size(src, oldest_src_snapshot)
                 size_human = human_readable_bytes(size_bytes)
                 send_cmd = p.split_args(
                     f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, oldest_src_snapshot
@@ -1453,7 +1453,7 @@ class Job:
                 steps_todo = self.incremental_send_steps_wrapper(cand_snapshots, cand_guids, included_src_guids)
                 self.trace("steps_todo:", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
             for i, (incr_flag, start_snap, end_snap) in enumerate(steps_todo):
-                size_bytes = self.estimate_zfs_send_size(incr_flag, start_snap, end_snap)
+                size_bytes = self.estimate_zfs_send_size(src, incr_flag, start_snap, end_snap)
                 size_human = human_readable_bytes(size_bytes)
                 send_cmd = p.split_args(
                     f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, incr_flag, start_snap, end_snap
@@ -2048,15 +2048,15 @@ class Job:
                         print(e.stderr, file=sys.stderr, end="")
                         raise
 
-    def estimate_zfs_send_size(self, *items) -> int:
+    def estimate_zfs_send_size(self, remote: Remote, *items) -> int:
         """estimate num bytes to transfer via 'zfs send'."""
         p = self.params
-        if self.is_solaris_zfs(p.src):
+        if self.is_solaris_zfs(remote):
             return 0  # solaris-11.4 does not have a --parsable equivalent
         zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
-        cmd = p.split_args(f"{p.src.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
-        lines = self.try_ssh_command(p.src, self.trace, cmd=cmd)
+        cmd = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
+        lines = self.try_ssh_command(remote, self.trace, cmd=cmd)
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
         size = None
