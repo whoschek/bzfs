@@ -2160,24 +2160,22 @@ class Job:
                     while i < n and guids[i] not in included_guids:  # skip hourlies
                         i += 1
                     if i < n:
-                        # assert start != i
-                        if start != i:
-                            step = ("-i", src_snapshots[start], src_snapshots[i])
-                            # print(f"r1 {self.send_step_to_str(step)}")
-                            steps.append(step)
+                        assert start != i
+                        step = ("-i", src_snapshots[start], src_snapshots[i])
+                        # print(f"r1 {self.send_step_to_str(step)}")
+                        steps.append(step)
                         i -= 1
                 else:
                     # it's a run of more than one daily
                     i -= 1
-                    # assert start != i
-                    if start != i:
-                        step = ("-I", src_snapshots[start], src_snapshots[i])
-                        # print(f"r2 {self.send_step_to_str(step)}")
-                        if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
-                            steps.append(step)
-                        else:  # convert -I step to -i steps
-                            for j in range(start, i):
-                                steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
+                    assert start != i
+                    step = ("-I", src_snapshots[start], src_snapshots[i])
+                    # print(f"r2 {self.send_step_to_str(step)}")
+                    if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
+                        steps.append(step)
+                    else:  # convert -I step to -i steps
+                        for j in range(start, i):
+                            steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
                     i -= 1
             else:
                 # finish up run of trailing dailies
