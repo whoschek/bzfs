@@ -688,8 +688,8 @@ class Params:
         self.dry_run_no_send: bool = args.dryrun == "send"
         self.verbose: str = "-v" if args.verbose >= 1 else ""
         self.verbose_zfs: bool = args.verbose >= 2
-        self.quiet: str = "" if args.quiet else "-v"
-        self.verbose_destroy: str = self.quiet
+        self.not_quiet: bool = not args.quiet
+        self.verbose_destroy: str = "" if args.quiet else "-v"
         self.verbose_trace: bool = args.verbose >= 2
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
@@ -1608,7 +1608,7 @@ class Job:
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
             and (
-                (loc == "src")
+                loc == "src"
                 or (loc == "dst" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
                 or (loc == "local" and p.src.ssh_user_host != "" and p.dst.ssh_user_host != "")
             )
@@ -1659,7 +1659,7 @@ class Job:
         self.log("[W]", *items)
 
     def info_raw(self, *items):
-        if self.params.quiet != "":
+        if self.params.not_quiet:
             print(f"{current_time()} [I] {' '.join(items)}")
 
     def info(self, *items):
@@ -1669,7 +1669,7 @@ class Job:
         return self.params.verbose != ""
 
     def debug(self, *items):
-        if self.params.verbose != "":
+        if self.params.verbose:
             self.log("[D]", *items)
 
     def trace(self, *items):
@@ -1677,7 +1677,7 @@ class Job:
             self.log("[T]", *items)
 
     def log(self, first, second, *items):
-        if self.params.quiet != "":
+        if self.params.not_quiet:
             print(f"{current_time()} {first} {second:<28} {' '.join(items)}")  # right-pad second arg
 
     def local_ssh_command(self, remote: Remote) -> List[str]:
@@ -1728,8 +1728,9 @@ class Job:
     def run_ssh_command(
         self, remote: Remote, level=info, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
     ):
-        """Runs the given ssh CLI command, which is the concatenation of both the command to run on the localhost and
-        the command to run on the given remote host."""
+        """Runs the given cmd via ssh on the given remote. The full command is the concatenation of both the command
+        to run on the localhost in order to talk to the remote host ($remote.ssh_cmd) and the command to run on the
+        given remote host ($cmd)."""
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p = self.params
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
@@ -1988,7 +1989,7 @@ class Job:
         )
 
     def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
-        """Delete the given datasets via zfs destroy -r"""
+        """Delete the given datasets via zfs destroy -r on the given remote."""
         # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
         p = self.params
