@@ -989,7 +989,7 @@ class Job:
                 r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
             r.sudo, r.use_zfs_delegation = self.sudo_cmd(r.ssh_user_host, r.ssh_user)
-            r.ssh_cmd = self.ssh_command(remote)
+            r.ssh_cmd = self.local_ssh_command(remote)
 
         if src.ssh_host == dst.ssh_host:
             if src.root_dataset == dst.root_dataset:
@@ -1448,7 +1448,7 @@ class Job:
                 # skip intermediate snapshots
                 steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot)]
             else:
-                # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy using
+                # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy, using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
                 steps_todo = self.incremental_send_steps_wrapper(cand_snapshots, cand_guids, included_src_guids)
                 self.trace("steps_todo:", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
@@ -1679,7 +1679,9 @@ class Job:
         if self.params.quiet != "":
             print(f"{current_time()} {first} {second:<28} {' '.join(items)}")  # right-pad second arg
 
-    def ssh_command(self, remote: Remote) -> List[str]:
+    def local_ssh_command(self, remote: Remote) -> List[str]:
+        """Returns the ssh CLI command to run locally in order to talk to the remote host. This excludes the (trailing)
+        command to run on the remote host, which will be appended later."""
         if remote.ssh_user_host == "":
             return []  # dataset is on local host - don't use ssh
 
@@ -1725,14 +1727,16 @@ class Job:
     def run_ssh_command(
         self, remote: Remote, level=info, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
     ):
+        """Runs the given ssh CLI command, which is the concatenation of both the command to run on the localhost and
+        the command to run on the given remote host."""
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p = self.params
-        msg_cmd = [shlex.quote(arg) for arg in cmd]
+        quoted_cmd = [shlex.quote(arg) for arg in cmd]
         ssh_cmd: List[str] = remote.ssh_cmd
         if len(ssh_cmd) > 0:
             if not self.is_program_available("ssh", "local"):
                 die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
-            cmd = msg_cmd
+            cmd = quoted_cmd
             if p.ssh_socket_enabled:
                 # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
                 # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
@@ -1756,7 +1760,7 @@ class Job:
                         )
 
         msg = "Would execute:" if is_dry else "Executing:"
-        level(msg, " ".join([shlex.quote(item) for item in ssh_cmd] + msg_cmd).lstrip())
+        level(msg, " ".join([shlex.quote(item) for item in ssh_cmd] + quoted_cmd).lstrip())
         if not is_dry:
             try:
                 process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
@@ -1771,6 +1775,7 @@ class Job:
                 return process.stdout
 
     def try_ssh_command(self, remote: Remote, level=info, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
+        """Convenience method that helps react to a dataset or pool that potentially doesn't exist anymore."""
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
             return self.run_ssh_command(remote, level=level, is_dry=is_dry, cmd=cmd)
@@ -1788,7 +1793,7 @@ class Job:
             raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None):
-        """For testing only"""
+        """For testing only; for unit tests to create errors during replication and test correct handling of them."""
         if error_trigger:
             counter = self.error_injection_triggers.get("before")
             if counter and counter[error_trigger] > 0:
@@ -1798,7 +1803,7 @@ class Job:
                 )
 
     def maybe_inject_delete(self, remote: Remote, dataset=None, delete_trigger=None):
-        """For testing only"""
+        """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
         assert delete_trigger
         counter = self.delete_injection_triggers.get("before")
         if counter and counter[delete_trigger] > 0:
