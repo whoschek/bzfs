@@ -176,7 +176,7 @@ feature.
               "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
               "A dataset name is absolute if the specified dataset is prefixed by `/`, e.g. `/tank/baz/tmp`. "
               "Otherwise the dataset name is relative wrt. source and destination, e.g. `baz/tmp` if the source "
-              "is `tank`. "
+              "is `tank`.\n\n"
               "This option is automatically translated to an --include-dataset-regex (see below) and can be "
               "specified multiple times.\n\n"
               "If the option starts with a `+` prefix then dataset names are read from the newline-separated "
@@ -256,9 +256,9 @@ feature.
               "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n"))
     parser.add_argument(
         "--force-rollback-to-latest-snapshot", action="store_true",
-        help=("Before replication, rollback the destination dataset to its most recent destination snapshot, via "
-              "'zfs rollback', just in case the destination dataset was modified since its most recent snapshot. "
-              "This is much less invasive than --force (see below).\n\n"))
+        help=("Before replication, rollback the destination dataset to its most recent destination snapshot (if there "
+              "is one), via 'zfs rollback', just in case the destination dataset was modified since its most recent "
+              "snapshot. This is much less invasive than --force (see below).\n\n"))
     parser.add_argument(
         "--force", action="store_true",
         help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
@@ -348,7 +348,7 @@ feature.
         "--no-privilege-elevation", "-p", action="store_true",
         help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
               "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
-              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`).\n\n"
+              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`\n\n"
               "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
               "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
               "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
@@ -760,14 +760,14 @@ class Params:
         self.platform_platform: str = platform.platform()
 
     def getenv(self, key: str, default=None) -> str:
-        # All shell environment variable names used for configuration start with this prefix
+        """All shell environment variable names used for configuration start with this prefix."""
         return os.getenv(env_var_prefix + key, default)
 
     def getenv_bool(self, key: str, default: bool = False) -> bool:
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
-        """split option string on runs of one or more whitespace into an option list."""
+        """Split option string on runs of one or more whitespace into an option list."""
         text = text.strip()
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
         xappend(opts, items)
@@ -803,7 +803,7 @@ class Params:
         )
 
     def program_name(self, program: str) -> str:
-        """For testing: help simulate errors caused by external programs"""
+        """For testing: help simulate errors caused by external programs."""
         self.validate_arg(program)
         if not program:
             die("Program name must not be the empty string")

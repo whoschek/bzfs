@@ -304,7 +304,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     A dataset name is absolute if the specified dataset is prefixed by
     `/`, e.g. `/tank/baz/tmp`. Otherwise the dataset name is
     relative wrt. source and destination, e.g. `baz/tmp` if the source
-    is `tank`. This option is automatically translated to an
+    is `tank`.
+
+    This option is automatically translated to an
     --include-dataset-regex (see below) and can be specified multiple
     times.
 
@@ -442,9 +444,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--force-rollback-to-latest-snapshot**
 
 *  Before replication, rollback the destination dataset to its most
-    recent destination snapshot, via 'zfs rollback', just in case the
-    destination dataset was modified since its most recent snapshot.
-    This is much less invasive than --force (see below).
+    recent destination snapshot (if there is one), via 'zfs rollback',
+    just in case the destination dataset was modified since its most
+    recent snapshot. This is much less invasive than --force (see
+    below).
 
 <!-- -->
 
@@ -591,7 +594,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Do not attempt to run state changing ZFS operations 'zfs
     create/rollback/destroy/send/receive' as root (via 'sudo -u root'
     elevation granted by administrators appending the following to
-    /etc/sudoers: `<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`).
+    /etc/sudoers: `<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`
 
     Instead, the --no-privilege-elevation flag is for non-root users
     that have been granted corresponding ZFS permissions by
