@@ -2939,6 +2939,12 @@ class TestPythonVersionCheck(unittest.TestCase):
         importlib.reload(bzfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()
 
+    @patch("__main__.main")  # Mock the main function to ensure calling main() is covered
+    def test_main_called(self, mock_main):
+        if __name__ == "__main__":
+            main()
+        mock_main.assert_called_once()
+
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
