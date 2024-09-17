@@ -1150,7 +1150,7 @@ class Job:
                     )
                     missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
                     missing_snapshot_tags = cut(2, separator="@", lines=missing_snapshot_tags)
-                    self.delete_snapshots(dst_ds, snapshot_tags=missing_snapshot_tags)
+                    self.delete_snapshots(dst, dst_ds, snapshot_tags=missing_snapshot_tags)
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
@@ -1170,7 +1170,7 @@ class Job:
             dst_datasets = set(self.filter_datasets(dst, dst_datasets))  # apply include/exclude policy
             others = {replace_prefix(src_ds, src.root_dataset, dst.root_dataset) for src_ds in basis_src_datasets}
             to_delete = dst_datasets.difference(others)
-            self.delete_datasets(to_delete)
+            self.delete_datasets(dst, to_delete)
 
             # Optionally, delete any existing destination dataset that has no snapshot if all descendants of that
             # dataset do not have a snapshot either. To do so, we walk the dataset list (conceptually, a tree)
@@ -1200,7 +1200,7 @@ class Job:
                         if not self.try_ssh_command(dst, self.trace, cmd=cmd):
                             orphans.add(dst_dataset)  # found zero snapshots - mark dataset as an orphan
 
-                self.delete_datasets(orphans)
+                self.delete_datasets(dst, orphans)
 
     def replicate_dataset(self, src_dataset: str, dst_dataset: str):
         """Replicate src_dataset (without handling descendants) to dst_dataset"""
@@ -1357,7 +1357,7 @@ class Job:
                 if self.is_solaris_zfs(dst):
                     # solaris-11.4 has no wildcard syntax to delete all snapshots in a single CLI invocation
                     self.delete_snapshots(
-                        dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids)
+                        dst, dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids)
                     )
                 else:
                     cmd = p.split_args(
@@ -1404,7 +1404,7 @@ class Job:
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not dry_run_no_send and not params.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
-                self.create_zfs_bookmark(oldest_src_snapshot, src_dataset)
+                self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
 
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
@@ -1471,7 +1471,7 @@ class Job:
                     send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="incr_zfs_send"
                 )
                 if i == len(steps_todo) - 1:
-                    self.create_zfs_bookmark(end_snap, src_dataset)
+                    self.create_zfs_bookmark(src, end_snap, src_dataset)
             self.zfs_set(set_opts, dst, dst_dataset)
         return True
 
@@ -1938,26 +1938,26 @@ class Job:
                 results.append(line)
         return results
 
-    def delete_snapshots(self, dataset: str, snapshot_tags: List[str] = []) -> None:
+    def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str] = []) -> None:
         if len(snapshot_tags) == 0:
             return
         p = self.params
-        if self.is_solaris_zfs(p.dst):
+        if self.is_solaris_zfs(remote):
             # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
             for snapshot_tag in snapshot_tags:
-                self.delete_snapshot(f"{dataset}@{snapshot_tag}")
+                self.delete_snapshot(remote, f"{dataset}@{snapshot_tag}")
         else:  # delete snapshots in batches, without creating a command line that's too big for the OS to handle
-            max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes("dst"))
-            encoding = sys.getfilesystemencoding()
-            header_bytes = len(" ".join(p.dst.ssh_cmd + self.delete_snapshot_cmd(dataset + "@")).encode(encoding))
+            max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
+            fsenc = sys.getfilesystemencoding()
+            header_bytes = len(" ".join(remote.ssh_cmd + self.delete_snapshot_cmd(remote, dataset + "@")).encode(fsenc))
             batch_tags, total_bytes = [], header_bytes
 
             def flush_batch():
                 if len(batch_tags) > 0:
-                    self.delete_snapshot(dataset + "@" + ",".join(batch_tags))
+                    self.delete_snapshot(remote, dataset + "@" + ",".join(batch_tags))
 
             for snapshot_tag in snapshot_tags:
-                tag_bytes = len(f",{snapshot_tag}".encode(encoding))
+                tag_bytes = len(f",{snapshot_tag}".encode(fsenc))
                 if total_bytes + tag_bytes > max_bytes:  # or len(batch_tags) >= 1000:
                     flush_batch()
                     batch_tags, total_bytes = [], header_bytes
@@ -1965,20 +1965,24 @@ class Job:
                 total_bytes += tag_bytes
             flush_batch()
 
-    def delete_snapshot(self, snaps_to_delete: str) -> None:
+    def delete_snapshot(self, remote: Remote, snaps_to_delete: str) -> None:
         p = self.params
         self.info("Deleting snapshot(s):", snaps_to_delete)
-        cmd = self.delete_snapshot_cmd(snaps_to_delete)
-        is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4 knows no 'zfs destroy -n' flag
-        self.run_ssh_command(p.dst, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        cmd = self.delete_snapshot_cmd(remote, snaps_to_delete)
+        is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
+        self.run_ssh_command(remote, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
-    def delete_snapshot_cmd(self, snaps_to_delete: str):
+    def delete_snapshot_cmd(self, remote: Remote, snaps_to_delete: str):
         p = self.params
         return p.split_args(
-            f"{p.dst.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete
+            f"{remote.sudo} {p.zfs_program} destroy",
+            p.force_hard,
+            p.verbose_destroy,
+            p.dry_run_destroy,
+            snaps_to_delete,
         )
 
-    def delete_datasets(self, datasets: Iterable[str]) -> None:
+    def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
         """Delete the given datasets via zfs destroy -r"""
         # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
@@ -1989,15 +1993,15 @@ class Job:
                 continue
             self.info("Delete missing dataset tree:", f"{dataset} ...")
             cmd = p.split_args(
-                f"{p.dst.sudo} {p.zfs_program} destroy -r",
+                f"{remote.sudo} {p.zfs_program} destroy -r",
                 p.force_unmount,
                 p.force_hard,
                 p.verbose_destroy,
                 p.dry_run_destroy,
                 dataset,
             )
-            is_dry = p.dry_run and self.is_solaris_zfs(p.dst)  # solaris-11.4 knows no 'zfs destroy -n' flag
-            self.run_ssh_command(p.dst, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+            is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
+            self.run_ssh_command(remote, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
             last_deleted_dataset = dataset
 
     def create_filesystem(self, filesystem: str) -> None:
@@ -2025,14 +2029,14 @@ class Job:
                     self.dst_dataset_exists[parent] = True
             parent += "/"
 
-    def create_zfs_bookmark(self, src_snapshot: str, src_dataset: str) -> None:
+    def create_zfs_bookmark(self, remote: Remote, src_snapshot: str, src_dataset: str) -> None:
         p = self.params
         if "@" in src_snapshot:
             bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
-            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(p.src):
-                cmd = p.split_args(f"{p.src.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
+            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(remote):
+                cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
                 try:
-                    self.run_ssh_command(p.src, self.debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
+                    self.run_ssh_command(remote, self.debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
                     if ": bookmark exists" not in e.stderr:
