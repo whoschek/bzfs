@@ -782,7 +782,7 @@ class Params:
         return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
-        """Split option string on runs of one or more whitespace into an option list."""
+        """Splits option string on runs of one or more whitespace into an option list."""
         text = text.strip()
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
         xappend(opts, items)
@@ -818,7 +818,7 @@ class Params:
         )
 
     def program_name(self, program: str) -> str:
-        """For testing: help simulate errors caused by external programs."""
+        """For testing: helps simulate errors caused by external programs."""
         self.validate_arg(program)
         if not program:
             die("Program name must not be the empty string")
@@ -841,7 +841,7 @@ class Params:
 #############################################################################
 class Remote:
     def __init__(self, loc: str, args: argparse.Namespace, p: Params):
-        """Option values for either location=='src' or location=='dst'; read from ArgumentParser via args."""
+        """Option values for either location=='src' or location=='dst'; reads from ArgumentParser via args."""
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
         self.basis_root_dataset: str = ""  # deferred until run_main()
@@ -876,7 +876,7 @@ class Remote:
 #############################################################################
 class CopyPropertiesConfig:
     def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params):
-        """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; read from ArgumentParser via args."""
+        """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; reads from ArgumentParser via args."""
         # immutable variables:
         grup = group
         self.group: str = group
@@ -894,7 +894,7 @@ class CopyPropertiesConfig:
 #############################################################################
 class RetryPolicy:
     def __init__(self, args: argparse.Namespace, p: Params):
-        """Option values for retries; read from ArgumentParser via args."""
+        """Option values for retries; reads from ArgumentParser via args."""
         # immutable variables:
         self.retries: int = args.retries
         self.min_sleep_secs: float = args.retry_min_sleep_secs
@@ -1273,7 +1273,7 @@ class Job:
                 self.delete_datasets(dst, orphans)
 
     def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
-        """Replicate src_dataset (without handling descendants) to dst_dataset."""
+        """Replicates src_dataset (without handling descendants) to dst_dataset."""
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         p = params = self.params
@@ -1672,7 +1672,7 @@ class Job:
                 xprint(process.stderr, file=sys.stderr)
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
-        """If mbuffer command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
+        """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
         smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
         p = self.params
         if (
@@ -1689,7 +1689,7 @@ class Job:
             return "cat"
 
     def compress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
-        """If zstd command is on the PATH, use it in the ssh network pipe between 'zfs send' and 'zfs receive' to
+        """If zstd command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
         reduce network bottlenecks by sending compressed data."""
         p = self.params
         if (
@@ -1713,7 +1713,7 @@ class Job:
             return "cat"
 
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
-        """If pv command is on the PATH, monitor the progress of data transfer from 'zfs send' to 'zfs receive'.
+        """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka ~/bzfs-logs/current.pv or similar."""
         p = self.params
         if size_estimate_bytes >= p.min_pipe_transfer_size and self.is_program_available("pv", loc):
@@ -1865,7 +1865,7 @@ class Job:
         return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
 
     def dquote(self, arg: str) -> str:
-        """shell-escape double quotes and backticks, then surround with double quotes."""
+        """shell-escapes double quotes and backticks, then surrounds with double quotes."""
         return '"' + arg.replace('"', '\\"').replace("`", "\\`") + '"'
 
     def filter_datasets(self, remote: Remote, datasets: List[str]) -> List[str]:
@@ -1889,7 +1889,7 @@ class Job:
         return results
 
     def filter_datasets_by_exclude_property(self, remote: Remote, datasets: List[str]) -> List[str]:
-        """Exclude datasets that are marked with a user property value that, in effect, says 'skip me'."""
+        """Excludes datasets that are marked with a user property value that, in effect, says 'skip me'."""
         p, log = self.params, self.params.log
         results = []
         localhostname = None
@@ -1986,7 +1986,7 @@ class Job:
 
     @staticmethod
     def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
-        """For each line in input_list, print the line if input_set contains the first column field of that line."""
+        """For each line in input_list, prints the line if input_set contains the first column field of that line."""
         results: List[str] = []
         if len(input_set) == 0:
             return results
@@ -2039,7 +2039,7 @@ class Job:
         )
 
     def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
-        """Delete the given datasets via zfs destroy -r on the given remote."""
+        """Deletes the given datasets via zfs destroy -r on the given remote."""
         # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
         p, log = self.params, self.params.log
@@ -2100,7 +2100,7 @@ class Job:
                         raise
 
     def estimate_zfs_send_size(self, remote: Remote, *items) -> int:
-        """estimate num bytes to transfer via 'zfs send'."""
+        """Estimates num bytes to transfer via 'zfs send'."""
         p, log = self.params, self.params.log
         if self.is_solaris_zfs(remote):
             return 0  # solaris-11.4 does not have a --parsable equivalent
@@ -2142,7 +2142,7 @@ class Job:
         return results
 
     def run_with_retries(self, policy: RetryPolicy, func, *args, **kwargs) -> Any:
-        """Run the given function with the given arguments, and retry on failure as indicated by policy."""
+        """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
         log = self.params.log
         max_sleep_mark = policy.min_sleep_nanos
         retry_count = 0
@@ -2345,7 +2345,7 @@ class Job:
 
     @staticmethod
     def recv_option_property_names(recv_opts: List[str]) -> Set[str]:
-        """extract -o and -x property names that are already specified on the command line. This can be used to check
+        """Extracts -o and -x property names that are already specified on the command line. This can be used to check
         for dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
         propnames = set()
         i = 0
@@ -2563,7 +2563,7 @@ def die(*items) -> None:
 
 
 def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
-    """Retain only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
+    """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
     if field == 1:
         return [line[0 : line.index(separator)] for line in lines]
     elif field == 2:
@@ -2577,7 +2577,7 @@ def is_descendant(dataset: str, of_root_dataset: str) -> bool:
 
 
 def relativize_dataset(dataset: str, root_dataset: str) -> str:
-    """converts an absolute dataset path to a relative dataset path wrt root_dataset
+    """Converts an absolute dataset path to a relative dataset path wrt root_dataset
     Example: root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz"""
     return dataset[len(root_dataset) :]
 
@@ -2622,9 +2622,9 @@ def compile_regexes(regexes: List[str], suffix: str = "") -> List[Tuple[re.Patte
 
 
 def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
-    """Replace regex capturing groups with non-capturing groups for better matching performance.
+    """Replaces regex capturing groups with non-capturing groups for better matching performance.
     Example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\()'
-    Aka replace brace '(' followed by a char other than question mark '?', but not preceded by a backslash
+    Aka replaces brace '(' followed by a char other than question mark '?', but not preceded by a backslash
     with the replacement string '(?:'
     Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups
     """
@@ -2646,7 +2646,7 @@ def patch_exclude_dataset_regexes(regexes: List[str], default: str) -> List[str]
 
 
 def delete_stale_ssh_socket_files(socket_dir: str, prefix: str) -> None:
-    """Clean up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash."""
+    """Cleans up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash."""
     secs = 30 * 24 * 60 * 60
     now = time.time()
     for filename in os.listdir(socket_dir):
@@ -2661,8 +2661,8 @@ def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
 
 
 def xappend(lst, *items) -> List[str]:
-    """Append each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
-    If an item is an iterable do so recursively, flattening the output."""
+    """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
+    If an item is an iterable does so recursively, flattening the output."""
     for item in items:
         if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
             if item:
@@ -2677,7 +2677,7 @@ def current_time() -> str:
 
 
 def replace_prefix(line: str, s1: str, s2: str) -> str:
-    """In a line, replace a leading s1 string with s2. Assumes the leading string is present."""
+    """In a line, replaces a leading s1 string with s2. Assumes the leading string is present."""
     return s2 + line.rstrip()[len(s1) :]
 
 
@@ -2691,7 +2691,7 @@ def human_readable_bytes(size: int) -> str:
 
 
 def get_home_directory() -> str:
-    """reliably detect home dir even if HOME env var is undefined."""
+    """Reliably detects home dir even if HOME env var is undefined."""
     home = os.getenv("HOME")
     if not home:
         # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
@@ -2710,7 +2710,7 @@ def create_symlink(src: str, dst_dir: str, dst: str) -> None:
 
 
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:
-    """Check if the version string is at least the minimum version string."""
+    """Checks if the version string is at least the minimum version string."""
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
@@ -2729,7 +2729,7 @@ def append_if_absent(lst: List, *items) -> List:
 
 
 def stderr_to_str(stderr) -> str:
-    """workaround for https://github.com/python/cpython/issues/87597"""
+    """Workaround for https://github.com/python/cpython/issues/87597"""
     return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
