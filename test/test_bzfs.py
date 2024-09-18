@@ -2974,7 +2974,7 @@ class TestParseDatasetLocator(unittest.TestCase):
             )
             self.fail()
 
-    def runTest(self):
+    def test_basic(self):
         # Input format is [[user@]host:]dataset
         # test columns indicate values for: input | user | host | dataset | userhost | validationError
         self.run_test(
@@ -3472,7 +3472,7 @@ def stop_on_failure_subtest(**params):
 def main():
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
-    suite.addTest(TestParseDatasetLocator())
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
@@ -3488,8 +3488,6 @@ def main():
     # for ssh_mode in []:
     for ssh_mode in ["local"]:
         for min_pipe_transfer_size in [1024**2]:
-            # for affix in [".  -"]:
-            # for affix in ["", ".  -"]:
             for affix in [""]:
                 # no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
@@ -3517,15 +3515,11 @@ def main():
     # for ssh_mode in ["local", "pull-push", "push", "pull"]:
     # for ssh_mode in []:
     for ssh_mode in ["local", "pull-push"]:
-        # for min_pipe_transfer_size in [1024 ** 2]:
         for min_pipe_transfer_size in [0, 1024**2]:
             # for affix in [""]:
             # for affix in [".  -"]:
             for affix in ["", ".  -"]:
                 no_privilege_elevation_modes = [False]
-                # no_privilege_elevation_modes = []
-                # if os.geteuid() != 0:
-                #     no_privilege_elevation_modes.append(True)
                 for no_privilege_elevation in no_privilege_elevation_modes:
                     for encrypted_dataset in [False]:
                         params = {

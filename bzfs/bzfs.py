@@ -716,7 +716,7 @@ class Params:
 
         self.src = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst = Remote("dst", args, self)  # dst dataset, host and ssh options
-        self.ssh_socket_reuse_enabled: bool = self.getenv_bool("ssh_socket_reuse_enabled", True)
+        self.reuse_ssh_connection: bool = self.getenv_bool("reuse_ssh_connection", True)
 
         self.timestamp: str = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         self.home_dir: str = get_home_directory()
@@ -1715,13 +1715,13 @@ class Job:
             ssh_cmd += ["-c", remote.ssh_cipher]
         if remote.ssh_port:
             ssh_cmd += ["-p", str(remote.ssh_port)]
-        if p.ssh_socket_reuse_enabled:
-            # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
+        if p.reuse_ssh_connection:
+            # performance: reuse ssh connection for low latency startup of frequent ssh invocations
             # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
             # generate unique private socket file name in user's home dir
             socket_dir = os.path.join(p.home_dir, ".ssh", "bzfs")
             os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
-            os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # chmod u=rwx,go=
+            os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             prefix = "s"
             delete_stale_ssh_socket_files(socket_dir, prefix)
 
@@ -1755,16 +1755,16 @@ class Job:
             if not self.is_program_available("ssh", "local"):
                 die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
             cmd = quoted_cmd
-            if p.ssh_socket_reuse_enabled:
-                # performance: (re)use ssh socket for low latency ssh startup of frequent ssh invocations
+            if p.reuse_ssh_connection:
+                # performance: reuse ssh connection for low latency startup of frequent ssh invocations
                 # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
                 ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
                 if subprocess.run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:
-                    self.trace("ssh socket is alive:", " ".join(ssh_socket_cmd))
+                    self.trace("ssh connection is alive:", " ".join(ssh_socket_cmd))
                 else:
-                    self.trace("ssh socket is not yet alive:", " ".join(ssh_socket_cmd))
+                    self.trace("ssh connection is not yet alive:", " ".join(ssh_socket_cmd))
                     ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                     ssh_socket_cmd += ["-M", "-o", "ControlPersist=60s", remote.ssh_user_host, "exit"]
                     self.debug("Executing:", " ".join(ssh_socket_cmd))
