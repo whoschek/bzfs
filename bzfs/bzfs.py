@@ -775,7 +775,7 @@ class Params:
             self.validate_quoting(opts)
         return opts
 
-    def validate_arg(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str:
+    def validate_arg(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> Optional[str]:
         """allow_all permits all characters, including whitespace and quotes. See squote() and dquote()."""
         if allow_all or opt is None:
             return opt
@@ -785,7 +785,7 @@ class Params:
         return opt
 
     @staticmethod
-    def validate_quoting(opts: List[str]):
+    def validate_quoting(opts: List[str]) -> None:
         for opt in opts:
             if "'" in opt or '"' in opt or "`" in opt:
                 die(f"Option must not contain a single quote or double quote or backtick character: {opt}")
@@ -815,7 +815,7 @@ class Params:
             return program
 
     @staticmethod
-    def unset_matching_env_vars(args):
+    def unset_matching_env_vars(args) -> None:
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes = compile_regexes(args.include_envvar_regex)
         for key in list(os.environ.keys()):
@@ -853,7 +853,7 @@ class Remote:
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
             self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.__dict__)
 
 
@@ -871,12 +871,12 @@ class CopyPropertiesConfig:
         self.include_regexes: List[Tuple[re.Pattern, bool]] = compile_regexes(getattr(args, f"{grup}_include_regex"))
         self.exclude_regexes: List[Tuple[re.Pattern, bool]] = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.__dict__)
 
 
 #############################################################################
-def main():
+def main() -> None:
     """API for command line clients."""
     try:
         run_main(argument_parser().parse_args(), sys.argv)
@@ -884,7 +884,7 @@ def main():
         sys.exit(e.returncode)
 
 
-def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
+def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None) -> None:
     """API for Python clients; visible for testing; may become a public API eventually."""
     Job().run_main(args, sys_argv)
 
@@ -905,7 +905,7 @@ class Job:
         self.inject_params: Dict[str, bool] = {}  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
-    def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None):
+    def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None) -> None:
         try:
             self.params = p = Params(args, sys_argv, self.inject_params)
         except SystemExit as e:
@@ -972,13 +972,13 @@ class Job:
                 sys.stdout.flush()
                 sys.stderr.flush()
 
-    def validate_once(self):
+    def validate_once(self) -> None:
         p = self.params
         p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
         p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex)
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or [".*"])
 
-    def validate(self):
+    def validate(self) -> None:
         p = params = self.params
         src, dst = p.src, p.dst
         for remote in [src, dst]:
@@ -1050,7 +1050,7 @@ class Job:
         else:
             return "", True
 
-    def run_task(self):
+    def run_task(self) -> None:
         p = params = self.params
         src, dst = p.src, p.dst
 
@@ -1203,7 +1203,7 @@ class Job:
 
                 self.delete_datasets(dst, orphans)
 
-    def replicate_dataset(self, src_dataset: str, dst_dataset: str):
+    def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
         """Replicate src_dataset (without handling descendants) to dst_dataset."""
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
@@ -1411,7 +1411,7 @@ class Job:
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
 
-            def replication_candidates():
+            def replication_candidates() -> Tuple[List[str], List[str]]:
                 result_snapshots = []
                 result_guids = []
                 last_appended_guid = ""
@@ -1484,7 +1484,7 @@ class Job:
         size_estimate_human: str,
         dry_run_no_send: bool,
         error_trigger: Optional[str] = None,
-    ):
+    ) -> None:
         p = self.params
         send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
         recv_cmd = " ".join([shlex.quote(item) for item in recv_cmd])
@@ -1655,28 +1655,28 @@ class Job:
         else:
             return "cat"
 
-    def warn(self, *items):
+    def warn(self, *items) -> None:
         self.log("[W]", *items)
 
-    def info_raw(self, *items):
+    def info_raw(self, *items) -> None:
         if self.params.not_quiet:
             print(f"{current_time()} [I] {' '.join(items)}")
 
-    def info(self, *items):
+    def info(self, *items) -> None:
         self.log("[I]", *items)
 
     def is_debug_enabled(self) -> bool:
         return self.params.verbose != ""
 
-    def debug(self, *items):
+    def debug(self, *items) -> None:
         if self.params.verbose:
             self.log("[D]", *items)
 
-    def trace(self, *items):
+    def trace(self, *items) -> None:
         if self.params.verbose_trace:
             self.log("[T]", *items)
 
-    def log(self, first, second, *items):
+    def log(self, first, second, *items) -> None:
         if self.params.not_quiet:
             print(f"{current_time()} {first} {second:<28} {' '.join(items)}")  # right-pad second arg
 
@@ -1709,7 +1709,7 @@ class Job:
             prefix = "s"
             delete_stale_ssh_socket_files(socket_dir, prefix)
 
-            def sanitize(name):
+            def sanitize(name: str) -> str:
                 # replace any whitespace, /, $, \, @ with a ~ tilde char
                 name = re.sub(r"[\s\\/@$]", "~", name)
                 # Remove characters not in the allowed set
@@ -1727,10 +1727,10 @@ class Job:
 
     def run_ssh_command(
         self, remote: Remote, level=info, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
-    ):
-        """Runs the given cmd via ssh on the given remote. The full command is the concatenation of both the command
-        to run on the localhost in order to talk to the remote host ($remote.ssh_cmd) and the command to run on the
-        given remote host ($cmd)."""
+    ) -> str:
+        """Runs the given cmd via ssh on the given remote, and returns stdout. The full command is the concatenation
+        of both the command to run on the localhost in order to talk to the remote host ($remote.ssh_cmd) and the
+        command to run on the given remote host ($cmd)."""
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p = self.params
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
@@ -1794,8 +1794,8 @@ class Job:
                 self.warn(stderr.rstrip())
             raise RetryableError("Subprocess failed") from e
 
-    def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None):
-        """For testing only; for unit tests to create errors during replication and test correct handling of them."""
+    def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
+        """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
         if error_trigger:
             counter = self.error_injection_triggers.get("before")
             if counter and counter[error_trigger] > 0:
@@ -1804,7 +1804,7 @@ class Job:
                     returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ": dataset is busy"
                 )
 
-    def maybe_inject_delete(self, remote: Remote, dataset=None, delete_trigger=None):
+    def maybe_inject_delete(self, remote: Remote, dataset=None, delete_trigger=None) -> None:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
         assert delete_trigger
         counter = self.delete_injection_triggers.get("before")
@@ -1958,7 +1958,7 @@ class Job:
             header_bytes = len(" ".join(remote.ssh_cmd + self.delete_snapshot_cmd(remote, dataset + "@")).encode(fsenc))
             batch_tags, total_bytes = [], header_bytes
 
-            def flush_batch():
+            def flush_batch() -> None:
                 if len(batch_tags) > 0:
                     self.delete_snapshot(remote, dataset + "@" + ",".join(batch_tags))
 
@@ -1978,7 +1978,7 @@ class Job:
         is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
         self.run_ssh_command(remote, self.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
-    def delete_snapshot_cmd(self, remote: Remote, snaps_to_delete: str):
+    def delete_snapshot_cmd(self, remote: Remote, snaps_to_delete: str) -> List[str]:
         p = self.params
         return p.split_args(
             f"{remote.sudo} {p.zfs_program} destroy",
@@ -2198,14 +2198,14 @@ class Job:
         return steps
 
     @staticmethod
-    def send_step_to_str(step):
+    def send_step_to_str(step) -> str:
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
 
-    def zfs_set(self, properties: List[str], remote: Remote, dataset: str):
+    def zfs_set(self, properties: List[str], remote: Remote, dataset: str) -> None:
         """Applies the given property key=value pairs via 'zfs set' CLI to the given dataset on the given remote."""
 
-        def run_zfs_set(props: List[str]):
+        def run_zfs_set(props: List[str]) -> None:
             p = self.params
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} set") + props + [dataset]
             self.run_ssh_command(remote, self.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
@@ -2247,8 +2247,8 @@ class Job:
         return props
 
     def add_recv_property_options(
-        self, full_send: bool, recv_opts: List[str], dataset: str, cache: Dict[Tuple[str, str], Dict[str, str]]
-    ):
+        self, full_send: bool, recv_opts: List[str], dataset: str, cache: Dict[Tuple[str, str, str], Dict[str, str]]
+    ) -> Tuple[List[str], List[str]]:
         """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according
         to CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes
         successfully."""
@@ -2370,14 +2370,14 @@ class Job:
             if r.sudo and not self.is_program_available("sudo", r.location):
                 die(f"{p.sudo_program} CLI is not available on {r.location} host: {r.ssh_user_host or 'localhost'}")
 
-    def disable_program(self, program: str):
+    def disable_program(self, program: str) -> None:
         for location in ["src", "dst", "local"]:
             self.disable_program_internal(program, location)
 
-    def disable_program_internal(self, program: str, location: str):
+    def disable_program_internal(self, program: str, location: str) -> None:
         self.params.available_programs[location].pop(program, None)
 
-    def find_available_programs(self):
+    def find_available_programs(self) -> str:
         params = self.params
         return f"""
         command -v echo > /dev/null && echo echo
@@ -2391,7 +2391,7 @@ class Job:
         command -v {params.uname_program} > /dev/null && printf uname- && {params.uname_program} -a || true
         """
 
-    def detect_available_programs_remote(self, remote: Remote, available_programs: Dict, ssh_user_host: str):
+    def detect_available_programs_remote(self, remote: Remote, available_programs: Dict, ssh_user_host: str) -> None:
         p = self.params
         location = remote.location
         available_programs_minimum = {"zpool": None, "sudo": None}
@@ -2505,11 +2505,11 @@ class Job:
 
 
 #############################################################################
-def error(*items):
+def error(*items) -> None:
     print(f"{current_time()} [E] ERROR: {' '.join(items)}", file=sys.stderr)
 
 
-def die(*items):
+def die(*items) -> None:
     ex = SystemExit(" ".join(items))
     ex.code = die_status
     raise ex
@@ -2598,7 +2598,7 @@ def patch_exclude_dataset_regexes(regexes: List[str], default: str) -> List[str]
     return [regex for regex in regexes if regex != "" and regex != "!.*"]  # these don't exclude anything
 
 
-def delete_stale_ssh_socket_files(socket_dir: str, prefix: str):
+def delete_stale_ssh_socket_files(socket_dir: str, prefix: str) -> None:
     """Clean up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash."""
     secs = 30 * 24 * 60 * 60
     now = time.time()
@@ -2652,7 +2652,7 @@ def get_home_directory() -> str:
     return home
 
 
-def create_symlink(src: str, dst_dir: str, dst: str):
+def create_symlink(src: str, dst_dir: str, dst: str) -> None:
     """For parallel usage, ensure there is no time window when the symlink does not exist; uses atomic os.rename()."""
     uniq = f".tmp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex}"
     fd, temp_link = tempfile.mkstemp(suffix=".tmp", prefix=uniq, dir=dst_dir)
@@ -2767,7 +2767,7 @@ def parse_dataset_locator(input_text: str, validate: bool = True, user: str = No
     return user, host, user_host, pool, dataset
 
 
-def validate_dataset_name(dataset: str, input_text: str):
+def validate_dataset_name(dataset: str, input_text: str) -> None:
     # 'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc.
     # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
@@ -2795,17 +2795,17 @@ def validate_dataset_name(dataset: str, input_text: str):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
-def validate_user_name(user: str, input_text: str):
+def validate_user_name(user: str, input_text: str) -> None:
     if user and any(char.isspace() or char == '"' or char == "'" or char == "`" for char in user):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
-def validate_host_name(host: str, input_text: str):
+def validate_host_name(host: str, input_text: str) -> None:
     if host and any(char.isspace() or char == "@" or char == '"' or char == "'" or char == "`" for char in host):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
-def validate_port(port: int, message: str):
+def validate_port(port: int, message: str) -> None:
     if isinstance(port, int):
         port = str(port)
     if port and not port.isdigit():
@@ -2825,16 +2825,16 @@ class Tee:
     def __init__(self, *files):
         self.files = files
 
-    def write(self, obj):
+    def write(self, obj) -> None:
         for file in self.files:
             file.write(obj)
             file.flush()  # Ensure each write is flushed immediately
 
-    def flush(self):
+    def flush(self) -> None:
         for file in self.files:
             file.flush()
 
-    def fileno(self):
+    def fileno(self) -> int:
         return self.files[0].fileno()
 
 
