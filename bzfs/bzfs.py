@@ -301,10 +301,32 @@ feature.
     retries_default = 0
     parser.add_argument(
         "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
-        help=(f"The number of times a retryable replication step shall be retried if it fails, for example because "
-              f"of network hiccups (default: {retries_default}). "
+        help=("The maximum number of times a retryable replication step shall be retried if it fails, for example "
+              f"because of network hiccups (default: {retries_default}). "
               "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
               f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n"))
+    retry_min_sleep_secs_default = 0.125
+    parser.add_argument(
+        "--retry-min-sleep-secs", type=float, min=0, default=retry_min_sleep_secs_default,
+        action=CheckRange, metavar="FLOAT",
+        # help=(f"The minimum duration to sleep between retries  (default: {retry_min_sleep_secs_default}). "
+        #       "This duration doubles on each retry, up to the maximum of --retry-max-sleep-secs (see below).\n\n"))
+        help=argparse.SUPPRESS)
+    retry_max_sleep_secs_default = 5 * 60
+    parser.add_argument(
+        "--retry-max-sleep-secs", type=float, min=0, default=retry_max_sleep_secs_default,
+        action=CheckRange, metavar="FLOAT",
+        # help=f"The maximum duration to sleep between retries (default: {retry_max_sleep_secs_default}).\n\n")
+        help=argparse.SUPPRESS)
+    retry_max_elapsed_secs_default = 60 * 60
+    parser.add_argument(
+        "--retry-max-elapsed-secs", type=float, min=0, default=retry_max_elapsed_secs_default,
+        action=CheckRange, metavar="FLOAT",
+        # help=("A single operation (e.g. 'zfs send/receive' of the current dataset) will not be retried (or not "
+        #       "retried anymore) once this much time has elapsed since the initial start of the operation, including "
+        #       f"retries. (default: {retry_max_elapsed_secs_default}). The timer resets after each operation "
+        #       "completes or retries exhaust, such that subsequently failing operations can again be retried.\n\n"))
+        help=argparse.SUPPRESS)
     parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset", nargs="?",
         help=("During replication, if an error is not retryable, or --retries has been exhausted, "
@@ -569,10 +591,9 @@ feature.
               "leading `!` character removed does not match. "
               "The default is to include no environment variables, i.e. to make no exceptions to "
               "--exclude-envvar-regex. "
-              f"Example that retains at least these three env vars: "
-              f"`--include-envvar-regex {env_var_prefix}retry_min_sleep_secs "
-              f"--include-envvar-regex {env_var_prefix}retry_max_sleep_secs "
-              f"--include-envvar-regex {env_var_prefix}retry_max_elapsed_secs`. "
+              f"Example that retains at least these two env vars: "
+              "`--include-envvar-regex PATH "
+              f"--include-envvar-regex {env_var_prefix}min_pipe_transfer_size`. "
               "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
     parser.add_argument(
         "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
@@ -876,9 +897,9 @@ class RetryPolicy:
         """Option values for retries; read from ArgumentParser via args."""
         # immutable variables:
         self.retries: int = args.retries
-        self.min_sleep_secs: float = float(p.getenv("retry_min_sleep_secs", 0.125))
-        self.max_sleep_secs: float = float(p.getenv("retry_max_sleep_secs", 5 * 60))
-        self.max_elapsed_secs: float = float(p.getenv("retry_max_elapsed_secs", 60 * 60))
+        self.min_sleep_secs: float = args.retry_min_sleep_secs
+        self.max_sleep_secs: float = args.retry_max_sleep_secs
+        self.max_elapsed_secs: float = args.retry_max_elapsed_secs
         self.min_sleep_nanos: int = int(self.min_sleep_secs * 1000_000_000)
         self.max_sleep_nanos: int = int(self.max_sleep_secs * 1000_000_000)
         self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1000_000_000)
@@ -2679,7 +2700,7 @@ def get_home_directory() -> str:
 
 
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
-    """For parallel usage, ensure there is no time window when the symlink does not exist; uses atomic os.rename()."""
+    """For parallel usage, ensures there is no time window when the symlink does not exist; uses atomic os.rename()."""
     uniq = f".tmp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex}"
     fd, temp_link = tempfile.mkstemp(suffix=".tmp", prefix=uniq, dir=dst_dir)
     os.close(fd)

@@ -512,11 +512,11 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--retries** *INT*
 
-*  The number of times a retryable replication step shall be retried if
-    it fails, for example because of network hiccups (default: 0). Also
-    consider this option if a periodic pruning script may simultaneously
-    delete a dataset or snapshot or bookmark while bzfs is running and
-    attempting to access it.
+*  The maximum number of times a retryable replication step shall be
+    retried if it fails, for example because of network hiccups
+    (default: 0). Also consider this option if a periodic pruning script
+    may simultaneously delete a dataset or snapshot or bookmark while
+    bzfs is running and attempting to access it.
 
 <!-- -->
 
@@ -993,10 +993,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     regex with the leading `!` character removed does not match. The
     default is to include no environment variables, i.e. to make no
     exceptions to --exclude-envvar-regex. Example that retains at least
-    these three env vars: `--include-envvar-regex bzfs_min_sleep_secs
-    --include-envvar-regex bzfs_max_sleep_secs --include-envvar-regex
-    bzfs_max_elapsed_secs`. Example that retains all environment
-    variables without tightened security: `'.*'`
+    these two env vars: `--include-envvar-regex PATH
+    --include-envvar-regex bzfs_min_pipe_transfer_size`. Example that
+    retains all environment variables without tightened security:
+    `'.*'`
 
 <!-- -->
 
