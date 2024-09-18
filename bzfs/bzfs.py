@@ -658,30 +658,19 @@ class Params:
         self.args: argparse.Namespace = args
         self.sys_argv: List[str] = sys_argv if sys_argv is not None else []
         self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
-        self.unset_matching_env_vars(args)
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
+        self.unset_matching_env_vars(args)
+
         assert len(args.root_dataset_pairs) > 0
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
-        self.src = Remote("src", args, self)  # src dataset, host and ssh options
-        self.dst = Remote("dst", args, self)  # dst dataset, host and ssh options
-        cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in zfs_recv_groups.items()]
-        self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
-        self.skip_parent: bool = args.skip_parent
-        self.force_rollback_to_latest_snapshot: bool = args.force_rollback_to_latest_snapshot
-        self.force_once: bool = args.force_once
-        self.force: bool = args.force or args.force_once
-        self.force_unmount: str = "-f" if args.force_unmount else ""
-        self.force_hard: str = "-R" if args.force_hard else ""
-        self.skip_missing_snapshots: str = args.skip_missing_snapshots
-        self.create_bookmark: bool = not args.no_create_bookmark
-        self.use_bookmark: bool = not args.no_use_bookmark
-        self.no_stream: bool = args.no_stream
-        self.delete_missing_datasets: bool = args.delete_missing_datasets
-        self.delete_empty_datasets: bool = args.delete_missing_datasets
-        self.delete_missing_snapshots: bool = args.delete_missing_snapshots
-        self.skip_replication: bool = args.skip_replication
+        self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
+        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+
         self.dry_run: bool = args.dryrun is not None
         self.dry_run_recv: str = "-n" if self.dry_run else ""
         self.dry_run_destroy: str = self.dry_run_recv
@@ -690,13 +679,7 @@ class Params:
         self.verbose_zfs: bool = args.verbose >= 2
         self.not_quiet: bool = not args.quiet
         self.verbose_destroy: str = "" if args.quiet else "-v"
-        self.verbose_trace: bool = args.verbose >= 2
-        self.enable_privilege_elevation: bool = not args.no_privilege_elevation
-        self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
-        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.trace_level: bool = args.verbose >= 2
 
         self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
         self.curr_zfs_send_program_opts: List[str] = []
@@ -709,6 +692,31 @@ class Params:
             append_if_absent(self.zfs_recv_program_opts, "-v")
         self.zfs_full_recv_opts: List[str] = self.zfs_recv_program_opts.copy()
         self.zfs_recv_ox_names: Set[str] = set()
+        cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in zfs_recv_groups.items()]
+        self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
+
+        self.force_rollback_to_latest_snapshot: bool = args.force_rollback_to_latest_snapshot
+        self.force_once: bool = args.force_once
+        self.force: bool = args.force or args.force_once
+        self.force_unmount: str = "-f" if args.force_unmount else ""
+        self.force_hard: str = "-R" if args.force_hard else ""
+
+        self.skip_parent: bool = args.skip_parent
+        self.skip_missing_snapshots: str = args.skip_missing_snapshots
+        self.skip_on_error: str = args.skip_on_error
+        self.retry_policy = RetryPolicy(args, self)
+        self.skip_replication: bool = args.skip_replication
+        self.delete_missing_snapshots: bool = args.delete_missing_snapshots
+        self.delete_missing_datasets: bool = args.delete_missing_datasets
+        self.delete_empty_datasets: bool = args.delete_missing_datasets
+        self.enable_privilege_elevation: bool = not args.no_privilege_elevation
+        self.no_stream: bool = args.no_stream
+        self.create_bookmark: bool = not args.no_create_bookmark
+        self.use_bookmark: bool = not args.no_use_bookmark
+
+        self.src = Remote("src", args, self)  # src dataset, host and ssh options
+        self.dst = Remote("dst", args, self)  # dst dataset, host and ssh options
+        self.ssh_socket_reuse_enabled: bool = self.getenv_bool("ssh_socket_reuse_enabled", True)
 
         self.timestamp: str = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         self.home_dir: str = get_home_directory()
@@ -735,20 +743,8 @@ class Params:
         self.zfs_program: str = self.program_name(args.zfs_program)
         self.zpool_program: str = self.program_name(args.zpool_program)
 
-        self.skip_on_error: str = args.skip_on_error
-        self.retries: int = args.retries
-        self.retry_min_sleep_secs: float = float(self.getenv("retry_min_sleep_secs", 0.125))
-        self.retry_max_sleep_secs: float = float(self.getenv("retry_max_sleep_secs", 5 * 60))
-        self.retry_max_elapsed_secs: float = float(self.getenv("retry_max_elapsed_secs", 60 * 60))
-        self.retry_min_sleep_nanos: int = int(self.retry_min_sleep_secs * 1000_000_000)
-        self.retry_max_sleep_nanos: int = int(self.retry_max_sleep_secs * 1000_000_000)
-        self.retry_max_elapsed_nanos: int = int(self.retry_max_elapsed_secs * 1000_000_000)
-        self.retry_min_sleep_nanos = max(1, self.retry_min_sleep_nanos)
-        self.retry_max_sleep_nanos = max(self.retry_min_sleep_nanos, self.retry_max_sleep_nanos)
-
-        # no point trying to be fancy for smaller data transfers:
+        # no point trying to create complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = int(self.getenv("min_pipe_transfer_size", 1024 * 1024))
-        self.ssh_socket_reuse_enabled: bool = self.getenv_bool("ssh_socket_reuse_enabled", True)
 
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
@@ -873,6 +869,28 @@ class CopyPropertiesConfig:
 
     def __repr__(self) -> str:
         return str(self.__dict__)
+
+
+#############################################################################
+class RetryPolicy:
+    def __init__(self, args: argparse.Namespace, p: Params):
+        """Option values for retries; read from ArgumentParser via args."""
+        # immutable variables:
+        self.retries: int = args.retries
+        self.min_sleep_secs: float = float(p.getenv("retry_min_sleep_secs", 0.125))
+        self.max_sleep_secs: float = float(p.getenv("retry_max_sleep_secs", 5 * 60))
+        self.max_elapsed_secs: float = float(p.getenv("retry_max_elapsed_secs", 60 * 60))
+        self.min_sleep_nanos: int = int(self.min_sleep_secs * 1000_000_000)
+        self.max_sleep_nanos: int = int(self.max_sleep_secs * 1000_000_000)
+        self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1000_000_000)
+        self.min_sleep_nanos = max(1, self.min_sleep_nanos)
+        self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
+
+    def __repr__(self) -> str:
+        return (
+            f"Retry policy: retries: {self.retries}, min_sleep_secs: {self.min_sleep_secs}, "
+            f"max_sleep_secs: {self.max_sleep_secs}, max_elapsed_secs: {self.max_elapsed_secs}"
+        )
 
 
 #############################################################################
@@ -1084,11 +1102,7 @@ class Job:
             )
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            self.trace(
-                "Retry policy:",
-                f"retries: {p.retries}, retry_min_sleep_secs: {p.retry_min_sleep_secs}, "
-                f"retry_max_sleep_secs: {p.retry_max_sleep_secs}, retry_max_elapsed_secs: {p.retry_max_elapsed_secs}",
-            )
+            self.trace(str(p.retry_policy))
             skip_src_dataset = ""
             for src_dataset in src_datasets:
                 if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
@@ -1102,7 +1116,7 @@ class Job:
                     str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"]))),
                 ] + p.mbuffer_program_opts
                 try:
-                    if not self.run_with_retries(self.replicate_dataset, src_dataset, dst_dataset):
+                    if not self.run_with_retries(p.retry_policy, self.replicate_dataset, src_dataset, dst_dataset):
                         skip_src_dataset = src_dataset
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                     failed = True
@@ -1586,7 +1600,7 @@ class Job:
 
         cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
         msg = "Would execute:" if dry_run_no_send else "Executing:"
-        self.debug(msg, " ".join(cmd[2:]).lstrip())
+        self.debug(msg, cmd[2].lstrip())
         if not dry_run_no_send:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
@@ -1673,7 +1687,7 @@ class Job:
             self.log("[D]", *items)
 
     def trace(self, *items) -> None:
-        if self.params.verbose_trace:
+        if self.params.trace_level:
             self.log("[T]", *items)
 
     def log(self, first, second, *items) -> None:
@@ -2091,10 +2105,9 @@ class Job:
             results.append(regex)
         return results
 
-    def run_with_retries(self, func, *args, **kwargs) -> Any:
-        """Run the given function with the given arguments, and retry on failure as indicated by params."""
-        p = self.params
-        max_sleep_mark = p.retry_min_sleep_nanos
+    def run_with_retries(self, policy: RetryPolicy, func, *args, **kwargs) -> Any:
+        """Run the given function with the given arguments, and retry on failure as indicated by policy."""
+        max_sleep_mark = policy.min_sleep_nanos
         retry_count = 0
         start_time_nanos = time.time_ns()
         while True:
@@ -2102,18 +2115,18 @@ class Job:
                 return func(*args, **kwargs)  # Call the target function with the provided arguments
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
-                if retry_count < p.retries and elapsed_nanos < p.retry_max_elapsed_nanos:
-                    # pick a random sleep duration within the range [retry_min_sleep_nanos, max_sleep_mark] as delay
-                    sleep_nanos = random.randint(p.retry_min_sleep_nanos, max_sleep_mark)
-                    self.info(f"Retrying [{retry_count + 1}/{p.retries}] soon ...")
+                if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
+                    # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
+                    sleep_nanos = random.randint(policy.min_sleep_nanos, max_sleep_mark)
+                    self.info(f"Retrying [{retry_count + 1}/{policy.retries}] soon ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     retry_count = retry_count + 1
-                    max_sleep_mark = min(p.retry_max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
+                    max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
-                    if p.retries > 0:
+                    if policy.retries > 0:
                         error(
-                            f"Giving up because the last [{retry_count}/{p.retries}] retries across "
-                            f"[{elapsed_nanos // 1_000_000_000}/{p.retry_max_elapsed_nanos // 1_000_000_000}] "
+                            f"Giving up because the last [{retry_count}/{policy.retries}] retries across "
+                            f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )
                     raise retryable_error.__cause__
