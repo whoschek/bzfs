@@ -830,6 +830,7 @@ class Remote:
         self.sudo: str = ""
         self.use_zfs_delegation: bool = False
         self.ssh_cmd: List[str] = []
+        self.ssh_cmd_quoted: List[str] = []
         self.ssh_user: str = ""
         self.ssh_host: str = ""
 
@@ -1009,6 +1010,7 @@ class Job:
             )
             r.sudo, r.use_zfs_delegation = self.sudo_cmd(r.ssh_user_host, r.ssh_user)
             r.ssh_cmd = self.local_ssh_command(remote)
+            r.ssh_cmd_quoted = [shlex.quote(item) for item in r.ssh_cmd]
 
         if src.ssh_host == dst.ssh_host:
             if src.root_dataset == dst.root_dataset:
@@ -1595,8 +1597,8 @@ class Job:
 
         src_pipe = self.squote(p.src.ssh_cmd, src_pipe)
         dst_pipe = self.squote(p.dst.ssh_cmd, dst_pipe)
-        src_ssh_cmd = " ".join([shlex.quote(item) for item in p.src.ssh_cmd])
-        dst_ssh_cmd = " ".join([shlex.quote(item) for item in p.dst.ssh_cmd])
+        src_ssh_cmd = " ".join(p.src.ssh_cmd_quoted)
+        dst_ssh_cmd = " ".join(p.dst.ssh_cmd_quoted)
 
         cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
         msg = "Would execute:" if dry_run_no_send else "Executing:"
@@ -1776,7 +1778,7 @@ class Job:
                         )
 
         msg = "Would execute:" if is_dry else "Executing:"
-        level(msg, " ".join([shlex.quote(item) for item in ssh_cmd] + quoted_cmd).lstrip())
+        level(msg, " ".join(remote.ssh_cmd_quoted + quoted_cmd).lstrip())
         if not is_dry:
             try:
                 process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
