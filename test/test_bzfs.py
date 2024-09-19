@@ -56,12 +56,6 @@ os.write(ssh_config_file_fd, "# Empty ssh_config file".encode())
 keylocation = f"file://{zfs_encryption_key}"
 rng = random.Random(12345)
 has_netcat_prog = shutil.which("nc") is not None
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(message)s",
-    # datefmt='%Y-%m-%d %H:%M:%S',
-    datefmt="%H:%M:%S:",
-)
 
 
 def getenv_any(key, default=None):
@@ -119,6 +113,8 @@ class BZFSTestCase(ParametrizedTestCase):
         global src_pool, dst_pool
         global src_root_dataset, dst_root_dataset
         global afix
+
+        logging.shutdown()  # close all FileHandler files
 
         for pool in src_pool_name, dst_pool_name:
             if dataset_exists(pool):
@@ -2777,14 +2773,15 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["-x"], params.fix_recv_opts(["-x"]))
 
     def test_xprint(self):
-        bzfs.xprint("foo")
-        bzfs.xprint("foo", run=True)
-        bzfs.xprint("foo", run=False)
-        bzfs.xprint("foo", file=sys.stdout)
-        bzfs.xprint("")
-        bzfs.xprint("", run=True)
-        bzfs.xprint("", run=False)
-        bzfs.xprint(None)
+        log = logging.getLogger()
+        bzfs.xprint(log, "foo")
+        bzfs.xprint(log, "foo", run=True)
+        bzfs.xprint(log, "foo", run=False)
+        bzfs.xprint(log, "foo", file=sys.stdout)
+        bzfs.xprint(log, "")
+        bzfs.xprint(log, "", run=True)
+        bzfs.xprint(log, "", run=False)
+        bzfs.xprint(log, None)
 
     def test_exclude_dataset_regex(self):
         self.assertListEqual(["x"], bzfs.patch_exclude_dataset_regexes(["x"], "d"))
@@ -2874,6 +2871,44 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual(["-w", "compress"], bzfs.fix_solaris_raw_mode(["-w", "--compressed"]))
         self.assertListEqual(["-w", "none", "foo"], bzfs.fix_solaris_raw_mode(["-w", "foo"]))
         self.assertListEqual(["-F"], bzfs.fix_solaris_raw_mode(["-F"]))
+
+    def test_get_logger(self):
+        fd, file_name = tempfile.mkstemp()
+        os.close(fd)
+        prefix = "test_get_logger:"
+        try:
+            args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+            root_logger = logging.getLogger()
+            log = bzfs.get_logger(args, root_logger)
+            self.assertTrue(log == root_logger)
+            log.info(prefix + "aaa1")
+
+            args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+            log = bzfs.get_logger(args, log=None)
+            log.log(bzfs.log_stderr, "%s", prefix + "bbbe1")
+            log.log(bzfs.log_stdout, "%s", prefix + "bbbo1")
+            log.info("%s", prefix + "bbb3")
+            log.setLevel(logging.WARNING)
+            log.log(bzfs.log_stderr, "%s", prefix + "bbbe2")
+            log.log(bzfs.log_stdout, "%s", prefix + "bbbo2")
+            log.info("%s", prefix + "bbb4")
+            log.trace("%s", prefix + "bbb5")
+            log.setLevel(bzfs.log_trace)
+            log.trace("%s", prefix + "bbb6")
+
+            args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v"])
+            log = bzfs.get_logger(args, log=None, log_file=file_name)
+            self.assertIsNotNone(log)
+
+            args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v", "-v"])
+            log = bzfs.get_logger(args, log=None, log_file=file_name)
+            self.assertIsNotNone(log)
+
+            args = bzfs.argument_parser().parse_args(args=["src", "dst", "--quiet"])
+            log = bzfs.get_logger(args, log=None)
+            self.assertIsNotNone(log)
+        finally:
+            os.remove(file_name)
 
 
 #############################################################################

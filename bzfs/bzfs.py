@@ -21,6 +21,7 @@
 
 import argparse
 import collections
+import logging
 import operator
 import os
 import platform
@@ -37,10 +38,11 @@ import tempfile
 import time
 import uuid
 from collections import defaultdict, Counter
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr
 from datetime import datetime
+from logging import Logger
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import List, Dict, Set, Iterable, Tuple, Callable, Any, Optional
+from typing import List, Dict, Set, Iterable, Tuple, Any, Optional
 
 __version__ = "0.9.0-dev"
 prog_name = "bzfs"
@@ -54,6 +56,10 @@ disable_prg = "-"
 env_var_prefix = prog_name + "_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
+log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
+log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
+log_debug = logging.DEBUG
+log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 PIPE = subprocess.PIPE
 
 
@@ -673,15 +679,17 @@ class Params:
         self,
         args: argparse.Namespace,
         sys_argv: Optional[List[str]] = None,
+        log: Optional[Logger] = None,
         inject_params: Optional[Dict[str, bool]] = None,
     ):
         assert args is not None
         self.args: argparse.Namespace = args
         self.sys_argv: List[str] = sys_argv if sys_argv is not None else []
+        assert isinstance(self.sys_argv, list)
         self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
+        assert isinstance(self.inject_params, dict)
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
-        self.log = Logger(args)
-        self.unset_matching_env_vars(args)
+        self.unset_matching_env_vars(args, log)
 
         assert len(args.root_dataset_pairs) > 0
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
@@ -745,6 +753,7 @@ class Params:
         os.close(fd)
         fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
+        self.log: Logger = get_logger(args, log, log_file=self.log_file)
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -829,13 +838,15 @@ class Params:
         else:
             return program
 
-    def unset_matching_env_vars(self, args) -> None:
+    @staticmethod
+    def unset_matching_env_vars(args: argparse.Namespace, log: Optional[Logger]) -> None:
+        log = get_logger(args, log)
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes = compile_regexes(args.include_envvar_regex)
         for key in list(os.environ.keys()):
             if is_included(key, exclude_envvar_regexes, include_envvar_regexes):
                 os.environ.pop(key, None)
-                self.log.debug("Unsetting b/c envvar regex:", key)
+                log.debug("Unsetting b/c envvar regex: %s", key)
 
 
 #############################################################################
@@ -908,42 +919,9 @@ class RetryPolicy:
 
     def __repr__(self) -> str:
         return (
-            f"Retry policy: retries: {self.retries}, min_sleep_secs: {self.min_sleep_secs}, "
+            f"retries: {self.retries}, min_sleep_secs: {self.min_sleep_secs}, "
             f"max_sleep_secs: {self.max_sleep_secs}, max_elapsed_secs: {self.max_elapsed_secs}"
         )
-
-
-#############################################################################
-class Logger:
-    def __init__(self, args: argparse.Namespace):
-        self.is_debug: bool = args.verbose >= 1
-        self.is_trace: bool = args.verbose >= 2
-        self.is_not_quiet: bool = not args.quiet
-
-    @staticmethod
-    def error(*items) -> None:
-        print(f"{current_time()} [E] ERROR: {' '.join(items)}", file=sys.stderr)
-
-    def warn(self, *items) -> None:
-        self.log("[W]", *items)
-
-    def info(self, *items) -> None:
-        self.log("[I]", *items)
-
-    def debug(self, *items) -> None:
-        if self.is_debug:
-            self.log("[D]", *items)
-
-    def is_debug_enabled(self) -> bool:
-        return self.is_debug
-
-    def trace(self, *items) -> None:
-        if self.is_trace:
-            self.log("[T]", *items)
-
-    def log(self, first, second, *items) -> None:
-        if self.is_not_quiet:
-            print(f"{current_time()} {first} {second:<28} {' '.join(items)}")  # right-pad second arg
 
 
 #############################################################################
@@ -955,9 +933,9 @@ def main() -> None:
         sys.exit(e.returncode)
 
 
-def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None) -> None:
+def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None) -> None:
     """API for Python clients; visible for testing; may become a public API eventually."""
-    Job().run_main(args, sys_argv)
+    Job().run_main(args, sys_argv, log)
 
 
 #############################################################################
@@ -976,21 +954,21 @@ class Job:
         self.inject_params: Dict[str, bool] = {}  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
-    def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None) -> None:
+    def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
         try:
-            self.params = p = Params(args, sys_argv, self.inject_params)
+            self.params = p = Params(args, sys_argv, log, self.inject_params)
         except SystemExit as e:
-            Logger(args).error(str(e))
+            get_logger(args, log).error("%s", str(e))
             raise
         log = p.log
-        log.info("Log file is: " + p.log_file)
+        log.info("%s", "Log file is: " + p.log_file)
         create_symlink(p.log_file, p.log_dir, "current.log")
         create_symlink(p.pv_log_file, p.log_dir, "current.pv")
 
         with open(p.log_file, "a", encoding="utf-8") as log_file_fd:
-            with redirect_stdout(Tee(log_file_fd, sys.stdout)), redirect_stderr(Tee(log_file_fd, sys.stderr)):
-                log.info("CLI arguments:", " ".join(p.sys_argv), f"[euid: {os.geteuid()}]")
-                log.debug("Parsed CLI arguments:", str(p.args))
+            with redirect_stderr(Tee(log_file_fd, sys.stderr)):
+                log.info("CLI arguments: %s %s", " ".join(p.sys_argv), f"[euid: {os.geteuid()}]")
+                log.debug("Parsed CLI arguments: %s", p.args)
                 try:
                     self.validate_once()
                     self.all_exceptions = []
@@ -1002,26 +980,26 @@ class Job:
                         p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                         self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
                         log.info(
-                            "Starting task:",
+                            "Starting task: %s",
                             f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                         )
                         try:
                             self.validate()
                             self.run_task()
                         except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                            log.error(str(e))
+                            log.error("%s", str(e))
                             if p.skip_on_error == "fail":
                                 raise
                             self.first_exception = self.first_exception or e
                             self.all_exceptions.append(str(e))
                             log.error(
-                                f"#{len(self.all_exceptions)}: Done with task:",
+                                f"#{len(self.all_exceptions)}: Done with task: %s",
                                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}",
                             )
                     error_count = len(self.all_exceptions)
                     if error_count > 0:
                         msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
-                        log.error(f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
+                        log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                         raise self.first_exception  # reraise first swallowed exception
                 except subprocess.CalledProcessError as e:
                     log.error(f"Exiting with status code: {e.returncode}")
@@ -1035,12 +1013,12 @@ class Job:
                     ex.code = die_status
                     raise ex
                 finally:
-                    log.info("Log file was: " + p.log_file)
+                    log.info("%s", "Log file was: " + p.log_file)
 
                 for line in tail(p.pv_log_file, 10):
-                    print(line, end="")
+                    log.log(log_stdout, "%s", line.rstrip())
                 log.info("Success. Goodbye!")
-                sys.stdout.flush()
+                print("", end="", file=sys.stderr)
                 sys.stderr.flush()
 
     def validate_once(self) -> None:
@@ -1087,7 +1065,7 @@ class Job:
         p.exclude_dataset_regexes = compile_regexes(exclude_regexes, suffix=re_suffix)
         p.include_dataset_regexes = compile_regexes(include_regexes or [".*"], suffix=re_suffix)
         self.detect_available_programs()
-        log.trace("Validated Param values:", pprint.pformat(vars(self.params)))
+        log.trace("Validated Param values: %s", pretty_print_formatter(self.params))
 
         zfs_send_program_opts = p.curr_zfs_send_program_opts
         if self.is_zpool_feature_enabled_or_active(dst, "feature@large_blocks"):
@@ -1133,7 +1111,7 @@ class Job:
             p.recursive_flag,
             src.root_dataset,
         )
-        src_datasets_with_record_sizes = (self.try_ssh_command(src, log.debug, cmd=cmd) or "").splitlines()
+        src_datasets_with_record_sizes = (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines()
         src_datasets = []
         src_properties = {}
         for line in src_datasets_with_record_sizes:
@@ -1152,12 +1130,12 @@ class Job:
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not params.skip_replication:
             log.info(
-                "Starting replication task:",
+                "Starting replication task: %s",
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            log.trace(str(p.retry_policy))
+            log.trace("Retry policy: %s", p.retry_policy)
             skip_src_dataset = ""
             for src_dataset in src_datasets:
                 if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
@@ -1165,7 +1143,7 @@ class Job:
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
                 dst_dataset = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
-                log.debug("Replicating:", f"{src_dataset} --> {dst_dataset} ...")
+                log.debug("Replicating: %s", f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = [
                     "-s",
                     str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"]))),
@@ -1181,8 +1159,8 @@ class Job:
                         skip_src_dataset = src_dataset
                     self.first_exception = self.first_exception or e
                     self.all_exceptions.append(str(e))
-                    log.error(str(e))
-                    log.error(f"#{len(self.all_exceptions)}: Done replicating:", f"{src_dataset} --> {dst_dataset}")
+                    log.error("%s", str(e))
+                    log.error(f"#{len(self.all_exceptions)}: Done replicating: %s", f"{src_dataset} --> {dst_dataset}")
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex and the destination
@@ -1190,7 +1168,7 @@ class Job:
         # --exclude-dataset-property policy
         if params.delete_missing_snapshots and not failed:
             log.info(
-                "--delete-missing-snapshots:",
+                "--delete-missing-snapshots: %s",
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             skip_src_dataset = ""
@@ -1205,15 +1183,15 @@ class Job:
                     src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src_for_delete_missing_snapshots"
                 )
                 try:
-                    src_snapshots_with_guids = self.run_ssh_command(src, log.trace, cmd=cmd).splitlines()
+                    src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                 except subprocess.CalledProcessError:
-                    log.warn("Third party deleted source:", src_dataset)
+                    log.warning("Third party deleted source: %s", src_dataset)
                     skip_src_dataset = src_dataset
                     basis_src_datasets.remove(src_dataset)
                 else:
                     dst_ds = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
                     cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_ds)
-                    dst_snapshots_with_guids = self.run_ssh_command(dst, log.trace, check=False, cmd=cmd).splitlines()
+                    dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
                     dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                         set(cut(1, lines=src_snapshots_with_guids))
@@ -1230,13 +1208,13 @@ class Job:
         # recurse without --recursive.
         if params.delete_missing_datasets and not failed:
             log.info(
-                "--delete-missing-datasets:",
+                "--delete-missing-datasets: %s",
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o name -s name", p.recursive_flag, dst.root_dataset
             )
-            dst_datasets = self.run_ssh_command(dst, log.trace, check=False, cmd=cmd).splitlines()
+            dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
             dst_datasets = set(self.filter_datasets(dst, dst_datasets))  # apply include/exclude policy
             others = {replace_prefix(src_ds, src.root_dataset, dst.root_dataset) for src_ds in basis_src_datasets}
             to_delete = dst_datasets.difference(others)
@@ -1250,7 +1228,7 @@ class Job:
             # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
             if p.delete_empty_datasets:
                 log.info(
-                    "--delete-empty-datasets:",
+                    "--delete-empty-datasets: %s",
                     f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
@@ -1267,7 +1245,7 @@ class Job:
                     if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
                         # all children of the dataset turned out to be orphans so the dataset itself could be an orphan
                         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o name", dst_dataset)
-                        if not self.try_ssh_command(dst, log.trace, cmd=cmd):
+                        if not self.try_ssh_command(dst, log_trace, cmd=cmd):
                             orphans.add(dst_dataset)  # found zero snapshots - mark dataset as an orphan
 
                 self.delete_datasets(dst, orphans)
@@ -1282,7 +1260,7 @@ class Job:
         use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
         props = "creation,guid,name" if use_bookmark else "guid,name"
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
-        dst_snapshots_with_guids = self.try_ssh_command(dst, log.trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
+        dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
         use_bookmark = use_bookmark and len(dst_snapshots_with_guids) > 0
@@ -1305,9 +1283,9 @@ class Job:
             types = "snapshot"
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
-        src_snapshots_and_bookmarks = self.try_ssh_command(src, log.trace, cmd=cmd)
+        src_snapshots_and_bookmarks = self.try_ssh_command(src, log_trace, cmd=cmd)
         if src_snapshots_and_bookmarks is None:
-            log.warn("Third party deleted source:", src_dataset)
+            log.warning("Third party deleted source: %s", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
 
@@ -1347,12 +1325,12 @@ class Job:
                     "using --skip-missing-snapshots=dataset"
                 )
             elif params.skip_missing_snapshots == "dataset":
-                log.warn("Skipping source dataset because it includes no snapshot:", src_dataset)
+                log.warning("Skipping source dataset because it includes no snapshot: %s", src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and params.recursive:
-                    log.warn("Also skipping descendant datasets as destination dataset does not exist:", src_dataset)
+                    log.warning("Also skipping descendant datasets as dst dataset does not exist:%s", src_dataset)
                 return self.dst_dataset_exists[dst_dataset]
 
-        log.debug("latest_src_snapshot:", latest_src_snapshot)
+        log.debug("latest_src_snapshot: %s", latest_src_snapshot)
         latest_dst_snapshot = ""
         latest_dst_guid = ""
         latest_common_src_snapshot = ""
@@ -1363,12 +1341,12 @@ class Job:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
                 if params.force_rollback_to_latest_snapshot or params.force:
-                    log.info("Rolling back destination to most recent snapshot:", latest_dst_snapshot)
+                    log.info("Rolling back destination to most recent snapshot: %s", latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-                    self.run_ssh_command(dst, log.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                    self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             elif latest_src_snapshot == "":
-                log.info("Already-up-to-date:", dst_dataset)
+                log.info("Already-up-to-date: %s", dst_dataset)
                 return True
 
             # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
@@ -1386,8 +1364,8 @@ class Job:
             latest_common_guid, latest_common_src_snapshot = latest_common_snapshot(
                 src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids))
             )
-            log.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
-            log.trace("latest_dst_snapshot:", latest_dst_snapshot)
+            log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
+            log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
 
             if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
                 # common snapshot was found. rollback dst to that common snapshot
@@ -1400,19 +1378,19 @@ class Job:
                     )
                 if params.force_once:
                     params.force = False
-                log.info("Rolling back destination to most recent common snapshot:", latest_common_dst_snapshot)
+                log.info("Rolling back destination to most recent common snapshot: %s", latest_common_dst_snapshot)
                 cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
                     latest_common_dst_snapshot,
                 )
-                self.run_ssh_command(dst, log.debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
+                self.run_ssh_command(dst, log_debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
-                log.info("Already up-to-date:", dst_dataset)
+                log.info("Already up-to-date: %s", dst_dataset)
                 return True
 
-        log.debug("latest_common_src_snapshot:", latest_common_src_snapshot)  # is a snapshot or bookmark
-        log.trace("latest_dst_snapshot:", latest_dst_snapshot)
+        log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
+        log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
         dry_run_no_send = False
         if not latest_common_src_snapshot:
             # no common snapshot was found. delete all dst snapshots, if any
@@ -1435,7 +1413,7 @@ class Job:
                         f"{dst.sudo} {p.zfs_program} destroy {p.force_hard} {p.verbose_destroy} {p.dry_run_destroy}",
                         f"{dst_dataset}@%",
                     )  # delete all dst snapshots in a batch
-                    self.run_ssh_command(dst, log.debug, cmd=cmd, print_stdout=True)
+                    self.run_ssh_command(dst, log_debug, cmd=cmd, print_stdout=True)
                 if params.dry_run:
                     # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really
                     # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
@@ -1467,7 +1445,7 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
-                log.info("Full zfs send:", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
+                log.info("Full zfs send: %s", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
                 dry_run_no_send = dry_run_no_send or params.dry_run_no_send
                 self.run_zfs_send_receive(
                     send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="full_zfs_send"
@@ -1522,18 +1500,18 @@ class Job:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy, using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
                 steps_todo = self.incremental_send_steps_wrapper(cand_snapshots, cand_guids, included_src_guids)
-                log.trace("steps_todo:", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
-            for i, (incr_flag, start_snap, end_snap) in enumerate(steps_todo):
-                size_bytes = self.estimate_zfs_send_size(src, incr_flag, start_snap, end_snap)
+                log.trace("steps_todo: %s", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
+            for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo):
+                size_bytes = self.estimate_zfs_send_size(src, incr_flag, from_snap, to_snap)
                 size_human = human_readable_bytes(size_bytes)
                 send_cmd = p.split_args(
-                    f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, incr_flag, start_snap, end_snap
+                    f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, incr_flag, from_snap, to_snap
                 )
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 log.info(
-                    f"Incremental zfs send: {incr_flag}", f"{start_snap} {end_snap} --> {dst_dataset} ({size_human})..."
+                    f"Incremental zfs send {incr_flag}:%s", f"{from_snap} {to_snap} --> {dst_dataset} ({size_human})..."
                 )
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
                     dry_run_no_send = True
@@ -1542,7 +1520,7 @@ class Job:
                     send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="incr_zfs_send"
                 )
                 if i == len(steps_todo) - 1:
-                    self.create_zfs_bookmark(src, end_snap, src_dataset)
+                    self.create_zfs_bookmark(src, to_snap, src_dataset)
             self.zfs_set(set_opts, dst, dst_dataset)
         return True
 
@@ -1655,7 +1633,7 @@ class Job:
         dst_ssh_cmd = " ".join(p.dst.ssh_cmd_quoted)
 
         cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
-        msg = "Would execute:" if dry_run_no_send else "Executing:"
+        msg = "Would execute: %s" if dry_run_no_send else "Executing: %s"
         log.debug(msg, cmd[2].lstrip())
         if not dry_run_no_send:
             try:
@@ -1664,12 +1642,12 @@ class Job:
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                 if not isinstance(e, UnicodeDecodeError):
-                    xprint(stderr_to_str(e.stdout), file=sys.stdout)
-                    log.warn(stderr_to_str(e.stderr).rstrip())
+                    xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
+                    log.warning("%s", stderr_to_str(e.stderr).rstrip())
                 raise RetryableError("Subprocess failed") from e
             else:
-                xprint(process.stdout, file=sys.stdout)
-                xprint(process.stderr, file=sys.stderr)
+                xprint(log, process.stdout, file=sys.stdout)
+                xprint(log, process.stderr, file=sys.stderr)
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
@@ -1771,14 +1749,14 @@ class Job:
         return ssh_cmd
 
     def run_ssh_command(
-        self, remote: Remote, level: Callable, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
+        self, remote: Remote, level: int = -1, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
     ) -> str:
         """Runs the given cmd via ssh on the given remote, and returns stdout. The full command is the concatenation
         of both the command to run on the localhost in order to talk to the remote host ($remote.ssh_cmd) and the
         command to run on the given remote host ($cmd)."""
+        level = level if level >= 0 else logging.INFO
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p, log = self.params, self.params.log
-        level = level or log.info
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
         ssh_cmd: List[str] = remote.ssh_cmd
         if len(ssh_cmd) > 0:
@@ -1791,38 +1769,38 @@ class Job:
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
                 ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-                if subprocess.run(ssh_socket_cmd, capture_output=True, text=True).returncode == 0:
-                    log.trace("ssh connection is alive:", " ".join(ssh_socket_cmd))
+                if subprocess.run(ssh_socket_cmd, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+                    log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
                 else:
-                    log.trace("ssh connection is not yet alive:", " ".join(ssh_socket_cmd))
+                    log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                     ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                     ssh_socket_cmd += ["-M", "-o", "ControlPersist=60s", remote.ssh_user_host, "exit"]
-                    log.debug("Executing:", " ".join(ssh_socket_cmd))
+                    log.debug("Executing: %s", list_formatter(ssh_socket_cmd))
                     process = subprocess.run(ssh_socket_cmd, stderr=PIPE, text=True)
                     if process.returncode != 0:
-                        log.error(process.stderr.rstrip())
+                        log.error("%s", process.stderr.rstrip())
                         die(
                             f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. "
                             "Fix ssh configuration first, considering diagnostic log file output from running "
                             f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                         )
 
-        msg = "Would execute:" if is_dry else "Executing:"
-        level(msg, " ".join(remote.ssh_cmd_quoted + quoted_cmd).lstrip())
+        msg = "Would execute: %s" if is_dry else "Executing: %s"
+        log.log(level, msg, list_formatter(remote.ssh_cmd_quoted + quoted_cmd, lstrip=True))
         if not is_dry:
             try:
                 process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 if not isinstance(e, UnicodeDecodeError):
-                    xprint(stderr_to_str(e.stdout), run=print_stdout, end="")
-                    xprint(stderr_to_str(e.stderr), run=print_stderr, end="")
+                    xprint(log, stderr_to_str(e.stdout), run=print_stdout, end="")
+                    xprint(log, stderr_to_str(e.stderr), run=print_stderr, end="")
                 raise
             else:
-                xprint(process.stdout, run=print_stdout, end="")
-                xprint(process.stderr, run=print_stderr, end="")
+                xprint(log, process.stdout, run=print_stdout, end="")
+                xprint(log, process.stderr, run=print_stderr, end="")
                 return process.stdout
 
-    def try_ssh_command(self, remote: Remote, level, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
+    def try_ssh_command(self, remote: Remote, level: int, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
         """Convenience method that helps react to a dataset or pool that potentially doesn't exist anymore."""
         log = self.params.log
         try:
@@ -1838,7 +1816,7 @@ class Job:
                     or ": no such pool" in stderr
                 ):
                     return None
-                log.warn(stderr.rstrip())
+                log.warning("%s", stderr.rstrip())
             raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
@@ -1859,7 +1837,7 @@ class Job:
             counter[delete_trigger] -= 1
             p, log = self.params, self.params.log
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
-            self.run_ssh_command(remote, log.debug, print_stdout=True, cmd=cmd)
+            self.run_ssh_command(remote, log_debug, print_stdout=True, cmd=cmd)
 
     def squote(self, ssh_cmd: List[str], arg: str) -> str:
         return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
@@ -1881,9 +1859,9 @@ class Job:
                 rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
             if is_included(rel_dataset, p.include_dataset_regexes, p.exclude_dataset_regexes):
                 results.append(dataset)
-                log.debug("Including b/c dataset regex:", dataset)
+                log.debug("Including b/c dataset regex: %s", dataset)
             else:
-                log.debug("Excluding b/c dataset regex:", dataset)
+                log.debug("Excluding b/c dataset regex: %s", dataset)
         if p.exclude_dataset_property:
             results = self.filter_datasets_by_exclude_property(remote, results)
         return results
@@ -1904,9 +1882,9 @@ class Job:
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset
             )
             self.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
-            property_value = self.try_ssh_command(remote, log.trace, cmd=cmd)
+            property_value = self.try_ssh_command(remote, log_trace, cmd=cmd)
             if property_value is None:
-                log.warn(f"Third party deleted {remote.location}:", dataset)
+                log.warning(f"Third party deleted {remote.location}: %s", dataset)
                 skip_dataset = dataset
             else:
                 reason = ""
@@ -1922,10 +1900,10 @@ class Job:
 
                 if sync:
                     results.append(dataset)
-                    log.debug("Including b/c dataset prop:", dataset + reason)
+                    log.debug("Including b/c dataset prop: %s%s", dataset, reason)
                 else:
                     skip_dataset = dataset
-                    log.debug("Excluding b/c dataset prop:", dataset + reason)
+                    log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
@@ -1933,7 +1911,7 @@ class Job:
         include_snapshot_regexes = self.params.include_snapshot_regexes
         exclude_snapshot_regexes = self.params.exclude_snapshot_regexes
         p, log = self.params, self.params.log
-        is_debug = log.is_debug_enabled()
+        is_debug = log.isEnabledFor(log_debug)
         results = []
         for snapshot in snapshots:
             i = snapshot.find("#")  # bookmark separator
@@ -1942,16 +1920,16 @@ class Job:
             if is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
                 if is_debug:
-                    log.debug("Including b/c snaphot regex:", snapshot[1 + snapshot.find("\t", 0, i) :])
+                    log.debug("Including b/c snaphot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
             elif is_debug:
-                log.debug("Excluding b/c snaphot regex:", snapshot[1 + snapshot.find("\t", 0, i) :])
+                log.debug("Excluding b/c snaphot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
         return results
 
     def filter_bookmarks(
         self, snapshots_and_bookmarks: List[str], oldest_dst_snapshot_creation: int, latest_dst_snapshot_creation: int
     ) -> List[str]:
         p, log = self.params, self.params.log
-        is_debug = log.is_debug_enabled()
+        is_debug = log.isEnabledFor(log_debug)
         results = []
         for snapshot in snapshots_and_bookmarks:
             if "@" in snapshot:
@@ -1965,23 +1943,23 @@ class Job:
                 if oldest_dst_snapshot_creation <= creation_time <= latest_dst_snapshot_creation:
                     results.append(snapshot)
                     if is_debug:
-                        log.debug("Including b/c bookmark time:", snapshot[snapshot.rindex("\t") + 1 :])
+                        log.debug("Including b/c bookmark time: %s", snapshot[snapshot.rindex("\t") + 1 :])
                 elif is_debug:
-                    log.debug("Excluding b/c bookmark time:", snapshot[snapshot.rindex("\t") + 1 :])
+                    log.debug("Excluding b/c bookmark time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
         p, log = self.params, self.params.log
-        is_debug = log.is_debug_enabled()
+        is_debug = log.isEnabledFor(log_debug)
         results = {}
         for propname, propvalue in props.items():
             if is_included(propname, include_regexes, exclude_regexes):
                 results[propname] = propvalue
                 if is_debug:
-                    log.debug("Including bc property regex:", propname)
+                    log.debug("Including bc property regex: %s", propname)
             elif is_debug:
-                log.debug("Excluding bc property regex:", propname)
+                log.debug("Excluding bc property regex: %s", propname)
         return results
 
     @staticmethod
@@ -2023,10 +2001,10 @@ class Job:
 
     def delete_snapshot(self, remote: Remote, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
-        log.info("Deleting snapshot(s):", snaps_to_delete)
+        log.info("Deleting snapshot(s): %s", snaps_to_delete)
         cmd = self.delete_snapshot_cmd(remote, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
-        self.run_ssh_command(remote, log.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
     def delete_snapshot_cmd(self, remote: Remote, snaps_to_delete: str) -> List[str]:
         p = self.params
@@ -2047,7 +2025,7 @@ class Job:
         for dataset in isorted(datasets):
             if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
                 continue
-            log.info("Delete missing dataset tree:", f"{dataset} ...")
+            log.info("Delete missing dataset tree: %s", f"{dataset} ...")
             cmd = p.split_args(
                 f"{remote.sudo} {p.zfs_program} destroy -r",
                 p.force_unmount,
@@ -2057,7 +2035,7 @@ class Job:
                 dataset,
             )
             is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
-            self.run_ssh_command(remote, log.debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+            self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
             last_deleted_dataset = dataset
 
     def create_filesystem(self, filesystem: str) -> None:
@@ -2073,7 +2051,7 @@ class Job:
             if not self.dst_dataset_exists[parent]:
                 cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
                 try:
-                    self.run_ssh_command(p.dst, log.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                    self.run_ssh_command(p.dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless error caused by 'zfs create' without the -u flag
                     if (
@@ -2092,7 +2070,7 @@ class Job:
             if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(remote):
                 cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
                 try:
-                    self.run_ssh_command(remote, log.debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
+                    self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless zfs error caused by bookmark with the same name already existing
                     if ": bookmark exists" not in e.stderr:
@@ -2107,7 +2085,7 @@ class Job:
         zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
         cmd = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
-        lines = self.try_ssh_command(remote, log.trace, cmd=cmd)
+        lines = self.try_ssh_command(remote, log_trace, cmd=cmd)
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
         size = None
@@ -2258,7 +2236,7 @@ class Job:
         def run_zfs_set(props: List[str]) -> None:
             p, log = self.params, self.params.log
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} set") + props + [dataset]
-            self.run_ssh_command(remote, log.debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
         if len(properties) > 0:
             if not self.is_solaris_zfs(remote):
@@ -2283,7 +2261,7 @@ class Job:
         props = props_cache.get(cache_key)
         if props is None:
             cmd = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
-            lines = self.run_ssh_command(remote, log.trace, cmd=cmd)
+            lines = self.run_ssh_command(remote, log_trace, cmd=cmd)
             is_name_value_pair = "," in output_columns
             props = {}
             # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
@@ -2410,12 +2388,12 @@ class Job:
                     available_programs[key].pop(program)
                     uname = program[len("uname-") :]
                     available_programs[key]["uname"] = uname
-                    log.trace(f"available_programs[{key}][uname]:", uname)
+                    log.trace(f"available_programs[{key}][uname]: %s", uname)
                     available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
-                    log.trace(f"available_programs[{key}][os]:", f"{available_programs[key]['os']}")
+                    log.trace(f"available_programs[{key}][os]: %s", f"{available_programs[key]['os']}")
 
         for key, value in available_programs.items():
-            log.debug(f"available_programs[{key}]:", ", ".join(value))
+            log.debug(f"available_programs[{key}]: %s", ", ".join(value))
 
         for r in [p.src, p.dst]:
             if r.sudo and not self.is_program_available("sudo", r.location):
@@ -2454,7 +2432,7 @@ class Job:
             # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
             # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
             # option is not known there
-            lines = self.run_ssh_command(remote, log.trace, print_stderr=False, cmd=[p.zfs_program, "--version"])
+            lines = self.run_ssh_command(remote, log_trace, print_stderr=False, cmd=[p.zfs_program, "--version"])
             assert lines
         except (FileNotFoundError, PermissionError):  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
@@ -2479,13 +2457,13 @@ class Job:
             available_programs[location]["zfs"] = version
             if is_version_at_least(version, "2.1.0"):
                 available_programs[location][zfs_version_is_at_least_2_1_0] = True
-        log.trace(f"available_programs[{location}][zfs]:", available_programs[location]["zfs"])
+        log.trace(f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
 
         if p.shell_program != disable_prg:
             try:
                 cmd = [p.shell_program, "-c", self.find_available_programs()]
                 available_programs[location].update(
-                    dict.fromkeys(self.run_ssh_command(remote, log.trace, cmd=cmd).splitlines())
+                    dict.fromkeys(self.run_ssh_command(remote, log_trace, cmd=cmd).splitlines())
                 )
                 return
             except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
@@ -2493,7 +2471,7 @@ class Job:
                     raise
             except subprocess.CalledProcessError:
                 pass
-            log.warn(f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions ...")
+            log.warning("%s", f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions...")
         available_programs[location].update(available_programs_minimum)
 
     def is_solaris_zfs(self, remote: Remote) -> bool:
@@ -2507,17 +2485,19 @@ class Job:
         if params.zpool_program != disable_prg:
             cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
             try:
-                lines = self.run_ssh_command(remote, log.trace, check=False, cmd=cmd).splitlines()
+                lines = self.run_ssh_command(remote, log_trace, check=False, cmd=cmd).splitlines()
             except (FileNotFoundError, PermissionError) as e:
                 if e.filename != params.zpool_program:
                     raise
-                log.warn(f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions...")
+                log.warning(
+                    "%s", f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions ..."
+                )
             else:
                 props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
                 features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
         if len(lines) == 0:
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-            if self.try_ssh_command(remote, log.trace, cmd=cmd) is None:
+            if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
                 die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
         params.zpool_features[loc] = features
 
@@ -2672,10 +2652,6 @@ def xappend(lst, *items) -> List[str]:
     return lst
 
 
-def current_time() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 def replace_prefix(line: str, s1: str, s2: str) -> str:
     """In a line, replaces a leading s1 string with s2. Assumes the leading string is present."""
     return s2 + line.rstrip()[len(s1) :]
@@ -2733,9 +2709,11 @@ def stderr_to_str(stderr) -> str:
     return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
-def xprint(value, run: bool = True, end: str = "\n", file=None) -> None:
+def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> None:
     if run and value:
-        print(value, end=end, file=file)
+        value = value if end else value.rstrip()
+        level = log_stdout if file is sys.stdout else log_stderr
+        log.log(level, "%s", value)
 
 
 def fix_send_recv_opts(
@@ -2857,6 +2835,108 @@ def validate_port(port: int, message: str) -> None:
         port = str(port)
     if port and not port.isdigit():
         die(message + f"must be empty or a positive integer: '{port}'")
+
+
+def list_formatter(iterable: Iterable, separator=" ", lstrip=False):  # For lazy/noop evaluation in disabled log levels
+    class CustomListFormatter:
+        def __str__(self):
+            s = separator.join(map(str, iterable))
+            return s.lstrip() if lstrip else s
+
+    return CustomListFormatter()
+
+
+def pretty_print_formatter(obj_to_format):  # For lazy/noop evaluation in disabled log levels
+    class PrettyPrintFormatter:
+        def __str__(self):
+            return pprint.pformat(vars(obj_to_format))
+
+    return PrettyPrintFormatter()
+
+
+def get_logger(args: argparse.Namespace, log: Optional[Logger], log_file: str = None) -> Logger:
+    _log_trace = log_trace
+
+    def trace(self, msg: object, *arguments: object, **kwargs) -> None:
+        if self.isEnabledFor(_log_trace):
+            self._log(_log_trace, msg, arguments, **kwargs)
+
+    # add functions for custom log levels to the logger
+    if not hasattr(logging.Logger, "trace"):
+        logging.Logger.trace = trace
+
+    # add names for custom log levels to the logger
+    logging.addLevelName(log_trace, "TRACE")
+    logging.addLevelName(log_stderr, "STDERR")
+    logging.addLevelName(log_stdout, "STDOUT")
+
+    if log is not None:
+        assert isinstance(log, Logger)
+        return log  # use third party provided logger
+    else:
+        return get_default_logger(args, log_file)  # use our own logger
+
+
+def get_default_logger(args: argparse.Namespace, log_file: str = None) -> Logger:
+    return get_default_logger_impl(args, log_file)
+
+
+def get_default_logger_impl(args: argparse.Namespace, log_file: str = None) -> Logger:
+    _log_stderr = log_stderr
+    _log_stdout = log_stdout
+    _log_trace = log_trace
+
+    log = logging.getLogger(__name__)
+    if args.quiet:
+        log.setLevel(logging.ERROR)
+    elif args.verbose >= 2:
+        log.setLevel(log_trace)
+    elif args.verbose >= 1:
+        log.setLevel(logging.DEBUG)
+    else:
+        log.setLevel(logging.INFO)
+    log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages
+
+    level_prefixes = {
+        logging.CRITICAL: "[C] CRITICAL:",
+        logging.ERROR: "[E] ERROR:",
+        logging.WARNING: "[W]",
+        logging.INFO: "[I]",
+        logging.DEBUG: "[D]",
+        log_trace: "[T]",
+    }
+
+    class CustomFormatter(logging.Formatter):
+
+        def format(self, record) -> str:
+            levelno = record.levelno
+            if levelno != _log_stderr and levelno != _log_stdout:  # emit stdout and stderr "as-is" (no formatting)
+                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")
+                prefix = f"{timestamp} {level_prefixes.get(levelno, '')} "
+                msg = record.msg
+                i = msg.find("%s")
+                msg = prefix + msg
+                if i >= 1:
+                    i += len(prefix)
+                    msg = msg[0:i].ljust(53) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
+                record.msg = msg
+            return super().format(record)
+
+    if not any(isinstance(handler, logging.StreamHandler) for handler in log.handlers):  # log to stdout
+        handler = logging.StreamHandler(stream=sys.stdout)
+        handler.setFormatter(CustomFormatter("%(message)s"))
+        log.addHandler(handler)
+
+    if log_file and not any(isinstance(handler, logging.FileHandler) for handler in log.handlers):  # also log to file
+        handler = logging.FileHandler(log_file, encoding="utf-8")
+        handler.setFormatter(CustomFormatter("%(message)s"))
+        log.addHandler(handler)
+
+    # perf: tell logging framework not to gather unnecessary expensive info for each log record
+    logging.logProcesses = False
+    logging.logThreads = False
+    logging.logMultiProcessing = False
+    return log
 
 
 #############################################################################
