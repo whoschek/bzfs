@@ -486,8 +486,11 @@ feature.
         "--logdir", type=str, metavar="DIR",
         help=f"Path to log output directory (optional). Default is $HOME/{prog_name}-logs\n\n")
     parser.add_argument(
-        "--ssh-config-file", type=str, metavar="FILE",
-        help="Path to SSH ssh_config(5) file (optional); will be passed into ssh -F CLI.\n\n")
+        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
+        help="Display version information and exit.\n\n")
+    parser.add_argument(
+        "--help, -h", action="help",
+        help="Show this help message and exit.\n\n")
 
     ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
     # for speed with confidentiality and integrity
@@ -503,6 +506,10 @@ feature.
 
     ssh_private_key_file_default = ".ssh/id_rsa"
     locations = ["src", "dst"]
+    for loc in locations:
+        parser.add_argument(
+            f"--ssh-{loc}-config-file", type=str, metavar="FILE",
+            help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-private-key", action="append", default=[], metavar="FILE",
@@ -664,12 +671,6 @@ feature.
             f"--{grup}-exclude-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
             help=h(f"Same syntax as --{grup}-include-regex (see above), and the default is to exclude no properties. "
                    f"Example: --{grup}-exclude-regex encryptionroot keystatus origin volblocksize volsize\n\n"))
-    parser.add_argument(
-        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
-        help="Display version information and exit.\n\n")
-    parser.add_argument(
-        "--help, -h", action="help",
-        help="Show this help message and exit.\n\n")
     return parser
 # fmt: on
 
@@ -874,7 +875,7 @@ class Remote:
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
-        self.ssh_config_file: str = p.validate_arg(args.ssh_config_file)
+        self.ssh_config_file: str = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         self.ssh_cipher: str = p.validate_arg(args.ssh_cipher)
         self.ssh_private_key_files: List[str] = [p.validate_arg(key) for key in getattr(args, f"ssh_{loc}_private_key")]
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:

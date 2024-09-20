@@ -208,7 +208,8 @@ class BZFSTestCase(ParametrizedTestCase):
         src_user = ["--ssh-src-user", os_username()]
         private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
         src_private_key = ["--ssh-src-private-key", private_key_file, "--ssh-src-private-key", private_key_file]
-        src_ssh_config_file = ["--ssh-config-file", ssh_config_file]
+        src_ssh_config_file = ["--ssh-src-config-file", ssh_config_file]
+        dst_ssh_config_file = ["--ssh-dst-config-file", ssh_config_file]
         params = self.param
         if params and params.get("ssh_mode") == "push":
             args = args + dst_host + dst_port
@@ -217,7 +218,7 @@ class BZFSTestCase(ParametrizedTestCase):
         elif params and params.get("ssh_mode") == "pull-push":
             args = args + src_host + dst_host + src_port + dst_port
             if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
-                args = args + src_user + src_private_key + src_ssh_config_file + ["--ssh-cipher="]
+                args = args + src_user + src_private_key + src_ssh_config_file + dst_ssh_config_file + ["--ssh-cipher="]
             args = args + ["--bwlimit=10000m"]
         elif params and params.get("ssh_mode", "local") != "local":
             raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])

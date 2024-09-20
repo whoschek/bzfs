@@ -225,7 +225,8 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--delete-missing-datasets] [--no-privilege-elevation]
             [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
             [--dryrun [{recv,send}]] [--verbose] [--quiet] [--logdir DIR]
-            [--ssh-config-file FILE] [--ssh-cipher STRING]
+            [--version] [--help, -h] [--ssh-cipher STRING]
+            [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -247,8 +248,7 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--zfs-recv-x-targets {full|incremental|full,incremental}]
             [--zfs-recv-x-sources STRING]
             [--zfs-recv-x-include-regex REGEX [REGEX ...]]
-            [--zfs-recv-x-exclude-regex REGEX [REGEX ...]] [--version]
-            [--help, -h]
+            [--zfs-recv-x-exclude-regex REGEX [REGEX ...]]
             SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 
@@ -769,10 +769,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--ssh-config-file** *FILE*
+**--version**
 
-*  Path to SSH ssh_config(5) file (optional); will be passed into ssh
-    -F CLI.
+*  Display version information and exit.
+
+<!-- -->
+
+**--help, -h**
+
+*  Show this help message and exit.
 
 <!-- -->
 
@@ -784,6 +789,20 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     keyword in ssh_config(5) for more information:
     https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html.
     Default: `^aes256-gcm@openssh.com`
+
+<!-- -->
+
+**--ssh-src-config-file** *FILE*
+
+*  Path to SSH ssh_config(5) file to connect to src (optional); will be
+    passed into ssh -F CLI.
+
+<!-- -->
+
+**--ssh-dst-config-file** *FILE*
+
+*  Path to SSH ssh_config(5) file to connect to dst (optional); will be
+    passed into ssh -F CLI.
 
 <!-- -->
 
@@ -1005,18 +1024,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Same syntax as --include-envvar-regex (see above) except that the
     default is to exclude no environment variables. Example:
     `bzfs_.*`
-
-<!-- -->
-
-**--version**
-
-*  Display version information and exit.
-
-<!-- -->
-
-**--help, -h**
-
-*  Show this help message and exit.
 
 # ZFS-RECV-O (EXPERIMENTAL)
 
