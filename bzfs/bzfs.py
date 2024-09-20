@@ -702,6 +702,7 @@ class Params:
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
 
         self.dry_run: bool = args.dryrun is not None
+        self.dry_msg = "Dry " if self.dry_run else ""
         self.dry_run_recv: str = "-n" if self.dry_run else ""
         self.dry_run_destroy: str = self.dry_run_recv
         self.dry_run_no_send: bool = args.dryrun == "send"
@@ -1143,7 +1144,7 @@ class Job:
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
                 dst_dataset = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
-                log.debug("Replicating: %s", f"{src_dataset} --> {dst_dataset} ...")
+                log.debug(p.dry_msg + "Replicating: %s", f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = [
                     "-s",
                     str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"]))),
@@ -1168,7 +1169,7 @@ class Job:
         # --exclude-dataset-property policy
         if params.delete_missing_snapshots and not failed:
             log.info(
-                "--delete-missing-snapshots: %s",
+                p.dry_msg + "--delete-missing-snapshots: %s",
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             skip_src_dataset = ""
@@ -1208,7 +1209,7 @@ class Job:
         # recurse without --recursive.
         if params.delete_missing_datasets and not failed:
             log.info(
-                "--delete-missing-datasets: %s",
+                p.dry_msg + "--delete-missing-datasets: %s",
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             cmd = p.split_args(
@@ -1228,7 +1229,7 @@ class Job:
             # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
             if p.delete_empty_datasets:
                 log.info(
-                    "--delete-empty-datasets: %s",
+                    p.dry_msg + "--delete-empty-datasets: %s",
                     f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
@@ -1341,7 +1342,7 @@ class Job:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
                 if params.force_rollback_to_latest_snapshot or params.force:
-                    log.info("Rolling back destination to most recent snapshot: %s", latest_dst_snapshot)
+                    log.info(p.dry_msg + "Rolling back destination to most recent snapshot: %s", latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
                     self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
@@ -1378,7 +1379,10 @@ class Job:
                     )
                 if params.force_once:
                     params.force = False
-                log.info("Rolling back destination to most recent common snapshot: %s", latest_common_dst_snapshot)
+                log.info(
+                    p.dry_msg + "Rolling back destination to most recent common snapshot: %s",
+                    latest_common_dst_snapshot,
+                )
                 cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
                     latest_common_dst_snapshot,
@@ -1445,7 +1449,7 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
-                log.info("Full zfs send: %s", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
+                log.info(p.dry_msg + "Full zfs send: %s", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
                 dry_run_no_send = dry_run_no_send or params.dry_run_no_send
                 self.run_zfs_send_receive(
                     send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="full_zfs_send"
@@ -1511,7 +1515,8 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 log.info(
-                    f"Incremental zfs send {incr_flag}:%s", f"{from_snap} {to_snap} --> {dst_dataset} ({size_human})..."
+                    f"{p.dry_msg}Incremental zfs send {incr_flag}:%s",
+                    f"{from_snap} {to_snap} --> {dst_dataset} ({size_human})...",
                 )
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
                     dry_run_no_send = True
@@ -2001,7 +2006,7 @@ class Job:
 
     def delete_snapshot(self, remote: Remote, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
-        log.info("Deleting snapshot(s): %s", snaps_to_delete)
+        log.info(p.dry_msg + "Deleting snapshot(s): %s", snaps_to_delete)
         cmd = self.delete_snapshot_cmd(remote, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
         self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
@@ -2025,7 +2030,7 @@ class Job:
         for dataset in isorted(datasets):
             if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
                 continue
-            log.info("Delete missing dataset tree: %s", f"{dataset} ...")
+            log.info(p.dry_msg + "Delete missing dataset tree: %s", f"{dataset} ...")
             cmd = p.split_args(
                 f"{remote.sudo} {p.zfs_program} destroy -r",
                 p.force_unmount,
