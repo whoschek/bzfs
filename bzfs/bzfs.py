@@ -866,6 +866,7 @@ class Remote:
         self.ssh_cmd_quoted: List[str] = []
         self.ssh_user: str = ""
         self.ssh_host: str = ""
+        self.ssh_user_host: str = ""
 
         # immutable variables:
         assert loc == "src" or loc == "dst"
@@ -873,7 +874,6 @@ class Remote:
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
-        self.ssh_user_host: str = ""
         self.ssh_config_file: str = p.validate_arg(args.ssh_config_file)
         self.ssh_cipher: str = p.validate_arg(args.ssh_cipher)
         self.ssh_private_key_files: List[str] = [p.validate_arg(key) for key in getattr(args, f"ssh_{loc}_private_key")]
@@ -882,6 +882,16 @@ class Remote:
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
             self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
+
+    def set_ssh_cmd(self, ssh_cmd: List[str]) -> None:
+        self.ssh_cmd = ssh_cmd
+        self.ssh_cmd_quoted = [shlex.quote(item) for item in ssh_cmd]
+
+    def cache_key(self) -> Tuple:
+        # fmt: off
+        return (self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
+                tuple(self.ssh_private_key_files), tuple(self.ssh_extra_opts))
+        # fmt: on
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -950,6 +960,7 @@ class Job:
         self.mbuffer_current_opts: List[str] = []
         self.all_exceptions: List[str] = []
         self.first_exception: Optional[BaseException] = None
+        self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
 
         self.is_test_mode: bool = False  # for testing only
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
@@ -979,6 +990,7 @@ class Job:
                     self.validate_once()
                     self.all_exceptions = []
                     self.first_exception = None
+                    self.remote_conf_cache = {}
                     src, dst = p.src, p.dst
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                         src.root_dataset = src.basis_root_dataset = src_root_dataset
@@ -1045,8 +1057,6 @@ class Job:
                 r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
             r.sudo, r.use_zfs_delegation = self.sudo_cmd(r.ssh_user_host, r.ssh_user)
-            r.ssh_cmd = self.local_ssh_command(remote)
-            r.ssh_cmd_quoted = [shlex.quote(item) for item in r.ssh_cmd]
 
         if src.ssh_host == dst.ssh_host:
             if src.root_dataset == dst.root_dataset:
@@ -2354,18 +2364,31 @@ class Job:
         p = params = self.params
         log = p.log
         available_programs = params.available_programs
-        cmd = [p.shell_program_local, "-c", self.find_available_programs()]
-        available_programs["local"] = dict.fromkeys(
-            subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True, check=False).stdout.splitlines()
-        )
-        cmd = [p.shell_program_local, "-c", "exit"]
-        if subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
-            self.disable_program_internal("sh", "local")
+        if "local" not in available_programs:
+            cmd = [p.shell_program_local, "-c", self.find_available_programs()]
+            available_programs["local"] = dict.fromkeys(
+                subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True, check=False).stdout.splitlines()
+            )
+            cmd = [p.shell_program_local, "-c", "exit"]
+            if subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
+                self.disable_program_internal("sh", "local")
 
         for r in [p.src, p.dst]:
+            loc = r.location
+            remote_conf_cache_key = r.cache_key()
+            cache_item = self.remote_conf_cache.get(remote_conf_cache_key)
+            if cache_item is not None:
+                # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
+                available_programs[loc], p.zpool_features[loc], ssh_cmd = cache_item
+                if len(ssh_cmd) > 0:
+                    ssh_cmd = ssh_cmd[0:-1] + [r.ssh_user_host]  # update trailing ssh_user_host in remote case
+                r.set_ssh_cmd(ssh_cmd)
+                continue
+            r.set_ssh_cmd(self.local_ssh_command(r))
             self.detect_zpool_features(r)
             self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
-            if r.use_zfs_delegation and p.zpool_features[r.location].get("delegation") == "off":
+            self.remote_conf_cache[remote_conf_cache_key] = available_programs[loc], p.zpool_features[loc], r.ssh_cmd
+            if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
                 die(
                     f"Permission denied as ZFS delegation is disabled for {r.location} "
                     f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
@@ -2399,10 +2422,10 @@ class Job:
                     available_programs[key]["uname"] = uname
                     log.trace(f"available_programs[{key}][uname]: %s", uname)
                     available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
-                    log.trace(f"available_programs[{key}][os]: %s", f"{available_programs[key]['os']}")
+                    log.trace(f"available_programs[{key}][os]: %s", available_programs[key]["os"])
 
         for key, value in available_programs.items():
-            log.debug(f"available_programs[{key}]: %s", ", ".join(value))
+            log.debug(f"available_programs[{key}]: %s", list_formatter(value, separator=", "))
 
         for r in [p.src, p.dst]:
             if r.sudo and not self.is_program_available("sudo", r.location):

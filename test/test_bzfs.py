@@ -442,7 +442,7 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertSnapshots(dst_root_dataset, 3, "s")
 
-    def test_basic_replication_flat_simple_with_multiple_datasets(self):
+    def test_basic_replication_flat_simple_with_multiple_root_datasets(self):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -455,7 +455,7 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertSnapshots(dst_root_dataset, 3, "s")
 
-    def test_basic_replication_flat_simple_with_multiple_datasets_with_skip_on_error(self):
+    def test_basic_replication_flat_simple_with_multiple_root_datasets_with_skip_on_error(self):
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -2152,6 +2152,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_basic_replication_flat_send_recv_flags(self):
         LocalTestCase(param=self.param).test_basic_replication_flat_send_recv_flags()
+
+    def test_basic_replication_flat_simple_with_multiple_root_datasets(self):
+        LocalTestCase(param=self.param).test_basic_replication_flat_simple_with_multiple_root_datasets()
 
     def test_basic_replication_dataset_with_spaces(self):
         LocalTestCase(param=self.param).test_basic_replication_dataset_with_spaces()
