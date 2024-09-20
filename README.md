@@ -226,13 +226,13 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
             [--dryrun [{recv,send}]] [--verbose] [--quiet] [--logdir DIR]
             [--version] [--help, -h] [--ssh-cipher STRING]
-            [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
             [--ssh-src-port INT] [--ssh-dst-port INT]
             [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
             [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
+            [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
             [--bwlimit STRING] [--compression-program STRING]
             [--compression-program-opts STRING] [--mbuffer-program STRING]
             [--mbuffer-program-opts STRING] [--pv-program STRING]
@@ -379,10 +379,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
     Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'
 
-    Note: The use of --exclude-dataset-property is discouraged. It is
-    more flexible, powerful and efficient to instead use a combination
-    of --include/exclude-dataset-regex and --include/exclude-dataset
-    to achieve the same or better outcome.
+    *Note:* The use of --exclude-dataset-property is discouraged for
+    most use cases. It is more flexible, powerful *and* efficient to
+    instead use a combination of --include/exclude-dataset-regex and/or
+    --include/exclude-dataset to achieve the same or better outcome.
 
 <!-- -->
 
@@ -797,20 +797,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--ssh-src-config-file** *FILE*
-
-*  Path to SSH ssh_config(5) file to connect to src (optional); will be
-    passed into ssh -F CLI.
-
-<!-- -->
-
-**--ssh-dst-config-file** *FILE*
-
-*  Path to SSH ssh_config(5) file to connect to dst (optional); will be
-    passed into ssh -F CLI.
-
-<!-- -->
-
 **--ssh-src-private-key** *FILE*
 
 *  Path to SSH private key file on local host to connect to src
@@ -902,6 +888,20 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     option can be specified multiple times. Example:
     `--ssh-dst-extra-opt='-oProxyCommand=nc %h %p'` to disable the
     TCP_NODELAY socket option for OpenSSH.
+
+<!-- -->
+
+**--ssh-src-config-file** *FILE*
+
+*  Path to SSH ssh_config(5) file to connect to src (optional); will be
+    passed into ssh -F CLI.
+
+<!-- -->
+
+**--ssh-dst-config-file** *FILE*
+
+*  Path to SSH ssh_config(5) file to connect to dst (optional); will be
+    passed into ssh -F CLI.
 
 <!-- -->
 

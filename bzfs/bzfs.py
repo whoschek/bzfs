@@ -222,9 +222,9 @@ feature.
              "If a dataset is excluded its descendants are automatically excluded too, and the property values of the "
              "descendants are ignored because exclude takes precedence over include.\n\n"
              "Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'\n\n"
-             "Note: The use of --exclude-dataset-property is discouraged. It is more flexible, powerful and efficient "
-             "to instead use a combination of --include/exclude-dataset-regex and --include/exclude-dataset to achieve "
-             "the same or better outcome.\n\n")
+             "*Note:* The use of --exclude-dataset-property is discouraged for most use cases. It is more flexible, "
+             "powerful *and* efficient to instead use a combination of --include/exclude-dataset-regex and/or "
+             "--include/exclude-dataset to achieve the same or better outcome.\n\n")
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
@@ -511,10 +511,6 @@ feature.
     locations = ["src", "dst"]
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-config-file", type=str, metavar="FILE",
-            help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
-    for loc in locations:
-        parser.add_argument(
             f"--ssh-{loc}-private-key", action="append", default=[], metavar="FILE",
             help=f"Path to SSH private key file on local host to connect to {loc} (optional); will be passed into "
                  "ssh -i CLI. This option can be specified multiple times. "
@@ -545,6 +541,10 @@ feature.
                   "can contain spaces and is not split. This option can be specified multiple times. "
                   f"Example: `--ssh-{loc}-extra-opt='-oProxyCommand=nc %%h %%p'` to disable the TCP_NODELAY "
                   "socket option for OpenSSH.\n\n"))
+    for loc in locations:
+        parser.add_argument(
+            f"--ssh-{loc}-config-file", type=str, metavar="FILE",
+            help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
     parser.add_argument(
         "--bwlimit", type=str, metavar="STRING",
         help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
@@ -739,7 +739,7 @@ class Params:
         self.skip_replication: bool = args.skip_replication
         self.delete_missing_snapshots: bool = args.delete_missing_snapshots
         self.delete_missing_datasets: bool = args.delete_missing_datasets
-        self.delete_empty_datasets: bool = args.delete_missing_datasets
+        self.delete_empty_datasets: bool = self.delete_missing_datasets
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.create_bookmark: bool = not args.no_create_bookmark
@@ -2391,7 +2391,7 @@ class Job:
             r.set_ssh_cmd(self.local_ssh_command(r))
             self.detect_zpool_features(r)
             self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
-            self.remote_conf_cache[remote_conf_cache_key] = available_programs[loc], p.zpool_features[loc], r.ssh_cmd
+            self.remote_conf_cache[remote_conf_cache_key] = (available_programs[loc], p.zpool_features[loc], r.ssh_cmd)
             if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
                 die(
                     f"Permission denied as ZFS delegation is disabled for {r.location} "
