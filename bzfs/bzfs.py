@@ -221,7 +221,10 @@ feature.
              f"executing {prog_name} is contained in the list, otherwise exclude the dataset and its descendants.\n\n"
              "If a dataset is excluded its descendants are automatically excluded too, and the property values of the "
              "descendants are ignored because exclude takes precedence over include.\n\n"
-             "Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'\n\n")
+             "Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'\n\n"
+             "Note: The use of --exclude-dataset-property is discouraged. It is more flexible, powerful and efficient "
+             "to instead use a combination of --include/exclude-dataset-regex and --include/exclude-dataset to achieve "
+             "the same or better outcome.\n\n")
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "

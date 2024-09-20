@@ -379,6 +379,11 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
     Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'
 
+    Note: The use of --exclude-dataset-property is discouraged. It is
+    more flexible, powerful and efficient to instead use a combination
+    of --include/exclude-dataset-regex and --include/exclude-dataset
+    to achieve the same or better outcome.
+
 <!-- -->
 
 **--include-snapshot-regex** *REGEX [REGEX ...]*
