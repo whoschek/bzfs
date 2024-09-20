@@ -315,8 +315,9 @@ feature.
     parser.add_argument(
         "--retry-min-sleep-secs", type=float, min=0, default=retry_min_sleep_secs_default,
         action=CheckRange, metavar="FLOAT",
-        # help=(f"The minimum duration to sleep between retries  (default: {retry_min_sleep_secs_default}). "
-        #       "This duration doubles on each retry, up to the maximum of --retry-max-sleep-secs (see below).\n\n"))
+        # help=(f"The minimum duration to sleep between retries (default: {retry_min_sleep_secs_default}). "
+        #       "This duration doubles on each retry, up to the maximum of --retry-max-sleep-secs (see below). "
+        #       "The timer resets after each operation.\n\n"))
         help=argparse.SUPPRESS)
     retry_max_sleep_secs_default = 5 * 60
     parser.add_argument(
@@ -687,7 +688,6 @@ class Params:
         self.sys_argv: List[str] = sys_argv if sys_argv is not None else []
         assert isinstance(self.sys_argv, list)
         self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
-        assert isinstance(self.inject_params, dict)
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.unset_matching_env_vars(args, log)
 
@@ -702,7 +702,6 @@ class Params:
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
 
         self.dry_run: bool = args.dryrun is not None
-        self.dry_msg = "Dry " if self.dry_run else ""
         self.dry_run_recv: str = "-n" if self.dry_run else ""
         self.dry_run_destroy: str = self.dry_run_recv
         self.dry_run_no_send: bool = args.dryrun == "send"
@@ -849,6 +848,9 @@ class Params:
                 os.environ.pop(key, None)
                 log.debug("Unsetting b/c envvar regex: %s", key)
 
+    def dry(self, msg: str) -> str:
+        return "Dry " + msg if self.dry_run else msg
+
 
 #############################################################################
 class Remote:
@@ -956,6 +958,9 @@ class Job:
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
+        assert isinstance(self.error_injection_triggers, dict)
+        assert isinstance(self.delete_injection_triggers, dict)
+        assert isinstance(self.inject_params, dict)
         try:
             self.params = p = Params(args, sys_argv, log, self.inject_params)
         except SystemExit as e:
@@ -1144,7 +1149,7 @@ class Job:
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
                 dst_dataset = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
-                log.debug(p.dry_msg + "Replicating: %s", f"{src_dataset} --> {dst_dataset} ...")
+                log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = [
                     "-s",
                     str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"]))),
@@ -1169,7 +1174,7 @@ class Job:
         # --exclude-dataset-property policy
         if params.delete_missing_snapshots and not failed:
             log.info(
-                p.dry_msg + "--delete-missing-snapshots: %s",
+                p.dry("--delete-missing-snapshots: %s"),
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             skip_src_dataset = ""
@@ -1209,7 +1214,7 @@ class Job:
         # recurse without --recursive.
         if params.delete_missing_datasets and not failed:
             log.info(
-                p.dry_msg + "--delete-missing-datasets: %s",
+                p.dry("--delete-missing-datasets: %s"),
                 f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
             )
             cmd = p.split_args(
@@ -1229,7 +1234,7 @@ class Job:
             # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
             if p.delete_empty_datasets:
                 log.info(
-                    p.dry_msg + "--delete-empty-datasets: %s",
+                    p.dry("--delete-empty-datasets: %s"),
                     f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
@@ -1342,7 +1347,7 @@ class Job:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
                 if params.force_rollback_to_latest_snapshot or params.force:
-                    log.info(p.dry_msg + "Rolling back destination to most recent snapshot: %s", latest_dst_snapshot)
+                    log.info(p.dry("Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
                     self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
@@ -1380,8 +1385,7 @@ class Job:
                 if params.force_once:
                     params.force = False
                 log.info(
-                    p.dry_msg + "Rolling back destination to most recent common snapshot: %s",
-                    latest_common_dst_snapshot,
+                    p.dry("Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot
                 )
                 cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
@@ -1449,7 +1453,7 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
-                log.info(p.dry_msg + "Full zfs send: %s", f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
+                log.info(p.dry("Full zfs send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
                 dry_run_no_send = dry_run_no_send or params.dry_run_no_send
                 self.run_zfs_send_receive(
                     send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="full_zfs_send"
@@ -1515,8 +1519,8 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 log.info(
-                    f"{p.dry_msg}Incremental zfs send {incr_flag}:%s",
-                    f"{from_snap} {to_snap} --> {dst_dataset} ({size_human})...",
+                    p.dry(f"Incremental zfs send {incr_flag}:%s"),
+                    f"{from_snap} {to_snap} --> {dst_dataset} ({size_human}) ...",
                 )
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
                     dry_run_no_send = True
@@ -2006,7 +2010,7 @@ class Job:
 
     def delete_snapshot(self, remote: Remote, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
-        log.info(p.dry_msg + "Deleting snapshot(s): %s", snaps_to_delete)
+        log.info(p.dry("Deleting snapshot(s): %s"), snaps_to_delete)
         cmd = self.delete_snapshot_cmd(remote, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
         self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
@@ -2030,7 +2034,7 @@ class Job:
         for dataset in isorted(datasets):
             if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
                 continue
-            log.info(p.dry_msg + "Delete missing dataset tree: %s", f"{dataset} ...")
+            log.info(p.dry("Delete missing dataset tree: %s"), f"{dataset} ...")
             cmd = p.split_args(
                 f"{remote.sudo} {p.zfs_program} destroy -r",
                 p.force_unmount,
@@ -2887,10 +2891,6 @@ def get_default_logger(args: argparse.Namespace, log_file: str = None) -> Logger
 
 
 def get_default_logger_impl(args: argparse.Namespace, log_file: str = None) -> Logger:
-    _log_stderr = log_stderr
-    _log_stdout = log_stdout
-    _log_trace = log_trace
-
     log = logging.getLogger(__name__)
     if args.quiet:
         log.setLevel(logging.ERROR)
@@ -2910,6 +2910,8 @@ def get_default_logger_impl(args: argparse.Namespace, log_file: str = None) -> L
         logging.DEBUG: "[D]",
         log_trace: "[T]",
     }
+    _log_stderr = log_stderr
+    _log_stdout = log_stdout
 
     class CustomFormatter(logging.Formatter):
 
