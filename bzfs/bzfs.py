@@ -1077,11 +1077,12 @@ class Job:
                     f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
 
-        re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
-        exclude_regexes = self.dataset_regexes(p.args.exclude_dataset) + patch_exclude_dataset_regexes(
-            p.args.exclude_dataset_regex, exclude_dataset_regexes_default
-        )
+        exclude_regexes = [exclude_dataset_regexes_default]
+        if len(p.args.exclude_dataset_regex) > 0:  # some patterns don't exclude anything
+            exclude_regexes = [regex for regex in p.args.exclude_dataset_regex if regex != "" and regex != "!.*"]
+        exclude_regexes = self.dataset_regexes(p.args.exclude_dataset) + exclude_regexes
         include_regexes = self.dataset_regexes(p.args.include_dataset) + p.args.include_dataset_regex
+        re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         p.exclude_dataset_regexes = compile_regexes(exclude_regexes, suffix=re_suffix)
         p.include_dataset_regexes = compile_regexes(include_regexes or [".*"], suffix=re_suffix)
         self.detect_available_programs()
@@ -2653,12 +2654,6 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
             regex = f"{regex[0:i]}(?:{regex[i + 1:]}"
         i -= 1
     return regex
-
-
-def patch_exclude_dataset_regexes(regexes: List[str], default: str) -> List[str]:
-    if len(regexes) == 0:
-        return [default]
-    return [regex for regex in regexes if regex != "" and regex != "!.*"]  # these don't exclude anything
 
 
 def delete_stale_ssh_socket_files(socket_dir: str, prefix: str) -> None:

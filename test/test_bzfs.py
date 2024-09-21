@@ -2787,15 +2787,6 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.xprint(log, "", run=False)
         bzfs.xprint(log, None)
 
-    def test_exclude_dataset_regex(self):
-        self.assertListEqual(["x"], bzfs.patch_exclude_dataset_regexes(["x"], "d"))
-        self.assertListEqual(["x"], bzfs.patch_exclude_dataset_regexes(["", "!.*", "x"], "d"))
-        self.assertListEqual(["d"], bzfs.patch_exclude_dataset_regexes([], "d"))
-        self.assertListEqual([], bzfs.patch_exclude_dataset_regexes([""], "d"))
-        self.assertListEqual([], bzfs.patch_exclude_dataset_regexes(["", ""], "d"))
-        self.assertListEqual([], bzfs.patch_exclude_dataset_regexes(["!.*"], "d"))
-        self.assertListEqual([], bzfs.patch_exclude_dataset_regexes(["!.*", "!.*"], "d"))
-
     def test_delete_stale_ssh_socket_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             new_socket_file = os.path.join(tmpdir, "s_new_socket_file")
