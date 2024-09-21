@@ -35,6 +35,7 @@ on:
         - test_ubuntu_22_04
         - test_ubuntu_20_04
         - test_freebsd_14_1
+        - test_freebsd_13_4
         - test_freebsd_13_3
         - test_solaris_11_4
         default: "test_ubuntu_24_04_fast"
@@ -270,6 +271,23 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
+  test_freebsd_13_4:  # currently uses zfs-2.1.15
+    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+    - uses: actions/checkout@v4
+    - name: Test with unittest
+      id: test
+      uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
+      with:
+        release: "13.4"
+        run: |
+          ./.github-workflow-scripts/test_freebsd_13_3.sh
+    - name: Upload code coverage report to workflow run page
+      uses: ./.github/workflows/coverage-upload
+
+
   test_freebsd_13_3:  # currently uses zfs-2.1.14
     if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-24.04
@@ -315,6 +333,7 @@ jobs:
       - test_ubuntu_22_04
       - test_ubuntu_20_04
       - test_freebsd_14_1
+      - test_freebsd_13_4
       - test_freebsd_13_3
       - test_solaris_11_4
     steps:
@@ -344,6 +363,11 @@ jobs:
         with:
           name: coverage-test_freebsd_14_1
           path: coverage-test_freebsd_14_1
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_freebsd_13_4
+          path: coverage-test_freebsd_13_4
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
