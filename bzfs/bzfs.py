@@ -1085,8 +1085,8 @@ class Job:
         re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         p.exclude_dataset_regexes = compile_regexes(exclude_regexes, suffix=re_suffix)
         p.include_dataset_regexes = compile_regexes(include_regexes or [".*"], suffix=re_suffix)
+
         self.detect_available_programs()
-        log.trace("Validated Param values: %s", pretty_print_formatter(self.params))
 
         zfs_send_program_opts = p.curr_zfs_send_program_opts
         if self.is_zpool_feature_enabled_or_active(dst, "feature@large_blocks"):
@@ -1098,6 +1098,7 @@ class Job:
             zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = fix_solaris_raw_mode(zfs_send_program_opts)
         p.curr_zfs_send_program_opts = zfs_send_program_opts
+        log.trace("Validated Param values: %s", pretty_print_formatter(self.params))
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
         is_root = True
