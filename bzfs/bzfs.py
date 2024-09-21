@@ -486,7 +486,7 @@ feature.
         "--quiet", "-q", action="store_true",
         help="Suppress non-error, info, debug, and trace output.\n\n")
     parser.add_argument(
-        "--logdir", type=str, metavar="DIR",
+        "--log-dir", type=str, metavar="DIR",
         help=f"Path to log output directory (optional). Default is $HOME/{prog_name}-logs\n\n")
     parser.add_argument(
         "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
@@ -751,7 +751,7 @@ class Params:
 
         self.timestamp: str = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
         self.home_dir: str = get_home_directory()
-        self.log_dir: str = self.validate_arg(args.logdir if args.logdir else f"{self.home_dir}/{prog_name}-logs")
+        self.log_dir: str = self.validate_arg(args.log_dir if args.log_dir else f"{self.home_dir}/{prog_name}-logs")
         os.makedirs(self.log_dir, exist_ok=True)
         fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}__", dir=self.log_dir)
         os.close(fd)
