@@ -84,10 +84,12 @@ python-3.12).
 
 bzfs is a stand-alone program with zero required dependencies,
 consisting of a single file, akin to a stand-alone shell script or
-binary executable. No external Python packages are required; indeed no
-Python package management at all is required. You can just copy the file
-wherever you like, for example into /usr/local/bin or similar, and
-simply run it like any stand-alone shell script or binary executable.
+binary executable. It is designed to be able to run in restricted
+barebones server environments. No external Python packages are required;
+indeed no Python package management at all is required. You can just
+copy the file wherever you like, for example into /usr/local/bin or
+similar, and simply run it like any stand-alone shell script or binary
+executable.
 
 Optionally, bzfs applies bandwidth rate-limiting and progress monitoring
 (via 'pv' CLI) during 'zfs send/receive' data transfers. When run

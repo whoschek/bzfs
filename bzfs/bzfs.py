@@ -109,9 +109,10 @@ coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD an
 versions >= 3.7 (including latest stable which is currently python-3.12). 
 
 {prog_name} is a stand-alone program with zero required dependencies, consisting of a single file, akin to a 
-stand-alone shell script or binary executable. No external Python packages are required; indeed no Python package 
-management at all is required. You can just copy the file wherever you like, for example into /usr/local/bin or 
-similar, and simply run it like any stand-alone shell script or binary executable.
+stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server 
+environments. No external Python packages are required; indeed no Python package management at all is required. 
+You can just copy the file wherever you like, for example into /usr/local/bin or similar, and simply run it like 
+any stand-alone shell script or binary executable.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
@@ -720,6 +721,7 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
+
         self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
@@ -1122,13 +1124,13 @@ class Job:
                     f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
 
-        s = self.re_suffix  # also match descendants of a matching dataset
+        suffx = self.re_suffix  # also match descendants of a matching dataset
         p.exclude_dataset_regexes, p.include_dataset_regexes = (
-            p.tmp_exclude_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_exclude_datasets), suffix=s),
-            p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=s),
+            p.tmp_exclude_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_exclude_datasets), suffix=suffx),
+            p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=suffx),
         )
         if len(p.include_dataset_regexes) == 0:
-            p.include_dataset_regexes = compile_regexes([".*"], suffix=s)
+            p.include_dataset_regexes = compile_regexes([".*"], suffix=suffx)
 
         self.detect_available_programs()
 
