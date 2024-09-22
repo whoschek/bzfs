@@ -720,11 +720,15 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
+        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
         self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
         self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.tmp_exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.tmp_include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.abs_exclude_datasets: List[str] = []  # deferred to validate() phase
+        self.abs_include_datasets: List[str] = []  # deferred to validate() phase
 
         self.dry_run: bool = args.dryrun is not None
         self.dry_run_recv: str = "-n" if self.dry_run else ""
@@ -986,6 +990,7 @@ class Job:
         self.all_exceptions: List[str] = []
         self.first_exception: Optional[BaseException] = None
         self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
+        self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
 
         self.is_test_mode: bool = False  # for testing only
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
@@ -1070,6 +1075,25 @@ class Job:
         p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex)
         p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or [".*"])
 
+        exclude_regexes = [exclude_dataset_regexes_default]
+        if len(p.args.exclude_dataset_regex) > 0:  # some patterns don't exclude anything
+            exclude_regexes = [regex for regex in p.args.exclude_dataset_regex if regex != "" and regex != "!.*"]
+        include_regexes = p.args.include_dataset_regex
+
+        # relative datasets need not be compiled more than once as they don't change between tasks
+        def separate_abs_vs_rel_datasets(datasets: List[str]) -> Tuple[List[str], List[str]]:
+            abs_datasets, rel_datasets = [], []
+            for dataset in datasets:
+                (abs_datasets if dataset.startswith("/") else rel_datasets).append(dataset)
+            return abs_datasets, rel_datasets
+
+        p.abs_exclude_datasets, rel_exclude_datasets = separate_abs_vs_rel_datasets(p.args.exclude_dataset)
+        p.abs_include_datasets, rel_include_datasets = separate_abs_vs_rel_datasets(p.args.include_dataset)
+        p.tmp_exclude_dataset_regexes, p.tmp_include_dataset_regexes = (
+            compile_regexes(exclude_regexes + self.dataset_regexes(rel_exclude_datasets), suffix=self.re_suffix),
+            compile_regexes(include_regexes + self.dataset_regexes(rel_include_datasets), suffix=self.re_suffix),
+        )
+
     def validate(self) -> None:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
@@ -1098,14 +1122,13 @@ class Job:
                     f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
 
-        exclude_regexes = [exclude_dataset_regexes_default]
-        if len(p.args.exclude_dataset_regex) > 0:  # some patterns don't exclude anything
-            exclude_regexes = [regex for regex in p.args.exclude_dataset_regex if regex != "" and regex != "!.*"]
-        exclude_regexes = self.dataset_regexes(p.args.exclude_dataset) + exclude_regexes
-        include_regexes = self.dataset_regexes(p.args.include_dataset) + p.args.include_dataset_regex
-        re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
-        p.exclude_dataset_regexes = compile_regexes(exclude_regexes, suffix=re_suffix)
-        p.include_dataset_regexes = compile_regexes(include_regexes or [".*"], suffix=re_suffix)
+        s = self.re_suffix  # also match descendants of a matching dataset
+        p.exclude_dataset_regexes, p.include_dataset_regexes = (
+            p.tmp_exclude_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_exclude_datasets), suffix=s),
+            p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=s),
+        )
+        if len(p.include_dataset_regexes) == 0:
+            p.include_dataset_regexes = compile_regexes([".*"], suffix=s)
 
         self.detect_available_programs()
 
