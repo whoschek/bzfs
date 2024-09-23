@@ -986,6 +986,7 @@ def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log
 class Job:
     def __init__(self):
         self.params: Params
+        self.all_dst_dataset_exists: Dict[str, Dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: Dict[str, bool] = {}
         self.src_properties: Dict[str, Dict[str, str | int]] = {}
         self.mbuffer_current_opts: List[str] = []
@@ -1028,7 +1029,6 @@ class Job:
                         src.root_dataset = src.basis_root_dataset = src_root_dataset
                         dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                         p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
-                        self.dst_dataset_exists = defaultdict(bool)  # returns False for absent keys
                         log.info(
                             "Starting task: %s",
                             f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
@@ -1108,6 +1108,7 @@ class Job:
                 r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
             r.sudo, r.use_zfs_delegation = self.sudo_cmd(r.ssh_user_host, r.ssh_user)
+        self.dst_dataset_exists = self.all_dst_dataset_exists[dst.ssh_user_host]  # returns False for absent keys
 
         if src.ssh_host == dst.ssh_host:
             if src.root_dataset == dst.root_dataset:
