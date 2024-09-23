@@ -1606,8 +1606,12 @@ class Job:
         send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
         recv_cmd = " ".join([shlex.quote(item) for item in recv_cmd])
 
-        _compress_cmd = self.compress_cmd("src", size_estimate_bytes)
-        _decompress_cmd = self.decompress_cmd("dst", size_estimate_bytes)
+        if self.is_program_available("zstd", "src") and self.is_program_available("zstd", "dst"):
+            _compress_cmd = self.compress_cmd("src", size_estimate_bytes)
+            _decompress_cmd = self.decompress_cmd("dst", size_estimate_bytes)
+        else:  # no compression is used if source and destination do not both support compression
+            _compress_cmd, _decompress_cmd = "cat", "cat"
+
         src_buffer = self.mbuffer_cmd("src", size_estimate_bytes)
         dst_buffer = self.mbuffer_cmd("dst", size_estimate_bytes)
         local_buffer = self.mbuffer_cmd("local", size_estimate_bytes)
@@ -2157,11 +2161,8 @@ class Job:
         lines = self.try_ssh_command(remote, log_trace, cmd=cmd)
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
-        size = None
-        for line in lines.splitlines()[-1:]:
-            if line.startswith("size"):
-                size = line
-        assert size is not None
+        size = lines.splitlines()[-1]
+        assert size.startswith("size")
         return int(size[size.index("\t") + 1 :])
 
     def dataset_regexes(self, datasets: List[str]) -> List[str]:
@@ -2422,7 +2423,7 @@ class Job:
             )
             cmd = [p.shell_program_local, "-c", "exit"]
             if subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
-                self.disable_program_internal("sh", "local")
+                self.disable_program("sh", ["local"])
 
         for r in [p.src, p.dst]:
             loc = r.location
@@ -2445,22 +2446,21 @@ class Job:
                     f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
                 )
 
-        if not ("zstd" in available_programs["src"] and "zstd" in available_programs["dst"]):
-            self.disable_program("zstd")  # no compression is used if source and dst do not both support compression
+        locations = ["src", "dst", "local"]
         if params.compression_program == disable_prg:
-            self.disable_program("zstd")
+            self.disable_program("zstd", locations)
         if params.mbuffer_program == disable_prg:
-            self.disable_program("mbuffer")
+            self.disable_program("mbuffer", locations)
         if params.pv_program == disable_prg:
-            self.disable_program("pv")
+            self.disable_program("pv", locations)
         if params.shell_program == disable_prg:
-            self.disable_program("sh")
+            self.disable_program("sh", locations)
         if params.sudo_program == disable_prg:
-            self.disable_program("sudo")
+            self.disable_program("sudo", locations)
         if params.zpool_program == disable_prg:
-            self.disable_program("zpool")
+            self.disable_program("zpool", locations)
 
-        for key in ["src", "dst", "local"]:
+        for key in locations:
             for program in list(available_programs[key].keys()):
                 if program.startswith("uname-"):
                     # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
@@ -2482,12 +2482,9 @@ class Job:
             if r.sudo and not self.is_program_available("sudo", r.location):
                 die(f"{p.sudo_program} CLI is not available on {r.location} host: {r.ssh_user_host or 'localhost'}")
 
-    def disable_program(self, program: str) -> None:
-        for location in ["src", "dst", "local"]:
-            self.disable_program_internal(program, location)
-
-    def disable_program_internal(self, program: str, location: str) -> None:
-        self.params.available_programs[location].pop(program, None)
+    def disable_program(self, program: str, locations: List[str]) -> None:
+        for location in locations:
+            self.params.available_programs[location].pop(program, None)
 
     def find_available_programs(self) -> str:
         params = self.params
