@@ -32,6 +32,7 @@ import tempfile
 from collections import defaultdict, Counter
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Sequence, Callable, Optional, TypeVar
 from unittest.mock import patch, mock_open
 from .zfs_util import *
 from bzfs.bzfs import CheckRange
@@ -2368,6 +2369,11 @@ class TestFindMatch(unittest.TestCase):
         self.assert_find_match(-1, lst, condition, start=2, end=-2)
         self.assert_find_match(-1, lst, condition, start=3, end=-1)
 
+        self.assert_find_match(2, lst, condition, raises=False)
+        self.assert_find_match(2, lst, condition, raises=True)
+        with self.assertRaises(ValueError):
+            find_match(lst, condition, start=0, end=2, raises=True)
+
         lst = ["-c"]
         self.assert_find_match(0, lst, condition)
         self.assert_find_match(0, lst, condition, -1)
@@ -2429,9 +2435,9 @@ class TestFindMatch(unittest.TestCase):
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=False))
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=True))
 
-    def assert_find_match(self, expected, lst, condition, start=None, end=None):
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False))
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True))
+    def assert_find_match(self, expected, lst, condition, start=None, end=None, raises=False):
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raises))
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True, raises=raises))
 
 
 #############################################################################
@@ -3512,18 +3518,32 @@ def natsort_key(s: str):
     return s, 0
 
 
-def find_match(lst, condition, start=None, end=None, reverse=False):
-    """Returns the index within lst of the first item (or last item if reverse==True) that matches the given condition,
-    or -1 if no matching item is found; analog to str.find()"""
+T = TypeVar("T")
+
+
+def find_match(
+    lst: Sequence[T],
+    predicate: Callable[[T], bool],
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    reverse: bool = False,
+    raises: bool = False,
+):
+    """Returns the index within lst of the first item (or last item if reverse==True) that matches the given predicate
+    condition. If no matching item is found returns -1, or raises a ValueError if raises==True. Analog to str.find(),
+    including slicing semantics with parameters start and end.
+    """
     offset = 0 if start is None else start if start >= 0 else len(lst) + start
     if start is not None or end is not None:
         lst = lst[start:end]
-    for i, item in enumerate(reversed(lst)) if reverse else enumerate(lst):
-        if condition(item):
+    for i, item in enumerate(reversed(lst) if reverse else lst):
+        if predicate(item):
             if reverse:
                 return len(lst) - i - 1 + offset
             else:
                 return i + offset
+    if raises:
+        raise ValueError("No matching item found in sequence")
     return -1
 
 
