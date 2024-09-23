@@ -115,6 +115,7 @@ class BZFSTestCase(ParametrizedTestCase):
         global afix
 
         logging.shutdown()  # close all FileHandler files
+        logging.getLogger(bzfs.__name__).handlers.clear()
 
         for pool in src_pool_name, dst_pool_name:
             if dataset_exists(pool):
@@ -839,6 +840,42 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(job.get_max_command_line_bytes("dst", os_name="Darwin") > 0)
         self.assertTrue(job.get_max_command_line_bytes("dst", os_name="Windows") > 0)
         self.assertTrue(job.get_max_command_line_bytes("dst", os_name="unknown") > 0)
+
+    def test_syslog(self):
+        if platform.system() != "Linux" or "Ubuntu" not in platform.version():
+            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
+        for i in range(0, 2):
+            if i > 0:
+                self.tearDownAndSetup()
+            with stop_on_failure_subtest(i=i):
+                facility = "bzfs_backup"
+                verbose = ["-v"] if i == 0 else []
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    *verbose,
+                    "--log-syslog-address=/dev/log",
+                    "--log-syslog-level=TRACE",
+                    "--log-syslog-facility=" + facility,
+                    "--log-syslog-socktype=UDP",
+                    "--skip-replication",
+                )
+                lines = list(bzfs.tail("/var/log/syslog", 100))
+                k = -1
+                for kk, line in enumerate(lines):
+                    if facility in line and "Log file is:" in line:
+                        k = kk
+                self.assertGreaterEqual(k, 0)
+                lines = lines[k:]
+                found_msg = False
+                for line in lines:
+                    if facility in line:
+                        if i == 0:
+                            found_msg = found_msg or " [T] " in line
+                        else:
+                            found_msg = found_msg or " [D] " in line
+                            self.assertNotIn(" [T] ", line)
+                self.assertTrue(found_msg, "No bzfs syslog message was found")
 
     def test_zfs_set(self):
         if self.is_no_privilege_elevation():
@@ -2904,6 +2941,14 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertIsNotNone(log)
         finally:
             os.remove(file_name)
+
+    def test_get_syslog_address(self):
+        udp = socket.SOCK_DGRAM
+        tcp = socket.SOCK_STREAM
+        self.assertEqual((("localhost", 514), udp), bzfs.get_syslog_address("localhost:514", "UDP"))
+        self.assertEqual((("localhost", 514), tcp), bzfs.get_syslog_address("localhost:514", "TCP"))
+        self.assertEqual(("/dev/log", None), bzfs.get_syslog_address("/dev/log", "UDP"))
+        self.assertEqual(("/dev/log", None), bzfs.get_syslog_address("/dev/log", "TCP"))
 
 
 #############################################################################

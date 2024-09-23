@@ -220,7 +220,7 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--force-rollback-to-latest-snapshot] [--force] [--force-unmount]
             [--force-once] [--skip-parent]
             [--skip-missing-snapshots [{fail,dataset,continue}]]
-            [--retries INT] [--skip-on-error [{fail,tree,dataset}]]
+            [--retries INT] [--skip-on-error {fail,tree,dataset}]
             [--skip-replication] [--delete-missing-snapshots]
             [--delete-missing-datasets] [--no-privilege-elevation]
             [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
@@ -380,9 +380,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'
 
     *Note:* The use of --exclude-dataset-property is discouraged for
-    most use cases. It is more flexible, powerful *and* efficient to
-    instead use a combination of --include/exclude-dataset-regex and/or
-    --include/exclude-dataset to achieve the same or better outcome.
+    most use cases. It is more flexible, more powerful, *and* more
+    efficient to instead use a combination of
+    --include/exclude-dataset-regex and/or --include/exclude-dataset
+    to achieve the same or better outcome.
 
 <!-- -->
 
@@ -525,7 +526,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--skip-on-error** *[{fail,tree,dataset}]*
+**--skip-on-error** *{fail,tree,dataset}*
 
 *  During replication, if an error is not retryable, or --retries has
     been exhausted, or --skip-missing-snapshots raises an error,
@@ -768,9 +769,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--logdir** *DIR*
+**--log-dir** *DIR*
 
-*  Path to log output directory (optional). Default is $HOME/bzfs-logs
+*  Path to log output directory on local host (optional). Default is
+    $HOME/bzfs-logs
 
 <!-- -->
 

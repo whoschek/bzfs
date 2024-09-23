@@ -22,6 +22,7 @@
 import argparse
 import collections
 import logging
+import logging.handlers
 import operator
 import os
 import platform
@@ -223,8 +224,8 @@ feature.
              "descendants are ignored because exclude takes precedence over include.\n\n"
              "Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'\n\n"
              "*Note:* The use of --exclude-dataset-property is discouraged for most use cases. It is more flexible, "
-             "powerful *and* efficient to instead use a combination of --include/exclude-dataset-regex and/or "
-             "--include/exclude-dataset to achieve the same or better outcome.\n\n")
+             "more powerful, *and* more efficient to instead use a combination of --include/exclude-dataset-regex "
+             "and/or --include/exclude-dataset to achieve the same or better outcome.\n\n")
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
@@ -338,7 +339,7 @@ feature.
         #       "completes or retries exhaust, such that subsequently failing operations can again be retried.\n\n"))
         help=argparse.SUPPRESS)
     parser.add_argument(
-        "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset", nargs="?",
+        "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
         help=("During replication, if an error is not retryable, or --retries has been exhausted, "
               "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
               "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "
@@ -487,7 +488,27 @@ feature.
         help="Suppress non-error, info, debug, and trace output.\n\n")
     parser.add_argument(
         "--log-dir", type=str, metavar="DIR",
-        help=f"Path to log output directory (optional). Default is $HOME/{prog_name}-logs\n\n")
+        help=f"Path to log output directory on local host (optional). Default is $HOME/{prog_name}-logs\n\n")
+    parser.add_argument(
+        "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
+        # help=f"Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
+        #      f"the file system path to the syslog socket file on localhost (e.g. '/dev/log'). The default is to not "
+        #      f"log anything to syslog. See https://docs.python.org/3/library/logging.handlers.html#sysloghandler\n\n")
+        help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
+        default="ERROR",
+        # help=f"Only send messages with equal or higher priority than this log level to syslog. Default is 'ERROR'.\n\n")
+        help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--log-syslog-facility", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
+        # help=f"The name that identifies {prog_name} messages within the syslog, as opposed to messages from other "
+        #      f"sources. Default is '{prog_name}'.\n\n")
+        help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--log-syslog-socktype", choices=["UDP", "TCP"], default="UDP",
+        # help=f"The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
+        help=argparse.SUPPRESS)
     parser.add_argument(
         "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
         help="Display version information and exit.\n\n")
@@ -2114,7 +2135,7 @@ class Job:
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
         size = None
-        for line in lines.splitlines():
+        for line in lines.splitlines()[-1:]:
             if line.startswith("size"):
                 size = line
         assert size is not None
@@ -2187,7 +2208,8 @@ class Job:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
-        excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists.
+        excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists. Fewer
+        steps translate to better performance, especially when sending many small snapshots.
         Example: skip hourly snapshots and only include daily shapshots for replication
         Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
         -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
@@ -2962,11 +2984,38 @@ def get_default_logger_impl(args: argparse.Namespace, log_file: str = None) -> L
         handler.setFormatter(CustomFormatter("%(message)s"))
         log.addHandler(handler)
 
+    # optionally, also log to local or remote syslog
+    address = args.log_syslog_address
+    if address and not any(isinstance(handler, logging.handlers.SysLogHandler) for handler in log.handlers):
+        address, socktype = get_syslog_address(address, args.log_syslog_socktype)
+        facility = str(args.log_syslog_facility).strip().replace("%", "")  # sanitize
+        handler = logging.handlers.SysLogHandler(address=address, socktype=socktype)
+        handler.setFormatter(logging.Formatter(facility + " %(message)s"))
+        handler.setLevel(args.log_syslog_level)
+        log.addHandler(handler)
+        if handler.level < log.getEffectiveLevel():
+            log_level_name = logging.getLevelName(log.getEffectiveLevel())
+            log.warning(
+                "%s",
+                f"No messages with priority lower than {log_level_name} will be sent to syslog because syslog "
+                f"log level {args.log_syslog_level} is lower than overall log level {log_level_name}.",
+            )
+
     # perf: tell logging framework not to gather unnecessary expensive info for each log record
     logging.logProcesses = False
     logging.logThreads = False
     logging.logMultiProcessing = False
     return log
+
+
+def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple:
+    socktype = None
+    address = address.strip()
+    if ":" in address:
+        host, port = address.rsplit(":", 1)
+        address = (host.strip(), int(port.strip()))
+        socktype = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM
+    return address, socktype
 
 
 #############################################################################
