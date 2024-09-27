@@ -777,6 +777,7 @@ class Params:
         log: Logger = None,
         inject_params: Optional[Dict[str, bool]] = None,
     ):
+        # immutable variables:
         assert args is not None
         self.args: argparse.Namespace = args
         self.sys_argv: List[str] = sys_argv if sys_argv is not None else []
@@ -792,16 +793,6 @@ class Params:
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
 
-        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
-        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.tmp_exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.tmp_include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.abs_exclude_datasets: List[str] = []  # deferred to validate_task() phase
-        self.abs_include_datasets: List[str] = []  # deferred to validate_task() phase
-
         self.dry_run: bool = args.dryrun is not None
         self.dry_run_recv: str = "-n" if self.dry_run else ""
         self.dry_run_destroy: str = self.dry_run_recv
@@ -810,7 +801,6 @@ class Params:
         self.verbose_destroy: str = "" if args.quiet else "-v"
 
         self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
-        self.curr_zfs_send_program_opts: List[str] = []
         zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
@@ -819,7 +809,6 @@ class Params:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
         self.zfs_full_recv_opts: List[str] = self.zfs_recv_program_opts.copy()
-        self.zfs_recv_ox_names: Set[str] = set()
         cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in zfs_recv_groups.items()]
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
 
@@ -865,14 +854,27 @@ class Params:
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = int(self.getenv("min_pipe_transfer_size", 1024 * 1024))
 
-        self.available_programs: Dict[str, Dict[str, str]] = {}
-        self.zpool_features: Dict[str, Dict[str, str]] = {}
-
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
         self.python_version: str = sys.version
         self.platform_version: str = platform.version()
         self.platform_platform: str = platform.platform()
+
+        # mutable variables:
+        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
+        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.tmp_exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.tmp_include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.abs_exclude_datasets: List[str] = []  # deferred to validate_task() phase
+        self.abs_include_datasets: List[str] = []  # deferred to validate_task() phase
+
+        self.curr_zfs_send_program_opts: List[str] = []
+        self.zfs_recv_ox_names: Set[str] = set()
+        self.available_programs: Dict[str, Dict[str, str]] = {}
+        self.zpool_features: Dict[str, Dict[str, str]] = {}
 
     def getenv(self, key: str, default=None) -> str:
         """All shell environment variable names used for configuration start with this prefix."""
@@ -945,18 +947,6 @@ class Params:
 class Remote:
     def __init__(self, loc: str, args: argparse.Namespace, p: Params):
         """Option values for either location=='src' or location=='dst'; reads from ArgumentParser via args."""
-        # mutable variables:
-        self.root_dataset: str = ""  # deferred until run_main()
-        self.basis_root_dataset: str = ""  # deferred until run_main()
-        self.pool: str = ""
-        self.sudo: str = ""
-        self.use_zfs_delegation: bool = False
-        self.ssh_cmd: List[str] = []
-        self.ssh_cmd_quoted: List[str] = []
-        self.ssh_user: str = ""
-        self.ssh_host: str = ""
-        self.ssh_user_host: str = ""
-
         # immutable variables:
         assert loc == "src" or loc == "dst"
         self.location = loc
@@ -971,6 +961,18 @@ class Remote:
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
             self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
+
+        # mutable variables:
+        self.root_dataset: str = ""  # deferred until run_main()
+        self.basis_root_dataset: str = ""  # deferred until run_main()
+        self.pool: str = ""
+        self.sudo: str = ""
+        self.use_zfs_delegation: bool = False
+        self.ssh_cmd: List[str] = []
+        self.ssh_cmd_quoted: List[str] = []
+        self.ssh_user: str = ""
+        self.ssh_host: str = ""
+        self.ssh_user_host: str = ""
 
     def set_ssh_cmd(self, ssh_cmd: List[str]) -> None:
         self.ssh_cmd = ssh_cmd
@@ -1067,13 +1069,13 @@ class Job:
         try:
             log = get_logger(log_params, args, log)
             log.info("%s", "Log file is: " + log_params.log_file)
+            try:
+                self.params = Params(args, sys_argv, log_params, log, self.inject_params)
+            except SystemExit as e:
+                log.error("%s", str(e))
+                raise
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
                 with redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
-                    try:
-                        self.params = Params(args, sys_argv, log_params, log, self.inject_params)
-                    except SystemExit as e:
-                        log.error("%s", str(e))
-                        raise
                     self.run_tasks()
         finally:
             reset_logger()
