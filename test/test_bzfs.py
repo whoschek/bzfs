@@ -16,6 +16,7 @@
 
 import argparse
 import itertools
+import json
 import logging
 import platform
 import pwd
@@ -48,11 +49,11 @@ afix = ""
 encryption_algo = "aes-256-gcm"
 qq = bzfs.env_var_prefix  # 'bzfs_'
 zfs_encryption_key_fd, zfs_encryption_key = tempfile.mkstemp(prefix="test_bzfs.key_")
-os.write(zfs_encryption_key_fd, "mypasswd".encode())
+os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
 os.close(zfs_encryption_key_fd)
 ssh_config_file_fd, ssh_config_file = tempfile.mkstemp(prefix="ssh_config_file_")
 os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
-os.write(ssh_config_file_fd, "# Empty ssh_config file".encode())
+os.write(ssh_config_file_fd, "# Empty ssh_config file".encode("utf-8"))
 
 keylocation = f"file://{zfs_encryption_key}"
 rng = random.Random(12345)
@@ -115,9 +116,6 @@ class BZFSTestCase(ParametrizedTestCase):
         global src_root_dataset, dst_root_dataset
         global afix
 
-        logging.shutdown()  # close all FileHandler files
-        logging.getLogger(bzfs.__name__).handlers.clear()
-
         for pool in src_pool_name, dst_pool_name:
             if dataset_exists(pool):
                 destroy_pool(pool)
@@ -143,7 +141,7 @@ class BZFSTestCase(ParametrizedTestCase):
             features = "\n".join(
                 [f"{k}: {v}" for k, v in sorted(props.items()) if k.startswith("feature@") or k == "delegation"]
             )
-            print(f"zpool features: {features}", file=sys.stderr)
+            # print(f"test zpool features: {features}", file=sys.stderr)
 
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/bzfs/
     def tearDown(self):
@@ -843,40 +841,205 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(job.get_max_command_line_bytes("dst", os_name="unknown") > 0)
 
     def test_syslog(self):
-        if platform.system() != "Linux" or "Ubuntu" not in platform.version():
+        if "Ubuntu" not in platform.version():
             self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
         for i in range(0, 2):
             if i > 0:
                 self.tearDownAndSetup()
             with stop_on_failure_subtest(i=i):
-                facility = "bzfs_backup"
+                syslog_prefix = "bzfs_backup"
                 verbose = ["-v"] if i == 0 else []
                 self.run_bzfs(
                     src_root_dataset,
                     dst_root_dataset,
                     *verbose,
                     "--log-syslog-address=/dev/log",
-                    "--log-syslog-level=TRACE",
-                    "--log-syslog-facility=" + facility,
                     "--log-syslog-socktype=UDP",
+                    "--log-syslog-facility=2",
+                    "--log-syslog-level=TRACE",
+                    "--log-syslog-prefix=" + syslog_prefix,
                     "--skip-replication",
                 )
                 lines = list(bzfs.tail("/var/log/syslog", 100))
                 k = -1
                 for kk, line in enumerate(lines):
-                    if facility in line and "Log file is:" in line:
+                    if syslog_prefix in line and "Log file is:" in line:
                         k = kk
                 self.assertGreaterEqual(k, 0)
                 lines = lines[k:]
                 found_msg = False
                 for line in lines:
-                    if facility in line:
+                    if syslog_prefix in line:
                         if i == 0:
                             found_msg = found_msg or " [T] " in line
                         else:
                             found_msg = found_msg or " [D] " in line
                             self.assertNotIn(" [T] ", line)
                 self.assertTrue(found_msg, "No bzfs syslog message was found")
+
+    def test_log_config_file_nonempty(self):
+        if "Ubuntu" not in platform.version():
+            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
+        config_str = """
+# This is an example log_config.json file that demonstrates how to configure bzfs logging via the standard 
+# python logging.config.dictConfig mechanism.
+#
+# For more examples see 
+# https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig
+# and for details see https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema
+#
+# Note: Lines starting with a # character are ignored as comments within the JSON.
+# Also, if a line ends with a # character the portion between that # character and the preceding # character on
+# the same line is ignored as a comment.
+#
+# User defined variables and their values can be specified via the --log-config-var=name:value CLI option. These 
+# variables can be used in the JSON config via ${name[:default]} references, which are substituted (aka interpolated) 
+# as follows:
+# If the variable contains a non-empty CLI value then that value is used. Else if a default value for the 
+# variable exists in the JSON file that default value is used. Else the program aborts with an error.
+# Example: In the JSON variable ${syslog_address:/dev/log}, the variable name is "syslog_address" 
+# and the default value is "/dev/log". The default value is the portion after the optional : colon within the
+# variable declaration. The default value is used if the CLI user does not specify a non-empty value via 
+# --log-config-var, for example via 
+# --log-config-var syslog_address:/path/to/socket_file
+#
+# bzfs automatically supplies the following convenience variables:
+# ${bzfs.log_level}, ${bzfs.log_dir}, ${bzfs.log_file}, ${bzfs.sub.logger}, 
+# ${bzfs.get_default_log_formatter}, ${bzfs.timestamp}. 
+# For a complete list see the source code of get_dict_config_logger().
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {  # formatters specify how to convert a log record to a string message # 
+        "bzfs": {
+            # () specifies factory function to call in order to return a formatter.
+            "()": "${bzfs.get_default_log_formatter}"
+        },
+        "bzfs_syslog": {
+            # () specifies factory function to call with the given prefix arg in order to return a formatter.
+            # The prefix identifies bzfs messages within the syslog, as opposed to messages from other sources.
+            "()": "${bzfs.get_default_log_formatter}",
+            "prefix": "bzfs.sub "
+        },
+        "simple": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        }
+    },
+    "handlers": {  # handlers specify where to write messages to #
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+            # "formatter": "bzfs",
+            "stream": "ext://sys.stdout"  # log to stdout #
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "formatter": "bzfs",
+            "filename": "${bzfs.log_dir}/${log_file_prefix:custom-}${bzfs.log_file}",  # log to this output file #
+            "encoding": "utf-8"
+        },
+        "syslog": {
+            "class": "logging.handlers.SysLogHandler",  # log to local or remote syslog #
+            "level": "${syslog_level:INFO}",  # fall back to INFO level if syslog_level variable is empty #
+            "formatter": "bzfs_syslog",
+            "address": "${syslog_address:/dev/log}",  # log to local syslog socket file #
+            # "address": ["${syslog_host:127.0.0.1}", ${syslog_port:514}],  # log to remote syslog #
+            "socktype": "ext://socket.SOCK_DGRAM"  # Refers to existing UDP python object #
+            # "socktype": "ext://socket.SOCK_STREAM"  # Refers to existing TCP python object #
+        }
+    },
+    "loggers": {  # loggers specify what log records to forward to which handlers #
+        "${bzfs.sub.logger}": {
+            "level": "${log_level:TRACE}",  # do not forward any log record below that level #
+            "handlers": ["console", "file", "syslog"]  # forward records to these handlers, which format and print em #
+            # "handlers": ["file", "syslog"]  # use default console handler instead of a custom handler #
+        }
+    }            
+}
+        """
+        for i in range(0, 2):
+            if i > 0:
+                self.tearDownAndSetup()
+            log_file_prefix = "custom-" if i == 0 else ""
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                "--log-config-file=" + (config_str if i == 0 else config_str.replace("custom-", "")),
+                "--log-config-var",
+                "syslog_address:/dev/log",
+                "log_file_prefix:" + log_file_prefix,
+                "--skip-replication",
+            )
+        with open("test/log_config.json", "w", encoding="utf-8") as fd:
+            fd.write(config_str.lstrip())
+
+    def test_log_config_file_empty(self):
+        if "Ubuntu" not in platform.version():
+            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
+        config_str = """ "version": 1, "disable_existing_loggers": false, "foo": "${bar:}" """
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--log-config-file=" + config_str,
+            "--log-config-var",
+            "syslog_address:/dev/log",
+            "bar:white\t\n space",
+            "--skip-replication",
+            "-v",
+            "-v",
+        )
+
+        # test reading from file instead of string
+        tmpfile_fd, tmpfile = tempfile.mkstemp(prefix="test_bzfs.config_file")
+        os.write(tmpfile_fd, config_str.encode("utf-8"))
+        os.close(tmpfile_fd)
+        try:
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                "--log-config-file=+" + tmpfile,
+                "--log-config-var",
+                "syslog_address:/dev/log",
+                "bar:white\t\n space",
+                "--skip-replication",
+            )
+        finally:
+            os.remove(tmpfile)
+
+    def test_log_config_file_error(self):
+        if "Ubuntu" not in platform.version():
+            self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
+
+        # test that a trailing hash without a preceding hash is not ignored as a comment, and hence leads to a
+        # JSON parser error
+        config_str = """{ "version": 1, "disable_existing_loggers": false }#"""
+        with self.assertRaises(json.decoder.JSONDecodeError):
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                "--log-config-file=" + config_str,
+                "--skip-replication",
+            )
+
+        # Missing default value for empty substitution variable
+        config_str = """{ "version": 1, "disable_existing_loggers": false, "foo": "${missing_var}" }"""
+        with self.assertRaises(ValueError):
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                "--log-config-file=" + config_str,
+                "--skip-replication",
+            )
+
+        # User defined name:value variable must not be empty
+        config_str = """{ "version": 1, "disable_existing_loggers": false, "foo": "${:}" }"""
+        with self.assertRaises(ValueError):
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                "--log-config-file=" + config_str,
+                "--skip-replication",
+            )
 
     def test_zfs_set(self):
         if self.is_no_privilege_elevation():
@@ -2295,6 +2458,18 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 #############################################################################
 class IsolatedTestCase(BZFSTestCase):
 
+    def test_log_config_file_empty(self):
+        LocalTestCase(param=self.param).test_log_config_file_empty()
+
+    def test_log_config_file_nonempty(self):
+        LocalTestCase(param=self.param).test_log_config_file_nonempty()
+
+    def test_log_config_file_error(self):
+        LocalTestCase(param=self.param).test_log_config_file_error()
+
+    def test_syslog(self):
+        LocalTestCase(param=self.param).test_syslog()
+
     def test_zfs_set(self):
         LocalTestCase(param=self.param).test_zfs_set()
 
@@ -2910,43 +3085,66 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual(["-w", "none", "foo"], bzfs.fix_solaris_raw_mode(["-w", "foo"]))
         self.assertListEqual(["-F"], bzfs.fix_solaris_raw_mode(["-F"]))
 
-    def test_get_logger(self):
-        fd, file_name = tempfile.mkstemp()
-        os.close(fd)
+    def test_get_logger_with_cleanup(self):
+        def check(log, files):
+            files_todo = files.copy()
+            for handler in log.handlers:
+                if isinstance(handler, logging.FileHandler):
+                    self.assertIn(handler.baseFilename, files_todo)
+                    files_todo.remove(handler.baseFilename)
+            self.assertEqual(0, len(files_todo))
+
         prefix = "test_get_logger:"
-        try:
-            args = bzfs.argument_parser().parse_args(args=["src", "dst"])
-            root_logger = logging.getLogger()
-            log = bzfs.get_logger(args, root_logger)
-            self.assertTrue(log == root_logger)
-            log.info(prefix + "aaa1")
+        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        root_logger = logging.getLogger()
+        log_params = None
+        log = bzfs.get_logger(log_params, args, root_logger)
+        self.assertTrue(log is root_logger)
+        log.info(prefix + "aaa1")
 
-            args = bzfs.argument_parser().parse_args(args=["src", "dst"])
-            log = bzfs.get_logger(args, log=None)
-            log.log(bzfs.log_stderr, "%s", prefix + "bbbe1")
-            log.log(bzfs.log_stdout, "%s", prefix + "bbbo1")
-            log.info("%s", prefix + "bbb3")
-            log.setLevel(logging.WARNING)
-            log.log(bzfs.log_stderr, "%s", prefix + "bbbe2")
-            log.log(bzfs.log_stdout, "%s", prefix + "bbbo2")
-            log.info("%s", prefix + "bbb4")
-            log.trace("%s", prefix + "bbb5")
-            log.setLevel(bzfs.log_trace)
-            log.trace("%s", prefix + "bbb6")
+        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        log_params = bzfs.LogParams(args)
+        log = bzfs.get_logger(log_params, args)
+        log.log(bzfs.log_stderr, "%s", prefix + "bbbe1")
+        log.log(bzfs.log_stdout, "%s", prefix + "bbbo1")
+        log.info("%s", prefix + "bbb3")
+        log.setLevel(logging.WARNING)
+        log.log(bzfs.log_stderr, "%s", prefix + "bbbe2")
+        log.log(bzfs.log_stdout, "%s", prefix + "bbbo2")
+        log.info("%s", prefix + "bbb4")
+        log.trace("%s", prefix + "bbb5")
+        log.setLevel(bzfs.log_trace)
+        log.trace("%s", prefix + "bbb6")
+        files = {os.path.abspath(log_params.log_file)}
+        check(log, files)
 
-            args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v"])
-            log = bzfs.get_logger(args, log=None, log_file=file_name)
-            self.assertIsNotNone(log)
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v"])
+        log_params = bzfs.LogParams(args)
+        log = bzfs.get_logger(log_params, args)
+        self.assertIsNotNone(log)
+        files.add(os.path.abspath(log_params.log_file))
+        check(log, files)
 
-            args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v", "-v"])
-            log = bzfs.get_logger(args, log=None, log_file=file_name)
-            self.assertIsNotNone(log)
+        log.addFilter(lambda record: True)  # dummy
+        bzfs.reset_logger()
+        files.clear()
+        check(log, files)
 
-            args = bzfs.argument_parser().parse_args(args=["src", "dst", "--quiet"])
-            log = bzfs.get_logger(args, log=None)
-            self.assertIsNotNone(log)
-        finally:
-            os.remove(file_name)
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v", "-v"])
+        log_params = bzfs.LogParams(args)
+        log = bzfs.get_logger(log_params, args)
+        self.assertIsNotNone(log)
+        files.add(os.path.abspath(log_params.log_file))
+        check(log, files)
+
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--quiet"])
+        log_params = bzfs.LogParams(args)
+        log = bzfs.get_logger(log_params, args)
+        self.assertIsNotNone(log)
+        files.add(os.path.abspath(log_params.log_file))
+        check(log, files)
+
+        bzfs.reset_logger()
 
     def test_get_syslog_address(self):
         udp = socket.SOCK_DGRAM
@@ -2955,6 +3153,11 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual((("localhost", 514), tcp), bzfs.get_syslog_address("localhost:514", "TCP"))
         self.assertEqual(("/dev/log", None), bzfs.get_syslog_address("/dev/log", "UDP"))
         self.assertEqual(("/dev/log", None), bzfs.get_syslog_address("/dev/log", "TCP"))
+
+    def test_validate_log_config_variable(self):
+        self.assertIsNone(bzfs.validate_log_config_variable("name:value"))
+        for var in ["noColon", ":noName", "$n:v", "{:v", "}:v", "", "  ", "\t", "a\tb:v", "spa ce:v", '"k":v', "'k':v"]:
+            self.assertIsNotNone(bzfs.validate_log_config_variable(var))
 
 
 #############################################################################
@@ -3335,6 +3538,22 @@ class TestFileOrLiteralAction(unittest.TestCase):
 
 
 #############################################################################
+class TestLogConfigVariablesAction(unittest.TestCase):
+
+    def setUp(self):
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--log-config-var", nargs="+", action=bzfs.LogConfigVariablesAction)
+
+    def test_basic(self):
+        args = self.parser.parse_args(["--log-config-var", "name1:val1", "name2:val2"])
+        self.assertEqual(args.log_config_var, ["name1:val1", "name2:val2"])
+
+        for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--log-config-var", var])
+
+
+#############################################################################
 class TestCheckRange(unittest.TestCase):
 
     def test_valid_range_min_max(self):
@@ -3522,24 +3741,24 @@ T = TypeVar("T")
 
 
 def find_match(
-    lst: Sequence[T],
+    seq: Sequence[T],
     predicate: Callable[[T], bool],
     start: Optional[int] = None,
     end: Optional[int] = None,
     reverse: bool = False,
     raises: bool = False,
-):
-    """Returns the index within lst of the first item (or last item if reverse==True) that matches the given predicate
+) -> int:
+    """Returns the index within seq of the first item (or last item if reverse==True) that matches the given predicate
     condition. If no matching item is found returns -1, or raises a ValueError if raises==True. Analog to str.find(),
-    including slicing semantics with parameters start and end.
+    including slicing semantics with parameters start and end. For example, seq can be a list, tuple or str.
     """
-    offset = 0 if start is None else start if start >= 0 else len(lst) + start
+    offset = 0 if start is None else start if start >= 0 else len(seq) + start
     if start is not None or end is not None:
-        lst = lst[start:end]
-    for i, item in enumerate(reversed(lst) if reverse else lst):
+        seq = seq[start:end]
+    for i, item in enumerate(reversed(seq) if reverse else seq):
         if predicate(item):
             if reverse:
-                return len(lst) - i - 1 + offset
+                return len(seq) - i - 1 + offset
             else:
                 return i + offset
     if raises:
@@ -3571,9 +3790,10 @@ def main():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
     suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {"verbose": True}))

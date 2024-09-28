@@ -226,8 +226,7 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--skip-replication] [--delete-missing-snapshots]
             [--delete-missing-datasets] [--no-privilege-elevation]
             [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
-            [--dryrun [{recv,send}]] [--verbose] [--quiet] [--log-dir DIR]
-            [--version] [--help, -h] [--ssh-cipher STRING]
+            [--dryrun [{recv,send}]] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -240,7 +239,13 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--mbuffer-program-opts STRING] [--pv-program STRING]
             [--pv-program-opts STRING] [--shell-program STRING]
             [--ssh-program STRING] [--sudo-program STRING]
-            [--zfs-program STRING] [--zpool-program STRING]
+            [--zfs-program STRING] [--zpool-program STRING] [--quiet]
+            [--verbose] [--log-dir DIR] [--log-syslog-address STRING]
+            [--log-syslog-socktype {UDP,TCP}] [--log-syslog-facility INT]
+            [--log-syslog-prefix STRING]
+            [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
+            [--log-config-file STRING]
+            [--log-config-var NAME:VALUE [NAME:VALUE ...]]
             [--include-envvar-regex REGEX [REGEX ...]]
             [--exclude-envvar-regex REGEX [REGEX ...]]
             [--zfs-recv-o-targets {full|incremental|full,incremental}]
@@ -250,7 +255,8 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--zfs-recv-x-targets {full|incremental|full,incremental}]
             [--zfs-recv-x-sources STRING]
             [--zfs-recv-x-include-regex REGEX [REGEX ...]]
-            [--zfs-recv-x-exclude-regex REGEX [REGEX ...]]
+            [--zfs-recv-x-exclude-regex REGEX [REGEX ...]] [--version]
+            [--help, -h]
             SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 
@@ -754,42 +760,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-**--verbose**, **-v**
-
-*  Print verbose information. This option can be specified multiple
-    times to increase the level of verbosity. To print what ZFS/SSH
-    operation exactly is happening (or would happen), add the `-v -v`
-    flag, maybe along with --dryrun. ERROR, WARN, INFO, DEBUG, TRACE
-    output lines are identified by [E], [W], [I], [D], [T]
-    prefixes, respectively.
-
-<!-- -->
-
-**--quiet**, **-q**
-
-*  Suppress non-error, info, debug, and trace output.
-
-<!-- -->
-
-**--log-dir** *DIR*
-
-*  Path to log output directory on local host (optional). Default is
-    $HOME/bzfs-logs
-
-<!-- -->
-
-**--version**
-
-*  Display version information and exit.
-
-<!-- -->
-
-**--help, -h**
-
-*  Show this help message and exit.
-
-<!-- -->
-
 **--ssh-cipher** *STRING*
 
 *  SSH cipher specification for encrypting the session (optional); will
@@ -1006,6 +976,123 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--quiet**, **-q**
+
+*  Suppress non-error, info, debug, and trace output.
+
+<!-- -->
+
+**--verbose**, **-v**
+
+*  Print verbose information. This option can be specified multiple
+    times to increase the level of verbosity. To print what ZFS/SSH
+    operation exactly is happening (or would happen), add the `-v -v`
+    flag, maybe along with --dryrun. ERROR, WARN, INFO, DEBUG, TRACE
+    output lines are identified by [E], [W], [I], [D], [T]
+    prefixes, respectively.
+
+<!-- -->
+
+**--log-dir** *DIR*
+
+*  Path to the log output directory on local host (optional). Default:
+    $HOME/bzfs-logs. The logger that is used by default writes log
+    files there, in addition to the console. The current.log symlink
+    always points to the most recent log file. The current.pv symlink
+    always points to the most recent data transfer monitoring log. Run
+    'tail -f' on both symlinks to follow what's currently going on.
+
+<!-- -->
+
+**--log-syslog-address** *STRING*
+
+*  Host:port of the syslog machine to send messages to (e.g.
+    'foo.example.com:514' or '127.0.0.1:514'), or the file system
+    path to the syslog socket file on localhost (e.g. '/dev/log'). The
+    default is no address, i.e. do not log anything to syslog by
+    default. See
+    https://docs.python.org/3/library/logging.handlers.html#sysloghandler
+
+<!-- -->
+
+**--log-syslog-socktype** *{UDP,TCP}*
+
+*  The socket type to use to connect if no local socket file system
+    path is used. Default is 'UDP'.
+
+<!-- -->
+
+**--log-syslog-facility** *INT*
+
+*  The local facility aka category that identifies msg sources in
+    syslog (default: 1, min=0, max=7)'.
+
+<!-- -->
+
+**--log-syslog-prefix** *STRING*
+
+*  The name to prepend to each message that is sent to syslog;
+    identifies bzfs messages as opposed to messages from other sources.
+    Default is 'bzfs'.
+
+<!-- -->
+
+**--log-syslog-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}*
+
+*  Only send messages with equal or higher priority than this log level
+    to syslog. Default is 'ERROR'.
+
+<!-- -->
+
+**--log-config-file** *STRING*
+
+*  The contents of a JSON file that defines a custom python logging
+    configuration to be used (optional). If the option starts with a
+    `+` prefix then the contents are read from the UTF-8 JSON file
+    given after the `+` prefix. Examples: +log_config.json,
+    +/path/to/log_config.json. Here is an example config file that
+    demonstrates usage:
+    https://github.com/whoschek/bzfs/blob/main/test/log_config.json
+
+    For more examples see
+    https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig
+    and for details see
+    https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema
+
+    Note: Lines starting with a # character are ignored as comments
+    within the JSON. Also, if a line ends with a # character the
+    portion between that # character and the preceding # character on
+    the same line is ignored as a comment.
+
+<!-- -->
+
+**--log-config-var** *NAME:VALUE [NAME:VALUE ...]*
+
+*  User defined variables in the form of zero or more NAME:VALUE pairs
+    (optional). These variables can be used within the JSON passed with
+    --log-config-file (see above) via `${name[:default]}`
+    references, which are substituted (aka interpolated) as follows:
+
+    If the variable contains a non-empty CLI value then that value is
+    used. Else if a default value for the variable exists in the JSON
+    file that default value is used. Else the program aborts with an
+    error. Example: In the JSON variable
+    `${syslog_address:/dev/log}`, the variable name is
+    'syslog_address' and the default value is '/dev/log'. The
+    default value is the portion after the optional : colon within the
+    variable declaration. The default value is used if the CLI user does
+    not specify a non-empty value via --log-config-var, for example via
+    --log-config-var syslog_address:/path/to/socket_file or via
+    --log-config-var syslog_address:[host,port].
+
+    bzfs automatically supplies the following convenience variables:
+    `${bzfs.log_level}`, `${bzfs.log_dir}`, `${bzfs.log_file}`,
+    `${bzfs.sub.logger}`, `${bzfs.get_default_log_formatter}`,
+    `${bzfs.timestamp}`. For a complete list see the source code of
+    get_dict_config_logger().
+
+<!-- -->
+
 **--include-envvar-regex** *REGEX [REGEX ...]*
 
 *  On program startup, unset all Unix environment variables for which
@@ -1033,6 +1120,18 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Same syntax as --include-envvar-regex (see above) except that the
     default is to exclude no environment variables. Example:
     `bzfs_.*`
+
+<!-- -->
+
+**--version**
+
+*  Display version information and exit.
+
+<!-- -->
+
+**--help, -h**
+
+*  Show this help message and exit.
 
 # ZFS-RECV-O (EXPERIMENTAL)
 
@@ -1090,7 +1189,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     file.
 
     The default is to include no properties, thus by default no extra
-    '-o' option is appended. Examples: `.*` (include all
+    '-o' option is appended. Example: `--zfs-recv-o-include-regex
+    recordsize volblocksize`. More examples: `.*` (include all
     properties), `foo bar myapp:.*` (include three regexes)
     `+zfs-recv-o_regexes.txt`, `+/path/to/zfs-recv-o_regexes.txt`
 
@@ -1161,7 +1261,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     file.
 
     The default is to include no properties, thus by default no extra
-    '-x' option is appended. Examples: `.*` (include all
+    '-x' option is appended. Example: `--zfs-recv-x-include-regex
+    recordsize volblocksize`. More examples: `.*` (include all
     properties), `foo bar myapp:.*` (include three regexes)
     `+zfs-recv-x_regexes.txt`, `+/path/to/zfs-recv-x_regexes.txt`
 

@@ -1,0 +1,75 @@
+# This is an example log_config.json file that demonstrates how to configure bzfs logging via the standard
+# python logging.config.dictConfig mechanism.
+#
+# For more examples see
+# https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig
+# and for details see https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema
+#
+# Note: Lines starting with a # character are ignored as comments within the JSON.
+# Also, if a line ends with a # character the portion between that # character and the preceding # character on
+# the same line is ignored as a comment.
+#
+# User defined variables and their values can be specified via the --log-config-var=name:value CLI option. These
+# variables can be used in the JSON config via ${name[:default]} references, which are substituted (aka interpolated)
+# as follows:
+# If the variable contains a non-empty CLI value then that value is used. Else if a default value for the
+# variable exists in the JSON file that default value is used. Else the program aborts with an error.
+# Example: In the JSON variable ${syslog_address:/dev/log}, the variable name is "syslog_address"
+# and the default value is "/dev/log". The default value is the portion after the optional : colon within the
+# variable declaration. The default value is used if the CLI user does not specify a non-empty value via
+# --log-config-var, for example via
+# --log-config-var syslog_address:/path/to/socket_file
+#
+# bzfs automatically supplies the following convenience variables:
+# ${bzfs.log_level}, ${bzfs.log_dir}, ${bzfs.log_file}, ${bzfs.sub.logger},
+# ${bzfs.get_default_log_formatter}, ${bzfs.timestamp}.
+# For a complete list see the source code of get_dict_config_logger().
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {  # formatters specify how to convert a log record to a string message #
+        "bzfs": {
+            # () specifies factory function to call in order to return a formatter.
+            "()": "${bzfs.get_default_log_formatter}"
+        },
+        "bzfs_syslog": {
+            # () specifies factory function to call with the given prefix arg in order to return a formatter.
+            # The prefix identifies bzfs messages within the syslog, as opposed to messages from other sources.
+            "()": "${bzfs.get_default_log_formatter}",
+            "prefix": "bzfs.sub "
+        },
+        "simple": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        }
+    },
+    "handlers": {  # handlers specify where to write messages to #
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+            # "formatter": "bzfs",
+            "stream": "ext://sys.stdout"  # log to stdout #
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "formatter": "bzfs",
+            "filename": "${bzfs.log_dir}/${log_file_prefix:custom-}${bzfs.log_file}",  # log to this output file #
+            "encoding": "utf-8"
+        },
+        "syslog": {
+            "class": "logging.handlers.SysLogHandler",  # log to local or remote syslog #
+            "level": "${syslog_level:INFO}",  # fall back to INFO level if syslog_level variable is empty #
+            "formatter": "bzfs_syslog",
+            "address": "${syslog_address:/dev/log}",  # log to local syslog socket file #
+            # "address": ["${syslog_host:127.0.0.1}", ${syslog_port:514}],  # log to remote syslog #
+            "socktype": "ext://socket.SOCK_DGRAM"  # Refers to existing UDP python object #
+            # "socktype": "ext://socket.SOCK_STREAM"  # Refers to existing TCP python object #
+        }
+    },
+    "loggers": {  # loggers specify what log records to forward to which handlers #
+        "${bzfs.sub.logger}": {
+            "level": "${log_level:TRACE}",  # do not forward any log record below that level #
+            "handlers": ["console", "file", "syslog"]  # forward records to these handlers, which format and print em #
+            # "handlers": ["file", "syslog"]  # use default console handler instead of a custom handler #
+        }
+    }
+}

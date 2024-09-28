@@ -21,7 +21,9 @@
 
 import argparse
 import collections
+import json
 import logging
+import logging.config
 import logging.handlers
 import operator
 import os
@@ -477,45 +479,6 @@ feature.
               "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no snapshot is "
               "actually transferred between source and destination. This is the default when specifying --dryrun.\n\n"
               "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n"))
-    parser.add_argument(
-        "--verbose", "-v", action="count", default=0,
-        help=("Print verbose information. This option can be specified multiple times to increase the level of "
-              "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
-              "flag, maybe along with --dryrun. "
-              "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
-              "respectively.\n\n"))
-    parser.add_argument(
-        "--quiet", "-q", action="store_true",
-        help="Suppress non-error, info, debug, and trace output.\n\n")
-    parser.add_argument(
-        "--log-dir", type=str, metavar="DIR",
-        help=f"Path to log output directory on local host (optional). Default is $HOME/{prog_name}-logs\n\n")
-    parser.add_argument(
-        "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
-        # help=f"Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
-        #      f"the file system path to the syslog socket file on localhost (e.g. '/dev/log'). The default is to not "
-        #      f"log anything to syslog. See https://docs.python.org/3/library/logging.handlers.html#sysloghandler\n\n")
-        help=argparse.SUPPRESS)
-    parser.add_argument(
-        "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
-        default="ERROR",
-        # help=f"Only send messages with equal or higher priority than this log level to syslog. Default is 'ERROR'.\n\n")
-        help=argparse.SUPPRESS)
-    parser.add_argument(
-        "--log-syslog-facility", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
-        # help=f"The name that identifies {prog_name} messages within the syslog, as opposed to messages from other "
-        #      f"sources. Default is '{prog_name}'.\n\n")
-        help=argparse.SUPPRESS)
-    parser.add_argument(
-        "--log-syslog-socktype", choices=["UDP", "TCP"], default="UDP",
-        # help=f"The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
-        help=argparse.SUPPRESS)
-    parser.add_argument(
-        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
-        help="Display version information and exit.\n\n")
-    parser.add_argument(
-        "--help, -h", action="help",
-        help="Show this help message and exit.\n\n")
 
     ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
     # for speed with confidentiality and integrity
@@ -619,6 +582,73 @@ feature.
         "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("zpool") + msg)
     parser.add_argument(
+        "--quiet", "-q", action="store_true",
+        help="Suppress non-error, info, debug, and trace output.\n\n")
+    parser.add_argument(
+        "--verbose", "-v", action="count", default=0,
+        help=("Print verbose information. This option can be specified multiple times to increase the level of "
+              "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
+              "flag, maybe along with --dryrun. "
+              "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
+              "respectively.\n\n"))
+    parser.add_argument(
+        "--log-dir", type=str, metavar="DIR",
+        help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "
+             f"that is used by default writes log files there, in addition to the console. The current.log symlink "
+             f"always points to the most recent log file. The current.pv symlink always points to the most recent "
+             f"data transfer monitoring log. Run 'tail -f' on both symlinks to follow what's currently going on.\n\n")
+    parser.add_argument(
+        "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
+        help=f"Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
+             f"the file system path to the syslog socket file on localhost (e.g. '/dev/log'). The default is no "
+             f"address, i.e. do not log anything to syslog by default. See "
+             f"https://docs.python.org/3/library/logging.handlers.html#sysloghandler\n\n")
+    parser.add_argument(
+        "--log-syslog-socktype", choices=["UDP", "TCP"], default="UDP",
+        help=f"The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
+    parser.add_argument(
+        "--log-syslog-facility", type=int, min=0, max=7, default=1, action=CheckRange, metavar="INT",
+        help=f"The local facility aka category that identifies msg sources in syslog (default: 1, min=0, max=7)'.\n\n")
+    parser.add_argument(
+        "--log-syslog-prefix", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
+        help=f"The name to prepend to each message that is sent to syslog; identifies {prog_name} messages as opposed "
+             f"to messages from other sources. Default is '{prog_name}'.\n\n")
+    parser.add_argument(
+        "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
+        default="ERROR",
+        help=f"Only send messages with equal or higher priority than this log level to syslog. Default is 'ERROR'.\n\n")
+    parser.add_argument(
+        "--log-config-file", default=None, action=NonEmptyStringAction, metavar="STRING",
+        help=("The contents of a JSON file that defines a custom python logging configuration to be used (optional). "
+              "If the option starts with a `+` prefix then the contents are read from the UTF-8 JSON file given "
+              "after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json. "
+              "Here is an example config file that demonstrates usage: "
+              "https://github.com/whoschek/bzfs/blob/main/test/log_config.json\n\n"
+              "For more examples see "
+              "https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig "
+              "and for details see "
+              "https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema\n\n"
+              "Note: Lines starting with a # character are ignored as comments within the JSON. Also, if a line ends "
+              "with a # character the portion between that # character and the preceding # character on the same line "
+              "is ignored as a comment.\n\n"))
+    parser.add_argument(
+        "--log-config-var", action=LogConfigVariablesAction, nargs="+", default=[], metavar="NAME:VALUE",
+        help=("User defined variables in the form of zero or more NAME:VALUE pairs (optional). "
+              "These variables can be used within the JSON passed with --log-config-file (see above) via "
+              "`${name[:default]}` references, which are substituted (aka interpolated) as follows:\n\n"
+              "If the variable contains a non-empty CLI value then that value is used. Else if a default value for the "
+              "variable exists in the JSON file that default value is used. Else the program aborts with an error. "
+              "Example: In the JSON variable `${syslog_address:/dev/log}`, the variable name is 'syslog_address' "
+              "and the default value is '/dev/log'. The default value is the portion after the optional : colon "
+              "within the variable declaration. The default value is used if the CLI user does not specify a non-empty "
+              "value via --log-config-var, for example via "
+              "--log-config-var syslog_address:/path/to/socket_file or via "
+              "--log-config-var syslog_address:[host,port].\n\n"
+              f"{prog_name} automatically supplies the following convenience variables: "
+              "`${bzfs.log_level}`, `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`, "
+              "`${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. "
+              "For a complete list see the source code of get_dict_config_logger().\n\n"))
+    parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help=("On program startup, unset all Unix environment variables for which the full environment variable "
               "name matches at least one of the excludes but none of the includes. If an environment variable is "
@@ -630,7 +660,7 @@ feature.
               "leading `!` character removed does not match. "
               "The default is to include no environment variables, i.e. to make no exceptions to "
               "--exclude-envvar-regex. "
-              f"Example that retains at least these two env vars: "
+              "Example that retains at least these two env vars: "
               "`--include-envvar-regex PATH "
               f"--include-envvar-regex {env_var_prefix}min_pipe_transfer_size`. "
               "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
@@ -690,14 +720,51 @@ feature.
                    "If the option starts with a `+` prefix then regexes are read from the newline-separated "
                    "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file.\n\n"
                    f"The default is to include no properties, thus by default no extra {flag} option is appended. "
-                   "Examples: `.*` (include all properties), `foo bar myapp:.*` (include three regexes) "
+                   f"Example: `--{grup}-include-regex recordsize volblocksize`. "
+                   "More examples: `.*` (include all properties), `foo bar myapp:.*` (include three regexes) "
                    f"`+{grup}_regexes.txt`, `+/path/to/{grup}_regexes.txt`\n\n"))
         argument_group.add_argument(
             f"--{grup}-exclude-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
             help=h(f"Same syntax as --{grup}-include-regex (see above), and the default is to exclude no properties. "
                    f"Example: --{grup}-exclude-regex encryptionroot keystatus origin volblocksize volsize\n\n"))
+    parser.add_argument(
+        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
+        help="Display version information and exit.\n\n")
+    parser.add_argument(
+        "--help, -h", action="help",
+        help="Show this help message and exit.\n\n")
     return parser
 # fmt: on
+
+
+#############################################################################
+class LogParams:
+    def __init__(self, args: argparse.Namespace):
+        """Option values for logging; reads from ArgumentParser via args."""
+        # immutable variables:
+        if args.quiet:
+            self.log_level = "ERROR"
+        elif args.verbose >= 2:
+            self.log_level = "TRACE"
+        elif args.verbose >= 1:
+            self.log_level = "DEBUG"
+        else:
+            self.log_level = "INFO"
+        self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")
+        self.home_dir: str = get_home_directory()
+        self.log_dir: str = args.log_dir if args.log_dir else f"{self.home_dir}/{prog_name}-logs"
+        os.makedirs(self.log_dir, exist_ok=True)
+        fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}_", dir=self.log_dir)
+        os.close(fd)
+        fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}_", dir=self.log_dir)
+        os.close(fd)
+        create_symlink(self.log_file, self.log_dir, "current.log")
+        create_symlink(self.pv_log_file, self.log_dir, "current.pv")
+        self.log_config_file = args.log_config_file
+        self.log_config_vars = dict(var.split(":", 1) for var in args.log_config_var)
+
+    def __repr__(self) -> str:
+        return str(self.__dict__)
 
 
 #############################################################################
@@ -706,31 +773,34 @@ class Params:
         self,
         args: argparse.Namespace,
         sys_argv: Optional[List[str]] = None,
-        log: Optional[Logger] = None,
+        log_params: LogParams = None,
+        log: Logger = None,
         inject_params: Optional[Dict[str, bool]] = None,
     ):
         assert args is not None
         self.args: argparse.Namespace = args
         self.sys_argv: List[str] = sys_argv if sys_argv is not None else []
         assert isinstance(self.sys_argv, list)
+        self.log_params: LogParams = log_params
+        self.log: Logger = log
         self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
-        self.unset_matching_env_vars(args, log)
+        self.unset_matching_env_vars(args)
 
         assert len(args.root_dataset_pairs) > 0
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
 
-        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
+        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
-        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.tmp_exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.tmp_include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate() phase
-        self.abs_exclude_datasets: List[str] = []  # deferred to validate() phase
-        self.abs_include_datasets: List[str] = []  # deferred to validate() phase
+        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.tmp_exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.tmp_include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.abs_exclude_datasets: List[str] = []  # deferred to validate_task() phase
+        self.abs_include_datasets: List[str] = []  # deferred to validate_task() phase
 
         self.dry_run: bool = args.dryrun is not None
         self.dry_run_recv: str = "-n" if self.dry_run else ""
@@ -762,7 +832,7 @@ class Params:
         self.skip_parent: bool = args.skip_parent
         self.skip_missing_snapshots: str = args.skip_missing_snapshots
         self.skip_on_error: str = args.skip_on_error
-        self.retry_policy = RetryPolicy(args, self)
+        self.retry_policy: RetryPolicy = RetryPolicy(args, self)
         self.skip_replication: bool = args.skip_replication
         self.delete_missing_snapshots: bool = args.delete_missing_snapshots
         self.delete_missing_datasets: bool = args.delete_missing_datasets
@@ -772,19 +842,9 @@ class Params:
         self.create_bookmark: bool = not args.no_create_bookmark
         self.use_bookmark: bool = not args.no_use_bookmark
 
-        self.src = Remote("src", args, self)  # src dataset, host and ssh options
-        self.dst = Remote("dst", args, self)  # dst dataset, host and ssh options
+        self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
+        self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.reuse_ssh_connection: bool = self.getenv_bool("reuse_ssh_connection", True)
-
-        self.timestamp: str = datetime.now().strftime("%Y_%m_%d__%H_%M_%S")
-        self.home_dir: str = get_home_directory()
-        self.log_dir: str = self.validate_arg(args.log_dir if args.log_dir else f"{self.home_dir}/{prog_name}-logs")
-        os.makedirs(self.log_dir, exist_ok=True)
-        fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}__", dir=self.log_dir)
-        os.close(fd)
-        fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}__", dir=self.log_dir)
-        os.close(fd)
-        self.log: Logger = get_logger(args, log, log_file=self.log_file)
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -802,7 +862,7 @@ class Params:
         self.zfs_program: str = self.program_name(args.zfs_program)
         self.zpool_program: str = self.program_name(args.zpool_program)
 
-        # no point trying to create complex shell pipeline commands for tiny data transfers:
+        # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = int(self.getenv("min_pipe_transfer_size", 1024 * 1024))
 
         self.available_programs: Dict[str, Dict[str, str]] = {}
@@ -869,15 +929,13 @@ class Params:
         else:
             return program
 
-    @staticmethod
-    def unset_matching_env_vars(args: argparse.Namespace, log: Optional[Logger]) -> None:
-        log = get_logger(args, log)
+    def unset_matching_env_vars(self, args: argparse.Namespace):
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes = compile_regexes(args.include_envvar_regex)
-        for key in list(os.environ.keys()):
-            if is_included(key, exclude_envvar_regexes, include_envvar_regexes):
-                os.environ.pop(key, None)
-                log.debug("Unsetting b/c envvar regex: %s", key)
+        for envvar_name in list(os.environ.keys()):
+            if is_included(envvar_name, exclude_envvar_regexes, include_envvar_regexes):
+                os.environ.pop(envvar_name, None)
+                self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
 
     def dry(self, msg: str) -> str:
         return "Dry " + msg if self.dry_run else msg
@@ -1005,71 +1063,76 @@ class Job:
         assert isinstance(self.error_injection_triggers, dict)
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
+        log_params = LogParams(args)
         try:
-            self.params = p = Params(args, sys_argv, log, self.inject_params)
-        except SystemExit as e:
-            get_logger(args, log).error("%s", str(e))
-            raise
-        log = p.log
-        log.info("%s", "Log file is: " + p.log_file)
-        create_symlink(p.log_file, p.log_dir, "current.log")
-        create_symlink(p.pv_log_file, p.log_dir, "current.pv")
+            log = get_logger(log_params, args, log)
+            log.info("%s", "Log file is: " + log_params.log_file)
+            with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
+                with redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
+                    try:
+                        self.params = Params(args, sys_argv, log_params, log, self.inject_params)
+                    except SystemExit as e:
+                        log.error("%s", str(e))
+                        raise
+                    self.run_tasks()
+        finally:
+            reset_logger()
 
-        with open(p.log_file, "a", encoding="utf-8") as log_file_fd:
-            with redirect_stderr(Tee(log_file_fd, sys.stderr)):
-                log.info("CLI arguments: %s %s", " ".join(p.sys_argv), f"[euid: {os.geteuid()}]")
-                log.debug("Parsed CLI arguments: %s", p.args)
+    def run_tasks(self) -> None:
+        p, log = self.params, self.params.log
+        log.info("CLI arguments: %s %s", " ".join(p.sys_argv), f"[euid: {os.geteuid()}]")
+        log.debug("Parsed CLI arguments: %s", p.args)
+        try:
+            self.validate_once()
+            self.all_exceptions = []
+            self.first_exception = None
+            self.remote_conf_cache = {}
+            src, dst = p.src, p.dst
+            for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
+                src.root_dataset = src.basis_root_dataset = src_root_dataset
+                dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
+                p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
+                log.info(
+                    "Starting task: %s",
+                    f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
+                )
                 try:
-                    self.validate_once()
-                    self.all_exceptions = []
-                    self.first_exception = None
-                    self.remote_conf_cache = {}
-                    src, dst = p.src, p.dst
-                    for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
-                        src.root_dataset = src.basis_root_dataset = src_root_dataset
-                        dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
-                        p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
-                        log.info(
-                            "Starting task: %s",
-                            f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
-                        )
-                        try:
-                            self.validate()
-                            self.run_task()
-                        except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                            log.error("%s", str(e))
-                            if p.skip_on_error == "fail":
-                                raise
-                            self.first_exception = self.first_exception or e
-                            self.all_exceptions.append(str(e))
-                            log.error(
-                                f"#{len(self.all_exceptions)}: Done with task: %s",
-                                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}",
-                            )
-                    error_count = len(self.all_exceptions)
-                    if error_count > 0:
-                        msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
-                        log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
-                        raise self.first_exception  # reraise first swallowed exception
-                except subprocess.CalledProcessError as e:
-                    log.error(f"Exiting with status code: {e.returncode}")
-                    raise
-                except SystemExit as e:
-                    log.error(f"Exiting with status code: {e.code}")
-                    raise
-                except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-                    log.error(f"Exiting with status code: {die_status}")
-                    ex = SystemExit(e)
-                    ex.code = die_status
-                    raise ex
-                finally:
-                    log.info("%s", "Log file was: " + p.log_file)
+                    self.validate_task()
+                    self.run_task()
+                except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                    log.error("%s", str(e))
+                    if p.skip_on_error == "fail":
+                        raise
+                    self.first_exception = self.first_exception or e
+                    self.all_exceptions.append(str(e))
+                    log.error(
+                        f"#{len(self.all_exceptions)}: Done with task: %s",
+                        f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}",
+                    )
+            error_count = len(self.all_exceptions)
+            if error_count > 0:
+                msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
+                log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
+                raise self.first_exception  # reraise first swallowed exception
+        except subprocess.CalledProcessError as e:
+            log.error(f"Exiting with status code: {e.returncode}")
+            raise
+        except SystemExit as e:
+            log.error(f"Exiting with status code: {e.code}")
+            raise
+        except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+            log.error(f"Exiting with status code: {die_status}")
+            ex = SystemExit(e)
+            ex.code = die_status
+            raise ex
+        finally:
+            log.info("%s", "Log file was: " + p.log_params.log_file)
 
-                for line in tail(p.pv_log_file, 10):
-                    log.log(log_stdout, "%s", line.rstrip())
-                log.info("Success. Goodbye!")
-                print("", end="", file=sys.stderr)
-                sys.stderr.flush()
+        for line in tail(p.log_params.pv_log_file, 10):
+            log.log(log_stdout, "%s", line.rstrip())
+        log.info("Success. Goodbye!")
+        print("", end="", file=sys.stderr)
+        sys.stderr.flush()
 
     def validate_once(self) -> None:
         p = self.params
@@ -1096,7 +1159,7 @@ class Job:
             compile_regexes(include_regexes + self.dataset_regexes(rel_include_datasets), suffix=self.re_suffix),
         )
 
-    def validate(self) -> None:
+    def validate_task(self) -> None:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         for remote in [src, dst]:
@@ -1768,14 +1831,15 @@ class Job:
 
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
         """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
-        Progress can be viewed via "tail -f $pv_log_file" aka ~/bzfs-logs/current.pv or similar."""
+        Progress can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
         p = self.params
         if size_estimate_bytes >= p.min_pipe_transfer_size and self.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
             if disable_progress_bar:
                 size = ""
             readable = size_estimate_human.replace(" ", "")
-            return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {p.pv_log_file}"
+            lp = p.log_params
+            return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {lp.pv_log_file}"
         else:
             return "cat"
 
@@ -1802,7 +1866,7 @@ class Job:
             # performance: reuse ssh connection for low latency startup of frequent ssh invocations
             # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
             # generate unique private socket file name in user's home dir
-            socket_dir = os.path.join(p.home_dir, ".ssh", "bzfs")
+            socket_dir = os.path.join(p.log_params.home_dir, ".ssh", "bzfs")
             os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
             os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             prefix = "s"
@@ -1953,7 +2017,7 @@ class Job:
                 # skip_dataset shall be ignored or has been deleted by some third party while we're running
                 continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
             skip_dataset = ""
-            # TODO: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
+            # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset
             )
@@ -2082,14 +2146,10 @@ class Job:
         is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
         self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
-    def delete_snapshot_cmd(self, remote: Remote, snaps_to_delete: str) -> List[str]:
+    def delete_snapshot_cmd(self, r: Remote, snaps_to_delete: str) -> List[str]:
         p = self.params
         return p.split_args(
-            f"{remote.sudo} {p.zfs_program} destroy",
-            p.force_hard,
-            p.verbose_destroy,
-            p.dry_run_destroy,
-            snaps_to_delete,
+            f"{r.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete
         )
 
     def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
@@ -2235,8 +2295,10 @@ class Job:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
-        excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists. Fewer
-        steps translate to better performance, especially when sending many small snapshots.
+        excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists. A step
+        corresponds to a single ZFS send/receive operation. Fewer steps translate to better performance, especially
+        when sending many small snapshots. For example, 1 step that sends 100 small snapshots in a single operation is
+        much faster than 100 steps that each send only 1 such snapshot per ZFS send/receive operation.
         Example: skip hourly snapshots and only include daily shapshots for replication
         Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
         -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
@@ -2366,7 +2428,7 @@ class Job:
                 # is no reliable way to determine where a record ends and the next record starts when listing multiple
                 # arbitrary records in a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for
                 # each ZFS user property.
-                # TODO: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
+                # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
                 try:
                     props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
                     user_propnames = [name for name in props.keys() if ":" in name]
@@ -2744,12 +2806,9 @@ def human_readable_bytes(size: int) -> str:
 
 
 def get_home_directory() -> str:
-    """Reliably detects home dir even if HOME env var is undefined."""
-    home = os.getenv("HOME")
-    if not home:
-        # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
-        home = pwd.getpwuid(os.getuid()).pw_dir
-    return home
+    """Reliably detects home dir without using HOME env var."""
+    # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
+    return pwd.getpwuid(os.getuid()).pw_dir
 
 
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
@@ -2837,9 +2896,7 @@ def parse_dataset_locator(input_text: str, validate: bool = True, user: str = No
     host_undefined = host is None
     if host is None:
         host = ""
-    user_host = ""
-    dataset = ""
-    pool = ""
+    user_host, dataset, pool = "", "", ""
 
     # Input format is [[user@]host:]dataset
     #                      1234         5          6
@@ -2931,93 +2988,72 @@ def pretty_print_formatter(obj_to_format):  # For lazy/noop evaluation in disabl
     return PrettyPrintFormatter()
 
 
-def get_logger(args: argparse.Namespace, log: Optional[Logger], log_file: str = None) -> Logger:
+def reset_logger():
+    """Remove and close logging handlers (and close their files) and reset loggers to default state."""
+    for log in [logging.getLogger(__name__), logging.getLogger(get_logger_subname())]:
+        for handler in log.handlers.copy():
+            log.removeHandler(handler)
+            handler.flush()
+            handler.close()
+        for _filter in log.filters.copy():
+            log.removeFilter(_filter)
+        log.setLevel(logging.NOTSET)
+        log.propagate = True
+
+
+def get_logger_subname() -> str:
+    return __name__ + ".sub"  # the logger name for use by --log-config-file
+
+
+def get_logger(log_params: LogParams, args: argparse.Namespace, log: Optional[Logger] = None) -> Logger:
     _log_trace = log_trace
-
-    def trace(self, msg: object, *arguments: object, **kwargs) -> None:
-        if self.isEnabledFor(_log_trace):
-            self._log(_log_trace, msg, arguments, **kwargs)
-
-    # add functions for custom log levels to the logger
-    if not hasattr(logging.Logger, "trace"):
-        logging.Logger.trace = trace
-
-    # add names for custom log levels to the logger
+    if not hasattr(logging.Logger, "trace"):  # add convenience function for custom log level to the logger
+        logging.Logger.trace = lambda self, msg, *arguments: (
+            self._log(_log_trace, msg, arguments) if self.isEnabledFor(_log_trace) else None
+        )
     logging.addLevelName(log_trace, "TRACE")
     logging.addLevelName(log_stderr, "STDERR")
     logging.addLevelName(log_stdout, "STDOUT")
 
     if log is not None:
         assert isinstance(log, Logger)
-        return log  # use third party provided logger
-    else:
-        return get_default_logger(args, log_file)  # use our own logger
+        return log  # use third party provided logger object
+    elif args.log_config_file:
+        log = get_dict_config_logger(log_params, args)  # use logger defined in config file, and afterwards ...
+    # ... add our own handlers unless matching handlers are already present
+    default_log = get_default_logger(log_params, args)
+    return log if args.log_config_file else default_log
 
 
-def get_default_logger(args: argparse.Namespace, log_file: str = None) -> Logger:
-    return get_default_logger_impl(args, log_file)
-
-
-def get_default_logger_impl(args: argparse.Namespace, log_file: str = None) -> Logger:
+def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+    sublog = logging.getLogger(get_logger_subname())
     log = logging.getLogger(__name__)
-    if args.quiet:
-        log.setLevel(logging.ERROR)
-    elif args.verbose >= 2:
-        log.setLevel(log_trace)
-    elif args.verbose >= 1:
-        log.setLevel(logging.DEBUG)
-    else:
-        log.setLevel(logging.INFO)
+    log.setLevel(log_params.log_level)
     log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages
 
-    level_prefixes = {
-        logging.CRITICAL: "[C] CRITICAL:",
-        logging.ERROR: "[E] ERROR:",
-        logging.WARNING: "[W]",
-        logging.INFO: "[I]",
-        logging.DEBUG: "[D]",
-        log_trace: "[T]",
-    }
-    _log_stderr = log_stderr
-    _log_stdout = log_stdout
-
-    class CustomFormatter(logging.Formatter):
-
-        def format(self, record) -> str:
-            levelno = record.levelno
-            if levelno != _log_stderr and levelno != _log_stdout:  # emit stdout and stderr "as-is" (no formatting)
-                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")
-                prefix = f"{timestamp} {level_prefixes.get(levelno, '')} "
-                msg = record.msg
-                i = msg.find("%s")
-                msg = prefix + msg
-                if i >= 1:
-                    i += len(prefix)
-                    msg = msg[0:i].ljust(53) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
-                record.msg = msg
-            return super().format(record)
-
-    if not any(isinstance(handler, logging.StreamHandler) for handler in log.handlers):  # log to stdout
+    if not any(isinstance(h, logging.StreamHandler) and h.stream in [sys.stdout, sys.stderr] for h in sublog.handlers):
         handler = logging.StreamHandler(stream=sys.stdout)
-        handler.setFormatter(CustomFormatter("%(message)s"))
+        handler.setFormatter(get_default_log_formatter())
+        handler.setLevel(log_params.log_level)
         log.addHandler(handler)
 
-    if log_file and not any(isinstance(handler, logging.FileHandler) for handler in log.handlers):  # also log to file
-        handler = logging.FileHandler(log_file, encoding="utf-8")
-        handler.setFormatter(CustomFormatter("%(message)s"))
+    abs_log_file = os.path.abspath(log_params.log_file)
+    if not any(isinstance(h, logging.FileHandler) and h.baseFilename == abs_log_file for h in sublog.handlers):
+        handler = logging.FileHandler(log_params.log_file, encoding="utf-8")
+        handler.setFormatter(get_default_log_formatter())
+        handler.setLevel(log_params.log_level)
         log.addHandler(handler)
 
-    # optionally, also log to local or remote syslog
     address = args.log_syslog_address
-    if address and not any(isinstance(handler, logging.handlers.SysLogHandler) for handler in log.handlers):
+    if address:  # optionally, also log to local or remote syslog
         address, socktype = get_syslog_address(address, args.log_syslog_socktype)
-        facility = str(args.log_syslog_facility).strip().replace("%", "")  # sanitize
-        handler = logging.handlers.SysLogHandler(address=address, socktype=socktype)
-        handler.setFormatter(logging.Formatter(facility + " %(message)s"))
+        log_syslog_prefix = str(args.log_syslog_prefix).strip().replace("%", "")  # sanitize
+        handler = logging.handlers.SysLogHandler(address=address, facility=args.log_syslog_facility, socktype=socktype)
+        handler.setFormatter(get_default_log_formatter(prefix=log_syslog_prefix + " "))
         handler.setLevel(args.log_syslog_level)
         log.addHandler(handler)
-        if handler.level < log.getEffectiveLevel():
-            log_level_name = logging.getLevelName(log.getEffectiveLevel())
+        if handler.level < sublog.getEffectiveLevel():
+            log_level_name = logging.getLevelName(sublog.getEffectiveLevel())
             log.warning(
                 "%s",
                 f"No messages with priority lower than {log_level_name} will be sent to syslog because syslog "
@@ -3031,14 +3067,132 @@ def get_default_logger_impl(args: argparse.Namespace, log_file: str = None) -> L
     return log
 
 
+def get_default_log_formatter(prefix: str = "") -> logging.Formatter:
+    level_prefixes = {
+        logging.CRITICAL: "[C] CRITICAL:",
+        logging.ERROR: "[E] ERROR:",
+        logging.WARNING: "[W]",
+        logging.INFO: "[I]",
+        logging.DEBUG: "[D]",
+        log_trace: "[T]",
+    }
+    _log_stderr = log_stderr
+    _log_stdout = log_stdout
+
+    class DefaultLogFormatter(logging.Formatter):
+        def format(self, record) -> str:
+            levelno = record.levelno
+            if levelno != _log_stderr and levelno != _log_stdout:  # emit stdout and stderr "as-is" (no formatting)
+                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")
+                ts_level = f"{timestamp} {level_prefixes.get(levelno, '')} "
+                msg = record.msg
+                i = msg.find("%s")
+                msg = ts_level + msg
+                if i >= 1:
+                    i += len(ts_level)
+                    msg = msg[0:i].ljust(53) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
+                if record.args:
+                    msg = msg % record.args
+                return prefix + msg
+            return prefix + super().format(record)
+
+    return DefaultLogFormatter()
+
+
 def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple:
     socktype = None
     address = address.strip()
     if ":" in address:
         host, port = address.rsplit(":", 1)
         address = (host.strip(), int(port.strip()))
-        socktype = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM
+        socktype = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM  # for TCP
     return address, socktype
+
+
+def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+    prefix = prog_name + "."
+    log_config_vars = {
+        prefix + "sub.logger": get_logger_subname(),
+        prefix + "get_default_log_formatter": __name__ + ".get_default_log_formatter",
+        prefix + "log_level": log_params.log_level,
+        prefix + "log_dir": log_params.log_dir,
+        prefix + "log_file": os.path.basename(log_params.log_file),
+        prefix + "timestamp": log_params.timestamp,
+        prefix + "dryrun": "dryrun" if args.dryrun else "",
+    }
+    log_config_vars.update(log_params.log_config_vars)  # merge variables passed into CLI with convenience variables
+
+    log_config_file_str = log_params.log_config_file
+    if log_config_file_str.startswith("+"):
+        with open(log_config_file_str[1:], "r", encoding="utf-8") as fd:
+            log_config_file_str = fd.read()
+
+    def remove_json_comments(config_str: str) -> str:  # not standard but practical
+        lines = []
+        for line in config_str.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                line = ""  # replace comment line with empty line to preserve line numbering
+            elif stripped.endswith("#"):
+                i = line.rfind("#", 0, line.rindex("#"))
+                if i >= 0:
+                    line = line[0:i]  # strip line-ending comment
+            lines.append(line)
+        return "\n".join(lines)
+
+    def substitute_log_config_vars(config_str: str, log_config_variables: Dict[str, str]) -> str:
+        """Substitute ${name[:default]} placeholders within JSON with values from log_config_vars"""
+
+        def substitute_fn(match: re.Match) -> str:
+            varname = match.group(1)
+            error_msg = validate_log_config_variable_name(varname)
+            if error_msg:
+                raise ValueError(error_msg)
+            replacement = log_config_variables.get(varname)
+            if not replacement:
+                default = match.group(3)
+                if default is None:
+                    raise ValueError("Missing default value in JSON for empty log config variable: ${" + varname + "}")
+                replacement = default
+            replacement = json.dumps(replacement)  # JSON escape special chars such as newlines, quotes, etc
+            assert len(replacement) >= 2
+            assert replacement.startswith('"')
+            assert replacement.endswith('"')
+            return replacement[1:-1]  # strip surrounding quotes added by dumps()
+
+        pattern = re.compile(r"\$\{([^}:]*?)(:([^}]*))?}")  # Any char except } and :, followed by optional default part
+        return pattern.sub(substitute_fn, config_str)
+
+    log_config_file_str = remove_json_comments(log_config_file_str)
+    if not log_config_file_str.strip().startswith("{"):
+        log_config_file_str = "{\n" + log_config_file_str  # lenient JSON parsing
+    if not log_config_file_str.strip().endswith("}"):
+        log_config_file_str = log_config_file_str + "\n}"  # lenient JSON parsing
+    log_config_file_str = substitute_log_config_vars(log_config_file_str, log_config_vars)
+    if args is not None and args.verbose >= 2:
+        print("[T] Substituted log_config_file_str:\n" + log_config_file_str, flush=True)
+    log_config_dict = json.loads(log_config_file_str)
+    logging.config.dictConfig(log_config_dict)
+    return logging.getLogger(get_logger_subname())
+
+
+def validate_log_config_variable(var: str) -> str:
+    if not var.strip():
+        return "Invalid log config NAME:VALUE variable. Variable must not be empty: " + var
+    if ":" not in var:
+        return "Invalid log config NAME:VALUE variable. Variable is missing a colon character: " + var
+    return validate_log_config_variable_name(var[0 : var.index(":")])
+
+
+def validate_log_config_variable_name(name: str):
+    if not name:
+        return "Invalid log config variable name. Name must not be empty: " + name
+    bad_chars = "${} " + '"' + "'"
+    if any(char in bad_chars for char in name):
+        return f"Invalid log config variable name. Name must not contain forbidden {bad_chars} characters: " + name
+    if any(char.isspace() for char in name):
+        return "Invalid log config variable name. Name must not contain whitespace: " + name
+    return None
 
 
 #############################################################################
@@ -3124,6 +3278,20 @@ class FileOrLiteralAction(argparse.Action):
                             current_values.append(line)
                 except FileNotFoundError:
                     parser.error(f"File not found: {value[1:]}")
+        setattr(namespace, self.dest, current_values)
+
+
+#############################################################################
+class LogConfigVariablesAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        current_values = getattr(namespace, self.dest, None)
+        if current_values is None:
+            current_values = []
+        for variable in values:
+            error_msg = validate_log_config_variable(variable)
+            if error_msg:
+                parser.error(error_msg)
+            current_values.append(variable)
         setattr(namespace, self.dest, current_values)
 
 
