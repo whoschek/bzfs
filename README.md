@@ -266,6 +266,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 ./test/update-readme.py bzfs/bzfs.py README.md
 -->
 <!-- BEGIN HELP DETAIL SECTION -->
+<div id="SRC_DATASET_DST_DATASET"></div>
+
 **SRC_DATASET DST_DATASET**
 
 *  SRC_DATASET: Source ZFS dataset (and its descendants) that will be
@@ -293,6 +295,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 
 
+<div id="--recursive"></div>
+
 **--recursive**, **-r**
 
 *  During replication, also consider descendant datasets, i.e. datasets
@@ -300,6 +304,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     children, etc.
 
 <!-- -->
+
+<div id="--include-dataset"></div>
 
 **--include-dataset** *DATASET [DATASET ...]*
 
@@ -327,6 +333,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--exclude-dataset"></div>
+
 **--exclude-dataset** *DATASET [DATASET ...]*
 
 *  Same syntax as --include-dataset (see above) except that the option
@@ -334,6 +342,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     below).
 
 <!-- -->
+
+<div id="--include-dataset-regex"></div>
 
 **--include-dataset-regex** *REGEX [REGEX ...]*
 
@@ -355,6 +365,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--exclude-dataset-regex"></div>
+
 **--exclude-dataset-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-dataset-regex (see above) except that the
@@ -362,6 +374,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     tmp datasets). Example: '!.*' (exclude no dataset)
 
 <!-- -->
+
+<div id="--exclude-dataset-property"></div>
 
 **--exclude-dataset-property** *STRING*
 
@@ -396,6 +410,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--include-snapshot-regex"></div>
+
 **--include-snapshot-regex** *REGEX [REGEX ...]*
 
 *  During replication, include any source ZFS snapshot or bookmark that
@@ -414,12 +430,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--exclude-snapshot-regex"></div>
+
 **--exclude-snapshot-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-snapshot-regex (see above) except that the
     default is to exclude no snapshots.
 
 <!-- -->
+
+<div id="--zfs-send-program-opts"></div>
 
 **--zfs-send-program-opts** *STRING*
 
@@ -431,6 +451,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     and https://github.com/openzfs/zfs/issues/13024
 
 <!-- -->
+
+<div id="--zfs-recv-program-opts"></div>
 
 **--zfs-recv-program-opts** *STRING*
 
@@ -445,6 +467,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--zfs-recv-program-opt"></div>
+
 **--zfs-recv-program-opt** *STRING*
 
 *  Parameter to fine-tune 'zfs receive' behaviour (optional); will be
@@ -456,6 +480,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--force-rollback-to-latest-snapshot"></div>
+
 **--force-rollback-to-latest-snapshot**
 
 *  Before replication, rollback the destination dataset to its most
@@ -465,6 +491,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     below).
 
 <!-- -->
+
+<div id="--force"></div>
 
 **--force**
 
@@ -480,12 +508,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--force-unmount"></div>
+
 **--force-unmount**
 
 *  On destination, --force will also forcibly unmount file systems via
     'zfs rollback -f' and 'zfs destroy -f'.
 
 <!-- -->
+
+<div id="--force-once"></div>
 
 **--force-once**, **--f1**
 
@@ -494,6 +526,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     interactively resolve conflicts, one conflict at a time.
 
 <!-- -->
+
+<div id="--skip-parent"></div>
 
 **--skip-parent**
 
@@ -504,6 +538,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     dst` is akin to Unix `cp -r src/* dst/`
 
 <!-- -->
+
+<div id="--skip-missing-snapshots"></div>
 
 **--skip-missing-snapshots** *[{fail,dataset,continue}]*
 
@@ -525,6 +561,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--retries"></div>
+
 **--retries** *INT*
 
 *  The maximum number of times a retryable replication step shall be
@@ -535,11 +573,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--retry-min-sleep-secs"></div>
+
 **--retry-min-sleep-secs** *FLOAT*
 
 *  The minimum duration to sleep between retries (default: 0.125).
 
 <!-- -->
+
+<div id="--retry-max-sleep-secs"></div>
 
 **--retry-max-sleep-secs** *FLOAT*
 
@@ -552,6 +594,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--retry-max-elapsed-secs"></div>
+
 **--retry-max-elapsed-secs** *FLOAT*
 
 *  A single operation (e.g. 'zfs send/receive' of the current
@@ -562,6 +606,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     operations can again be retried.
 
 <!-- -->
+
+<div id="--skip-on-error"></div>
 
 **--skip-on-error** *{fail,tree,dataset}*
 
@@ -597,12 +643,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--skip-replication"></div>
+
 **--skip-replication**
 
 *  Skip replication step (see above) and proceed to the optional
     --delete-missing-snapshots step immediately (see below).
 
 <!-- -->
+
+<div id="--delete-missing-snapshots"></div>
 
 **--delete-missing-snapshots**
 
@@ -615,6 +665,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     --recursive.
 
 <!-- -->
+
+<div id="--delete-missing-datasets"></div>
 
 **--delete-missing-datasets**
 
@@ -631,6 +683,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     --recursive.
 
 <!-- -->
+
+<div id="--dryrun"></div>
 
 **--dryrun** *[{recv,send}]*, **-n** *[{recv,send}]*
 
@@ -653,6 +707,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--verbose"></div>
+
 **--verbose**, **-v**
 
 *  Print verbose information. This option can be specified multiple
@@ -664,11 +720,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--quiet"></div>
+
 **--quiet**, **-q**
 
 *  Suppress non-error, info, debug, and trace output.
 
 <!-- -->
+
+<div id="--no-privilege-elevation"></div>
 
 **--no-privilege-elevation**, **-p**
 
@@ -706,6 +766,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--no-stream"></div>
+
 **--no-stream**
 
 *  During replication, only replicate the most recent source snapshot
@@ -719,6 +781,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     for rolling back to intermediate snapshots in the future.
 
 <!-- -->
+
+<div id="--no-create-bookmark"></div>
 
 **--no-create-bookmark**
 
@@ -784,6 +848,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--no-use-bookmark"></div>
+
 **--no-use-bookmark**
 
 *  For increased safety, in normal operation bzfs also looks for
@@ -806,6 +872,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--ssh-cipher"></div>
+
 **--ssh-cipher** *STRING*
 
 *  SSH cipher specification for encrypting the session (optional); will
@@ -817,6 +885,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--ssh-src-private-key"></div>
+
 **--ssh-src-private-key** *FILE*
 
 *  Path to SSH private key file on local host to connect to src
@@ -824,6 +894,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     specified multiple times. default: $HOME/.ssh/id_rsa
 
 <!-- -->
+
+<div id="--ssh-dst-private-key"></div>
 
 **--ssh-dst-private-key** *FILE*
 
@@ -833,12 +905,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--ssh-src-user"></div>
+
 **--ssh-src-user** *STRING*
 
 *  Remote SSH username of src host to connect to (optional). Overrides
     username given in SRC_DATASET.
 
 <!-- -->
+
+<div id="--ssh-dst-user"></div>
 
 **--ssh-dst-user** *STRING*
 
@@ -847,12 +923,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--ssh-src-host"></div>
+
 **--ssh-src-host** *STRING*
 
 *  Remote SSH hostname of src host to connect to (optional). Can also
     be an IPv4 or IPv6 address. Overrides hostname given in SRC_DATASET.
 
 <!-- -->
+
+<div id="--ssh-dst-host"></div>
 
 **--ssh-dst-host** *STRING*
 
@@ -861,17 +941,23 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--ssh-src-port"></div>
+
 **--ssh-src-port** *INT*
 
 *  Remote SSH port of src host to connect to (optional).
 
 <!-- -->
 
+<div id="--ssh-dst-port"></div>
+
 **--ssh-dst-port** *INT*
 
 *  Remote SSH port of dst host to connect to (optional).
 
 <!-- -->
+
+<div id="--ssh-src-extra-opts"></div>
 
 **--ssh-src-extra-opts** *STRING*
 
@@ -881,6 +967,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     to debug ssh config issues.
 
 <!-- -->
+
+<div id="--ssh-src-extra-opt"></div>
 
 **--ssh-src-extra-opt** *STRING*
 
@@ -892,6 +980,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--ssh-dst-extra-opts"></div>
+
 **--ssh-dst-extra-opts** *STRING*
 
 *  Additional options to be passed to ssh CLI when connecting to dst
@@ -900,6 +990,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     to debug ssh config issues.
 
 <!-- -->
+
+<div id="--ssh-dst-extra-opt"></div>
 
 **--ssh-dst-extra-opt** *STRING*
 
@@ -911,12 +1003,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--ssh-src-config-file"></div>
+
 **--ssh-src-config-file** *FILE*
 
 *  Path to SSH ssh_config(5) file to connect to src (optional); will be
     passed into ssh -F CLI.
 
 <!-- -->
+
+<div id="--ssh-dst-config-file"></div>
 
 **--ssh-dst-config-file** *FILE*
 
@@ -925,6 +1021,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--bwlimit"></div>
+
 **--bwlimit** *STRING*
 
 *  Sets 'pv' bandwidth rate limit for zfs send/receive data transfer
@@ -932,6 +1030,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     Default is unlimited. Also see https://linux.die.net/man/1/pv
 
 <!-- -->
+
+<div id="--compression-program"></div>
 
 **--compression-program** *STRING*
 
@@ -944,12 +1044,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--compression-program-opts"></div>
+
 **--compression-program-opts** *STRING*
 
 *  The options to be passed to the compression program on the
     compression step (optional). Default is '-1' (fastest).
 
 <!-- -->
+
+<div id="--mbuffer-program"></div>
 
 **--mbuffer-program** *STRING*
 
@@ -962,12 +1066,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--mbuffer-program-opts"></div>
+
 **--mbuffer-program-opts** *STRING*
 
 *  Options to be passed to 'mbuffer' program (optional). Default:
     '-q -m 128M'.
 
 <!-- -->
+
+<div id="--pv-program"></div>
 
 **--pv-program** *STRING*
 
@@ -977,6 +1085,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--pv-program-opts"></div>
+
 **--pv-program-opts** *STRING*
 
 *  The options to be passed to the 'pv' program (optional). Default:
@@ -985,12 +1095,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--shell-program"></div>
+
 **--shell-program** *STRING*
 
 *  The name or path to the 'sh' executable (optional). Default is
     'sh'. Use '-' to disable the use of this program.
 
 <!-- -->
+
+<div id="--ssh-program"></div>
 
 **--ssh-program** *STRING*
 
@@ -1001,12 +1115,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--sudo-program"></div>
+
 **--sudo-program** *STRING*
 
 *  The name or path to the 'sudo' executable (optional). Default is
     'sudo'. Use '-' to disable the use of this program.
 
 <!-- -->
+
+<div id="--zfs-program"></div>
 
 **--zfs-program** *STRING*
 
@@ -1015,12 +1133,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--zpool-program"></div>
+
 **--zpool-program** *STRING*
 
 *  The name or path to the 'zpool' executable (optional). Default is
     'zpool'. Use '-' to disable the use of this program.
 
 <!-- -->
+
+<div id="--log-dir"></div>
 
 **--log-dir** *DIR*
 
@@ -1033,6 +1155,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--log-syslog-address"></div>
+
 **--log-syslog-address** *STRING*
 
 *  Host:port of the syslog machine to send messages to (e.g.
@@ -1044,6 +1168,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--log-syslog-socktype"></div>
+
 **--log-syslog-socktype** *{UDP,TCP}*
 
 *  The socket type to use to connect if no local socket file system
@@ -1051,12 +1177,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--log-syslog-facility"></div>
+
 **--log-syslog-facility** *INT*
 
 *  The local facility aka category that identifies msg sources in
     syslog (default: 1, min=0, max=7)'.
 
 <!-- -->
+
+<div id="--log-syslog-prefix"></div>
 
 **--log-syslog-prefix** *STRING*
 
@@ -1066,12 +1196,16 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--log-syslog-level"></div>
+
 **--log-syslog-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}*
 
 *  Only send messages with equal or higher priority than this log level
     to syslog. Default is 'ERROR'.
 
 <!-- -->
+
+<div id="--log-config-file"></div>
 
 **--log-config-file** *STRING*
 
@@ -1094,6 +1228,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     the same line is ignored as a comment.
 
 <!-- -->
+
+<div id="--log-config-var"></div>
 
 **--log-config-var** *NAME:VALUE [NAME:VALUE ...]*
 
@@ -1122,6 +1258,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--include-envvar-regex"></div>
+
 **--include-envvar-regex** *REGEX [REGEX ...]*
 
 *  On program startup, unset all Unix environment variables for which
@@ -1144,6 +1282,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--exclude-envvar-regex"></div>
+
 **--exclude-envvar-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-envvar-regex (see above) except that the
@@ -1152,11 +1292,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--version"></div>
+
 **--version**
 
 *  Display version information and exit.
 
 <!-- -->
+
+<div id="--help,_-h"></div>
 
 **--help, -h**
 
@@ -1170,6 +1314,8 @@ properties from the source dataset to its corresponding destination
 dataset. The 'zfs-recv-o' group of parameters is applied before the
 'zfs-recv-x' group.
 
+<div id="--zfs-recv-o-targets"></div>
+
 **--zfs-recv-o-targets** *{full|incremental|full,incremental}*
 
 *  The zfs send phase or phases during which the extra '-o' options
@@ -1179,6 +1325,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     sometimes also known as an 'initial' send.
 
 <!-- -->
+
+<div id="--zfs-recv-o-sources"></div>
 
 **--zfs-recv-o-sources** *STRING*
 
@@ -1196,6 +1344,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     ZFS property source (https://github.com/openzfs/zfs/issues/13024).
 
 <!-- -->
+
+<div id="--zfs-recv-o-include-regex"></div>
 
 **--zfs-recv-o-include-regex** *REGEX [REGEX ...]*
 
@@ -1225,6 +1375,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
 
 <!-- -->
 
+<div id="--zfs-recv-o-exclude-regex"></div>
+
 **--zfs-recv-o-exclude-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --zfs-recv-o-include-regex (see above), and the
@@ -1240,6 +1392,8 @@ properties from the source dataset to its corresponding destination
 dataset. The 'zfs-recv-o' group of parameters is applied before the
 'zfs-recv-x' group.
 
+<div id="--zfs-recv-x-targets"></div>
+
 **--zfs-recv-x-targets** *{full|incremental|full,incremental}*
 
 *  The zfs send phase or phases during which the extra '-x' options
@@ -1249,6 +1403,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     sometimes also known as an 'initial' send.
 
 <!-- -->
+
+<div id="--zfs-recv-x-sources"></div>
 
 **--zfs-recv-x-sources** *STRING*
 
@@ -1268,6 +1424,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     default already).
 
 <!-- -->
+
+<div id="--zfs-recv-x-include-regex"></div>
 
 **--zfs-recv-x-include-regex** *REGEX [REGEX ...]*
 
@@ -1296,6 +1454,8 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
     `+zfs-recv-x_regexes.txt`, `+/path/to/zfs-recv-x_regexes.txt`
 
 <!-- -->
+
+<div id="--zfs-recv-x-exclude-regex"></div>
 
 **--zfs-recv-x-exclude-regex** *REGEX [REGEX ...]*
 

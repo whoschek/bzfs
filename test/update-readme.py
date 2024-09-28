@@ -60,18 +60,15 @@ def main():
     content = re.sub(r"\\]", r"\]", content)  # s/\\\]/\]/g
     content = re.sub(r"# OPTIONS", "", content)  # s/# OPTIONS//g
     content = re.sub(r": {3}", r"*  ", content)  # s/:   /*  /g
-    with open(tmp_manpage_md_path, "w", encoding="utf-8") as file:
-        file.write(content)
+    manpage = content.splitlines(keepends=True)
 
     # Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
     begin_desc_markdown_tag = "# DESCRIPTION"
     begin_help_markdown_tag = "**SRC_DATASET"
-    with open(tmp_manpage_md_path, "r", encoding="utf-8") as f:
-        manpage = f.readlines()  # Read the cleaned markdown file
     begin_desc_markdown_idx = find_match(
         manpage,
         lambda line: line.startswith(begin_desc_markdown_tag),
-        raises=lambda: f"{begin_desc_markdown_tag} not found in the cleaned markdown",
+        raises=f"{begin_desc_markdown_tag} not found in the cleaned markdown",
     )
     begin_help_markdown_idx = find_match(
         manpage,
@@ -97,9 +94,7 @@ def main():
         start=begin_desc_readme_idx,
         raises=f"{end_desc_readme_tag} not found in {readme_file}",
     )
-    updated_lines = readme[: begin_desc_readme_idx + 1] + [replacement + "\n\n"] + readme[end_desc_readme_idx:]
-    with open(readme_file, "w", encoding="utf-8") as f:
-        f.writelines(updated_lines)
+    readme = readme[: begin_desc_readme_idx + 1] + [replacement + "\n\n"] + readme[end_desc_readme_idx:]
 
     begin_help_markdown_idx = find_match(
         manpage,
@@ -107,18 +102,23 @@ def main():
         raises=f"Marker {begin_help_markdown_tag} not found in cleaned markdown.",
     )
     begin_help_readme_tag = "<!-- BEGIN HELP DETAIL SECTION -->"
-    with open(readme_file, "r", encoding="utf-8") as f:
-        readme = f.readlines()
     begin_help_readme_idx = find_match(
         readme,
         lambda line: begin_help_readme_tag in line,
         raises=f"{begin_help_readme_tag} not found in {readme_file}",
     )
 
+    # add anchors to be able to link to each CLI option
+    def substitute_fn(match: re.Match) -> str:
+        anchor_id = match.group(1).replace(" ", "_")
+        return f'<div id="{anchor_id}"></div>\n\n{match.group(0)}'
+
+    manpage = [re.sub(r"\*\*([^*]+?)\*\*.*", substitute_fn, x) for x in manpage[begin_help_markdown_idx:]]
+
     # Retain lines before and including the marker in readme_file and replace the rest
-    updated_lines = readme[: begin_help_readme_idx + 1] + manpage[begin_help_markdown_idx:]
+    readme = readme[: begin_help_readme_idx + 1] + manpage
     with open(readme_file, "w", encoding="utf-8") as f:
-        f.writelines(updated_lines)
+        f.writelines(readme)
 
     # os.remove(tmp_manpage1_path)
     # os.remove(tmp_manpage_md_path)
