@@ -33,7 +33,7 @@ import tempfile
 from collections import defaultdict, Counter
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Sequence, Callable, Optional, TypeVar
+from typing import Sequence, Callable, Optional, TypeVar, Union
 from unittest.mock import patch, mock_open
 from .zfs_util import *
 from bzfs.bzfs import CheckRange
@@ -2543,11 +2543,24 @@ class TestFindMatch(unittest.TestCase):
         self.assert_find_match(2, lst, condition, start=2, end=-1)
         self.assert_find_match(-1, lst, condition, start=2, end=-2)
         self.assert_find_match(-1, lst, condition, start=3, end=-1)
+        self.assert_find_match(-1, lst, condition, start=3, end=-1, raises=None)
+        self.assert_find_match(-1, lst, condition, start=3, end=-1, raises=False)
 
+        self.assert_find_match(2, lst, condition, raises=None)
         self.assert_find_match(2, lst, condition, raises=False)
         self.assert_find_match(2, lst, condition, raises=True)
         with self.assertRaises(ValueError):
             find_match(lst, condition, start=0, end=2, raises=True)
+        x = 2
+        with self.assertRaises(ValueError) as e:
+            find_match(lst, condition, start=0, end=2, raises=f"foo: {x}")
+        self.assertEqual(f"foo: {x}", str(e.exception))
+        with self.assertRaises(ValueError) as e:
+            find_match(lst, condition, start=0, end=2, raises=lambda: f"foo: {x}")
+        self.assertEqual(f"foo: {x}", str(e.exception))
+        with self.assertRaises(ValueError) as e:
+            find_match(lst, condition, start=0, end=2, raises="")
+        self.assertEqual("", str(e.exception))
 
         lst = ["-c"]
         self.assert_find_match(0, lst, condition)
@@ -3746,11 +3759,22 @@ def find_match(
     start: Optional[int] = None,
     end: Optional[int] = None,
     reverse: bool = False,
-    raises: bool = False,
+    raises: Union[bool, str, Callable[[], str]] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
 ) -> int:
-    """Returns the index within seq of the first item (or last item if reverse==True) that matches the given predicate
-    condition. If no matching item is found returns -1, or raises a ValueError if raises==True. Analog to str.find(),
-    including slicing semantics with parameters start and end. For example, seq can be a list, tuple or str.
+    """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
+    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter,
+    which is a bool indicating whether to raise an error, or a string containing the error message, but can also be a
+    Callable/lambda in order to support efficient deferred generation of error messages.
+    Analog to str.find(), including slicing semantics with parameters start and end.
+    For example, seq can be a list, tuple or str.
+
+    Example usage:
+        lst = ["a", "b", "-c", "d"]
+        i = find_match(lst, lambda arg: arg.startswith("-"), start=1, end=3, reverse=True)
+        if i >= 0:
+            ...
+        i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
+        i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
     """
     offset = 0 if start is None else start if start >= 0 else len(seq) + start
     if start is not None or end is not None:
@@ -3761,9 +3785,13 @@ def find_match(
                 return len(seq) - i - 1 + offset
             else:
                 return i + offset
-    if raises:
+    if raises is False or raises is None:
+        return -1
+    if raises is True:
         raise ValueError("No matching item found in sequence")
-    return -1
+    if callable(raises):
+        raises = raises()
+    raise ValueError(raises)
 
 
 def is_solaris_zfs():

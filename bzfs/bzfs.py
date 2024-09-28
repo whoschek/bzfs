@@ -599,10 +599,10 @@ feature.
              f"data transfer monitoring log. Run 'tail -f' on both symlinks to follow what's currently going on.\n\n")
     parser.add_argument(
         "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
-        help=f"Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
-             f"the file system path to the syslog socket file on localhost (e.g. '/dev/log'). The default is no "
-             f"address, i.e. do not log anything to syslog by default. See "
-             f"https://docs.python.org/3/library/logging.handlers.html#sysloghandler\n\n")
+        help="Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
+             "the file system path to the syslog socket file on localhost (e.g. '/dev/log'). The default is no "
+             "address, i.e. do not log anything to syslog by default. See "
+             "https://docs.python.org/3/library/logging.handlers.html#sysloghandler\n\n")
     parser.add_argument(
         "--log-syslog-socktype", choices=["UDP", "TCP"], default="UDP",
         help=f"The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
@@ -616,7 +616,7 @@ feature.
     parser.add_argument(
         "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
         default="ERROR",
-        help=f"Only send messages with equal or higher priority than this log level to syslog. Default is 'ERROR'.\n\n")
+        help="Only send messages with equal or higher priority than this log level to syslog. Default is 'ERROR'.\n\n")
     parser.add_argument(
         "--log-config-file", default=None, action=NonEmptyStringAction, metavar="STRING",
         help=("The contents of a JSON file that defines a custom python logging configuration to be used (optional). "
@@ -694,7 +694,7 @@ feature.
                    f"{', '.join([f'{qq}{x}{qq}' for x in target_choices_items])}. "
                    f"Default is '{target_choices_default}'. "
                    "A 'full' send is sometimes also known as an 'initial' send.\n\n"))
-        msg = f"Thus, -x opts do not benefit from source != 'local' (which is the default already)." \
+        msg = "Thus, -x opts do not benefit from source != 'local' (which is the default already)." \
             if flag == "'-x'" else ""
         argument_group.add_argument(
             f"--{grup}-sources", action=NonEmptyStringAction, default="local", metavar="STRING",
@@ -1929,7 +1929,9 @@ class Job:
 
         msg = "Would execute: %s" if is_dry else "Executing: %s"
         log.log(level, msg, list_formatter(remote.ssh_cmd_quoted + quoted_cmd, lstrip=True))
-        if not is_dry:
+        if is_dry:
+            return ""
+        else:
             try:
                 process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
@@ -2126,7 +2128,8 @@ class Job:
             max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
             fsenc = sys.getfilesystemencoding()
             header_bytes = len(" ".join(remote.ssh_cmd + self.delete_snapshot_cmd(remote, dataset + "@")).encode(fsenc))
-            batch_tags, total_bytes = [], header_bytes
+            batch_tags: List[str] = []
+            total_bytes: int = header_bytes
 
             def flush_batch() -> None:
                 if len(batch_tags) > 0:
@@ -2392,7 +2395,7 @@ class Job:
         propnames: str,
         splitlines: bool,
         props_cache: Dict[Tuple[str, str, str], Dict[str, str]],
-    ) -> Dict[str, str]:
+    ) -> Dict[str, Optional[str]]:
         """Returns the results of 'zfs get' CLI on the given dataset on the given remote."""
         p, log = self.params, self.params.log
         cache_key = (sources, output_columns, propnames)
@@ -2423,7 +2426,7 @@ class Job:
         ox_names = p.zfs_recv_ox_names.copy()
         for config in [p.zfs_recv_o_config, p.zfs_recv_x_config, p.zfs_set_config]:
             if len(config.include_regexes) == 0:
-                continue
+                continue  # this is the default - it's an instant noop
             if (full_send and "full" in config.targets) or (not full_send and "incremental" in config.targets):
                 # 'zfs get' uses newline as record separator and tab as separator between output columns. A ZFS user
                 # property may contain newline and tab characters (indeed anything). Together, this means that there
@@ -3065,7 +3068,8 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     # perf: tell logging framework not to gather unnecessary expensive info for each log record
     logging.logProcesses = False
     logging.logThreads = False
-    logging.logMultiProcessing = False
+    logging.logMultiprocessing = False
+    logging.logAsyncioTasks = False
     return log
 
 
@@ -3143,7 +3147,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
         return "\n".join(lines)
 
     def substitute_log_config_vars(config_str: str, log_config_variables: Dict[str, str]) -> str:
-        """Substitute ${name[:default]} placeholders within JSON with values from log_config_vars"""
+        """Substitute ${name[:default]} placeholders within JSON with values from log_config_variables"""
 
         def substitute_fn(match: re.Match) -> str:
             varname = match.group(1)
