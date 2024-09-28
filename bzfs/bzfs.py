@@ -381,6 +381,27 @@ feature.
               "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy). "
               "Does not recurse without --recursive.\n\n"))
     parser.add_argument(
+        "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
+        help=("Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
+              "for real (optional). This option treats both the ZFS source and destination as read-only. "
+              "Accepts an optional argument for fine tuning that is handled as follows:\n\n"
+              "a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via "
+              "'zfs receive -n', which discards the received data there.\n\n"
+              "b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less 'realistic' form "
+              "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no snapshot is "
+              "actually transferred between source and destination. This is the default when specifying --dryrun.\n\n"
+              "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n"))
+    parser.add_argument(
+        "--verbose", "-v", action="count", default=0,
+        help=("Print verbose information. This option can be specified multiple times to increase the level of "
+              "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
+              "flag, maybe along with --dryrun. "
+              "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
+              "respectively.\n\n"))
+    parser.add_argument(
+        "--quiet", "-q", action="store_true",
+        help="Suppress non-error, info, debug, and trace output.\n\n")
+    parser.add_argument(
         "--no-privilege-elevation", "-p", action="store_true",
         help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
               "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
@@ -468,17 +489,6 @@ feature.
               "number and creation time as the snapshot. Also note that you can create, delete and prune bookmarks "
               f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
               "bookmarks currently exist, if any.\n\n"))
-    parser.add_argument(
-        "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
-        help=("Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
-              "for real (optional). This option treats both the ZFS source and destination as read-only. "
-              "Accepts an optional argument for fine tuning that is handled as follows:\n\n"
-              "a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via "
-              "'zfs receive -n', which discards the received data there.\n\n"
-              "b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less 'realistic' form "
-              "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no snapshot is "
-              "actually transferred between source and destination. This is the default when specifying --dryrun.\n\n"
-              "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n"))
 
     ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
     # for speed with confidentiality and integrity
@@ -581,16 +591,6 @@ feature.
     parser.add_argument(
         "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("zpool") + msg)
-    parser.add_argument(
-        "--quiet", "-q", action="store_true",
-        help="Suppress non-error, info, debug, and trace output.\n\n")
-    parser.add_argument(
-        "--verbose", "-v", action="count", default=0,
-        help=("Print verbose information. This option can be specified multiple times to increase the level of "
-              "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
-              "flag, maybe along with --dryrun. "
-              "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
-              "respectively.\n\n"))
     parser.add_argument(
         "--log-dir", type=str, metavar="DIR",
         help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "

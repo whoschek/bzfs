@@ -224,9 +224,9 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--skip-missing-snapshots [{fail,dataset,continue}]]
             [--retries INT] [--skip-on-error {fail,tree,dataset}]
             [--skip-replication] [--delete-missing-snapshots]
-            [--delete-missing-datasets] [--no-privilege-elevation]
-            [--no-stream] [--no-create-bookmark] [--no-use-bookmark]
-            [--dryrun [{recv,send}]] [--ssh-cipher STRING]
+            [--delete-missing-datasets] [--dryrun [{recv,send}]] [--verbose]
+            [--quiet] [--no-privilege-elevation] [--no-stream]
+            [--no-create-bookmark] [--no-use-bookmark] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -239,10 +239,9 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--mbuffer-program-opts STRING] [--pv-program STRING]
             [--pv-program-opts STRING] [--shell-program STRING]
             [--ssh-program STRING] [--sudo-program STRING]
-            [--zfs-program STRING] [--zpool-program STRING] [--quiet]
-            [--verbose] [--log-dir DIR] [--log-syslog-address STRING]
-            [--log-syslog-socktype {UDP,TCP}] [--log-syslog-facility INT]
-            [--log-syslog-prefix STRING]
+            [--zfs-program STRING] [--zpool-program STRING] [--log-dir DIR]
+            [--log-syslog-address STRING] [--log-syslog-socktype {UDP,TCP}]
+            [--log-syslog-facility INT] [--log-syslog-prefix STRING]
             [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
             [--log-config-file STRING]
             [--log-config-var NAME:VALUE [NAME:VALUE ...]]
@@ -603,6 +602,44 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+**--dryrun** *[{recv,send}]*, **-n** *[{recv,send}]*
+
+*  Do a dry run (aka 'no-op') to print what operations would happen
+    if the command were to be executed for real (optional). This option
+    treats both the ZFS source and destination as read-only. Accepts an
+    optional argument for fine tuning that is handled as follows:
+
+    a) 'recv': Send snapshot data via 'zfs send' to the destination
+    host and receive it there via 'zfs receive -n', which discards the
+    received data there.
+
+    b) 'send': Do not execute 'zfs send' and do not execute 'zfs
+    receive'. This is a less 'realistic' form of dry run, but much
+    faster, especially for large snapshots and slow networks/disks, as
+    no snapshot is actually transferred between source and destination.
+    This is the default when specifying --dryrun.
+
+    Examples: --dryrun, --dryrun=send, --dryrun=recv
+
+<!-- -->
+
+**--verbose**, **-v**
+
+*  Print verbose information. This option can be specified multiple
+    times to increase the level of verbosity. To print what ZFS/SSH
+    operation exactly is happening (or would happen), add the `-v -v`
+    flag, maybe along with --dryrun. ERROR, WARN, INFO, DEBUG, TRACE
+    output lines are identified by [E], [W], [I], [D], [T]
+    prefixes, respectively.
+
+<!-- -->
+
+**--quiet**, **-q**
+
+*  Suppress non-error, info, debug, and trace output.
+
+<!-- -->
+
 **--no-privilege-elevation**, **-p**
 
 *  Do not attempt to run state changing ZFS operations 'zfs
@@ -736,27 +773,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     snapshot. Also note that you can create, delete and prune bookmarks
     any way you like, as bzfs (without --no-use-bookmark) will happily
     work with whatever bookmarks currently exist, if any.
-
-<!-- -->
-
-**--dryrun** *[{recv,send}]*, **-n** *[{recv,send}]*
-
-*  Do a dry run (aka 'no-op') to print what operations would happen
-    if the command were to be executed for real (optional). This option
-    treats both the ZFS source and destination as read-only. Accepts an
-    optional argument for fine tuning that is handled as follows:
-
-    a) 'recv': Send snapshot data via 'zfs send' to the destination
-    host and receive it there via 'zfs receive -n', which discards the
-    received data there.
-
-    b) 'send': Do not execute 'zfs send' and do not execute 'zfs
-    receive'. This is a less 'realistic' form of dry run, but much
-    faster, especially for large snapshots and slow networks/disks, as
-    no snapshot is actually transferred between source and destination.
-    This is the default when specifying --dryrun.
-
-    Examples: --dryrun, --dryrun=send, --dryrun=recv
 
 <!-- -->
 
@@ -973,23 +989,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  The name or path to the 'zpool' executable (optional). Default is
     'zpool'. Use '-' to disable the use of this program.
-
-<!-- -->
-
-**--quiet**, **-q**
-
-*  Suppress non-error, info, debug, and trace output.
-
-<!-- -->
-
-**--verbose**, **-v**
-
-*  Print verbose information. This option can be specified multiple
-    times to increase the level of verbosity. To print what ZFS/SSH
-    operation exactly is happening (or would happen), add the `-v -v`
-    flag, maybe along with --dryrun. ERROR, WARN, INFO, DEBUG, TRACE
-    output lines are identified by [E], [W], [I], [D], [T]
-    prefixes, respectively.
 
 <!-- -->
 
