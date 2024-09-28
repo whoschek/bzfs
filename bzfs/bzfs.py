@@ -322,25 +322,23 @@ feature.
     parser.add_argument(
         "--retry-min-sleep-secs", type=float, min=0, default=retry_min_sleep_secs_default,
         action=CheckRange, metavar="FLOAT",
-        # help=(f"The minimum duration to sleep between retries (default: {retry_min_sleep_secs_default}). "
-        #       "This duration doubles on each retry, up to the maximum of --retry-max-sleep-secs (see below). "
-        #       "The timer resets after each operation.\n\n"))
-        help=argparse.SUPPRESS)
+        help=f"The minimum duration to sleep between retries (default: {retry_min_sleep_secs_default}).\n\n")
     retry_max_sleep_secs_default = 5 * 60
     parser.add_argument(
         "--retry-max-sleep-secs", type=float, min=0, default=retry_max_sleep_secs_default,
         action=CheckRange, metavar="FLOAT",
-        # help=f"The maximum duration to sleep between retries (default: {retry_max_sleep_secs_default}).\n\n")
-        help=argparse.SUPPRESS)
+        help=("The maximum duration to sleep between retries initially starts with --retry-min-sleep-secs (see above), "
+              "and doubles on each retry, up to the final maximum of --retry-max-sleep-secs "
+              f"(default: {retry_max_sleep_secs_default}). On each retry a random sleep time in the "
+              "[--retry-min-sleep-secs, current max] range is picked. The timer resets after each operation.\n\n"))
     retry_max_elapsed_secs_default = 60 * 60
     parser.add_argument(
         "--retry-max-elapsed-secs", type=float, min=0, default=retry_max_elapsed_secs_default,
         action=CheckRange, metavar="FLOAT",
-        # help=("A single operation (e.g. 'zfs send/receive' of the current dataset) will not be retried (or not "
-        #       "retried anymore) once this much time has elapsed since the initial start of the operation, including "
-        #       f"retries. (default: {retry_max_elapsed_secs_default}). The timer resets after each operation "
-        #       "completes or retries exhaust, such that subsequently failing operations can again be retried.\n\n"))
-        help=argparse.SUPPRESS)
+        help=("A single operation (e.g. 'zfs send/receive' of the current dataset) will not be retried (or not "
+              "retried anymore) once this much time has elapsed since the initial start of the operation, including "
+              f"retries. (default: {retry_max_elapsed_secs_default}). The timer resets after each operation "
+              "completes or retries exhaust, such that subsequently failing operations can again be retried.\n\n"))
     parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
         help=("During replication, if an error is not retryable, or --retries has been exhausted, "

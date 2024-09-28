@@ -222,11 +222,13 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--force-rollback-to-latest-snapshot] [--force] [--force-unmount]
             [--force-once] [--skip-parent]
             [--skip-missing-snapshots [{fail,dataset,continue}]]
-            [--retries INT] [--skip-on-error {fail,tree,dataset}]
-            [--skip-replication] [--delete-missing-snapshots]
-            [--delete-missing-datasets] [--dryrun [{recv,send}]] [--verbose]
-            [--quiet] [--no-privilege-elevation] [--no-stream]
-            [--no-create-bookmark] [--no-use-bookmark] [--ssh-cipher STRING]
+            [--retries INT] [--retry-min-sleep-secs FLOAT]
+            [--retry-max-sleep-secs FLOAT] [--retry-max-elapsed-secs FLOAT]
+            [--skip-on-error {fail,tree,dataset}] [--skip-replication]
+            [--delete-missing-snapshots] [--delete-missing-datasets]
+            [--dryrun [{recv,send}]] [--verbose] [--quiet]
+            [--no-privilege-elevation] [--no-stream] [--no-create-bookmark]
+            [--no-use-bookmark] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -530,6 +532,34 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     (default: 0). Also consider this option if a periodic pruning script
     may simultaneously delete a dataset or snapshot or bookmark while
     bzfs is running and attempting to access it.
+
+<!-- -->
+
+**--retry-min-sleep-secs** *FLOAT*
+
+*  The minimum duration to sleep between retries (default: 0.125).
+
+<!-- -->
+
+**--retry-max-sleep-secs** *FLOAT*
+
+*  The maximum duration to sleep between retries initially starts with
+    --retry-min-sleep-secs (see above), and doubles on each retry, up
+    to the final maximum of --retry-max-sleep-secs (default: 300). On
+    each retry a random sleep time in the [--retry-min-sleep-secs,
+    current max] range is picked. The timer resets after each
+    operation.
+
+<!-- -->
+
+**--retry-max-elapsed-secs** *FLOAT*
+
+*  A single operation (e.g. 'zfs send/receive' of the current
+    dataset) will not be retried (or not retried anymore) once this much
+    time has elapsed since the initial start of the operation, including
+    retries. (default: 3600). The timer resets after each operation
+    completes or retries exhaust, such that subsequently failing
+    operations can again be retried.
 
 <!-- -->
 
