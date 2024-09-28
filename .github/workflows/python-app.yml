@@ -95,7 +95,7 @@ jobs:
 
 
   test_ubuntu_24_04:  # currently uses zfs-2.2.2
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -130,7 +130,7 @@ jobs:
 
 
   test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.2.6
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -179,7 +179,7 @@ jobs:
 
 
   test_ubuntu_22_04:   # currently uses zfs-2.1.5
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04'
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -220,7 +220,7 @@ jobs:
 
 
   test_ubuntu_20_04:  # currently uses zfs-0.8.3
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04'
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -255,7 +255,7 @@ jobs:
 
 
   test_freebsd_14_1:  # currently uses zfs-2.2.4
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
@@ -272,7 +272,7 @@ jobs:
 
 
   test_freebsd_13_4:  # currently uses zfs-2.1.15
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
@@ -289,7 +289,7 @@ jobs:
 
 
   test_freebsd_13_3:  # currently uses zfs-2.1.14
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
@@ -306,7 +306,7 @@ jobs:
 
 
   test_solaris_11_4:
-    if: github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
 #    if: false  # job currently disabled
     runs-on: ubuntu-24.04
     timeout-minutes: 140
@@ -431,6 +431,7 @@ jobs:
 
 
   upload_website_to_github_pages:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     needs:
       - generate_website
