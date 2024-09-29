@@ -153,10 +153,80 @@ git clone https://github.com/whoschek/bzfs.git
 cd bzfs/bzfs
 ./bzfs --help # Run the CLI
 sudo cp bzfs /usr/local/bin/ # Optional system installation
+
+# Alternatively, install a release via pip:
+pip install bzfs
+bzfs --help # Run the CLI
 ```
 
 
-# How To Run Unit Tests
+# Design Aspects
+
+* Rsync'ish look and feel.
+* Supports pull, push, pull-push and local transfer mode.
+* Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
+read-write mode.
+* Continously tested on Linux, FreeBSD and Solaris. Code is almost 100% covered by tests.
+* Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
+files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.
+* Stays true to the ZFS send/receive spirit. Retains the ability to use ZFS CLI options for fine tuning. Does not
+attempt to "abstract away" ZFS concepts and semantics. Keeps simple things simple, and makes complex things possible.
+* All ZFS and SSH commands (even in --dryrun mode) are logged such that they can be inspected, copy-and-pasted into
+a terminal/shell, and run manually to help anticipate or diagnose issues.
+* Supports replicating dataset subsets via powerful include/exclude regexes. For example, can replicate all except
+temporary datasets and private datasets.
+* Supports replicating snapshot subsets via powerful include/exclude regexes. For example, can replicate daily and
+weekly snapshots while ignoring hourly and 5 minute snapshots. Or, can replicate daily and weekly snapshots to a remote
+destination while replicating hourly and 5 minute snapshots to a local destination.
+* Also supports replicating arbitrary dataset subsets by feeding it a list of flat datasets.
+* Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
+* Can be told what ZFS dataset properties to copy, also via include/exclude regexes.
+* Full ZFS bookmark support for additional safety, or to reclaim disk space earlier.
+* Can be strict or told to be tolerant of runtime errors.
+* Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
+integration.
+* Code base is easy to change, hack and maintain. No hidden magic. Python is very readable to modern engineers.
+Chances are that CI tests will catch changes that have unintended side effects.
+* It's fast!
+
+
+# Automated Test Runs
+
+Results of automated test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
+[here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
+by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
+The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, Solaris, etc.
+The script also generates code coverage reports which are published
+[here](https://whoschek.github.io/bzfs/coverage).
+
+The gist is that it should work on any flavor, with python (3.7 or higher, no additional python packages required)
+only needed on the initiator host.
+
+
+# How To Run Unit Tests on GitHub
+
+* First, on the GitHub page of this repo, click on "Fork/Create a new fork".
+* Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
+* Then select 'All workflows' -> 'Tests' on the left side.
+* Then click the 'Run workflow' dropdown menu on the right side.
+* Select the name of the job to run (e.g. 'test_ubuntu_24_04') or select 'Run all jobs', plus select the git branch to
+run with (typically the branch containing your changes).
+* Then click the 'Run workflow' button which kicks off the job.
+* Click on the job to watch job progress.
+* Once the run completes, you can click on the wheel on the top right to select 'Download log archive', which is
+a zip file containing the output of all jobs of the run. This is useful for debugging.
+* Once the job completes, also a coverage report appears on the bottom of the run page, which you can download by
+clicking on it. Unzip and browse the HTML coverage report to see if the code you added or changed is actually executed
+by a test. Experience shows that code that isn't executed likely contains bugs, so all changes (code lines and
+branch conditions) should be covered by a test before a merge is considered. In practice, this means to watch out
+for coverage report lines that aren't colored green.
+* FYI, example test runs with coverage reports are
+[here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule).
+Click on any run and browse to the bottom of the resulting run page to find the coverage reports, including a combined
+coverage report that merges all jobs of the run.
+
+
+# How To Run Unit Tests Locally
 ```
 # verify zfs is installed
 zfs --version
@@ -189,22 +259,12 @@ ssh -p $bzfs_test_ssh_port 127.0.0.1 pv --version
 # verify mbuffer is on PATH for efficient buffering to become enabled
 ssh -p $bzfs_test_ssh_port 127.0.0.1 mbuffer --version
 
-# Finally, run unit tests
+# Finally, run unit tests. If cloned from git:
 ./test.sh
+
+# Finally, run unit tests. If installed via 'pip install':
+bzfs-test
 ```
-
-
-# Automated Test Runs
-
-Results of automated test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
-[here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
-by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
-The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, Solaris, etc.
-The script also generates code coverage reports which are published
-[here](https://whoschek.github.io/bzfs/coverage).
-
-The gist is that it should work on any flavor, with python (3.7 or higher, no additional python packages required)
-only needed on the initiator host.
 
 
 # Usage
@@ -514,7 +574,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--force-unmount**
 
 *  On destination, --force will also forcibly unmount file systems via
-    'zfs rollback -f' and 'zfs destroy -f'.
+    'zfs rollback -f' and 'zfs destroy -f'. That is, --force will
+    add the '-f' flag to 'zfs rollback' and 'zfs destroy'.
 
 <!-- -->
 
@@ -665,6 +726,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     --{include|exclude}-dataset policy. Does not recurse without
     --recursive.
 
+    For example, if the destination dataset contains snapshots
+    h1,h2,h3,d1 (h=hourly, d=daily) whereas the source dataset only
+    contains snapshot h3, and the include/exclude policy effectively
+    includes h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the
+    destination dataset to make it 'the same'. On the other hand, if
+    the include/exclude policy effectively only includes snapshots
+    h1,h2,h3 then only delete snapshots h1,h2 on the destination dataset
+    to make it 'the same'.
+
 <!-- -->
 
 <div id="--delete-missing-datasets"></div>
@@ -682,6 +752,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     --{include|exclude}-dataset-regex --{include|exclude}-dataset
     --exclude-dataset-property policy). Does not recurse without
     --recursive.
+
+    For example, if the destination contains datasets h1,h2,h3,d1
+    whereas source only contains h3, and the include/exclude policy
+    effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on
+    the destination to make it 'the same'. On the other hand, if the
+    include/exclude policy effectively only includes h1,h2,h3 then only
+    delete datasets h1,h2 on the destination to make it 'the same'.
 
 <!-- -->
 
@@ -715,7 +792,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  Print verbose information. This option can be specified multiple
     times to increase the level of verbosity. To print what ZFS/SSH
     operation exactly is happening (or would happen), add the `-v -v`
-    flag, maybe along with --dryrun. ERROR, WARN, INFO, DEBUG, TRACE
+    flag, maybe along with --dryrun. All ZFS and SSH commands (even
+    with --dryrun) are logged such that they can be inspected,
+    copy-and-pasted into a terminal shell and run manually to help
+    anticipate or diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE
     output lines are identified by [E], [W], [I], [D], [T]
     prefixes, respectively.
 

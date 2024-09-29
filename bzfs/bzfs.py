@@ -282,8 +282,8 @@ feature.
               "operation is aborted with an error when encountering a conflicting snapshot.\n\n"))
     parser.add_argument(
         "--force-unmount", action="store_true",
-        help=("On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' "
-              "and 'zfs destroy -f'. \n\n"))
+        help=("On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' and "
+              "'zfs destroy -f'. That is, --force will add the '-f' flag to 'zfs rollback' and 'zfs destroy'.\n\n"))
     parser.add_argument(
         "--force-hard", action="store_true",
         # help=("On destination, --force will also delete dependents such as clones and bookmarks via "
@@ -368,7 +368,12 @@ feature.
         help=("After successful replication, delete existing destination snapshots that do not exist within the source "
               "dataset if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex "
               "and the destination dataset is included via --{include|exclude}-dataset-regex "
-              "--{include|exclude}-dataset policy. Does not recurse without --recursive.\n\n"))
+              "--{include|exclude}-dataset policy. Does not recurse without --recursive.\n\n"
+              "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
+              "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
+              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
+              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
+              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"))
     parser.add_argument(
         "--delete-missing-datasets", action="store_true",
         help=("After successful replication step and successful --delete-missing-snapshots step, if any, delete "
@@ -377,7 +382,11 @@ feature.
               "Also delete an existing destination dataset that has no snapshot if all descendants of that dataset do "
               "not have a snapshot either (again, only if the existing destination dataset is included via "
               "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy). "
-              "Does not recurse without --recursive.\n\n"))
+              "Does not recurse without --recursive.\n\n"
+              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
+              "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
+              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
+              "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"))
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help=("Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -393,9 +402,10 @@ feature.
         "--verbose", "-v", action="count", default=0,
         help=("Print verbose information. This option can be specified multiple times to increase the level of "
               "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
-              "flag, maybe along with --dryrun. "
-              "ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] prefixes, "
-              "respectively.\n\n"))
+              "flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun) are logged such that "
+              "they can be inspected, copy-and-pasted into a terminal shell and run manually to help anticipate or "
+              "diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] "
+              "prefixes, respectively.\n\n"))
     parser.add_argument(
         "--quiet", "-q", action="store_true",
         help="Suppress non-error, info, debug, and trace output.\n\n")
