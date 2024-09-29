@@ -24,7 +24,7 @@ from typing import Sequence, Callable, Optional, TypeVar, Union
 def main():
     """
     Run this script to update README.md from the help info contained in bzfs.py.
-    Example usage: cd ~/repos/bzfs; test/update-readme.py bzfs/bzfs.py README.md
+    Example usage: cd ~/repos/bzfs; tests/update-readme.py bzfs/bzfs.py README.md
     This essentially does the following steps:
     argparse-manpage --pyfile bzfs/bzfs.py --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md

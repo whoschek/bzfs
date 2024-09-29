@@ -35,9 +35,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Sequence, Callable, Optional, TypeVar, Union
 from unittest.mock import patch, mock_open
-from .zfs_util import *
+
 from bzfs.bzfs import CheckRange
 from bzfs import bzfs
+from tests.zfs_util import *
 
 src_pool_name = "wb_src"
 dst_pool_name = "wb_dest"

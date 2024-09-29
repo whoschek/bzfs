@@ -8,4 +8,4 @@ fi
 echo "TMPDIR: $TMPDIR"
 
 cd $(realpath $(dirname "$0"))
-python3 -m test.test_bzfs
+python3 -m tests.test_bzfs
