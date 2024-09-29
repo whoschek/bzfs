@@ -479,6 +479,36 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertSnapshots(dst_root_dataset, 3, "s")
 
+    def test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive(self, volume=False):
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+        self.setup_basic(volume=volume)
+        for i in range(0, 3):
+            with stop_on_failure_subtest(i=i):
+                src_datasets = zfs_list([src_root_dataset], types=["filesystem", "volume"], max_depth=None)
+                dst_datasets = [
+                    bzfs.replace_prefix(src_dataset, src_root_dataset, dst_root_dataset) for src_dataset in src_datasets
+                ]
+                opts = [elem for pair in zip(src_datasets, dst_datasets) for elem in pair]
+                self.run_bzfs(*opts, dry_run=(i == 0))
+                if i == 0:
+                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+                else:
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
+
+                    compression_prop = dataset_property(dst_root_dataset + "/foo", "compression")
+                    self.assertEqual(compression_prop, "on")
+                    encryption_prop = dataset_property(dst_root_dataset, "encryption")
+                    self.assertEqual(encryption_prop, "off")
+                    encryption_prop = dataset_property(dst_root_dataset + "/foo", "encryption")
+                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else "off")
+                    encryption_prop = dataset_property(dst_root_dataset + "/foo/a", "encryption")
+                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else "off")
+
     def test_basic_replication_flat_nonzero_snapshots_create_parents(self):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
@@ -2360,6 +2390,11 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_basic_replication_dataset_with_spaces(self):
         LocalTestCase(param=self.param).test_basic_replication_dataset_with_spaces()
+
+    def test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive(self):
+        LocalTestCase(
+            param=self.param
+        ).test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive()
 
     def test_zfs_set(self):
         LocalTestCase(param=self.param).test_zfs_set()

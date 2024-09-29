@@ -2500,8 +2500,6 @@ class Job:
             if cache_item is not None:
                 # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
                 available_programs[loc], p.zpool_features[loc], ssh_cmd = cache_item
-                if len(ssh_cmd) > 0:
-                    ssh_cmd = ssh_cmd[0:-1] + [r.ssh_user_host]  # update trailing ssh_user_host in remote case
                 r.set_ssh_cmd(ssh_cmd)
                 continue
             r.set_ssh_cmd(self.local_ssh_command(r))
