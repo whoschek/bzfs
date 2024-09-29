@@ -1000,7 +1000,10 @@ class LocalTestCase(BZFSTestCase):
                 "log_file_prefix:" + log_file_prefix,
                 "--skip-replication",
             )
-        with open("test/log_config.json", "w", encoding="utf-8") as fd:
+        output_dir = os.path.dirname(os.path.abspath(__file__))
+        if not os.access(output_dir, os.W_OK):
+            output_dir = tempfile.gettempdir()
+        with open(os.path.join(output_dir, "log_config.json"), "w", encoding="utf-8") as fd:
             fd.write(config_str.lstrip())
 
     def test_log_config_file_empty(self):
