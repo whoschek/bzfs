@@ -1122,9 +1122,10 @@ class Job:
             raise
         except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             log.error(f"Exiting with status code: {die_status}")
-            ex = SystemExit(e)
-            ex.code = die_status
-            raise ex
+            raise SystemExit(die_status) from e
+        except re.error as e:
+            log.error("%s within regex %s", e, e.pattern)
+            raise SystemExit(die_status) from e
         finally:
             log.info("%s", "Log file was: " + p.log_params.log_file)
 

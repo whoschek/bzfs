@@ -1230,6 +1230,15 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=die_status)
         run_cmd(sudo_cmd + ["zpool", "set", "delegation=on", dst_pool_name])
 
+    def test_regex_compilation_error(self):
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-regex=(xxx",
+            "--skip-missing-snapshots=dataset",
+            expected_status=die_status,
+        )
+
     def test_basic_replication_skip_missing_snapshots(self):
         self.assertTrue(dataset_exists(src_root_dataset))
         destroy(dst_root_dataset)
