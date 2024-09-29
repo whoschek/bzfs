@@ -1,6 +1,8 @@
 [build-system]
-requires = ["setuptools >= 61.0"]
+requires = ["setuptools >= 75.1"]
 build-backend = "setuptools.build_meta"
+#requires = ["hatchling"]
+#build-backend = "hatchling.build"
 
 [project]
 name = "bzfs"
@@ -22,7 +24,7 @@ authors = [
 maintainers = [
   {name = "Wolfgang Hoschek", email = "wolfgang.hoschek@mac.com"},
 ]
-dynamic = ["version"]  # version = "0.9.0"
+dynamic = ["version"]
 readme = "README.md"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -41,7 +43,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 license = {text = "Apache License (2.0)"}
@@ -59,16 +60,34 @@ Changelog = "https://github.com/whoschek/bzfs/blob/main/CHANGELOG.md"
 Distribution = "https://pypi.org/project/bzfs"
 
 [project.optional-dependencies]
-dev = [
+dev = [  # for development only
   "black",
   "coverage",
   "mypy",
   "argparse-manpage",
   # "pandoc", # instead use this: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
+  "genbadge[coverage]",
 ]
 
+[project.scripts]
+bzfs = "bzfs.bzfs:main"
+bzfs-test = "tests.test_bzfs:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+tests = ["*.json"]
+
 [tool.setuptools.dynamic]
-version = {attr = "package.__version__"}
+version = {attr = "bzfs.bzfs.__version__"}
+
+[tool.hatch.build]
+include = ["bzfs/**", "tests/**"]
+
+[tool.hatch.version]
+path = "bzfs/bzfs.py"
+pattern = "^__version__ = ['\"](?P<version>[^'\"]+)['\"]$"
 
 [tool.black]
 line_length = 120

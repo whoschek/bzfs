@@ -20,9 +20,9 @@ name: Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "branch-1.1.x", "branch-1.0.x" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "branch-1.1.x", "branch-1.0.x" ]
   workflow_dispatch:
     inputs:
       name:
@@ -431,7 +431,7 @@ jobs:
 
 
   upload_website_to_github_pages:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref_name == 'main'
     runs-on: ubuntu-24.04
     needs:
       - generate_website
