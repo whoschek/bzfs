@@ -26,6 +26,7 @@
 [![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![python](https://whoschek.github.io/bzfs/badges/python-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+<!-- [![](https://whoschek.github.io/bzfs/badges/pypy-badge.svg)](https://pypi.org/project/bzfs) -->
 
 <!-- BEGIN DESCRIPTION SECTION -->
 *bzfs is a backup command line tool that reliably replicates ZFS

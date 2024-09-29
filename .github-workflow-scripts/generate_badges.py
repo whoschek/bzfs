@@ -46,6 +46,8 @@ def main():
         py_versions = merge_versions(f"{dir}/python")
         py_versions = " | ".join(["3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13"])
         generate_badge("python", py_versions, color)
+        pypy_versions = ""
+        generate_badge("pypy", pypy_versions, color)
 
 
 def touch(dir, path):
