@@ -2693,8 +2693,55 @@ class Job:
 
 
 #############################################################################
-def die(*items) -> None:
-    ex = SystemExit(" ".join(items))
+def fix_send_recv_opts(
+    opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str, include_arg_opts: Set[str]
+) -> List[str]:
+    """These opts are instead managed via bzfs CLI args --dryrun, etc."""
+    assert "-" not in exclude_short_opts
+    results = []
+    i = 0
+    n = len(opts)
+    while i < n:
+        opt = opts[i]
+        i += 1
+        if opt in include_arg_opts:  # example: {"-o", "-x"}
+            results.append(opt)
+            if i < n:
+                results.append(opts[i])
+                i += 1
+        elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
+            if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
+                for char in exclude_short_opts:  # example: "den"
+                    opt = opt.replace(char, "")
+                if opt == "-":
+                    continue
+            results.append(opt)
+    return results
+
+
+def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
+    lst = ["-w" if opt == "--raw" else opt for opt in lst]
+    lst = ["compress" if opt == "--compressed" else opt for opt in lst]
+    i = lst.index("-w") if "-w" in lst else -1
+    if i >= 0:
+        i += 1
+        if i == len(lst) or (lst[i] != "none" and lst[i] != "compress"):
+            lst.insert(i, "none")
+    return lst
+
+
+def delete_stale_ssh_socket_files(socket_dir: str, prefix: str) -> None:
+    """Cleans up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash."""
+    secs = 30 * 24 * 60 * 60
+    now = time.time()
+    for filename in os.listdir(socket_dir):
+        file = os.path.join(socket_dir, filename)
+        if filename.startswith(prefix) and not os.path.isdir(file) and now - os.path.getmtime(file) >= secs:
+            os.remove(file)
+
+
+def die(msg: str) -> None:
+    ex = SystemExit(msg)
     ex.code = die_status
     raise ex
 
@@ -2776,16 +2823,6 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     return regex
 
 
-def delete_stale_ssh_socket_files(socket_dir: str, prefix: str) -> None:
-    """Cleans up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash."""
-    secs = 30 * 24 * 60 * 60
-    now = time.time()
-    for filename in os.listdir(socket_dir):
-        file = os.path.join(socket_dir, filename)
-        if filename.startswith(prefix) and not os.path.isdir(file) and now - os.path.getmtime(file) >= secs:
-            os.remove(file)
-
-
 def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
     """case-insensitive sort (A < a < B < b and so on)."""
     return sorted(iterable, key=str.casefold, reverse=reverse)
@@ -2862,43 +2899,6 @@ def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> 
         value = value if end else value.rstrip()
         level = log_stdout if file is sys.stdout else log_stderr
         log.log(level, "%s", value)
-
-
-def fix_send_recv_opts(
-    opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str, include_arg_opts: Set[str]
-) -> List[str]:
-    """These opts are instead managed via bzfs CLI args --dryrun, etc."""
-    assert "-" not in exclude_short_opts
-    results = []
-    i = 0
-    n = len(opts)
-    while i < n:
-        opt = opts[i]
-        i += 1
-        if opt in include_arg_opts:  # example: {"-o", "-x"}
-            results.append(opt)
-            if i < n:
-                results.append(opts[i])
-                i += 1
-        elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
-            if opt.startswith("-") and opt != "-" and not opt.startswith("--"):
-                for char in exclude_short_opts:  # example: "den"
-                    opt = opt.replace(char, "")
-                if opt == "-":
-                    continue
-            results.append(opt)
-    return results
-
-
-def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
-    lst = ["-w" if opt == "--raw" else opt for opt in lst]
-    lst = ["compress" if opt == "--compressed" else opt for opt in lst]
-    i = lst.index("-w") if "-w" in lst else -1
-    if i >= 0:
-        i += 1
-        if i == len(lst) or (lst[i] != "none" and lst[i] != "compress"):
-            lst.insert(i, "none")
-    return lst
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
