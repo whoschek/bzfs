@@ -116,8 +116,7 @@ def create_filesystem(dataset, path=None, no_mount=True, props=[]):
 
         if no_mount and (not zfs_version_is_at_least_2_1_0) and not already_exists:
             # zfs < 2.1.0 does not know the zfs create -u flag, so we manually unmount after dataset creation
-            cmd = sudo_cmd + ["zfs", "unmount", parent]
-            run_cmd(cmd)
+            run_cmd(sudo_cmd + ["zfs", "unmount", parent])
 
         parent += "/"
     return dataset
