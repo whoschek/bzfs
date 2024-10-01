@@ -44,15 +44,23 @@ on:
         type: boolean
         default: False
   schedule:
-    - cron: '0 3 * * *'  # Runs daily at 3am UTC
-#    - cron: '0 4 * * 0'  # Runs weekly at 4am UTC on Sundays
+    - cron: '0 3 * * *'  # Run nightly for main at 3am UTC,
+    - cron: '1 3 * * *'  # Run nightly for branch-1.0.x at 3:01am UTC
+  workflow_call:  # Enables this workflow to be called by other workflows (incl. the same workflow from another branch)
+    inputs:
+      is_external_call:
+        description: 'true if we are called from another workflow, false otherwise'
+        type: boolean
+        required: false
+        default: true
+
 
 permissions:
   contents: read
 
 jobs:
   test_ubuntu_24_04_fast:  # currently uses zfs-2.2.2
-    if: (!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch') || github.event.inputs.name == 'test_ubuntu_24_04_fast'
+    if: (!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch' && github.event.schedule != '1 3 * * *') || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_fast'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -95,7 +103,7 @@ jobs:
 
 
   test_ubuntu_24_04:  # currently uses zfs-2.2.2
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -130,7 +138,7 @@ jobs:
 
 
   test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.2.6
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -179,7 +187,7 @@ jobs:
 
 
   test_ubuntu_22_04:   # currently uses zfs-2.1.5
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04'
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -220,7 +228,7 @@ jobs:
 
 
   test_ubuntu_20_04:  # currently uses zfs-0.8.3
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04'
     runs-on: ubuntu-20.04
     strategy:
       matrix:
@@ -255,7 +263,7 @@ jobs:
 
 
   test_freebsd_14_1:  # currently uses zfs-2.2.4
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
@@ -272,7 +280,7 @@ jobs:
 
 
   test_freebsd_13_4:  # currently uses zfs-2.1.15
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
@@ -289,7 +297,7 @@ jobs:
 
 
   test_freebsd_13_3:  # currently uses zfs-2.1.14
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-24.04
     timeout-minutes: 80
     steps:
@@ -306,7 +314,7 @@ jobs:
 
 
   test_solaris_11_4:
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
+    if: github.event_name == 'pull_request' || github.event.schedule == '0 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
 #    if: false  # job currently disabled
     runs-on: ubuntu-24.04
     timeout-minutes: 140
@@ -431,7 +439,7 @@ jobs:
 
 
   upload_website_to_github_pages:
-    if: github.event_name != 'pull_request' && github.ref_name == 'main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     needs:
       - generate_website
@@ -459,6 +467,17 @@ jobs:
       - name: Deploy website to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4  # see https://github.com/actions/deploy-pages
-      - name: "Display URL of GitHub Pages - https://whoschek.github.io/bzfs/"
+      - name: "Display URL of GitHub Pages"
         run: |
-          echo "Uploaded website to GitHub Pages at https://whoschek.github.io/bzfs/"
+          echo "Uploaded website to GitHub Pages at ${{ steps.deployment.outputs.page_url }}"
+
+
+  # GitHub honours the "on: schedule:" directive only on main branch. Use hack to run nightlies also on other branches:
+  test_branch_1_0_x:
+    if: github.event.schedule == '1 3 * * *'
+    uses: whoschek/bzfs/.github/workflows/python-app.yml@branch-1.0.x
+    # uses: ./.github/workflows/python-app.yml@branch-1.0.x  # GitHub does not support this syntax
+    # See https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_iduses
+    # and https://github.com/orgs/community/discussions/16107
+    # and https://github.com/orgs/community/discussions/25246
+    # and https://github.com/actions/runner/issues/1483
