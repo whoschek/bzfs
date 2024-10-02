@@ -47,7 +47,7 @@ from logging import Logger
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import List, Dict, Set, Iterable, Tuple, Any, Optional
 
-__version__ = "0.9.0-dev"
+__version__ = "1.0.0"
 prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
