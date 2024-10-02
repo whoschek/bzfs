@@ -165,7 +165,7 @@ bzfs --help # Run the CLI
 * Rsync'ish look and feel.
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
-read-write mode.
+delete mode.
 * Continously tested on Linux, FreeBSD and Solaris. Code is almost 100% covered by tests.
 * Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
 files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.
@@ -178,14 +178,14 @@ temporary datasets and private datasets.
 * Supports replicating snapshot subsets via powerful include/exclude regexes. For example, can replicate daily and
 weekly snapshots while ignoring hourly and 5 minute snapshots. Or, can replicate daily and weekly snapshots to a remote
 destination while replicating hourly and 5 minute snapshots to a local destination.
-* Also supports replicating arbitrary dataset subsets by feeding it a list of flat datasets.
+* Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
 * Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
 * Can be told what ZFS dataset properties to copy, also via include/exclude regexes.
 * Full ZFS bookmark support for additional safety, or to reclaim disk space earlier.
 * Can be strict or told to be tolerant of runtime errors.
 * Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
 integration.
-* Code base is easy to change, hack and maintain. No hidden magic. Python is very readable to modern engineers.
+* Code base is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
 
