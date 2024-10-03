@@ -54,7 +54,7 @@ die_status = 3
 if sys.version_info < (3, 7):
     print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
     sys.exit(die_status)
-exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*"  # skip tmp datasets by default
+exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
@@ -2377,7 +2377,7 @@ class Job:
         return steps
 
     @staticmethod
-    def send_step_to_str(step) -> str:
+    def send_step_to_str(step: Tuple[str, str, str]) -> str:
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
 

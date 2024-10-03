@@ -138,7 +138,7 @@ have drastically diverged:
 --exclude-snapshot-regex 'test_.*' --exclude-dataset
 /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash
 --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex
-'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' ssh-dst-private-key
+'(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' ssh-dst-private-key
 /root/.ssh/id_rsa`
 
 <!-- END DESCRIPTION SECTION -->
@@ -431,8 +431,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--exclude-dataset-regex** *REGEX [REGEX ...]*
 
 *  Same syntax as --include-dataset-regex (see above) except that the
-    default is `(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*` (exclude
-    tmp datasets). Example: '!.*' (exclude no dataset)
+    default is `(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*`
+    (exclude tmp datasets). Example: '!.*' (exclude no dataset)
 
 <!-- -->
 
@@ -1263,7 +1263,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--log-syslog-facility** *INT*
 
 *  The local facility aka category that identifies msg sources in
-    syslog (default: 1, min=0, max=7)'.
+    syslog (default: 1, min=0, max=7).
 
 <!-- -->
 
