@@ -138,7 +138,7 @@ have drastically diverged:
 --exclude-snapshot-regex 'test_.*' --exclude-dataset
 /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash
 --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex
-'(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' ssh-dst-private-key
+'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' ssh-dst-private-key
 /root/.ssh/id_rsa`
 
 <!-- END DESCRIPTION SECTION -->
@@ -1296,7 +1296,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     given after the `+` prefix. Examples: +log_config.json,
     +/path/to/log_config.json. Here is an example config file that
     demonstrates usage:
-    https://github.com/whoschek/bzfs/blob/main/test/log_config.json
+    https://github.com/whoschek/bzfs/blob/main/tests/log_config.json
 
     For more examples see
     https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig

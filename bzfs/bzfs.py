@@ -631,7 +631,7 @@ feature.
               "If the option starts with a `+` prefix then the contents are read from the UTF-8 JSON file given "
               "after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json. "
               "Here is an example config file that demonstrates usage: "
-              "https://github.com/whoschek/bzfs/blob/main/test/log_config.json\n\n"
+              "https://github.com/whoschek/bzfs/blob/main/tests/log_config.json\n\n"
               "For more examples see "
               "https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig "
               "and for details see "
