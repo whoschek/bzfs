@@ -616,7 +616,7 @@ feature.
         help=f"The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
     parser.add_argument(
         "--log-syslog-facility", type=int, min=0, max=7, default=1, action=CheckRange, metavar="INT",
-        help=f"The local facility aka category that identifies msg sources in syslog (default: 1, min=0, max=7)'.\n\n")
+        help=f"The local facility aka category that identifies msg sources in syslog (default: 1, min=0, max=7).\n\n")
     parser.add_argument(
         "--log-syslog-prefix", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
         help=f"The name to prepend to each message that is sent to syslog; identifies {prog_name} messages as opposed "
@@ -758,7 +758,7 @@ class LogParams:
             self.log_level = "DEBUG"
         else:
             self.log_level = "INFO"
-        self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")
+        self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.home_dir: str = get_home_directory()
         self.log_dir: str = args.log_dir if args.log_dir else f"{self.home_dir}/{prog_name}-logs"
         os.makedirs(self.log_dir, exist_ok=True)
@@ -785,6 +785,7 @@ class Params:
         log: Logger = None,
         inject_params: Optional[Dict[str, bool]] = None,
     ):
+        """Option values for all aspects; reads from ArgumentParser via args."""
         # immutable variables:
         assert args is not None
         self.args: argparse.Namespace = args
