@@ -160,12 +160,14 @@ feature.
         help=(
             "SRC_DATASET: "
             "Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
-            "Format is [[user@]host:]dataset. The host name can also be an IPv4 address. If the host name is '-', "
-            "the dataset will be on the local host, and the corresponding SSH leg will be omitted. The same is true "
-            "if the host is omitted and the dataset does not contain a ':' colon at the same time. "
+            "Format is [[user@]host:]dataset. The host name can also be an IPv4 address (or an IPv6 address where "
+            "each ':' colon character must be replaced with a '|' pipe character for disambiguation). If the "
+            "host name is '-', the dataset will be on the local host, and the corresponding SSH leg will be omitted. "
+            "The same is true if the host is omitted and the dataset does not contain a ':' colon at the same time. "
             "Local dataset examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` "
             "Remote dataset examples: `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`, "
-            "`root@host:tank`, `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`. "
+            "`root@host:tank`, `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`, "
+            "`user@||1:tank1/foo/bar:baz:boo`. "
             "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`. "
             "If the option starts with a `+` prefix then dataset names are read from the UTF-8 text file given "
             "after the `+` prefix, with each line in the file containing a SRC_DATASET and a DST_DATASET, "
@@ -2903,12 +2905,16 @@ def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> 
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
+    def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator
+        return hostname.replace("|", ":")
+
     user_undefined = user is None
     if user is None:
         user = ""
     host_undefined = host is None
     if host is None:
         host = ""
+    host = convert_ipv6(host)
     user_host, dataset, pool = "", "", ""
 
     # Input format is [[user@]host:]dataset
@@ -2919,6 +2925,7 @@ def parse_dataset_locator(input_text: str, validate: bool = True, user: str = No
             user = match.group(4) or ""
         if host_undefined:
             host = match.group(5) or ""
+            host = convert_ipv6(host)
         if host == "-":
             host = ""
         dataset = match.group(6) or ""

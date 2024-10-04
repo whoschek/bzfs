@@ -276,6 +276,8 @@ class BZFSTestCase(ParametrizedTestCase):
         args = list(args)
         src_host = ["--ssh-src-host", "127.0.0.1"]
         dst_host = ["--ssh-dst-host", "127.0.0.1"]
+        if getenv_bool("enable_IPv6", True):
+            dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
         ssh_dflt_port = "2222" if ssh_program == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
         src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
