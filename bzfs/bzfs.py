@@ -1418,7 +1418,7 @@ class Job:
         # pool, i.e. comparing createtxg is only meaningful within a single pool, not across pools from src to dst.
         # Comparing creation time remains meaningful across pools from src to dst. Creation time is a UTC Unix time
         # in integer seconds.
-        # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' enforce that snapshot names must not
+        # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
         if use_bookmark:
