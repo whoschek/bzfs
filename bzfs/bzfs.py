@@ -152,7 +152,7 @@ feature.
 
 * Example with further options:
 
-`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' ssh-dst-private-key /root/.ssh/id_rsa`
+`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' ssh-dst-private-key /root/.ssh/id_rsa`
 """, formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
@@ -548,7 +548,7 @@ feature.
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-user", type=str, metavar="STRING",
-            help=f"Remote SSH username of {loc} host to connect to (optional). Overrides username given in "
+            help=f"Remote SSH username on {loc} host to connect to (optional). Overrides username given in "
                  f"{loc.upper()}_DATASET.\n\n")
     for loc in locations:
         parser.add_argument(
@@ -558,7 +558,7 @@ feature.
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-port", type=int, metavar="INT",
-            help=f"Remote SSH port of {loc} host to connect to (optional).\n\n")
+            help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-extra-opts", type=str, default="", metavar="STRING",
@@ -773,11 +773,6 @@ feature.
 
 
 #############################################################################
-RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
-UnixTimeRange = Optional[Tuple[int, int]]  # Type alias
-
-
-#############################################################################
 class LogParams:
     def __init__(self, args: argparse.Namespace):
         """Option values for logging; reads from ArgumentParser via args."""
@@ -805,6 +800,11 @@ class LogParams:
 
     def __repr__(self) -> str:
         return str(self.__dict__)
+
+
+#############################################################################
+RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
+UnixTimeRange = Optional[Tuple[int, int]]  # Type alias
 
 
 #############################################################################

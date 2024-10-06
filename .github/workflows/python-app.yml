@@ -150,7 +150,7 @@ jobs:
       run: |
         # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
         # sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt update
-        # sudo apt-get -y apt install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
         # sudo apt-get -y install zfs-dkms zfsutils-linux
         # zfs --version
         

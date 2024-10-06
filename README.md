@@ -138,8 +138,8 @@ have drastically diverged:
 --exclude-snapshot-regex 'test_.*' --exclude-dataset
 /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash
 --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex
-'(.*/)?[Tt][Ee]?[Mm][Pp][0-9]*' ssh-dst-private-key
-/root/.ssh/id_rsa`
+'(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'
+ssh-dst-private-key /root/.ssh/id_rsa`
 
 <!-- END DESCRIPTION SECTION -->
 # How To Install and Run
@@ -166,7 +166,8 @@ bzfs --help # Run the CLI
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.
-* Continously tested on Linux, FreeBSD and Solaris. Code is almost 100% covered by tests.
+* Continously tested on Linux, FreeBSD and Solaris.
+* Code is almost 100% covered by tests.
 * Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
 files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.
 * Stays true to the ZFS send/receive spirit. Retains the ability to use ZFS CLI options for fine tuning. Does not
@@ -181,10 +182,12 @@ destination while replicating hourly and 5 minute snapshots to a local destinati
 * Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
 * Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
 * Can be told what ZFS dataset properties to copy, also via include/exclude regexes.
-* Full ZFS bookmark support for additional safety, or to reclaim disk space earlier.
+* Full and precise ZFS bookmark support for additional safety, or to reclaim disk space earlier.
 * Can be strict or told to be tolerant of runtime errors.
 * Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
 integration.
+* Multiple bzfs processes can run in parallel as long as they don't write to the same destination dataset
+simultaneously.
 * Code base is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
@@ -1043,7 +1046,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--ssh-src-user** *STRING*
 
-*  Remote SSH username of src host to connect to (optional). Overrides
+*  Remote SSH username on src host to connect to (optional). Overrides
     username given in SRC_DATASET.
 
 <!-- -->
@@ -1052,7 +1055,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--ssh-dst-user** *STRING*
 
-*  Remote SSH username of dst host to connect to (optional). Overrides
+*  Remote SSH username on dst host to connect to (optional). Overrides
     username given in DST_DATASET.
 
 <!-- -->
@@ -1079,7 +1082,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--ssh-src-port** *INT*
 
-*  Remote SSH port of src host to connect to (optional).
+*  Remote SSH port on src host to connect to (optional).
 
 <!-- -->
 
@@ -1087,7 +1090,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--ssh-dst-port** *INT*
 
-*  Remote SSH port of dst host to connect to (optional).
+*  Remote SSH port on dst host to connect to (optional).
 
 <!-- -->
 
