@@ -42,10 +42,10 @@ import time
 import uuid
 from collections import defaultdict, Counter
 from contextlib import redirect_stderr
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging import Logger
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import List, Dict, Set, Iterable, Tuple, Any, Optional
+from typing import List, Dict, Set, Iterable, Tuple, Any, Optional, Union
 
 __version__ = "1.1.0-dev"
 prog_name = "bzfs"
@@ -246,6 +246,30 @@ feature.
         "--exclude-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
+    parser.add_argument(
+        "--include-snapshot-from-time", action=TimestampAction, default=None, metavar="TIME|DURATION",
+        help=("Specifies the minimum ZFS 'creation' time that a source snapshot (and bookmark) must have in order to "
+              "be included (default: negative infinity). Only snapshots (and bookmarks) in the closed time range "
+              "[--include-snapshot-from-time, --include-snapshot-to-time] are included; other snapshots "
+              "(and bookmarks) are excluded. The specified time can take any of the following forms:\n\n"
+              "a) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
+              "b) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
+              "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
+              "requires Python >= 3.11.\n\n"
+              "c) a duration that indicates how long ago from the current time, using the following syntax: "
+              "a non-negative integer number, followed by zero or more spaces, followed by a duration unit that is "
+              "*one* of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
+              "Examples: '0s', '90min', '48h', '90 days', '12w'.\n\n"
+              "Note: This option compares the specified time against the standard ZFS 'creation' time property of the "
+              "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
+              "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
+              "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
+              "the -p flag to display UTC Unix time in integer seconds).\n\n"))
+    parser.add_argument(
+        "--include-snapshot-to-time", action=TimestampAction, default=None, metavar="TIME|DURATION",
+        help=("Specifies the maximum ZFS 'creation' time that a source snapshot (and bookmark) must have in order to "
+              "be included (default: positive infinity). Has same syntax as --include-snapshot-from-time "
+              "(see above).\n\n"))
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -368,8 +392,9 @@ feature.
     parser.add_argument(
         "--delete-missing-snapshots", action="store_true",
         help=("After successful replication, delete existing destination snapshots that do not exist within the source "
-              "dataset if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex "
-              "and the destination dataset is included via --{include|exclude}-dataset-regex "
+              "dataset if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, "
+              "and they fall into the [--include-snapshot-from-time, --include-snapshot-to-time] range, and "
+              "the destination dataset is included via --{include|exclude}-dataset-regex "
               "--{include|exclude}-dataset policy. Does not recurse without --recursive.\n\n"
               "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
               "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
@@ -749,6 +774,7 @@ feature.
 
 #############################################################################
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
+UnixTimeRange = Optional[Tuple[int, int]]  # Type alias
 
 
 #############################################################################
@@ -807,6 +833,7 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
+        self.snapshot_time_range: UnixTimeRange = self.get_snapshot_time_range(args)
 
         self.dry_run: bool = args.dryrun is not None
         self.dry_run_recv: str = "-n" if self.dry_run else ""
@@ -945,6 +972,22 @@ class Params:
             return "false"  # substitute a program that will error out with non-zero return code
         else:
             return program
+
+    @staticmethod
+    def get_snapshot_time_range(args: argparse.Namespace) -> UnixTimeRange:
+        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
+            if isinstance(time_spec, timedelta):
+                return int(current_time - time_spec.total_seconds())
+            if isinstance(time_spec, int):
+                return int(time_spec)
+            return default
+
+        if args.include_snapshot_from_time is None and args.include_snapshot_to_time is None:
+            return None
+        current_time = time.time()
+        lo = utc_unix_time_in_seconds(args.include_snapshot_from_time, default=0)
+        hi = utc_unix_time_in_seconds(args.include_snapshot_to_time, default=1000000000000)  # 33658-09-27 ~ infinity
+        return (lo, hi) if lo <= hi else (hi, lo)
 
     def unset_matching_env_vars(self, args: argparse.Namespace):
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
@@ -1313,9 +1356,9 @@ class Job:
                     log.error(f"#{len(self.all_exceptions)}: Done replicating: %s", f"{src_dataset} --> {dst_dataset}")
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
-        # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex and the destination
-        # dataset is included via --{include|exclude}-dataset-regex --{include|exclude}-dataset
-        # --exclude-dataset-property policy
+        # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, and they fall into the
+        # [--include-snapshot-from-time, --include-snapshot-to-time] time range, and the destination dataset is included
+        # via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
         if params.delete_missing_snapshots and not failed:
             log.info(
                 p.dry("--delete-missing-snapshots: %s"),
@@ -1340,9 +1383,15 @@ class Job:
                     basis_src_datasets.remove(src_dataset)
                 else:
                     dst_ds = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
-                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_ds)
+                    props = "creation,guid,name" if p.snapshot_time_range else "guid,name"
+                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_ds)
                     dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
-                    dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)
+                    if p.snapshot_time_range:
+                        dst_snapshots_with_guids = self.filter_snapshots_by_creation_time(
+                            dst_snapshots_with_guids, p.snapshot_time_range, bookmark_time_range=None
+                        )
+                        dst_snapshots_with_guids = cut(2, lines=dst_snapshots_with_guids)
+                    dst_snapshots_with_guids = self.filter_snapshots_by_regex(dst_snapshots_with_guids)
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                         set(cut(1, lines=src_snapshots_with_guids))
                     )
@@ -1425,9 +1474,9 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        if use_bookmark:
+        if use_bookmark or p.snapshot_time_range:
             props = "creation,guid,name"
-            types = "snapshot,bookmark"
+            types = "snapshot,bookmark" if use_bookmark else "snapshot"
         else:
             props = "guid,name"
             types = "snapshot"
@@ -1439,22 +1488,29 @@ class Job:
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
 
-        # ignore irrelevant bookmarks: ignore src bookmarks if the destination dataset has no snapshot. Ignore any src
-        # bookmark that is older than the oldest destination snapshot or newer than the latest destination snapshot.
-        if use_bookmark:
-            src_snapshots_and_bookmarks = self.filter_bookmarks(
+        # ignore irrelevant bookmarks and snapshots wrt. ZFS creation time
+        if use_bookmark or p.snapshot_time_range:
+            src_snapshots_and_bookmarks = self.filter_snapshots_by_creation_time(
                 src_snapshots_and_bookmarks,
-                oldest_dst_snapshot_creation=int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
-                latest_dst_snapshot_creation=int(dst_snapshots_with_guids[-1].split("\t", 1)[0]),
+                snapshot_time_range=p.snapshot_time_range,
+                bookmark_time_range=(
+                    None
+                    if not use_bookmark
+                    else (
+                        int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
+                        int(dst_snapshots_with_guids[-1].split("\t", 1)[0]),
+                    )
+                ),
             )
             src_snapshots_and_bookmarks = cut(field=2, lines=src_snapshots_and_bookmarks)
-            dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
+            if use_bookmark:
+                dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
         src_snapshots_with_guids = src_snapshots_and_bookmarks
         src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
         basis_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
+        src_snapshots_with_guids = self.filter_snapshots_by_regex(src_snapshots_with_guids)
 
         # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
         # a snapshot is "true" if it is not a bookmark.
@@ -2066,7 +2122,7 @@ class Job:
                     log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
-    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
+    def filter_snapshots_by_regex(self, snapshots: List[str]) -> List[str]:
         """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
         include_snapshot_regexes = self.params.include_snapshot_regexes
         exclude_snapshot_regexes = self.params.exclude_snapshot_regexes
@@ -2085,27 +2141,34 @@ class Job:
                 log.debug("Excluding b/c snaphot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
         return results
 
-    def filter_bookmarks(
-        self, snapshots_and_bookmarks: List[str], oldest_dst_snapshot_creation: int, latest_dst_snapshot_creation: int
+    def filter_snapshots_by_creation_time(
+        self, snapshots: List[str], snapshot_time_range: UnixTimeRange, bookmark_time_range: UnixTimeRange
     ) -> List[str]:
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
         results = []
-        for snapshot in snapshots_and_bookmarks:
-            if "@" in snapshot:
-                results.append(snapshot)  # it's a true snapshot
-            else:
+        for snapshot in snapshots:
+            creation_time = None
+            include = "@" in snapshot  # it's a true snapshot?
+            if bookmark_time_range and not include:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
                 creation_time = int(snapshot[0 : snapshot.index("\t")])
-                if oldest_dst_snapshot_creation <= creation_time <= latest_dst_snapshot_creation:
-                    results.append(snapshot)
-                    if is_debug:
-                        log.debug("Including b/c bookmark time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-                elif is_debug:
-                    log.debug("Excluding b/c bookmark time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                include = bookmark_time_range[0] <= creation_time <= bookmark_time_range[1]
+
+            if snapshot_time_range and include:
+                creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
+                include = snapshot_time_range[0] <= creation_time <= snapshot_time_range[1]
+
+            if include:
+                results.append(snapshot)
+                if is_debug:
+                    log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+            elif is_debug:
+                log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+
         return results
 
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
@@ -3302,6 +3365,51 @@ class FileOrLiteralAction(argparse.Action):
                 except FileNotFoundError:
                     parser.error(f"File not found: {value[1:]}")
         setattr(namespace, self.dest, current_values)
+
+
+#############################################################################
+class TimestampAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        values = values.strip()
+        if values.isdigit():
+            # Input is a Unix time in integer seconds
+            setattr(namespace, self.dest, int(values))
+        else:
+            try:
+                duration = timedelta(seconds=self.parse_duration_to_seconds(values))
+                setattr(namespace, self.dest, duration)
+            except ValueError:
+                try:  # If it's not a duration, try parsing as an ISO 8601 datetime
+                    unix_time_secs = int(datetime.fromisoformat(values).timestamp())
+                    setattr(namespace, self.dest, unix_time_secs)
+                except ValueError:
+                    parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {values}")
+
+    @staticmethod
+    def parse_duration_to_seconds(duration: str) -> int:
+        unit_seconds = {
+            "s": 1,  # seconds
+            "sec": 1,  # seconds
+            "secs": 1,  # seconds
+            "m": 60,  # minutes
+            "min": 60,  # minutes
+            "mins": 60,  # minutes
+            "h": 60 * 60,  # hours
+            "hour": 60 * 60,  # hours
+            "hours": 60 * 60,  # hours
+            "d": 86400,  # days
+            "day": 86400,  # days
+            "days": 86400,  # days
+            "w": 7 * 86400,  # weeks
+            "week": 7 * 86400,  # weeks
+            "weeks": 7 * 86400,  # weeks
+        }
+        match = re.fullmatch(r"(\d+)\s*(s|secs?|m|mins?|h|hours?|d|days?|w|weeks?)", duration)
+        if not match:
+            raise ValueError("Invalid duration format")
+        quantity = int(match.group(1))
+        unit = match.group(2)
+        return quantity * unit_seconds[unit]
 
 
 #############################################################################

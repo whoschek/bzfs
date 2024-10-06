@@ -278,6 +278,8 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--exclude-dataset-property STRING]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
+            [--include-snapshot-from-time TIME|DURATION]
+            [--include-snapshot-to-time TIME|DURATION]
             [--zfs-send-program-opts STRING] [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
             [--force-rollback-to-latest-snapshot] [--force] [--force-unmount]
@@ -503,6 +505,53 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
+<div id="--include-snapshot-from-time"></div>
+
+**--include-snapshot-from-time** *TIME|DURATION*
+
+*  Specifies the minimum ZFS 'creation' time that a source snapshot
+    (and bookmark) must have in order to be included (default: negative
+    infinity). Only snapshots (and bookmarks) in the closed time range
+    [--include-snapshot-from-time, --include-snapshot-to-time] are
+    included; other snapshots (and bookmarks) are excluded. The
+    specified time can take any of the following forms:
+
+    a) a non-negative integer representing a UTC Unix time in seconds.
+    Example: 1728109805
+
+    b) an ISO 8601 datetime string with or without timezone. Examples:
+    '2024-10-05', '2024-10-05T14:48:00', '2024-10-05T14:48:00+02',
+    '2024-10-05T14:48:00-04:30'. Timezone string support requires
+    Python >= 3.11.
+
+    c) a duration that indicates how long ago from the current time,
+    using the following syntax: a non-negative integer number, followed
+    by zero or more spaces, followed by a duration unit that is *one*
+    of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]',
+    'd', 'day[s]', 'w', 'week[s]'. Examples: '0s',
+    '90min', '48h', '90 days', '12w'.
+
+    Note: This option compares the specified time against the standard
+    ZFS 'creation' time property of the snapshot (which is a UTC Unix
+    time in integer seconds), rather than against a timestamp that may
+    be part of the snapshot name. You can list the ZFS creation time of
+    snapshots and bookmarks as follows: `zfs list -t snapshot,bookmark
+    -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add
+    the -p flag to display UTC Unix time in integer seconds).
+
+<!-- -->
+
+<div id="--include-snapshot-to-time"></div>
+
+**--include-snapshot-to-time** *TIME|DURATION*
+
+*  Specifies the maximum ZFS 'creation' time that a source snapshot
+    (and bookmark) must have in order to be included (default: positive
+    infinity). Has same syntax as --include-snapshot-from-time (see
+    above).
+
+<!-- -->
+
 <div id="--zfs-send-program-opts"></div>
 
 **--zfs-send-program-opts** *STRING*
@@ -724,10 +773,11 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 *  After successful replication, delete existing destination snapshots
     that do not exist within the source dataset if they match at least
     one of --include-snapshot-regex but none of
-    --exclude-snapshot-regex and the destination dataset is included
-    via --{include|exclude}-dataset-regex
-    --{include|exclude}-dataset policy. Does not recurse without
-    --recursive.
+    --exclude-snapshot-regex, and they fall into the
+    [--include-snapshot-from-time, --include-snapshot-to-time]
+    range, and the destination dataset is included via
+    --{include|exclude}-dataset-regex --{include|exclude}-dataset
+    policy. Does not recurse without --recursive.
 
     For example, if the destination dataset contains snapshots
     h1,h2,h3,d1 (h=hourly, d=daily) whereas the source dataset only

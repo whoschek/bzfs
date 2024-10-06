@@ -799,6 +799,52 @@ class LocalTestCase(BZFSTestCase):
                     self.assertSnapshots(dst_root_dataset, 0)
                     self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
 
+    def test_include_snapshot_time_range_full(self):
+        self.setup_basic()
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-from-time=10secs",
+            "--include-snapshot-to-time=2999-01-01",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+
+    def test_include_snapshot_time_range_empty(self):
+        self.setup_basic()
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-from-time=2999-01-01",
+            "--include-snapshot-to-time=2999-01-01",
+        )
+        self.assertSnapshots(dst_root_dataset, 0)
+
+    def test_include_snapshot_time_range_full_with_existing_nonempty_dst(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset)
+        destroy(snapshots(dst_root_dataset)[-1])
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-from-time=60secs",
+            "--include-snapshot-to-time=2999-01-01",
+        )
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+
+    def test_include_snapshot_time_range_full_with_existing_nonempty_dst_no_use_bookmark(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset)
+        destroy(snapshots(dst_root_dataset)[-1])
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--no-use-bookmark",
+            "--include-snapshot-from-time=60secs",
+            "--include-snapshot-to-time=2999-01-01",
+        )
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+
     def test_nostream(self):
         self.setup_basic()
         for i in range(0, 3):
@@ -2225,6 +2271,50 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertSnapshotNames(dst_root_dataset + "/foo/a", ["u1", "u2"])
+
+    def test_delete_missing_snapshots_flat_with_time_range_full(self):
+        self.setup_basic_with_recursive_replication_done()
+        destroy(snapshots(src_root_dataset)[2])
+        destroy(snapshots(src_root_dataset)[0])
+        src_foo = build(src_root_dataset + "/foo")
+        destroy(snapshots(src_foo)[1])
+        src_foo_a = build(src_root_dataset + "/foo/a")
+        destroy(snapshots(src_foo_a)[2])
+        kwargs = {}
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-missing-snapshots",
+            "--include-snapshot-from-time=10secs",
+            "--include-snapshot-to-time=2999-01-01",
+            **kwargs,
+        )
+        self.assertSnapshotNames(dst_root_dataset, ["s2"])
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+
+    def test_delete_missing_snapshots_flat_with_time_range_empty(self):
+        self.setup_basic_with_recursive_replication_done()
+        destroy(snapshots(src_root_dataset)[2])
+        destroy(snapshots(src_root_dataset)[0])
+        src_foo = build(src_root_dataset + "/foo")
+        destroy(snapshots(src_foo)[1])
+        src_foo_a = build(src_root_dataset + "/foo/a")
+        destroy(snapshots(src_foo_a)[2])
+        kwargs = {}
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-missing-snapshots",
+            "--include-snapshot-from-time=2999-01-01",
+            "--include-snapshot-to-time=2999-01-01",
+            **kwargs,
+        )
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_delete_missing_snapshots_with_excludes_flat_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
