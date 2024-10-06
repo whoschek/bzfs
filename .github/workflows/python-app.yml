@@ -149,10 +149,10 @@ jobs:
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
         # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
-        sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt update
+        # sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt update
         # sudo apt-get -y apt install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux
-        zfs --version
+        # sudo apt-get -y install zfs-dkms zfsutils-linux
+        # zfs --version
         
         # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
         sudo add-apt-repository ppa:rapier1/hpnssh; sudo apt update
