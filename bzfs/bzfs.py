@@ -748,6 +748,10 @@ feature.
 
 
 #############################################################################
+RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
+
+
+#############################################################################
 class LogParams:
     def __init__(self, args: argparse.Namespace):
         """Option values for logging; reads from ArgumentParser via args."""
@@ -872,13 +876,13 @@ class Params:
         self.platform_platform: str = platform.platform()
 
         # mutable variables:
-        self.exclude_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.include_snapshot_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.exclude_snapshot_regexes: RegexList = []  # deferred to validate_task() phase
+        self.include_snapshot_regexes: RegexList = []  # deferred to validate_task() phase
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
-        self.exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.tmp_exclude_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
-        self.tmp_include_dataset_regexes: List[Tuple[re.Pattern, bool]] = []  # deferred to validate_task() phase
+        self.exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
+        self.include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
+        self.tmp_exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
+        self.tmp_include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
         self.abs_exclude_datasets: List[str] = []  # deferred to validate_task() phase
         self.abs_include_datasets: List[str] = []  # deferred to validate_task() phase
 
@@ -1010,8 +1014,8 @@ class CopyPropertiesConfig:
         sources: str = p.validate_arg(getattr(args, f"{grup}_sources"))
         self.sources: str = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
         self.targets: str = p.validate_arg(getattr(args, f"{grup}_targets"))
-        self.include_regexes: List[Tuple[re.Pattern, bool]] = compile_regexes(getattr(args, f"{grup}_include_regex"))
-        self.exclude_regexes: List[Tuple[re.Pattern, bool]] = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
+        self.include_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_include_regex"))
+        self.exclude_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -2769,9 +2773,7 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
     return dataset[len(root_dataset) :]
 
 
-def is_included(
-    name: str, include_regexes: List[Tuple[re.Pattern, bool]], exclude_regexes: List[Tuple[re.Pattern, bool]]
-) -> bool:
+def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
     """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
     else False. A regex that starts with a `!` is a negation - the regex matches if the regex without the
     `!` prefix does not match."""
@@ -2795,7 +2797,7 @@ def is_included(
     return True
 
 
-def compile_regexes(regexes: List[str], suffix: str = "") -> List[Tuple[re.Pattern, bool]]:
+def compile_regexes(regexes: List[str], suffix: str = "") -> RegexList:
     compiled_regexes = []
     for regex in regexes:
         is_negation = regex.startswith("!")
