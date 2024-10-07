@@ -2851,24 +2851,21 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
     """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
     else False. A regex that starts with a `!` is a negation - the regex matches if the regex without the
     `!` prefix does not match."""
-    is_match = False
-    for regex, is_negation in include_regexes:
-        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
-        if is_negation:
-            is_match = not is_match
-        if is_match:
-            break
-
-    if not is_match:
-        return False
-
     for regex, is_negation in exclude_regexes:
         is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
         if is_negation:
             is_match = not is_match
         if is_match:
             return False
-    return True
+
+    for regex, is_negation in include_regexes:
+        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
+        if is_negation:
+            is_match = not is_match
+        if is_match:
+            return True
+
+    return False
 
 
 def compile_regexes(regexes: List[str], suffix: str = "") -> RegexList:
