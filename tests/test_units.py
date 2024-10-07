@@ -188,6 +188,15 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun", "-n"]))
         self.assertEqual(["-x"], params.fix_recv_opts(["-x"]))
 
+        self.assertEqual([], params.fix_send_opts(["-n"]))
+        self.assertEqual([], params.fix_send_opts(["--dryrun", "-n", "-ed"]))
+        self.assertEqual([], params.fix_send_opts(["-I", "s1"]))
+        self.assertEqual(["--raw"], params.fix_send_opts(["-i", "s1", "--raw"]))
+        self.assertEqual(["-X", "d1,d2"], params.fix_send_opts(["-X", "d1,d2"]))
+        self.assertEqual(
+            ["--exclude", "d1,d2", "--redact", "b1"], params.fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
+        )
+
     def test_xprint(self):
         log = logging.getLogger()
         bzfs.xprint(log, "foo")

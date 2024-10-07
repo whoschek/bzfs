@@ -952,13 +952,17 @@ class Params:
     @staticmethod
     def fix_recv_opts(opts: List[str]) -> List[str]:
         return fix_send_recv_opts(
-            opts=opts, exclude_long_opts={"--dryrun"}, exclude_short_opts="n", include_arg_opts={"-o", "-x"}
+            opts, exclude_long_opts={"--dryrun"}, exclude_short_opts="n", include_arg_opts={"-o", "-x"}
         )
 
     @staticmethod
     def fix_send_opts(opts: List[str]) -> List[str]:
         return fix_send_recv_opts(
-            opts=opts, exclude_long_opts={"--dryrun"}, exclude_short_opts="den", include_arg_opts={"-i", "-I"}
+            opts,
+            exclude_long_opts={"--dryrun"},
+            exclude_short_opts="den",
+            include_arg_opts={"-X", "--exclude", "--redact"},
+            exclude_arg_opts={"-i", "-I"},
         )
 
     def program_name(self, program: str) -> str:
@@ -2764,7 +2768,11 @@ class Job:
 
 #############################################################################
 def fix_send_recv_opts(
-    opts: List[str], exclude_long_opts: Set[str], exclude_short_opts: str, include_arg_opts: Set[str]
+    opts: List[str],
+    exclude_long_opts: Set[str],
+    exclude_short_opts: str,
+    include_arg_opts: Set[str],
+    exclude_arg_opts: Set[str] = set(),
 ) -> List[str]:
     """These opts are instead managed via bzfs CLI args --dryrun, etc."""
     assert "-" not in exclude_short_opts
@@ -2774,7 +2782,10 @@ def fix_send_recv_opts(
     while i < n:
         opt = opts[i]
         i += 1
-        if opt in include_arg_opts:  # example: {"-o", "-x"}
+        if opt in exclude_arg_opts:  # example: {"-X", "--exclude"}
+            i += 1
+            continue
+        elif opt in include_arg_opts:  # example: {"-o", "-x"}
             results.append(opt)
             if i < n:
                 results.append(opts[i])

@@ -55,6 +55,7 @@ from tests.zfs_util import (
     take_snapshot,
     zfs_list,
     zfs_set,
+    zfs_version,
 )
 
 src_pool_name = "wb_src"
@@ -898,6 +899,12 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_root_dataset + "/" + d1, [s1])
         self.assertTrue(dataset_exists(dst_root_dataset + "/" + d1 + "/" + d2))
         self.assertSnapshotNames(dst_root_dataset + "/" + d1 + "/" + d2, [t1])
+
+    def test_basic_replication_flat_simple_with_fixup_X_opt(self):
+        if not is_zfs_at_least_2_3_0():
+            self.skipTest("zfs send -X option requires zfs >= 2.3.0")
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--zfs-send-program-opts=-X zzzz --exclude zzzzz")
+        self.assertSnapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_flat_simple_with_multiple_root_datasets(self):
         self.setup_basic()
@@ -2866,6 +2873,15 @@ def natsort_key(s: str):
 
 def is_solaris_zfs_at_least_11_4_42():
     return is_solaris_zfs() and bzfs.is_version_at_least(".".join(platform.version().split(".")[0:3]), "11.4.42")
+
+
+def is_zfs_at_least_2_3_0():
+    if is_solaris_zfs():
+        return False
+    ver = zfs_version()
+    if ver is None:
+        return False
+    return bzfs.is_version_at_least(ver, "2.3.0")
 
 
 def os_username():
