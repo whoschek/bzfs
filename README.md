@@ -184,10 +184,12 @@ destination while replicating hourly and 5 minute snapshots to a local destinati
 * Can be told what ZFS dataset properties to copy, also via include/exclude regexes.
 * Full and precise ZFS bookmark support for additional safety, or to reclaim disk space earlier.
 * Can be strict or told to be tolerant of runtime errors.
+* Multiple bzfs processes can run in parallel. If multiple processes attempt to write to the same destination dataset
+simultaneously this is detected and the operation can be auto-retried safely.
+* A periodic job that runs every N minutes declines to start if the same previous periodic job is still running
+without completion yet.
 * Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
 integration.
-* Multiple bzfs processes can run in parallel as long as they don't write to the same destination dataset
-simultaneously.
 * Code base is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
@@ -304,10 +306,11 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
             [--bwlimit STRING] [--compression-program STRING]
             [--compression-program-opts STRING] [--mbuffer-program STRING]
-            [--mbuffer-program-opts STRING] [--pv-program STRING]
-            [--pv-program-opts STRING] [--shell-program STRING]
-            [--ssh-program STRING] [--sudo-program STRING]
-            [--zfs-program STRING] [--zpool-program STRING] [--log-dir DIR]
+            [--mbuffer-program-opts STRING] [--ps-program STRING]
+            [--pv-program STRING] [--pv-program-opts STRING]
+            [--shell-program STRING] [--ssh-program STRING]
+            [--sudo-program STRING] [--zfs-program STRING]
+            [--zpool-program STRING] [--log-dir DIR]
             [--log-syslog-address STRING] [--log-syslog-socktype {UDP,TCP}]
             [--log-syslog-facility INT] [--log-syslog-prefix STRING]
             [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
@@ -1209,6 +1212,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  Options to be passed to 'mbuffer' program (optional). Default:
     '-q -m 128M'.
+
+<!-- -->
+
+<div id="--ps-program"></div>
+
+**--ps-program** *STRING*
+
+*  The name or path to the 'ps' executable (optional). Default is
+    'ps'. Use '-' to disable the use of this program.
 
 <!-- -->
 

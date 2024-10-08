@@ -1365,6 +1365,11 @@ class LocalTestCase(BZFSTestCase):
                 expected = old_recordsize if i == 0 else new_recordsize
                 self.assertEqual(str(expected), dataset_property(dst_root_dataset + "/foo", "recordsize"))
 
+    def test_is_zfs_already_busy_receiving_dataset(self):
+        self.setup_basic()
+        inject_params = {"is_zfs_already_busy_receiving_dataset": True}
+        self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=die_status, inject_params=inject_params)
+
     def test_periodic_job_locking(self):
         if is_solaris_zfs():
             self.skipTest(
@@ -2786,6 +2791,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         if self.param and self.param.get("ssh_mode") != "local" and self.param.get("min_pipe_transfer_size", -1) == 0:
             self.tearDownAndSetup()
             self.inject_unavailable_program("inject_failing_mbuffer", expected_error=1)
+
+    def test_inject_unavailable_ps(self):
+        self.inject_unavailable_program("inject_unavailable_ps")
 
     def test_inject_unavailable_pv(self):
         self.inject_unavailable_program("inject_unavailable_pv")

@@ -607,6 +607,9 @@ feature.
         "--mbuffer-program-opts", default=mbuffer_program_opts_default, metavar="STRING",
         help=f"Options to be passed to 'mbuffer' program (optional). Default: '{mbuffer_program_opts_default}'.\n\n")
     parser.add_argument(
+        "--ps-program", default="ps", action=NonEmptyStringAction, metavar="STRING",
+        help=hlp("ps") + msg)
+    parser.add_argument(
         "--pv-program", default="pv", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("pv") + msg.rstrip() + " This is used for bandwidth rate-limiting and progress monitoring.\n\n")
     pv_program_opts_default = ("--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 "
@@ -884,6 +887,7 @@ class Params:
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
         self.mbuffer_program: str = self.program_name(args.mbuffer_program)
         self.mbuffer_program_opts: List[str] = self.split_args(args.mbuffer_program_opts)
+        self.ps_program: str = self.program_name(args.ps_program)
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
         if args.bwlimit and args.bwlimit.strip():
@@ -1005,7 +1009,7 @@ class Params:
                 self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
 
     def lock_file_name(self) -> str:
-        """Makes it such that a periodic job that runs every N mins declines to start if the same previous periodic
+        """Makes it such that a periodic job that runs every N mins declines to proceed if the same previous periodic
         job is still running without completion yet."""
         # fmt: off
         key = (tuple(self.root_dataset_pairs), self.args.recursive, self.args.exclude_dataset_property,
@@ -1484,10 +1488,16 @@ class Job:
     def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
 
-        # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         p = params = self.params
         log = p.log
         src, dst = p.src, p.dst
+        if self.is_zfs_already_busy_receiving_dataset(dst, dst_dataset):
+            try:
+                die("Destination is already busy with zfs receive from another process: " + dst_dataset)
+            except SystemExit as e:
+                raise RetryableError("dst already busy with zfs receive") from e
+
+        # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
         props = "creation,guid,name" if use_bookmark else "guid,name"
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
@@ -2630,6 +2640,8 @@ class Job:
             self.disable_program("zstd", locations)
         if params.mbuffer_program == disable_prg:
             self.disable_program("mbuffer", locations)
+        if params.ps_program == disable_prg:
+            self.disable_program("ps", locations)
         if params.pv_program == disable_prg:
             self.disable_program("pv", locations)
         if params.shell_program == disable_prg:
@@ -2676,6 +2688,7 @@ class Job:
         command -v {params.compression_program} > /dev/null && echo zstd
         command -v {params.mbuffer_program} > /dev/null && echo mbuffer
         command -v {params.pv_program} > /dev/null && echo pv
+        command -v {params.ps_program} > /dev/null && echo ps
         command -v {params.uname_program} > /dev/null && printf uname- && {params.uname_program} -a || true
         """
 
@@ -2768,6 +2781,19 @@ class Job:
         return self.is_zpool_feature_enabled_or_active(
             remote, "feature@bookmark_v2"
         ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
+
+    recv_proc_regex = re.compile(r"(.* )?zfs (receive|recv) .*".replace("(", "(?:"))  # non-capturing group
+
+    def is_zfs_already_busy_receiving_dataset(self, remote: Remote, dataset: str) -> bool:
+        """Checks whether the given dataset on the given remote is currently part of a 'zfs receive' process."""
+        if not self.is_program_available("ps", remote.location):
+            return False
+        p = self.params
+        cmd = p.split_args(f"{p.ps_program} -Ao args")
+        procs = (self.try_ssh_command(remote, log_debug, cmd=cmd) or "").splitlines()
+        if self.inject_params.get("is_zfs_already_busy_receiving_dataset", False):
+            procs += ["sudo zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
+        return any(proc.endswith(" " + dataset) and self.recv_proc_regex.fullmatch(proc) for proc in procs)
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
