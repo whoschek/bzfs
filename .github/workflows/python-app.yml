@@ -20,9 +20,9 @@ name: Tests
 
 on:
   push:
-    branches: [ "main", "branch-1.1.x", "branch-1.0.x" ]
+    branches: [ "main", "branch-1.2.x", "branch-1.1.x", "branch-1.0.x" ]
   pull_request:
-    branches: [ "main", "branch-1.1.x", "branch-1.0.x" ]
+    branches: [ "main", "branch-1.2.x", "branch-1.1.x", "branch-1.0.x" ]
   workflow_dispatch:
     inputs:
       name:
@@ -45,7 +45,7 @@ on:
         default: False
   schedule:
     - cron: '5 3 * * *'  # Run nightly for main at 3:05am UTC,
-    - cron: '0 3 * * *'  # Run nightly for branch-1.0.x at 3am UTC
+    - cron: '0 3 * * *'  # Run nightly for branch-1.1.x at 3am UTC
   workflow_call:  # Enables this workflow to be called by other workflows (incl. the same workflow from another branch)
     inputs:
       is_external_call:
@@ -473,11 +473,16 @@ jobs:
 
 
   # GitHub honours the "on: schedule:" directive only on main branch. Use hack to run nightlies also on other branches:
-  test_branch_1_0_x:
+  test_branch_1_1_x:
     if: github.event.schedule == '0 3 * * *'
-    uses: whoschek/bzfs/.github/workflows/python-app.yml@branch-1.0.x
+    uses: whoschek/bzfs/.github/workflows/python-app.yml@branch-1.1.x
     # uses: ./.github/workflows/python-app.yml@branch-1.0.x  # GitHub does not support this syntax
     # See https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#jobsjob_iduses
     # and https://github.com/orgs/community/discussions/16107
     # and https://github.com/orgs/community/discussions/25246
     # and https://github.com/actions/runner/issues/1483
+
+  test_branch_1_0_x:
+    if: false  # job currently disabled
+    #if: github.event.schedule == '0 3 * * *'
+    uses: whoschek/bzfs/.github/workflows/python-app.yml@branch-1.0.x
