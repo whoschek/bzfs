@@ -186,8 +186,8 @@ destination while replicating hourly and 5 minute snapshots to a local destinati
 * Can be strict or told to be tolerant of runtime errors.
 * Multiple bzfs processes can run in parallel. If multiple processes attempt to write to the same destination dataset
 simultaneously this is detected and the operation can be auto-retried safely.
-* A periodic job that runs every N minutes declines to start if the same previous periodic job is still running
-without completion yet.
+* A job that runs periodically declines to start if the same previous periodic job is still running without
+completion yet.
 * Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
 integration.
 * Code base is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.

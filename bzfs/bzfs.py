@@ -1009,7 +1009,7 @@ class Params:
                 self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
 
     def lock_file_name(self) -> str:
-        """Makes it such that a periodic job that runs every N mins declines to proceed if the same previous periodic
+        """Makes it such that a job that runs periodically declines to start if the same previous periodic
         job is still running without completion yet."""
         # fmt: off
         key = (tuple(self.root_dataset_pairs), self.args.recursive, self.args.exclude_dataset_property,
