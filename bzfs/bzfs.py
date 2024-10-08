@@ -21,6 +21,8 @@
 
 import argparse
 import collections
+import fcntl
+import hashlib
 import json
 import logging
 import logging.config
@@ -44,6 +46,7 @@ from collections import defaultdict, Counter
 from contextlib import redirect_stderr
 from datetime import datetime, timedelta
 from logging import Logger
+from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import List, Dict, Set, Iterable, Tuple, Any, Optional, Union
 
@@ -1001,6 +1004,19 @@ class Params:
                 os.environ.pop(envvar_name, None)
                 self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
 
+    def lock_file_name(self) -> str:
+        """Makes it such that a periodic job that runs every N mins declines to start if the same previous periodic
+        job is still running without completion yet."""
+        # fmt: off
+        key = (tuple(self.root_dataset_pairs), self.args.recursive, self.args.exclude_dataset_property,
+               tuple(self.args.include_dataset), tuple(self.args.exclude_dataset),
+               tuple(self.args.include_dataset_regex), tuple(self.args.exclude_dataset_regex),
+               self.src.basis_ssh_host, self.dst.basis_ssh_host,
+               self.src.basis_ssh_user, self.dst.basis_ssh_user)
+        # fmt: on
+        hash_code = hashlib.sha256(str(key).encode("utf-8")).hexdigest()
+        return os.path.join(tempfile.gettempdir(), f"{prog_name}-lockfile-{hash_code}.lock")
+
     def dry(self, msg: str) -> str:
         return "Dry " + msg if self.dry_run else msg
 
@@ -1131,21 +1147,33 @@ class Job:
         try:
             log = get_logger(log_params, args, log)
             log.info("%s", "Log file is: " + log_params.log_file)
+            log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
+            log.debug("Parsed CLI arguments: %s", args)
             try:
-                self.params = Params(args, sys_argv, log_params, log, self.inject_params)
+                self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
             except SystemExit as e:
                 log.error("%s", str(e))
                 raise
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
                 with redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
-                    self.run_tasks()
+                    lock_file = p.lock_file_name()
+                    with open(lock_file, "w") as lock_file_fd:
+                        try:
+                            # Acquire an exclusive lock; will raise an error if lock is already held by another process.
+                            # The (advisory) lock is auto-released when the process terminates or the fd is closed.
+                            fcntl.flock(lock_file_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
+                        except BlockingIOError as e:
+                            log.error("Exiting as same previous periodic job is still running without completion yet.")
+                            raise SystemExit(die_status) from e
+                        try:
+                            self.run_tasks()
+                        finally:
+                            unlink_missing_ok(lock_file)  # avoid accumulation of stale lock files
         finally:
             reset_logger()
 
     def run_tasks(self) -> None:
         p, log = self.params, self.params.log
-        log.info("CLI arguments: %s %s", " ".join(p.sys_argv), f"[euid: {os.geteuid()}]")
-        log.debug("Parsed CLI arguments: %s", p.args)
         try:
             self.validate_once()
             self.all_exceptions = []
@@ -2975,6 +3003,13 @@ def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> 
         value = value if end else value.rstrip()
         level = log_stdout if file is sys.stdout else log_stderr
         log.log(level, "%s", value)
+
+
+def unlink_missing_ok(file: str):  # workaround for compat with python < 3.8
+    try:
+        Path(file).unlink()
+    except FileNotFoundError:
+        pass
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):

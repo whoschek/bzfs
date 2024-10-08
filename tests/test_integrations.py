@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import fcntl
 import json
 import os
 import platform
@@ -1364,6 +1364,28 @@ class LocalTestCase(BZFSTestCase):
                 )
                 expected = old_recordsize if i == 0 else new_recordsize
                 self.assertEqual(str(expected), dataset_property(dst_root_dataset + "/foo", "recordsize"))
+
+    def test_periodic_job_locking(self):
+        if is_solaris_zfs():
+            self.skipTest(
+                "On Solaris fcntl.flock() does not work as expected. Solaris grants the lock on both file "
+                "descriptors simultaneously; probably because they are both in the same process; seems harmless."
+            )
+        self.setup_basic()
+        params = bzfs.Params(bzfs.argument_parser().parse_args(args=[src_root_dataset, dst_root_dataset]))
+        lock_file = params.lock_file_name()
+        with open(lock_file, "w") as lock_file_fd:
+            # Acquire an exclusive lock; will raise an error if the lock is already held by another process.
+            # The (advisory) lock is auto-released when the process terminates or the file descriptor is closed.
+            self.assertTrue(os.path.exists(lock_file))
+            fcntl.flock(lock_file_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
+            try:
+                # job will fail because the lock is already held
+                self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=die_status)
+                self.assertTrue(os.path.exists(lock_file))
+            finally:
+                bzfs.unlink_missing_ok(lock_file)  # avoid accumulation of stale lock files
+                self.assertFalse(os.path.exists(lock_file))
 
     def test_basic_replication_with_delegation_disabled(self):
         if not self.is_no_privilege_elevation():
