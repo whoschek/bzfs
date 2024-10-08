@@ -81,7 +81,7 @@ bzfs is written in Python and continously runs a wide set of unit tests
 and integration tests to ensure coverage and compatibility with old and
 new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
 versions >= 3.7 (including latest stable which is currently
-python-3.12).
+python-3.13).
 
 bzfs is a stand-alone program with zero required dependencies,
 consisting of a single file, akin to a stand-alone shell script or
