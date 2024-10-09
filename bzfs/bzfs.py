@@ -2790,7 +2790,7 @@ class Job:
             return False
         p = self.params
         cmd = p.split_args(f"{p.ps_program} -Ao args")
-        procs = (self.try_ssh_command(remote, log_debug, cmd=cmd) or "").splitlines()
+        procs = (self.try_ssh_command(remote, log_trace, cmd=cmd) or "").splitlines()
         if self.inject_params.get("is_zfs_already_busy_receiving_dataset", False):
             procs += ["sudo zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
         return any(proc.endswith(" " + dataset) and self.recv_proc_regex.fullmatch(proc) for proc in procs)
