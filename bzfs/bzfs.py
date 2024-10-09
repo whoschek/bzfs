@@ -1161,11 +1161,11 @@ class Job:
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
                 with redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
                     lock_file = p.lock_file_name()
-                    with open(lock_file, "w") as lock_file_fd:
+                    with open(lock_file, "w") as lock_fd:
                         try:
                             # Acquire an exclusive lock; will raise an error if lock is already held by another process.
                             # The (advisory) lock is auto-released when the process terminates or the fd is closed.
-                            fcntl.flock(lock_file_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
+                            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
                         except BlockingIOError as e:
                             log.error("Exiting as same previous periodic job is still running without completion yet.")
                             raise SystemExit(die_status) from e
