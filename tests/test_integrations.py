@@ -2825,6 +2825,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_disabled_mbuffer(self):
         self.inject_disabled_program("mbuffer")
 
+    def test_disabled_ps(self):
+        self.inject_disabled_program("ps")
+
     def test_disabled_pv(self):
         self.inject_disabled_program("pv")
 
