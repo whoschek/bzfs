@@ -3458,21 +3458,21 @@ class TimestampAction(argparse.Action):
     @staticmethod
     def parse_duration_to_seconds(duration: str) -> int:
         unit_seconds = {
-            "s": 1,  # seconds
-            "sec": 1,  # seconds
-            "secs": 1,  # seconds
-            "m": 60,  # minutes
-            "min": 60,  # minutes
-            "mins": 60,  # minutes
-            "h": 60 * 60,  # hours
-            "hour": 60 * 60,  # hours
-            "hours": 60 * 60,  # hours
-            "d": 86400,  # days
-            "day": 86400,  # days
-            "days": 86400,  # days
-            "w": 7 * 86400,  # weeks
-            "week": 7 * 86400,  # weeks
-            "weeks": 7 * 86400,  # weeks
+            "s": 1,
+            "sec": 1,
+            "secs": 1,
+            "m": 60,
+            "min": 60,
+            "mins": 60,
+            "h": 60 * 60,
+            "hour": 60 * 60,
+            "hours": 60 * 60,
+            "d": 86400,
+            "day": 86400,
+            "days": 86400,
+            "w": 7 * 86400,
+            "week": 7 * 86400,
+            "weeks": 7 * 86400,
         }
         match = re.fullmatch(r"(\d+)\s*(s|secs?|m|mins?|h|hours?|d|days?|w|weeks?)", duration)
         if not match:
