@@ -111,7 +111,7 @@ ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
-versions >= 3.7 (including latest stable which is currently python-3.12). 
+versions >= 3.7 (including latest stable which is currently python-3.13). 
 
 {prog_name} is a stand-alone program with zero required dependencies, consisting of a single file, akin to a 
 stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server 
@@ -1000,7 +1000,7 @@ class Params:
         hi = utc_unix_time_in_seconds(args.include_snapshot_to_time, default=1000000000000)  # 33658-09-27 ~ infinity
         return (lo, hi) if lo <= hi else (hi, lo)
 
-    def unset_matching_env_vars(self, args: argparse.Namespace):
+    def unset_matching_env_vars(self, args: argparse.Namespace) -> None:
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes = compile_regexes(args.include_envvar_regex)
         for envvar_name in list(os.environ.keys()):
@@ -2202,7 +2202,6 @@ class Job:
             if snapshot_time_range and include:
                 creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
                 include = snapshot_time_range[0] <= creation_time <= snapshot_time_range[1]
-
             if include:
                 results.append(snapshot)
                 if is_debug:
@@ -2787,7 +2786,7 @@ class Job:
         Instead, retry the operation later and only execute it when it's become safe. For example, decline to start
         a 'zfs receive' into a destination dataset if another process is already running another 'zfs receive' into
         the same destination dataset. However, it's actually safe to run an incremental 'zfs receive' into a dataset
-        in parallel with a 'zfs send' out of the very same dataset. This helps daisy chain use cases where
+        in parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where
         A replicates to B, and B replicates to C."""
         p = self.params
         if p.force or not self.is_program_available("ps", remote.location):
@@ -2801,7 +2800,7 @@ class Job:
         op = "zfs {create|destroy|receive|rollback" + ("|send" if busy_if_send else "") + "} operation"
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
-        except BaseException as e:
+        except SystemExit as e:
             raise RetryableError("dst currently busy with zfs mutation op") from e
 
     # FIXME: move into instance
