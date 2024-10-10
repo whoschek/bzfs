@@ -2518,6 +2518,8 @@ class Job:
         props_cache: Dict[Tuple[str, str, str], Dict[str, str]],
     ) -> Dict[str, Optional[str]]:
         """Returns the results of 'zfs get' CLI on the given dataset on the given remote."""
+        if not propnames:
+            return {}
         p, log = self.params, self.params.log
         cache_key = (sources, output_columns, propnames)
         props = props_cache.get(cache_key)
@@ -2557,17 +2559,16 @@ class Job:
                 # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
                 try:
                     props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
+                    props = self.filter_properties(props, config.include_regexes, config.exclude_regexes)
                     user_propnames = [name for name in props.keys() if ":" in name]
-                    system_propnames = [name for name in props.keys() if ":" not in name]
-                    propnames = "all" if len(user_propnames) == 0 else ",".join(system_propnames)
-                    props = self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, True, cache)
+                    sys_propnames = ",".join([name for name in props.keys() if ":" not in name])
+                    props = self.zfs_get(p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
                     for propnames in user_propnames:
                         props.update(
                             self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache)
                         )
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                     raise RetryableError("Subprocess failed") from e
-                props = self.filter_properties(props, config.include_regexes, config.exclude_regexes)
                 for propname in sorted(props.keys()):
                     if config is p.zfs_recv_o_config:
                         if propname not in ox_names:
