@@ -1465,8 +1465,6 @@ class Job:
                     f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
-                # if len(dst_datasets) == 0:
-                #     return
 
                 # compute the direct children of each dataset
                 children = defaultdict(list)
@@ -1486,45 +1484,6 @@ class Job:
                     skip_dst_dataset = dst_dataset
                     descendants[skip_dst_dataset].append(dst_dataset)
 
-                # # Within all subtrees, find all datasets that have at least one snapshot
-                # cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name", dst_dataset_roots)
-                # dst_datasets_with_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd).splitlines()
-                # dst_datasets_with_snapshots = set(cut(1, "@", dst_datasets_with_snapshots))
-
-                # cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name")
-                # max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(dst.location))
-                # fsenc = sys.getfilesystemencoding()
-                # header_bytes = len(" ".join(dst.ssh_cmd + cmd).encode(fsenc))
-                # batch: List[str] = []
-                # total_bytes: int = header_bytes
-                #
-                # def flush_batch() -> None:
-                #     if len(batch) > 0:
-                #         dst_datasets_with_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
-                #         dst_datasets_with_snapshots = set(cut(1, "@", dst_datasets_with_snapshots))
-                #
-                #         # find and mark orphan datasets
-                #         orphans = set()
-                #         # for dst_dataset in reversed(dst_datasets):
-                #         for root_dataset in batch:
-                #             for dst_dataset in reversed(descendants[root_dataset]):
-                #                 if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
-                #                     # all children turned out to be orphans so the dataset itself could be an orphan
-                #                     if dst_dataset not in dst_datasets_with_snapshots:
-                #                         orphans.add(dst_dataset)
-                #
-                #         # delete all orphan datasets
-                #         self.delete_datasets(dst, orphans)
-                #
-                # for dst_dataset_root in dst_dataset_roots:
-                #     curr_bytes = len(f" {dst_dataset_root}".encode(fsenc))
-                #     if total_bytes + curr_bytes > max_bytes:  # or len(batch) >= 1000:
-                #         flush_batch()
-                #         batch, total_bytes = [], header_bytes
-                #     batch.append(dst_dataset_root)
-                #     total_bytes += curr_bytes
-                # flush_batch()
-
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name")
 
                 def flush_batch(batch: List[str]) -> None:
@@ -1534,7 +1493,6 @@ class Job:
 
                     # find and mark orphan datasets
                     orphans = set()
-                    # for dst_dataset in reversed(dst_datasets):
                     for root_dataset in batch:
                         for dst_dataset in reversed(descendants[root_dataset]):
                             if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
@@ -1545,30 +1503,8 @@ class Job:
                     # delete all orphan datasets
                     self.delete_datasets(dst, orphans)
 
+                # run flush_batch(dst_dataset_roots) without creating a command line that's too big for the OS to handle
                 self.run_ssh_cmd_batched(dst, cmd, dst_dataset_roots, flush_batch)
-
-    def run_ssh_cmd_batched(
-        self, remote: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], None]
-    ):
-        """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
-        max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
-        fsenc = sys.getfilesystemencoding()
-        header_bytes = len(" ".join(remote.ssh_cmd + cmd).encode(fsenc))
-        batch: List[str] = []
-        total_bytes: int = header_bytes
-
-        def flush() -> None:
-            if len(batch) > 0:
-                func(batch)
-
-        for cmd_arg in cmd_args:
-            curr_bytes = len(f" {cmd_arg}".encode(fsenc))
-            if total_bytes + curr_bytes > max_bytes:  # or len(batch) >= 1000:
-                flush()
-                batch, total_bytes = [], header_bytes
-            batch.append(cmd_arg)
-            total_bytes += curr_bytes
-        flush()
 
     def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
@@ -2335,39 +2271,10 @@ class Job:
             def flush_batch(batch: List[str]) -> None:
                 self.delete_snapshot(remote, dataset + "@" + ",".join(batch))
 
+            # run flush_batch(snapshot_tags) without creating a command line that's too big for the OS to handle
             self.run_ssh_cmd_batched(
                 remote, self.delete_snapshot_cmd(remote, dataset + "@"), snapshot_tags, flush_batch
             )
-            # max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
-            # fsenc = sys.getfilesystemencoding()
-            # header_bytes = len(" ".join(remote.ssh_cmd + self.delete_snapshot_cmd(remote, dataset + "@")).encode(fsenc))
-            # batch_tags: List[str] = []
-            # total_bytes: int = header_bytes
-            #
-            # def flush_batch() -> None:
-            #     if len(batch_tags) > 0:
-            #         self.delete_snapshot(remote, dataset + "@" + ",".join(batch_tags))
-            #
-            # for snapshot_tag in snapshot_tags:
-            #     tag_bytes = len(f",{snapshot_tag}".encode(fsenc))
-            #     if total_bytes + tag_bytes > max_bytes:  # or len(batch_tags) >= 1000:
-            #         flush_batch()
-            #         batch_tags, total_bytes = [], header_bytes
-            #     batch_tags.append(snapshot_tag)
-            #     total_bytes += tag_bytes
-            # flush_batch()
-            #
-            # if True:
-            #     return
-
-            # for snapshot_tag in snapshot_tags:
-            #     tag_bytes = len(f",{snapshot_tag}".encode(fsenc))
-            #     if total_bytes + tag_bytes > max_bytes:  # or len(batch_tags) >= 1000:
-            #         flush_batch()
-            #         batch_tags, total_bytes = [], header_bytes
-            #     batch_tags.append(snapshot_tag)
-            #     total_bytes += tag_bytes
-            # flush_batch()
 
     def delete_snapshot(self, remote: Remote, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
@@ -2899,6 +2806,29 @@ class Job:
         if self.inject_params.get("is_zfs_already_busy_receiving_dataset", False):
             procs += ["sudo zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
         return any(proc.endswith(" " + dataset) and self.recv_proc_regex.fullmatch(proc) for proc in procs)
+
+    def run_ssh_cmd_batched(
+        self, remote: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], None]
+    ):
+        """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
+        max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
+        fsenc = sys.getfilesystemencoding()
+        header_bytes = len(" ".join(remote.ssh_cmd + cmd).encode(fsenc))
+        batch: List[str] = []
+        total_bytes: int = header_bytes
+
+        def flush() -> None:
+            if len(batch) > 0:
+                func(batch)
+
+        for cmd_arg in cmd_args:
+            curr_bytes = len(f" {cmd_arg}".encode(fsenc))
+            if total_bytes + curr_bytes > max_bytes:  # or len(batch) >= 1000:
+                flush()
+                batch, total_bytes = [], header_bytes
+            batch.append(cmd_arg)
+            total_bytes += curr_bytes
+        flush()
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
