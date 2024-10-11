@@ -48,7 +48,7 @@ from datetime import datetime, timedelta
 from logging import Logger
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import List, Dict, Set, Iterable, Tuple, Any, Optional, Union
+from typing import List, Dict, Set, Iterable, Tuple, Any, Optional, Union, Callable
 
 __version__ = "1.2.0-dev"
 prog_name = "bzfs"
@@ -1465,22 +1465,6 @@ class Job:
                     f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
-                if len(dst_datasets) == 0:
-                    return
-
-                # preparation: find the roots of all subtrees
-                dst_dataset_roots = []
-                skip_dst_dataset = ""
-                for dst_dataset in dst_datasets:
-                    if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
-                        continue
-                    dst_dataset_roots.append(dst_dataset)
-                    skip_dst_dataset = dst_dataset
-
-                # Within all subtrees, find all datasets that have at least one snapshot
-                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name", dst_dataset_roots)
-                dst_datasets_with_nonzero_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd).splitlines()
-                dst_datasets_with_nonzero_snapshots = set(cut(1, "@", dst_datasets_with_nonzero_snapshots))
 
                 # compute the direct children of each dataset
                 children = defaultdict(list)
@@ -1488,16 +1472,39 @@ class Job:
                     parent = os.path.dirname(dst_dataset)
                     children[parent].append(dst_dataset)
 
-                # find and mark orphan datasets
-                orphans = set()
-                for dst_dataset in reversed(dst_datasets):
-                    if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
-                        # all children of the dataset turned out to be orphans so the dataset itself could be an orphan
-                        if dst_dataset not in dst_datasets_with_nonzero_snapshots:
-                            orphans.add(dst_dataset)
+                # find the roots of all subtrees
+                descendants = defaultdict(list)
+                dst_dataset_roots = []
+                skip_dst_dataset = ""
+                for dst_dataset in dst_datasets:
+                    if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
+                        descendants[skip_dst_dataset].append(dst_dataset)
+                        continue
+                    dst_dataset_roots.append(dst_dataset)
+                    skip_dst_dataset = dst_dataset
+                    descendants[skip_dst_dataset].append(dst_dataset)
 
-                # delete all orphan datasets
-                self.delete_datasets(dst, orphans)
+                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name")
+
+                def flush_batch(batch: List[str]) -> None:
+                    # Within all subtrees, find all datasets that have at least one snapshot
+                    dst_datasets_with_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
+                    dst_datasets_with_snapshots = set(cut(1, "@", dst_datasets_with_snapshots))
+
+                    # find and mark orphan datasets
+                    orphans = set()
+                    for root_dataset in batch:
+                        for dst_dataset in reversed(descendants[root_dataset]):
+                            if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
+                                # all children turned out to be orphans so the dataset itself could be an orphan
+                                if dst_dataset not in dst_datasets_with_snapshots:
+                                    orphans.add(dst_dataset)
+
+                    # delete all orphan datasets
+                    self.delete_datasets(dst, orphans)
+
+                # run flush_batch(dst_dataset_roots) without creating a command line that's too big for the OS to handle
+                self.run_ssh_cmd_batched(dst, cmd, dst_dataset_roots, flush_batch)
 
     def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
@@ -2260,24 +2267,14 @@ class Job:
             for snapshot_tag in snapshot_tags:
                 self.delete_snapshot(remote, f"{dataset}@{snapshot_tag}")
         else:  # delete snapshots in batches, without creating a command line that's too big for the OS to handle
-            max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
-            fsenc = sys.getfilesystemencoding()
-            header_bytes = len(" ".join(remote.ssh_cmd + self.delete_snapshot_cmd(remote, dataset + "@")).encode(fsenc))
-            batch_tags: List[str] = []
-            total_bytes: int = header_bytes
 
-            def flush_batch() -> None:
-                if len(batch_tags) > 0:
-                    self.delete_snapshot(remote, dataset + "@" + ",".join(batch_tags))
+            def flush_batch(batch: List[str]) -> None:
+                self.delete_snapshot(remote, dataset + "@" + ",".join(batch))
 
-            for snapshot_tag in snapshot_tags:
-                tag_bytes = len(f",{snapshot_tag}".encode(fsenc))
-                if total_bytes + tag_bytes > max_bytes:  # or len(batch_tags) >= 1000:
-                    flush_batch()
-                    batch_tags, total_bytes = [], header_bytes
-                batch_tags.append(snapshot_tag)
-                total_bytes += tag_bytes
-            flush_batch()
+            # run flush_batch(snapshot_tags) without creating a command line that's too big for the OS to handle
+            self.run_ssh_cmd_batched(
+                remote, self.delete_snapshot_cmd(remote, dataset + "@"), snapshot_tags, flush_batch
+            )
 
     def delete_snapshot(self, remote: Remote, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
@@ -2809,6 +2806,29 @@ class Job:
         if self.inject_params.get("is_zfs_already_busy_receiving_dataset", False):
             procs += ["sudo zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
         return any(proc.endswith(" " + dataset) and self.recv_proc_regex.fullmatch(proc) for proc in procs)
+
+    def run_ssh_cmd_batched(
+        self, remote: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], None]
+    ):
+        """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
+        max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
+        fsenc = sys.getfilesystemencoding()
+        header_bytes = len(" ".join(remote.ssh_cmd + cmd).encode(fsenc))
+        batch: List[str] = []
+        total_bytes: int = header_bytes
+
+        def flush() -> None:
+            if len(batch) > 0:
+                func(batch)
+
+        for cmd_arg in cmd_args:
+            curr_bytes = len(f" {cmd_arg}".encode(fsenc))
+            if total_bytes + curr_bytes > max_bytes:  # or len(batch) >= 1000:
+                flush()
+                batch, total_bytes = [], header_bytes
+            batch.append(cmd_arg)
+            total_bytes += curr_bytes
+        flush()
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
