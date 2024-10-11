@@ -93,7 +93,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite():
-    is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
+    is_adhoc_test = getenv_bool("adhoc", True)  # Consider toggling this when testing isolated code changes
     suite = unittest.TestSuite()
     if not is_adhoc_test:
         suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {"verbose": True}))
@@ -459,14 +459,46 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
-        LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+    def test_basic_replication_flat_simple_with_skip_parent(self):
+        LocalTestCase(param=self.param).test_basic_replication_flat_simple_with_skip_parent()
 
-    def test_basic_replication_flat_simple(self):
-        FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
+    def test_basic_replication_recursive_with_skip_parent(self):
+        LocalTestCase(param=self.param).test_basic_replication_recursive_with_skip_parent()
 
-    def test_zfs_set_via_recv_o(self):
-        FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
+    def test_basic_replication_flat_simple_with_multiple_root_datasets_with_skip_on_error(self):
+        LocalTestCase(
+            param=self.param
+        ).test_basic_replication_flat_simple_with_multiple_root_datasets_with_skip_on_error()
+
+    def test_delete_missing_datasets_with_missing_src_root(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_with_missing_src_root()
+
+    def test_delete_missing_datasets_recursive1(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_recursive1()
+
+    def test_delete_missing_datasets_with_exclude_regex1(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_with_exclude_regex1()
+
+    def test_delete_missing_datasets_with_exclude_regex2(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_with_exclude_regex2()
+
+    def test_delete_missing_datasets_with_exclude_dataset(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_with_exclude_dataset()
+
+    def test_delete_missing_datasets_and_empty_datasets(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_and_empty_datasets()
+
+    def test_delete_missing_snapshots_nothing_todo(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_nothing_todo()
+
+    def test_delete_missing_snapshots_flat(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_flat()
+
+    def test_delete_missing_snapshots_despite_same_name(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_despite_same_name()
+
+    def test_delete_missing_snapshots_recursive(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_recursive()
 
 
 #############################################################################
