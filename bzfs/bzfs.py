@@ -1352,7 +1352,7 @@ class Job:
         self.src_properties = src_properties
         src_datasets_with_record_sizes = None  # help gc
 
-        basis_src_datasets = set(src_datasets)
+        basis_src_datasets = src_datasets
         src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
         failed = False
 
@@ -1404,7 +1404,6 @@ class Job:
             for src_dataset in src_datasets:
                 if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
                     # skip_src_dataset has been deleted by some third party while we're running
-                    basis_src_datasets.remove(src_dataset)
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
@@ -1416,7 +1415,6 @@ class Job:
                 except subprocess.CalledProcessError:
                     log.warning("Third party deleted source: %s", src_dataset)
                     skip_src_dataset = src_dataset
-                    basis_src_datasets.remove(src_dataset)
                 else:
                     dst_ds = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
                     props = "creation,guid,name" if p.snapshot_time_range else "guid,name"
