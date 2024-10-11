@@ -1465,8 +1465,24 @@ class Job:
                     f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 dst_datasets = isorted(dst_datasets.difference(to_delete))
+                if len(dst_datasets) == 0:
+                    return
 
-                # preparation: compute the direct children of each dataset
+                # preparation: find the roots of all subtrees
+                dst_dataset_roots = []
+                skip_dst_dataset = ""
+                for dst_dataset in dst_datasets:
+                    if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
+                        continue
+                    dst_dataset_roots.append(dst_dataset)
+                    skip_dst_dataset = dst_dataset
+
+                # Within all subtrees, find all datasets that have at least one snapshot
+                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name", dst_dataset_roots)
+                dst_datasets_with_nonzero_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd).splitlines()
+                dst_datasets_with_nonzero_snapshots = set(cut(1, "@", dst_datasets_with_nonzero_snapshots))
+
+                # compute the direct children of each dataset
                 children = defaultdict(list)
                 for dst_dataset in dst_datasets:
                     parent = os.path.dirname(dst_dataset)
@@ -1477,10 +1493,10 @@ class Job:
                 for dst_dataset in reversed(dst_datasets):
                     if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
                         # all children of the dataset turned out to be orphans so the dataset itself could be an orphan
-                        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o name", dst_dataset)
-                        if not self.try_ssh_command(dst, log_trace, cmd=cmd):
-                            orphans.add(dst_dataset)  # found zero snapshots - mark dataset as an orphan
+                        if dst_dataset not in dst_datasets_with_nonzero_snapshots:
+                            orphans.add(dst_dataset)
 
+                # delete all orphan datasets
                 self.delete_datasets(dst, orphans)
 
     def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
