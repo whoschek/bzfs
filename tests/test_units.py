@@ -914,17 +914,11 @@ class TestTimestampAction(unittest.TestCase):
         self.assertEqual(args.time_or_duration, timedelta(seconds=1209600))
 
         # Test with spaces
-        args = self.parser.parse_args(["--time-or-duration", "  30   m"])
+        args = self.parser.parse_args(["--time-or-duration", "  30m"])
         self.assertEqual(args.time_or_duration, timedelta(seconds=1800))
 
-        args = self.parser.parse_args(["--time-or-duration", "5   s"])
+        args = self.parser.parse_args(["--time-or-duration", "5s "])
         self.assertEqual(args.time_or_duration, timedelta(seconds=5))
-
-        args = self.parser.parse_args(["--time-or-duration", "   0    d   "])
-        self.assertEqual(args.time_or_duration, timedelta(seconds=0))
-
-        args = self.parser.parse_args(["--time-or-duration", "10   w"])
-        self.assertEqual(args.time_or_duration, timedelta(seconds=6048000))
 
     def test_invalid_time_spec(self):
         with self.assertRaises(SystemExit):
@@ -935,6 +929,9 @@ class TestTimestampAction(unittest.TestCase):
 
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["--time-or-duration", "10x"])  # Invalid unit
+
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--time-or-duration", "10   w"])  # spaces
 
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["--time-or-duration", "-5m"])  # Negative number

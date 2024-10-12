@@ -260,7 +260,7 @@ feature.
               "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
               "requires Python >= 3.11.\n\n"
               "c) a duration that indicates how long ago from the current time, using the following syntax: "
-              "a non-negative integer number, followed by zero or more spaces, followed by a duration unit that is "
+              "a non-negative integer number, immediately followed by a duration unit that is "
               "*one* of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
               "Examples: '0s', '90min', '48h', '90 days', '12w'.\n\n"
               "Note: This option compares the specified time against the standard ZFS 'creation' time property of the "
@@ -3531,7 +3531,7 @@ class TimestampAction(argparse.Action):
             "week": 7 * 86400,
             "weeks": 7 * 86400,
         }
-        match = re.fullmatch(r"(\d+)\s*(s|secs?|m|mins?|h|hours?|d|days?|w|weeks?)", duration)
+        match = re.fullmatch(r"(\d+)(s|secs?|m|mins?|h|hours?|d|days?|w|weeks?)", duration)
         if not match:
             raise ValueError("Invalid duration format")
         quantity = int(match.group(1))
