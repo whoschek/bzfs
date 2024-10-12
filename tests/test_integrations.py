@@ -1365,15 +1365,20 @@ class LocalTestCase(BZFSTestCase):
                 expected = old_recordsize if i == 0 else new_recordsize
                 self.assertEqual(str(expected), dataset_property(dst_root_dataset + "/foo", "recordsize"))
 
-    def test_is_zfs_already_busy_receiving_dataset(self):
+    def test_check_zfs_dataset_busy_without_force(self):
         self.setup_basic()
-        inject_params = {"is_zfs_already_busy_receiving_dataset": True}
+        inject_params = {"is_zfs_dataset_busy": True}
         self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=die_status, inject_params=inject_params)
+
+    def test_check_zfs_dataset_busy_with_force(self):
+        self.setup_basic()
+        inject_params = {"is_zfs_dataset_busy": True}
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--force", expected_status=0, inject_params=inject_params)
 
     def test_periodic_job_locking(self):
         if is_solaris_zfs():
             self.skipTest(
-                "On Solaris fcntl.flock() does not work as expected. Solaris grants the lock on both file "
+                "On Solaris fcntl.flock() does not work quite as expected. Solaris grants the lock on both file "
                 "descriptors simultaneously; probably because they are both in the same process; seems harmless."
             )
         self.setup_basic()

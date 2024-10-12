@@ -371,6 +371,33 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.unlink_missing_ok(tmp_file)
         self.assertFalse(os.path.exists(tmp_file))
 
+    def test_is_zfs_dataset_busy_match(self):
+        def is_busy(proc, dataset, busy_if_send: bool = True):
+            return bzfs.Job().is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
+
+        ds = "tank/foo/bar"
+        self.assertTrue(is_busy("zfs receive " + ds, ds))
+        self.assertTrue(is_busy("zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("sudo zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("/bin/sudo zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("/usr/bin/sudo zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("sudo /sbin/zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("sudo /usr/sbin/zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("/bin/sudo /sbin/zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("doas zfs receive -u " + ds, ds))
+        self.assertTrue(is_busy("doas zfs receive -u " + ds, ds, busy_if_send=False))
+        self.assertTrue(is_busy("sudo zfs receive -u -o foo:bar=/baz " + ds, ds))
+        self.assertTrue(is_busy("zfs destroy   " + ds + "@snap-2024-01-01_daily,s2", ds))
+        self.assertTrue(is_busy("zfs destroy " + ds + "@%", ds))
+        self.assertTrue(is_busy("zfs rollback -r " + ds + "@snap", ds))
+        self.assertFalse(is_busy("sudo zfs xxxxxx -u " + ds, ds))
+        self.assertFalse(is_busy("sudo zfs xxxxxx -u " + ds, ds, busy_if_send=False))
+        self.assertFalse(is_busy("xsudo zfs receive -u " + ds, ds))
+        self.assertFalse(is_busy("sudo zfs receive -u", ds))
+        self.assertFalse(is_busy("sudo receive -u " + ds, ds))
+        self.assertFalse(is_busy("zfs send " + ds + "@snap", ds, busy_if_send=False))
+        self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
+
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
