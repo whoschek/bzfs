@@ -2202,9 +2202,9 @@ class Job:
             if is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
                 if is_debug:
-                    log.debug("Including b/c snaphot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
+                    log.debug("Including b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
             elif is_debug:
-                log.debug("Excluding b/c snaphot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
+                log.debug("Excluding b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
         return results
 
     def filter_snapshots_by_creation_time(
@@ -2245,9 +2245,9 @@ class Job:
             if is_included(propname, include_regexes, exclude_regexes):
                 results[propname] = propvalue
                 if is_debug:
-                    log.debug("Including bc property regex: %s", propname)
+                    log.debug("Including b/c property regex: %s", propname)
             elif is_debug:
-                log.debug("Excluding bc property regex: %s", propname)
+                log.debug("Excluding b/c property regex: %s", propname)
         return results
 
     @staticmethod
@@ -3304,7 +3304,7 @@ def get_default_log_formatter(prefix: str = "") -> logging.Formatter:
                 msg = ts_level + msg
                 if i >= 1:
                     i += len(ts_level)
-                    msg = msg[0:i].ljust(53) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
+                    msg = msg[0:i].ljust(54) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
                 if record.args:
                     msg = msg % record.args
                 return prefix + msg
