@@ -129,7 +129,7 @@ ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
 have drastically diverged:
 
 ` bzfs tank1/foo/bar tank2/boo/bar --recursive --force
---delete-missing-snapshots --delete-missing-datasets`
+--delete-missing-datasets --delete-missing-snapshots`
 
 * Example with further options:
 
@@ -293,10 +293,10 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--retries INT] [--retry-min-sleep-secs FLOAT]
             [--retry-max-sleep-secs FLOAT] [--retry-max-elapsed-secs FLOAT]
             [--skip-on-error {fail,tree,dataset}] [--skip-replication]
-            [--delete-missing-snapshots] [--delete-missing-datasets]
-            [--dryrun [{recv,send}]] [--verbose] [--quiet]
-            [--no-privilege-elevation] [--no-stream] [--no-create-bookmark]
-            [--no-use-bookmark] [--ssh-cipher STRING]
+            [--delete-missing-datasets] [--delete-missing-snapshots]
+            [--delete-empty-datasets] [--dryrun [{recv,send}]] [--verbose]
+            [--quiet] [--no-privilege-elevation] [--no-stream]
+            [--no-create-bookmark] [--no-use-bookmark] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -768,7 +768,26 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 **--skip-replication**
 
 *  Skip replication step (see above) and proceed to the optional
-    --delete-missing-snapshots step immediately (see below).
+    --delete-missing-datasets step immediately (see below).
+
+<!-- -->
+
+<div id="--delete-missing-datasets"></div>
+
+**--delete-missing-datasets**
+
+*  After successful replication step, if any, delete existing
+    destination datasets that are included via
+    --{include|exclude}-dataset-regex --{include|exclude}-dataset
+    --exclude-dataset-property policy yet do not exist within
+    SRC_DATASET. Does not recurse without --recursive.
+
+    For example, if the destination contains datasets h1,h2,h3,d1
+    whereas source only contains h3, and the include/exclude policy
+    effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on
+    the destination to make it 'the same'. On the other hand, if the
+    include/exclude policy effectively only includes h1,h2,h3 then only
+    delete datasets h1,h2 on the destination to make it 'the same'.
 
 <!-- -->
 
@@ -776,9 +795,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--delete-missing-snapshots**
 
-*  After successful replication, delete existing destination snapshots
-    that do not exist within the source dataset if they match at least
-    one of --include-snapshot-regex but none of
+*  After successful replication, and successful
+    --delete-missing-datasets step, if any, delete existing destination
+    snapshots that do not exist within the source dataset if they match
+    at least one of --include-snapshot-regex but none of
     --exclude-snapshot-regex, and they fall into the
     [--include-snapshot-from-time, --include-snapshot-to-time]
     range, and the destination dataset is included via
@@ -796,28 +816,25 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-<div id="--delete-missing-datasets"></div>
+<div id="--delete-empty-datasets"></div>
 
-**--delete-missing-datasets**
+**--delete-empty-datasets**
 
 *  After successful replication step and successful
-    --delete-missing-snapshots step, if any, delete existing
-    destination datasets that do not exist within the source dataset if
-    they are included via --{include|exclude}-dataset-regex
-    --{include|exclude}-dataset --exclude-dataset-property policy.
-    Also delete an existing destination dataset that has no snapshot if
-    all descendants of that dataset do not have a snapshot either
-    (again, only if the existing destination dataset is included via
+    --delete-missing-datasets and successful
+    --delete-missing-snapshots steps, if any, delete any included
+    destination dataset that has no snapshot if all descendants of that
+    destination dataset do not have a snapshot either (again, only if
+    the existing destination dataset is included via
     --{include|exclude}-dataset-regex --{include|exclude}-dataset
     --exclude-dataset-property policy). Does not recurse without
     --recursive.
 
-    For example, if the destination contains datasets h1,h2,h3,d1
-    whereas source only contains h3, and the include/exclude policy
-    effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on
-    the destination to make it 'the same'. On the other hand, if the
-    include/exclude policy effectively only includes h1,h2,h3 then only
-    delete datasets h1,h2 on the destination to make it 'the same'.
+    For example, if the destination contains datasets h1,d1, and the
+    include/exclude policy effectively includes h1,d1, then check if
+    h1,d1 can be deleted. On the other hand, if the include/exclude
+    policy effectively only includes h1 then only check if h1 can be
+    deleted.
 
 <!-- -->
 
@@ -890,11 +907,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     and the receiving Unix user at the destination should be separate
     Unix user accounts with separate private keys even if both accounts
     reside on the same machine, per the principle of least privilege.
-    Further, if you do not plan to use the --force* flags or
-    --delete-missing-snapshots or --delete-missing-dataset then ZFS
-    permissions 'rollback,destroy' can be omitted. If you do not plan
-    to customize the respective ZFS dataset property then ZFS
-    permissions
+    Further, if you do not plan to use the --force* flags and
+    --delete-* CLI options then ZFS permissions 'rollback,destroy'
+    can be omitted. If you do not plan to customize the respective ZFS
+    dataset property then ZFS permissions
     'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize'
     can be omitted, arriving at the absolutely minimal set of required
     destination permissions: `mount,create,receive`.

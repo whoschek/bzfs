@@ -2239,6 +2239,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--skip-replication",
             "--delete-missing-datasets",
+            "--delete-empty-datasets",
             "--exclude-dataset",
             "boo",
         )
@@ -2251,13 +2252,49 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
 
+    def test_delete_missing_snapshots_and_empty_datasets(self):
+        create_filesystems("axe")
+        create_filesystems("foo/a")
+        create_filesystems("foo/a/b")
+        create_filesystems("foo/a/b/c")
+        create_filesystems("foo/a/b/d")
+        take_snapshot(create_filesystems("foo/a/e"), fix("e1"))
+        create_filesystems("foo/b/c")
+        create_filesystems("foo/b/c/d")
+        create_filesystems("foo/b/d")
+        take_snapshot(create_filesystems("foo/c"), fix("c1"))
+        create_volumes("zoo")
+        create_filesystems("boo")
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--recursive",
+            "--skip-replication",
+            "--delete-empty-datasets",
+            "--delete-missing-snapshots",
+            "--exclude-dataset",
+            "boo",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset + "/axe"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a/b"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a/e"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/c"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
+
     def test_delete_missing_snapshots_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
         self.assertTrue(dataset_exists(src_root_dataset + "/foo/b"))
         self.assertEqual(0, len(snapshots(build(src_root_dataset + "/foo/b"))))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
         self.run_bzfs(
-            src_root_dataset + "/foo/b", dst_root_dataset + "/foo/b", "--skip-replication", "--delete-missing-snapshots"
+            src_root_dataset + "/foo/b",
+            dst_root_dataset + "/foo/b",
+            "--skip-replication",
+            "--delete-missing-snapshots",
+            "--delete-empty-datasets",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
 
@@ -2281,6 +2318,7 @@ class LocalTestCase(BZFSTestCase):
                     dst_root_dataset,
                     "--skip-replication",
                     "--delete-missing-snapshots",
+                    "--delete-empty-datasets",
                     **kwargs,
                 )
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2303,13 +2341,34 @@ class LocalTestCase(BZFSTestCase):
         src_foo = build(src_root_dataset + "/foo")
         destroy(snapshots(src_foo)[1])
         src_foo_a = build(src_root_dataset + "/foo/a")
-        destroy(snapshots(src_foo_a)[2])
+        destroy(src_foo_a, recursive=True)
         self.run_bzfs(
             src_root_dataset, dst_root_dataset, "--recursive", "--skip-replication", "--delete-missing-snapshots"
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
-        self.assertSnapshotNames(dst_root_dataset + "/foo/a", ["u1", "u2"])
+        self.assertTrue(dataset_exists(dst_root_dataset + "/foo/a"))
+        self.assertSnapshotNames(dst_root_dataset + "/foo/a", [])
+
+    def test_delete_missing_snapshots_recursive_with_delete_empty_datasets(self):
+        self.setup_basic_with_recursive_replication_done()
+        destroy(snapshots(src_root_dataset)[2])
+        destroy(snapshots(src_root_dataset)[0])
+        src_foo = build(src_root_dataset + "/foo")
+        destroy(snapshots(src_foo)[1])
+        src_foo_a = build(src_root_dataset + "/foo/a")
+        destroy(src_foo_a, recursive=True)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--recursive",
+            "--skip-replication",
+            "--delete-missing-snapshots",
+            "--delete-empty-datasets",
+        )
+        self.assertSnapshotNames(dst_root_dataset, ["s2"])
+        self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
 
     def test_delete_missing_snapshots_flat_with_time_range_full(self):
         self.setup_basic_with_recursive_replication_done()
@@ -2325,6 +2384,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-missing-snapshots",
+            "--delete-empty-datasets",
             "--include-snapshot-from-time=10secs",
             "--include-snapshot-to-time=2999-01-01",
             **kwargs,
@@ -2347,6 +2407,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-missing-snapshots",
+            "--delete-empty-datasets",
             "--include-snapshot-from-time=2999-01-01",
             "--include-snapshot-to-time=2999-01-01",
             **kwargs,
@@ -2362,6 +2423,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-missing-snapshots",
+            "--delete-empty-datasets",
             "--exclude-snapshot-regex",
             "xxxx*",
         )
@@ -2380,6 +2442,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-missing-snapshots",
+            "--delete-empty-datasets",
             "--exclude-snapshot-regex",
             r"!.*s[1-2]+.*",
         )
@@ -2399,6 +2462,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--skip-replication",
             "--delete-missing-snapshots",
+            "--delete-empty-datasets",
             "--exclude-snapshot-regex",
             ".*s[1-2]+.*",
             "--exclude-snapshot-regex",
@@ -2422,6 +2486,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--skip-replication",
             "--delete-missing-snapshots",
+            "--delete-empty-datasets",
             "--exclude-dataset-regex",
             "foo",
             "--exclude-snapshot-regex",
@@ -2434,30 +2499,6 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_root_dataset, ["s1", "s2"])
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
-
-    def test_delete_missing_snapshots_with_injected_dataset_deletes(self):
-        self.setup_basic_with_recursive_replication_done()
-        take_snapshot(create_filesystem(dst_root_dataset, "bar"), fix("b1"))
-        take_snapshot(create_filesystem(dst_root_dataset, "zoo"), fix("z1"))
-
-        # inject deletes for this many times. only after that stop deleting datasets
-        counter = Counter(zfs_list_snapshot_src_for_delete_missing_snapshots=1)
-        self.run_bzfs(
-            src_root_dataset,
-            dst_root_dataset,
-            "--recursive",
-            "--skip-replication",
-            "--delete-missing-snapshots",
-            delete_injection_triggers={"before": counter},
-        )
-
-        # nothing has changed for the simultaneously deleted datasets:
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
-        self.assertSnapshots(dst_root_dataset + "/bar", 1, "b")
-        self.assertSnapshots(dst_root_dataset + "/zoo", 1, "z")
-        self.assertEqual(0, counter["zfs_list_snapshot_src_for_delete_missing_snapshots"])
 
     def test_syslog(self):
         if "Ubuntu" not in platform.version():

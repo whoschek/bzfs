@@ -161,7 +161,7 @@ feature.
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
-`   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-missing-snapshots --delete-missing-datasets`
+`   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-missing-datasets --delete-missing-snapshots`
 
 * Example with further options:
 
@@ -400,14 +400,24 @@ feature.
               "remaining datasets and the remaining users.\n\n"))
     parser.add_argument(
         "--skip-replication", action="store_true",
-        help="Skip replication step (see above) and proceed to the optional --delete-missing-snapshots step "
+        help="Skip replication step (see above) and proceed to the optional --delete-missing-datasets step "
              "immediately (see below).\n\n")
     parser.add_argument(
+        "--delete-missing-datasets", action="store_true",
+        help=("After successful replication step, if any, delete existing destination datasets that are included via "
+              "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy yet "
+              "do not exist within SRC_DATASET. Does not recurse without --recursive.\n\n"
+              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
+              "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
+              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
+              "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"))
+    parser.add_argument(
         "--delete-missing-snapshots", action="store_true",
-        help=("After successful replication, delete existing destination snapshots that do not exist within the source "
-              "dataset if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, "
-              "and they fall into the [--include-snapshot-from-time, --include-snapshot-to-time] range, and "
-              "the destination dataset is included via --{include|exclude}-dataset-regex "
+        help=("After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
+              "destination snapshots that do not exist within the source dataset "
+              "if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, "
+              "and they fall into the [--include-snapshot-from-time, --include-snapshot-to-time] range, "
+              "and the destination dataset is included via --{include|exclude}-dataset-regex "
               "--{include|exclude}-dataset policy. Does not recurse without --recursive.\n\n"
               "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
               "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
@@ -415,18 +425,17 @@ feature.
               "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
               "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"))
     parser.add_argument(
-        "--delete-missing-datasets", action="store_true",
-        help=("After successful replication step and successful --delete-missing-snapshots step, if any, delete "
-              "existing destination datasets that do not exist within the source dataset if they are included via "
-              "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy. "
-              "Also delete an existing destination dataset that has no snapshot if all descendants of that dataset do "
-              "not have a snapshot either (again, only if the existing destination dataset is included via "
+        "--delete-empty-datasets", action="store_true",
+        help=("After successful replication step and successful --delete-missing-datasets and successful "
+              "--delete-missing-snapshots steps, if any, "
+              "delete any included destination dataset that has no snapshot if all descendants of that destination "
+              "dataset do not have a snapshot either (again, only if the existing destination dataset is included via "
               "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy). "
               "Does not recurse without --recursive.\n\n"
-              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
-              "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
-              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
-              "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"))
+              "For example, if the destination contains datasets h1,d1, and the include/exclude policy effectively "
+              "includes h1,d1, then check if h1,d1 can be deleted. "
+              "On the other hand, if the include/exclude policy effectively only includes h1 then only check if h1 "
+              "can be deleted.\n\n"))
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help=("Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -462,8 +471,8 @@ feature.
               "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
               "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
               "user accounts with separate private keys even if both accounts reside on the same machine, per the "
-              "principle of least privilege. Further, if you do not plan to use the --force* flags or "
-              "--delete-missing-snapshots or --delete-missing-dataset then ZFS permissions 'rollback,destroy' can "
+              "principle of least privilege. Further, if you do not plan to use the --force* flags and "
+              "--delete-* CLI options then ZFS permissions 'rollback,destroy' can "
               "be omitted. If you do not plan to customize the respective ZFS dataset property then ZFS permissions "
               "'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be omitted, arriving "
               "at the absolutely minimal set of required destination permissions: "
@@ -883,7 +892,7 @@ class Params:
         self.skip_replication: bool = args.skip_replication
         self.delete_missing_snapshots: bool = args.delete_missing_snapshots
         self.delete_missing_datasets: bool = args.delete_missing_datasets
-        self.delete_empty_datasets: bool = self.delete_missing_datasets
+        self.delete_empty_datasets: bool = args.delete_empty_datasets
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.create_bookmark: bool = not args.no_create_bookmark
@@ -1341,9 +1350,9 @@ class Job:
             return "", True
 
     def run_task(self) -> None:
-        p = params = self.params
-        log = p.log
+        p, log = self.params, self.params.log
         src, dst = p.src, p.dst
+        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
@@ -1363,16 +1372,13 @@ class Job:
         self.src_properties = src_properties
         src_datasets_with_record_sizes = None  # help gc
 
-        basis_src_datasets = src_datasets
+        basis_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
         failed = False
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
-        if not params.skip_replication:
-            log.info(
-                "Starting replication task: %s",
-                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
-            )
+        if not p.skip_replication:
+            log.info("Starting replication task: %s", task_description)
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             log.trace("Retry policy: %s", p.retry_policy)
@@ -1382,12 +1388,10 @@ class Job:
                     # skip_src_dataset shall be ignored or has been deleted by some third party while we're running
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
                 skip_src_dataset = ""
-                dst_dataset = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
+                dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
                 log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
-                self.mbuffer_current_opts = [
-                    "-s",
-                    str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"]))),
-                ] + p.mbuffer_program_opts
+                self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"])))]
+                self.mbuffer_current_opts += p.mbuffer_program_opts
                 try:
                     if not self.run_with_retries(p.retry_policy, self.replicate_dataset, src_dataset, dst_dataset):
                         skip_src_dataset = src_dataset
@@ -1402,120 +1406,107 @@ class Job:
                     log.error("%s", str(e))
                     log.error(f"#{len(self.all_exceptions)}: Done replicating: %s", f"{src_dataset} --> {dst_dataset}")
 
+        if failed or not (p.delete_missing_datasets or p.delete_missing_snapshots or p.delete_empty_datasets):
+            return
+        log.info(p.dry("Prepare --delete-missing-*: %s"), task_description)
+        cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
+        basis_dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
+        dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
+
+        # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
+        # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
+        # Does not recurse without --recursive.
+        if p.delete_missing_datasets:
+            log.info(p.dry("--delete-missing-datasets: %s"), task_description)
+            dst_datasets = set(dst_datasets)
+            to_delete = dst_datasets.difference(
+                {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
+            )
+            self.delete_datasets(dst, to_delete)
+            dst_datasets = isorted(dst_datasets.difference(to_delete))
+
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, and they fall into the
         # [--include-snapshot-from-time, --include-snapshot-to-time] time range, and the destination dataset is included
         # via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
-        if params.delete_missing_snapshots and not failed:
-            log.info(
-                p.dry("--delete-missing-snapshots: %s"),
-                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
-            )
-            skip_src_dataset = ""
-            for src_dataset in src_datasets:
-                if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
-                    # skip_src_dataset has been deleted by some third party while we're running
-                    continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
-                skip_src_dataset = ""
-                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
-                self.maybe_inject_delete(
-                    src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src_for_delete_missing_snapshots"
-                )
-                try:
+        dst_datasets_having_snapshots = set()
+        if p.delete_missing_snapshots:
+            log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
+            for dst_dataset in dst_datasets:
+                props = "creation,guid,name" if p.snapshot_time_range else "guid,name"
+                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+                dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
+                k = len(dst_snapshots_with_guids)
+                if p.snapshot_time_range:
+                    dst_snapshots_with_guids = self.filter_snapshots_by_creation_time(
+                        dst_snapshots_with_guids, p.snapshot_time_range, bookmark_time_range=None
+                    )
+                    dst_snapshots_with_guids = cut(2, lines=dst_snapshots_with_guids)
+                dst_snapshots_with_guids = self.filter_snapshots_by_regex(dst_snapshots_with_guids)
+
+                src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
+                if src_dataset in basis_src_datasets:
+                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o guid,name", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
-                except subprocess.CalledProcessError:
-                    log.warning("Third party deleted source: %s", src_dataset)
-                    skip_src_dataset = src_dataset
-                else:
-                    dst_ds = dst.root_dataset + relativize_dataset(src_dataset, src.root_dataset)
-                    props = "creation,guid,name" if p.snapshot_time_range else "guid,name"
-                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_ds)
-                    dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
-                    if p.snapshot_time_range:
-                        dst_snapshots_with_guids = self.filter_snapshots_by_creation_time(
-                            dst_snapshots_with_guids, p.snapshot_time_range, bookmark_time_range=None
-                        )
-                        dst_snapshots_with_guids = cut(2, lines=dst_snapshots_with_guids)
-                    dst_snapshots_with_guids = self.filter_snapshots_by_regex(dst_snapshots_with_guids)
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                         set(cut(1, lines=src_snapshots_with_guids))
                     )
                     missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
-                    missing_snapshot_tags = cut(2, separator="@", lines=missing_snapshot_tags)
-                    self.delete_snapshots(dst, dst_ds, snapshot_tags=missing_snapshot_tags)
+                else:
+                    missing_snapshot_tags = dst_snapshots_with_guids
+                missing_snapshot_tags = cut(2, separator="@", lines=missing_snapshot_tags)
+                self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                if p.delete_empty_datasets and k > len(missing_snapshot_tags):
+                    dst_datasets_having_snapshots.add(dst_dataset)
 
-        # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
-        # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
-        # Also delete an existing destination dataset that has no snapshot if all descendants of that dataset do not
-        # have a snapshot either (again, only if the existing destination dataset is included via
-        # --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy). Does not
-        # recurse without --recursive.
-        if params.delete_missing_datasets and not failed:
-            log.info(
-                p.dry("--delete-missing-datasets: %s"),
-                f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
-            )
-            cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -Hp -o name -s name", p.recursive_flag, dst.root_dataset
-            )
-            dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
-            dst_datasets = set(self.filter_datasets(dst, dst_datasets))  # apply include/exclude policy
-            others = {replace_prefix(src_ds, src.root_dataset, dst.root_dataset) for src_ds in basis_src_datasets}
-            to_delete = dst_datasets.difference(others)
-            self.delete_datasets(dst, to_delete)
+        # Optionally, delete any existing destination dataset that has no snapshot if all descendants of that
+        # dataset do not have a snapshot either. To do so, we walk the dataset list (conceptually, a tree)
+        # depth-first (i.e. sorted descending). If a dst dataset has zero snapshots and all its children are
+        # already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in a reverse
+        # sorted way means that we efficiently check for zero snapshots not just over the direct children but
+        # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
+        if p.delete_empty_datasets:
+            log.info(p.dry("--delete-empty-datasets: %s"), task_description)
 
-            # Optionally, delete any existing destination dataset that has no snapshot if all descendants of that
-            # dataset do not have a snapshot either. To do so, we walk the dataset list (conceptually, a tree)
-            # depth-first (i.e. sorted descending). If a dst dataset has zero snapshots and all its children are
-            # already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in a reverse
-            # sorted way means that we efficiently check for zero snapshots not just over the direct children but
-            # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
-            if p.delete_empty_datasets:
-                log.info(
-                    p.dry("--delete-empty-datasets: %s"),
-                    f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
-                )
-                dst_datasets = isorted(dst_datasets.difference(to_delete))
+            # compute the direct children of each dataset
+            children = defaultdict(list)
+            for dst_dataset in basis_dst_datasets:
+                parent = os.path.dirname(dst_dataset)
+                children[parent].append(dst_dataset)
 
-                # compute the direct children of each dataset
-                children = defaultdict(list)
-                for dst_dataset in dst_datasets:
-                    parent = os.path.dirname(dst_dataset)
-                    children[parent].append(dst_dataset)
-
-                # find the roots of all subtrees
-                descendants = defaultdict(list)
-                dst_dataset_roots = []
-                skip_dst_dataset = ""
-                for dst_dataset in dst_datasets:
-                    if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
-                        descendants[skip_dst_dataset].append(dst_dataset)
-                        continue
-                    dst_dataset_roots.append(dst_dataset)
-                    skip_dst_dataset = dst_dataset
+            # find the roots of all subtrees, and the descendants of each root
+            descendants = defaultdict(list)
+            dst_dataset_roots = []
+            skip_dst_dataset = ""
+            for dst_dataset in dst_datasets:
+                if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
                     descendants[skip_dst_dataset].append(dst_dataset)
+                    continue
+                dst_dataset_roots.append(dst_dataset)
+                skip_dst_dataset = dst_dataset
+                descendants[skip_dst_dataset].append(dst_dataset)
 
+            if not p.delete_missing_snapshots:
+                # Within all subtrees, find all datasets that have at least one snapshot
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name")
 
                 def flush_batch(batch: List[str]) -> None:
-                    # Within all subtrees, find all datasets that have at least one snapshot
-                    dst_datasets_with_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
-                    dst_datasets_with_snapshots = set(cut(1, "@", dst_datasets_with_snapshots))
-
-                    # find and mark orphan datasets
-                    orphans = set()
-                    for root_dataset in batch:
-                        for dst_dataset in reversed(descendants[root_dataset]):
-                            if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
-                                # all children turned out to be orphans so the dataset itself could be an orphan
-                                if dst_dataset not in dst_datasets_with_snapshots:
-                                    orphans.add(dst_dataset)
-
-                    # delete all orphan datasets
-                    self.delete_datasets(dst, orphans)
+                    datasets_having_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
+                    datasets_having_snapshots = set(cut(1, "@", datasets_having_snapshots))
+                    dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
 
                 # run flush_batch(dst_dataset_roots) without creating a command line that's too big for the OS to handle
                 self.run_ssh_cmd_batched(dst, cmd, dst_dataset_roots, flush_batch)
+
+            # find and mark orphan datasets, finally delete them in an efficient way
+            orphans = set()
+            for root_dataset in dst_dataset_roots:
+                for dst_dataset in reversed(descendants[root_dataset]):
+                    if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
+                        # all children turned out to be orphans so the dataset itself could be an orphan
+                        if dst_dataset not in dst_datasets_having_snapshots:
+                            orphans.add(dst_dataset)
+            self.delete_datasets(dst, orphans)
 
     def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
@@ -2350,7 +2341,7 @@ class Job:
     def create_zfs_bookmark(self, remote: Remote, src_snapshot: str, src_dataset: str) -> None:
         p, log = self.params, self.params.log
         if "@" in src_snapshot:
-            bookmark = replace_prefix(src_snapshot, f"{src_dataset}@", f"{src_dataset}#")
+            bookmark = replace_prefix(src_snapshot, old_prefix=f"{src_dataset}@", new_prefix=f"{src_dataset}#")
             if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(remote):
                 cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
                 try:
@@ -2969,6 +2960,11 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
     return dataset[len(root_dataset) :]
 
 
+def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
+    """In a string s, replaces a leading old_prefix string with new_prefix. Assumes the leading string is present."""
+    return new_prefix + s[len(old_prefix) :]
+
+
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
     """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
     else False. A regex that starts with a `!` is a negation - the regex matches if the regex without the
@@ -3036,11 +3032,6 @@ def xappend(lst, *items) -> List[str]:
         else:
             xappend(lst, *item)
     return lst
-
-
-def replace_prefix(line: str, s1: str, s2: str) -> str:
-    """In a line, replaces a leading s1 string with s2. Assumes the leading string is present."""
-    return s2 + line.rstrip()[len(s1) :]
 
 
 def human_readable_bytes(size: int) -> str:
