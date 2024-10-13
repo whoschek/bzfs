@@ -260,16 +260,18 @@ feature.
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
     parser.add_argument(
-        "--include-snapshot-from-time", action=TimestampAction, default=None, metavar="TIME|DURATION",
-        help=("Specifies the minimum ZFS 'creation' time that a source snapshot (and bookmark) must have in order to "
-              "be included (default: negative infinity). Only snapshots (and bookmarks) in the closed time range "
-              "[--include-snapshot-from-time, --include-snapshot-to-time] are included; other snapshots "
-              "(and bookmarks) are excluded. The specified time can take any of the following forms:\n\n"
-              "a) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
-              "b) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
+        "--include-snapshot-times", action=TimeRangeAction, default=None, metavar="TIMERANGE",
+        help=("The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
+              "snapshot to be included (default: '*..*' aka all times). The time range consists of a 'start' time, "
+              "followed by a '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01'. Only "
+              "snapshots (and bookmarks) in the closed time range [start, end] are included; other snapshots "
+              "(and bookmarks) are excluded. Each of the two specified times can take any of the following forms:\n\n"
+              "a) a '*' wildcard character representing negative or positive infinity.\n\n"
+              "b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
+              "c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
               "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
               "requires Python >= 3.11.\n\n"
-              "c) a duration that indicates how long ago from the current time, using the following syntax: "
+              "d) a duration that indicates how long ago from the current time, using the following syntax: "
               "a non-negative integer number, immediately followed by a duration unit that is "
               "*one* of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
               "Examples: '0s', '90min', '48h', '90 days', '12w'.\n\n"
@@ -278,11 +280,6 @@ feature.
               "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
               "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
               "the -p flag to display UTC Unix time in integer seconds).\n\n"))
-    parser.add_argument(
-        "--include-snapshot-to-time", action=TimestampAction, default=None, metavar="TIME|DURATION",
-        help=("Specifies the maximum ZFS 'creation' time that a source snapshot (and bookmark) must have in order to "
-              "be included (default: positive infinity). Has same syntax as --include-snapshot-from-time "
-              "(see above).\n\n"))
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -416,7 +413,7 @@ feature.
         help=("After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
               "destination snapshots that do not exist within the source dataset "
               "if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, "
-              "and they fall into the [--include-snapshot-from-time, --include-snapshot-to-time] range, "
+              "and they fall into the --include-snapshot-times range, "
               "and the destination dataset is included via --{include|exclude}-dataset-regex "
               "--{include|exclude}-dataset policy. Does not recurse without --recursive.\n\n"
               "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
@@ -1012,11 +1009,14 @@ class Params:
                 return int(time_spec)
             return default
 
-        if args.include_snapshot_from_time is None and args.include_snapshot_to_time is None:
+        if args.include_snapshot_times is None:
             return None
+        if args.include_snapshot_times[0] is None and args.include_snapshot_times[1] is None:
+            return None
+
         current_time = time.time()
-        lo = utc_unix_time_in_seconds(args.include_snapshot_from_time, default=0)
-        hi = utc_unix_time_in_seconds(args.include_snapshot_to_time, default=1000000000000)  # 33658-09-27 ~ infinity
+        lo = utc_unix_time_in_seconds(args.include_snapshot_times[0], default=0)
+        hi = utc_unix_time_in_seconds(args.include_snapshot_times[1], default=1000000000000)  # 33658-09-27 ~ inf
         return (lo, hi) if lo <= hi else (hi, lo)
 
     def unset_matching_env_vars(self, args: argparse.Namespace) -> None:
@@ -1427,7 +1427,7 @@ class Job:
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, and they fall into the
-        # [--include-snapshot-from-time, --include-snapshot-to-time] time range, and the destination dataset is included
+        # --include-snapshot-times range, and the destination dataset is included
         # via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
         dst_datasets_having_snapshots = set()
         if p.delete_missing_snapshots:
@@ -3496,22 +3496,27 @@ class FileOrLiteralAction(argparse.Action):
 
 
 #############################################################################
-class TimestampAction(argparse.Action):
+class TimeRangeAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        values = values.strip()
-        if values.isdigit():
-            # Input is a Unix time in integer seconds
-            setattr(namespace, self.dest, int(values))
-        else:
+        def parse_time(time_spec):
+            time_spec = time_spec.strip()
+            if time_spec == "*":
+                return None
+            if time_spec.isdigit():
+                return int(time_spec)  # Input is a Unix time in integer seconds
             try:
-                duration = timedelta(seconds=self.parse_duration_to_seconds(values))
-                setattr(namespace, self.dest, duration)
+                return timedelta(seconds=self.parse_duration_to_seconds(time_spec))
             except ValueError:
                 try:  # If it's not a duration, try parsing as an ISO 8601 datetime
-                    unix_time_secs = int(datetime.fromisoformat(values).timestamp())
-                    setattr(namespace, self.dest, unix_time_secs)
+                    return int(datetime.fromisoformat(time_spec).timestamp())
                 except ValueError:
-                    parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {values}")
+                    parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
+
+        values = values.strip()
+        if ".." not in values:
+            parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {values}")
+        lo, hi = [parse_time(time_spec) for time_spec in values.split("..", 1)]
+        setattr(namespace, self.dest, (lo, hi))
 
     @staticmethod
     def parse_duration_to_seconds(duration: str) -> int:

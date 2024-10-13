@@ -805,8 +805,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-from-time=10secs",
-            "--include-snapshot-to-time=2999-01-01",
+            "--include-snapshot-times=10secs..2999-01-01",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertSnapshots(dst_root_dataset, 3, "s")
@@ -816,8 +815,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-from-time=2999-01-01",
-            "--include-snapshot-to-time=2999-01-01",
+            "--include-snapshot-times=2999-01-01..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 0)
 
@@ -828,8 +826,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-from-time=60secs",
-            "--include-snapshot-to-time=2999-01-01",
+            "--include-snapshot-times=60secs..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
@@ -841,8 +838,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--no-use-bookmark",
-            "--include-snapshot-from-time=60secs",
-            "--include-snapshot-to-time=2999-01-01",
+            "--include-snapshot-times=60secs..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
@@ -2385,8 +2381,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-missing-snapshots",
             "--delete-empty-datasets",
-            "--include-snapshot-from-time=10secs",
-            "--include-snapshot-to-time=2999-01-01",
+            "--include-snapshot-times=10secs..2999-01-01",
             **kwargs,
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2408,8 +2403,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-missing-snapshots",
             "--delete-empty-datasets",
-            "--include-snapshot-from-time=2999-01-01",
-            "--include-snapshot-to-time=2999-01-01",
+            "--include-snapshot-times=2999-01-01..2999-01-01",
             **kwargs,
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")

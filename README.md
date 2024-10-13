@@ -283,8 +283,7 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--exclude-dataset-property STRING]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
-            [--include-snapshot-from-time TIME|DURATION]
-            [--include-snapshot-to-time TIME|DURATION]
+            [--include-snapshot-times TIMERANGE]
             [--zfs-send-program-opts STRING] [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
             [--force-rollback-to-latest-snapshot] [--force] [--force-unmount]
@@ -511,26 +510,31 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-<div id="--include-snapshot-from-time"></div>
+<div id="--include-snapshot-times"></div>
 
-**--include-snapshot-from-time** *TIME|DURATION*
+**--include-snapshot-times** *TIMERANGE*
 
-*  Specifies the minimum ZFS 'creation' time that a source snapshot
-    (and bookmark) must have in order to be included (default: negative
-    infinity). Only snapshots (and bookmarks) in the closed time range
-    [--include-snapshot-from-time, --include-snapshot-to-time] are
-    included; other snapshots (and bookmarks) are excluded. The
-    specified time can take any of the following forms:
+*  The ZFS 'creation' time of a snapshot (and bookmark) must fall
+    into this time range in order for the snapshot to be included
+    (default: '*..*' aka all times). The time range consists of a
+    'start' time, followed by a '..' separator, followed by an
+    'end' time. For example '2024-01-01..2024-04-01'. Only snapshots
+    (and bookmarks) in the closed time range [start, end] are
+    included; other snapshots (and bookmarks) are excluded. Each of the
+    two specified times can take any of the following forms:
 
-    a) a non-negative integer representing a UTC Unix time in seconds.
+    a) a '*' wildcard character representing negative or positive
+    infinity.
+
+    b) a non-negative integer representing a UTC Unix time in seconds.
     Example: 1728109805
 
-    b) an ISO 8601 datetime string with or without timezone. Examples:
+    c) an ISO 8601 datetime string with or without timezone. Examples:
     '2024-10-05', '2024-10-05T14:48:00', '2024-10-05T14:48:00+02',
     '2024-10-05T14:48:00-04:30'. Timezone string support requires
     Python >= 3.11.
 
-    c) a duration that indicates how long ago from the current time,
+    d) a duration that indicates how long ago from the current time,
     using the following syntax: a non-negative integer number,
     immediately followed by a duration unit that is *one* of 's',
     'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd',
@@ -544,17 +548,6 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     snapshots and bookmarks as follows: `zfs list -t snapshot,bookmark
     -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add
     the -p flag to display UTC Unix time in integer seconds).
-
-<!-- -->
-
-<div id="--include-snapshot-to-time"></div>
-
-**--include-snapshot-to-time** *TIME|DURATION*
-
-*  Specifies the maximum ZFS 'creation' time that a source snapshot
-    (and bookmark) must have in order to be included (default: positive
-    infinity). Has same syntax as --include-snapshot-from-time (see
-    above).
 
 <!-- -->
 
@@ -800,10 +793,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     snapshots that do not exist within the source dataset if they match
     at least one of --include-snapshot-regex but none of
     --exclude-snapshot-regex, and they fall into the
-    [--include-snapshot-from-time, --include-snapshot-to-time]
-    range, and the destination dataset is included via
-    --{include|exclude}-dataset-regex --{include|exclude}-dataset
-    policy. Does not recurse without --recursive.
+    --include-snapshot-times range, and the destination dataset is
+    included via --{include|exclude}-dataset-regex
+    --{include|exclude}-dataset policy. Does not recurse without
+    --recursive.
 
     For example, if the destination dataset contains snapshots
     h1,h2,h3,d1 (h=hourly, d=daily) whereas the source dataset only
