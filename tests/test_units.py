@@ -48,6 +48,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
     return suite
 
@@ -1008,6 +1009,136 @@ class TestTimeRangeAction(unittest.TestCase):
         p = bzfs.Params(args)
         self.assertEqual(0, p.snapshot_time_range[0])
         self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_time_range[1])
+
+
+#############################################################################
+class TestRankRangeAction(unittest.TestCase):
+
+    def setUp(self):
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--ranks", nargs="+", action=bzfs.RankRangeAction)
+
+    def parse_args(self, arg):
+        return self.parser.parse_args(["--ranks", arg])
+
+    def test_valid_ranks(self):
+        self.assertEqual((("latest", 0, False), ("latest", 10, True)), self.parse_args("latest0..latest10%").ranks[0])
+        self.assertEqual((("oldest", 10, True), ("latest", 90, True)), self.parse_args("oldest10%..latest90%").ranks[0])
+
+    def test_invalid_ranks(self):
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest0..10")  # missing kind
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest0oldest1")  # missing .. separator
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldestt0..oldest1")  # misspelling
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest..oldest1")  # missing digits
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("1..2")  # missing oldest|latest|spread
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest1..oldest2p")  # non-digits
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest1..oldestx2%")  # non-digits
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest1..oldest101%")  # non-digits
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest1..xxxx100%")  # unknown param
+
+    @staticmethod
+    def filter_snapshots_by_rank(snapshots, ranks, ranks2=[]):
+        for i in range(0, 2):
+            verbose = [] if i == 0 else ["--verbose"]
+            args = bzfs.argument_parser().parse_args(
+                args=["src", "dst", "--include-snapshot-ranks", ranks, *ranks2, *verbose]
+            )
+            log_params = bzfs.LogParams(args)
+            try:
+                job = bzfs.Job()
+                job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+                result = job.filter_snapshots_by_rank(snapshots)
+                if i > 0:
+                    return result
+            finally:
+                bzfs.reset_logger()
+
+    def test_filter_snapshots_by_rank(self):
+        lst1 = ["\t" + snap for snap in ["d@0", "d@1", "d@2", "d@3"]]
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest0..latest0"))
+        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, "latest0..latest1"))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest0..latest2"))
+        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest0..latest3"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest0..latest4"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest0..latest5"))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "latest3..latest4"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest4..latest4"))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest2..latest0"))
+
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest 0"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest 0"))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "oldest 1"))
+        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, "latest 1"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest 4"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest 4"))
+        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, "oldest 3"))
+        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 3"))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 2"))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 2"))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 50%"))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 50%"))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 51%"))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 51%"))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 49%"))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 49%"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest 100%"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest 100%"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest 0%"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest 0%"))
+
+        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest0%..latest100%"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0%..oldest100%"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest100%..oldest0%"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest100%..latest0%"))
+
+        lst2 = ["\t" + snap for snap in ["d@0", "d@1", "d@2"]]
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, "oldest 51%"))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst2, "oldest 49%"))
+        self.assertListEqual(["\td@1", "\td@2"], self.filter_snapshots_by_rank(lst2, "latest 51%"))
+        self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst2, "latest 49%"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst2, "latest 0%"))
+        self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, "latest 100%"))
+
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest1"))
+        self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, "latest0..oldest0"))
+        self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, "oldest0..latest0"))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, "latest100%..latest1"))
+        self.assertListEqual(["\td@1"], self.filter_snapshots_by_rank(lst2, "oldest1..latest1"))
+        self.assertListEqual(["\td@1"], self.filter_snapshots_by_rank(lst2, "latest1..oldest1"))
+
+    def test_filter_snapshots_by_rank_with_bookmarks(self):
+        lst1 = ["\t" + snap for snap in ["d@0", "d#1", "d@2", "d@3"]]
+        self.assertListEqual(["\td#1"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest0"))
+        self.assertListEqual(["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest1"))
+        self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest2"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0..oldest3"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0..oldest4"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0..oldest5"))
+        self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%"))
+
+    def test_filter_snapshots_by_rank_with_chain(self):
+        lst1 = ["\t" + snap for snap in ["d@0", "d#1", "d@2", "d@3"]]
+        self.assertListEqual(
+            ["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%", ["latest1..latest100%"])
+        )
 
 
 #############################################################################

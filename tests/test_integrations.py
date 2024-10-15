@@ -842,6 +842,25 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
+    def test_include_snapshot_rank_range_full(self):
+        self.setup_basic()
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-ranks=latest0%..latest100%",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+
+    def test_include_snapshot_rank_range_empty(self):
+        self.setup_basic()
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-ranks=latest0%..latest0%",
+        )
+        self.assertSnapshots(dst_root_dataset, 0)
+
     def test_nostream(self):
         self.setup_basic()
         for i in range(0, 3):

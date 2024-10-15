@@ -262,11 +262,13 @@ feature.
     parser.add_argument(
         "--include-snapshot-times", action=TimeRangeAction, default=None, metavar="TIMERANGE",
         help=("The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
-              "snapshot to be included (default: '*..*' aka all times). The time range consists of a 'start' time, "
+              "snapshot to be included (default: `*..*` aka all times). The time range consists of a 'start' time, "
               "followed by a '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01'. Only "
-              "snapshots (and bookmarks) in the closed time range [start, end] are included; other snapshots "
-              "(and bookmarks) are excluded. Each of the two specified times can take any of the following forms:\n\n"
-              "a) a '*' wildcard character representing negative or positive infinity.\n\n"
+              "snapshots (and bookmarks) in the half-closed time range [start, end) are included; other snapshots "
+              "(and bookmarks) are excluded. If a snapshot is excluded this decision is never reconsidered because "
+              "exclude takes precedence over include. Each of the two specified times can take any of the following "
+              "forms:\n\n"
+              "a) a `*` wildcard character representing negative or positive infinity.\n\n"
               "b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
               "c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
               "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
@@ -274,12 +276,43 @@ feature.
               "d) a duration that indicates how long ago from the current time, using the following syntax: "
               "a non-negative integer number, immediately followed by a duration unit that is "
               "*one* of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
-              "Examples: '0s', '90min', '48h', '90 days', '12w'.\n\n"
-              "Note: This option compares the specified time against the standard ZFS 'creation' time property of the "
+              "Examples: '0s', '90min', '48h', '90days', '12w'.\n\n"
+              "*Note:* This option compares the specified time against the standard ZFS 'creation' time property of the "
               "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
               "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
               "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
               "the -p flag to display UTC Unix time in integer seconds).\n\n"))
+    parser.add_argument(
+        "--include-snapshot-ranks", action=RankRangeAction, nargs="+", default=[], metavar="RANKRANGE",
+        help=("Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
+              "snapshots (default: include all snapshots). Snapshots are sorted by creation time (actually, by the "
+              "'createtxg' ZFS property, which serves the same purpose but is more precise). The rank position of a "
+              "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consist of "
+              "the word 'oldest' or 'latest', followed by a non-negative integer, followed by an optional '%%' percent "
+              "sign. A rank range consists of a lower rank, followed by a '..' separator, followed by a higher rank. "
+              "If the optional lower rank is missing it is assumed to be 0. Examples:\n\n"
+              "* 'oldest 10%%' aka 'oldest 0..oldest 10%%' (include the oldest 10%% of all snapshots)\n\n"
+              "* 'latest 10%%' aka 'latest 0..latest 10%%' (include the latest 10%% of all snapshots)\n\n"
+              "* 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)\n\n"
+              "* 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)\n\n"
+              "* 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)\n\n"
+              "* 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
+              "* 'oldest 2' aka 'oldest 0..oldest 2' (include the oldest 2 snapshots)\n\n"
+              "* 'oldest 2..oldest 100%%' (include all snapshots except the oldest 2 snapshots)\n\n"
+              "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
+              "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
+              "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
+              "*Note:* The --include-snapshot-ranks filter is applied after all other include/exclude-snapshot-* "
+              "filters have already been applied. Percentage calculations are not based on the number of snapshots "
+              "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
+              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
+              "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
+              "include one of these two daily snapshots.\n\n"
+              "*Note:* Bookmarks are always retained aka included; the --include-snapshot-ranks filter is only applied "
+              "to snapshots. Bookmarks are 'invisible' to this filter and do not count towards N or N%%. Bookmarks "
+              "bypass this filter.\n\n"
+              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
+              "over include.\n\n"))
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -402,8 +435,8 @@ feature.
     parser.add_argument(
         "--delete-missing-datasets", action="store_true",
         help=("After successful replication step, if any, delete existing destination datasets that are included via "
-              "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy yet "
-              "do not exist within SRC_DATASET. Does not recurse without --recursive.\n\n"
+              "--{include|exclude}-dataset* policy yet do not exist within SRC_DATASET (which can be an empty "
+              "dummy dataset!). Does not recurse without --recursive.\n\n"
               "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
               "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
               "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
@@ -411,11 +444,9 @@ feature.
     parser.add_argument(
         "--delete-missing-snapshots", action="store_true",
         help=("After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
-              "destination snapshots that do not exist within the source dataset "
-              "if they match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, "
-              "and they fall into the --include-snapshot-times range, "
-              "and the destination dataset is included via --{include|exclude}-dataset-regex "
-              "--{include|exclude}-dataset policy. Does not recurse without --recursive.\n\n"
+              "destination snapshots that do not exist within the source dataset (which can be an empty dummy "
+              "dataset!) if they are included by the --include/exclude-snapshot-* policy, and the destination dataset "
+              "is included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
               "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
               "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
               "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
@@ -424,10 +455,9 @@ feature.
     parser.add_argument(
         "--delete-empty-datasets", action="store_true",
         help=("After successful replication step and successful --delete-missing-datasets and successful "
-              "--delete-missing-snapshots steps, if any, "
-              "delete any included destination dataset that has no snapshot if all descendants of that destination "
-              "dataset do not have a snapshot either (again, only if the existing destination dataset is included via "
-              "--{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy). "
+              "--delete-missing-snapshots steps, if any, delete any included destination dataset that has no snapshot "
+              "if all descendants of that destination dataset do not have a snapshot either (again, only if the "
+              "existing destination dataset is included via --{include|exclude}-dataset* policy). "
               "Does not recurse without --recursive.\n\n"
               "For example, if the destination contains datasets h1,d1, and the include/exclude policy effectively "
               "includes h1,d1, then check if h1,d1 can be deleted. "
@@ -685,7 +715,7 @@ feature.
               "https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig "
               "and for details see "
               "https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema\n\n"
-              "Note: Lines starting with a # character are ignored as comments within the JSON. Also, if a line ends "
+              "*Note:* Lines starting with a # character are ignored as comments within the JSON. Also, if a line ends "
               "with a # character the portion between that # character and the preceding # character on the same line "
               "is ignored as a comment.\n\n"))
     parser.add_argument(
@@ -827,6 +857,7 @@ class LogParams:
 #############################################################################
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 UnixTimeRange = Optional[Tuple[int, int]]  # Type alias
+RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
 
 
 #############################################################################
@@ -856,6 +887,7 @@ class Params:
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
         self.snapshot_time_range: UnixTimeRange = self.get_snapshot_time_range(args)
+        self.include_snapshot_ranks: List[RankRange] = args.include_snapshot_ranks
 
         self.dry_run: bool = args.dryrun is not None
         self.dry_run_recv: str = "-n" if self.dry_run else ""
@@ -1443,10 +1475,11 @@ class Job:
                     )
                     dst_snapshots_with_guids = cut(2, lines=dst_snapshots_with_guids)
                 dst_snapshots_with_guids = self.filter_snapshots_by_regex(dst_snapshots_with_guids)
+                dst_snapshots_with_guids = self.filter_snapshots_by_rank(dst_snapshots_with_guids)
 
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in basis_src_datasets:
-                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o guid,name", src_dataset)
+                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                         set(cut(1, lines=src_snapshots_with_guids))
@@ -1468,7 +1501,7 @@ class Job:
         if p.delete_empty_datasets:
             log.info(p.dry("--delete-empty-datasets: %s"), task_description)
 
-            # compute the direct children of each dataset
+            # compute the direct children of each (non-filtered) dataset
             children = defaultdict(list)
             for dst_dataset in basis_dst_datasets:
                 parent = os.path.dirname(dst_dataset)
@@ -1488,7 +1521,7 @@ class Job:
 
             if not p.delete_missing_snapshots:
                 # Within all subtrees, find all datasets that have at least one snapshot
-                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -Hp -o name")
+                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -s name -Hp -o name")
 
                 def flush_batch(batch: List[str]) -> None:
                     datasets_having_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
@@ -1572,6 +1605,7 @@ class Job:
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
         basis_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids = self.filter_snapshots_by_regex(src_snapshots_with_guids)
+        src_snapshots_with_guids = self.filter_snapshots_by_rank(src_snapshots_with_guids)
 
         # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
         # a snapshot is "true" if it is not a bookmark.
@@ -1636,7 +1670,7 @@ class Job:
             log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
 
             if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
-                # common snapshot was found but dst has an even newer snapshot. rollback dst to that common snapshot.
+                # found common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
                 _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
                 if not params.force:
                     die(
@@ -1784,7 +1818,7 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 log.info(
-                    p.dry(f"Incremental zfs send {incr_flag}:%s"),
+                    p.dry(f"Incremental zfs send {incr_flag}: %s"),
                     f"{from_snap} {to_snap} --> {dst_dataset} ({size_human}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
@@ -2226,15 +2260,49 @@ class Job:
 
             if snapshot_time_range and include:
                 creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
-                include = snapshot_time_range[0] <= creation_time <= snapshot_time_range[1]
+                include = snapshot_time_range[0] <= creation_time < snapshot_time_range[1]
             if include:
                 results.append(snapshot)
                 if is_debug:
                     log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
             elif is_debug:
                 log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-
         return results
+
+    def filter_snapshots_by_rank(self, snapshots: List[str]) -> List[str]:
+
+        def get_idx(rank: Tuple[str, int, bool], n: int) -> int:
+            kind, num, is_percent = rank
+            m = round(n * num / 100) if is_percent else min(n, num)
+            assert kind == "latest" or kind == "oldest"
+            return m if kind == "oldest" else n - m
+
+        p, log = self.params, self.params.log
+        if len(p.include_snapshot_ranks) == 0:
+            return snapshots
+        is_debug = log.isEnabledFor(log_debug)
+        n = sum(1 for snapshot in snapshots if "@" in snapshot)
+        for rank_range in p.include_snapshot_ranks:
+            lo_rank, hi_rank = rank_range
+            lo = get_idx(lo_rank, n)
+            hi = get_idx(hi_rank, n)
+            lo, hi = (lo, hi) if lo <= hi else (hi, lo)
+            i = 0
+            results = []
+            for snapshot in snapshots:
+                if "@" not in snapshot:
+                    results.append(snapshot)  # retain bookmarks, apply filter only to snapshots
+                else:
+                    if lo <= i < hi:
+                        results.append(snapshot)
+                        if is_debug:
+                            log.debug("Including b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                    elif is_debug:
+                        log.debug("Excluding b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                    i += 1
+            snapshots = results
+            n = hi - lo
+        return snapshots
 
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
@@ -3543,6 +3611,36 @@ class TimeRangeAction(argparse.Action):
         quantity = int(match.group(1))
         unit = match.group(2)
         return quantity * unit_seconds[unit]
+
+
+#############################################################################
+class RankRangeAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        def parse_spec(spec):
+            spec = spec.strip()
+            match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
+            if not match:
+                parser.error(f"{option_string}: Invalid rank format: {spec}")
+            kind = match.group(1)
+            num = int(match.group(2))
+            is_percent = spec.endswith("%")
+            if is_percent and num > 100:
+                parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
+            return kind, num, is_percent
+
+        current_values = getattr(namespace, self.dest, None)
+        if current_values is None:
+            current_values = []
+        for value in values:
+            value = value.strip()
+            if ".." in value:
+                lo, hi = value.split("..", 1)
+                lo, hi = [parse_spec(spec) for spec in [lo, hi]]
+            else:
+                hi = parse_spec(value)
+                lo = parse_spec(hi[0] + "0")
+            current_values.append((lo, hi))
+        setattr(namespace, self.dest, current_values)
 
 
 #############################################################################
