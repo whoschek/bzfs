@@ -170,64 +170,63 @@ feature.
 
     parser.add_argument(
         "root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
-        help=(
-            "SRC_DATASET: "
-            "Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
-            "Format is [[user@]host:]dataset. The host name can also be an IPv4 address (or an IPv6 address where "
-            "each ':' colon character must be replaced with a '|' pipe character for disambiguation). If the "
-            "host name is '-', the dataset will be on the local host, and the corresponding SSH leg will be omitted. "
-            "The same is true if the host is omitted and the dataset does not contain a ':' colon at the same time. "
-            "Local dataset examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` "
-            "Remote dataset examples: `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`, "
-            "`root@host:tank`, `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`, "
-            "`user@||1:tank1/foo/bar:baz:boo`. "
-            "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`. "
-            "If the option starts with a `+` prefix then dataset names are read from the UTF-8 text file given "
-            "after the `+` prefix, with each line in the file containing a SRC_DATASET and a DST_DATASET, "
-            "separated by a tab character. Example: `+root_dataset_names.txt`, `+/path/to/root_dataset_names.txt`\n\n"
-            "DST_DATASET: "
-            "Destination ZFS dataset for replication. Has same naming format as SRC_DATASET. During replication, "
-            "destination datasets that do not yet exist are created as necessary, along with their parent and "
-            "ancestors.\n\n"))
+        help="SRC_DATASET: "
+             "Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
+             "Format is [[user@]host:]dataset. The host name can also be an IPv4 address (or an IPv6 address where "
+             "each ':' colon character must be replaced with a '|' pipe character for disambiguation). If the "
+             "host name is '-', the dataset will be on the local host, and the corresponding SSH leg will be omitted. "
+             "The same is true if the host is omitted and the dataset does not contain a ':' colon at the same time. "
+             "Local dataset examples: `tank1/foo/bar`, `tank1`, `-:tank1/foo/bar:baz:boo` "
+             "Remote dataset examples: `host:tank1/foo/bar`, `host.example.com:tank1/foo/bar`, "
+             "`root@host:tank`, `root@host.example.com:tank1/foo/bar`, `user@127.0.0.1:tank1/foo/bar:baz:boo`, "
+             "`user@||1:tank1/foo/bar:baz:boo`. "
+             "The first component of the ZFS dataset name is the ZFS pool name, here `tank1`. "
+             "If the option starts with a `+` prefix then dataset names are read from the UTF-8 text file given "
+             "after the `+` prefix, with each line in the file containing a SRC_DATASET and a DST_DATASET, "
+             "separated by a tab character. Example: `+root_dataset_names.txt`, `+/path/to/root_dataset_names.txt`\n\n"
+             "DST_DATASET: "
+             "Destination ZFS dataset for replication. Has same naming format as SRC_DATASET. During replication, "
+             "destination datasets that do not yet exist are created as necessary, along with their parent and "
+             "ancestors.\n\n")
     parser.add_argument(
         "--recursive", "-r", action="store_true",
-        help=("During replication, also consider descendant datasets, i.e. datasets within the dataset tree, "
-              "including children, and children of children, etc.\n\n"))
+        help="During replication, also consider descendant datasets, i.e. datasets within the dataset tree, "
+             "including children, and children of children, etc.\n\n")
     parser.add_argument(
         "--include-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
-        help=("During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
-              "if its dataset name is one of the given include dataset names but none of the exclude dataset names. "
-              "If a dataset is excluded its descendants are automatically excluded too, and this decision is never "
-              "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
-              "A dataset name is absolute if the specified dataset is prefixed by `/`, e.g. `/tank/baz/tmp`. "
-              "Otherwise the dataset name is relative wrt. source and destination, e.g. `baz/tmp` if the source "
-              "is `tank`.\n\n"
-              "This option is automatically translated to an --include-dataset-regex (see below) and can be "
-              "specified multiple times.\n\n"
-              "If the option starts with a `+` prefix then dataset names are read from the newline-separated "
-              "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file. "
-              "Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), "
-              "`+dataset_names.txt`, `+/path/to/dataset_names.txt`\n\n"))
+        help="During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
+             "if its dataset name is one of the given include dataset names but none of the exclude dataset names. "
+             "If a dataset is excluded its descendants are automatically excluded too, and this decision is never "
+             "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
+             "A dataset name is absolute if the specified dataset is prefixed by `/`, e.g. `/tank/baz/tmp`. "
+             "Otherwise the dataset name is relative wrt. source and destination, e.g. `baz/tmp` if the source "
+             "is `tank`.\n\n"
+             "This option is automatically translated to an --include-dataset-regex (see below) and can be "
+             "specified multiple times.\n\n"
+             "If the option starts with a `+` prefix then dataset names are read from the newline-separated "
+             "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file. "
+             "Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), "
+             "`+dataset_names.txt`, `+/path/to/dataset_names.txt`\n\n")
     parser.add_argument(
         "--exclude-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
-        help=("Same syntax as --include-dataset (see above) except that the option is automatically translated to an "
-              "--exclude-dataset-regex (see below).\n\n"))
+        help="Same syntax as --include-dataset (see above) except that the option is automatically translated to an "
+             "--exclude-dataset-regex (see below).\n\n")
     parser.add_argument(
         "--include-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help=("During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
-              "if its relative dataset path (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given include "
-              "regular expressions but none of the exclude regular expressions. "
-              "If a dataset is excluded its descendants are automatically excluded too, and this decision is never "
-              "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
-              "This option can be specified multiple times. "
-              "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
-              "leading `!` character removed does not match.\n\n"
-              "Default: `.*` (include all datasets). "
-              "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`\n\n"))
+        help="During replication, include any ZFS dataset (and its descendants) that is contained within SRC_DATASET "
+             "if its relative dataset path (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given include "
+             "regular expressions but none of the exclude regular expressions. "
+             "If a dataset is excluded its descendants are automatically excluded too, and this decision is never "
+             "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
+             "This option can be specified multiple times. "
+             "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
+             "leading `!` character removed does not match.\n\n"
+             "Default: `.*` (include all datasets). "
+             "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`\n\n")
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help=("Same syntax as --include-dataset-regex (see above) except that the default is "
-              f"`{exclude_dataset_regexes_default}` (exclude tmp datasets). Example: '!.*' (exclude no dataset)\n\n"))
+        help="Same syntax as --include-dataset-regex (see above) except that the default is "
+             f"`{exclude_dataset_regexes_default}` (exclude tmp datasets). Example: '!.*' (exclude no dataset)\n\n")
     parser.add_argument(
         "--exclude-dataset-property", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="The name of a ZFS dataset user property (optional). If this option is specified, the effective value "
@@ -246,123 +245,123 @@ feature.
              "and/or --include/exclude-dataset to achieve the same or better outcome.\n\n")
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help=("During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
-              "the '@' and '#') that matches at least one of the given include regular expressions but none of the "
-              "exclude regular expressions. If a snapshot is excluded this decision is never reconsidered because "
-              "exclude takes precedence over include.\n\n"
-              "This option can be specified multiple times. "
-              "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
-              "leading `!` character removed does not match.\n\n"
-              "Default: `.*` (include all snapshots). "
-              "Examples: `test_.*`, `!prod_.*`, `.*_(hourly|frequent)`, `!.*_(weekly|daily)`\n\n"))
+        help="During replication, include any source ZFS snapshot or bookmark that has a name (i.e. the part after "
+             "the '@' and '#') that matches at least one of the given include regular expressions but none of the "
+             "exclude regular expressions. If a snapshot is excluded this decision is never reconsidered because "
+             "exclude takes precedence over include.\n\n"
+             "This option can be specified multiple times. "
+             "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
+             "leading `!` character removed does not match.\n\n"
+             "Default: `.*` (include all snapshots). "
+             "Examples: `test_.*`, `!prod_.*`, `.*_(hourly|frequent)`, `!.*_(weekly|daily)`\n\n")
     parser.add_argument(
         "--exclude-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
     parser.add_argument(
         "--include-snapshot-times", action=TimeRangeAction, default=None, metavar="TIMERANGE",
-        help=("The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
-              "snapshot to be included (default: `*..*` aka all times). The time range consists of a 'start' time, "
-              "followed by a '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01'. Only "
-              "snapshots (and bookmarks) in the half-closed time range [start, end) are included; other snapshots "
-              "(and bookmarks) are excluded. If a snapshot is excluded this decision is never reconsidered because "
-              "exclude takes precedence over include. Each of the two specified times can take any of the following "
-              "forms:\n\n"
-              "a) a `*` wildcard character representing negative or positive infinity.\n\n"
-              "b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
-              "c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
-              "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
-              "requires Python >= 3.11.\n\n"
-              "d) a duration that indicates how long ago from the current time, using the following syntax: "
-              "a non-negative integer number, immediately followed by a duration unit that is "
-              "*one* of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
-              "Examples: '0s', '90min', '48h', '90days', '12w'.\n\n"
-              "*Note:* This option compares the specified time against the standard ZFS 'creation' time property of the "
-              "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
-              "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
-              "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
-              "the -p flag to display UTC Unix time in integer seconds).\n\n"))
+        help="The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
+             "snapshot to be included (default: `*..*` aka all times). The time range consists of a 'start' time, "
+             "followed by a '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01'. Only "
+             "snapshots (and bookmarks) in the half-closed time range [start, end) are included; other snapshots "
+             "(and bookmarks) are excluded. If a snapshot is excluded this decision is never reconsidered because "
+             "exclude takes precedence over include. Each of the two specified times can take any of the following "
+             "forms:\n\n"
+             "a) a `*` wildcard character representing negative or positive infinity.\n\n"
+             "b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
+             "c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
+             "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
+             "requires Python >= 3.11.\n\n"
+             "d) a duration that indicates how long ago from the current time, using the following syntax: "
+             "a non-negative integer number, immediately followed by a duration unit that is "
+             "*one* of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
+             "Examples: '0s', '90min', '48h', '90days', '12w'.\n\n"
+             "*Note:* This option compares the specified time against the standard ZFS 'creation' time property of the "
+             "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
+             "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
+             "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
+             "the -p flag to display UTC Unix time in integer seconds).\n\n")
     parser.add_argument(
         "--include-snapshot-ranks", action=RankRangeAction, nargs="+", default=[], metavar="RANKRANGE",
-        help=("Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
-              "snapshots (default: include all snapshots). Snapshots are sorted by creation time (actually, by the "
-              "'createtxg' ZFS property, which serves the same purpose but is more precise). The rank position of a "
-              "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consist of "
-              "the word 'oldest' or 'latest', followed by a non-negative integer, followed by an optional '%%' percent "
-              "sign. A rank range consists of a lower rank, followed by a '..' separator, followed by a higher rank. "
-              "If the optional lower rank is missing it is assumed to be 0. Examples:\n\n"
-              "* 'oldest 10%%' aka 'oldest 0..oldest 10%%' (include the oldest 10%% of all snapshots)\n\n"
-              "* 'latest 10%%' aka 'latest 0..latest 10%%' (include the latest 10%% of all snapshots)\n\n"
-              "* 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)\n\n"
-              "* 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)\n\n"
-              "* 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)\n\n"
-              "* 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
-              "* 'oldest 2' aka 'oldest 0..oldest 2' (include the oldest 2 snapshots)\n\n"
-              "* 'oldest 2..oldest 100%%' (include all snapshots except the oldest 2 snapshots)\n\n"
-              "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
-              "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
-              "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
-              "*Note:* The --include-snapshot-ranks filter is applied after all other include/exclude-snapshot-* "
-              "filters have already been applied. Percentage calculations are not based on the number of snapshots "
-              "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
-              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
-              "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
-              "include one of these two daily snapshots.\n\n"
-              "*Note:* Bookmarks are always retained aka included; the --include-snapshot-ranks filter is only applied "
-              "to snapshots. Bookmarks are 'invisible' to this filter and do not count towards N or N%%. Bookmarks "
-              "bypass this filter.\n\n"
-              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
-              "over include.\n\n"))
+        help="Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
+             "snapshots (default: include all snapshots). Snapshots are sorted by creation time (actually, by the "
+             "'createtxg' ZFS property, which serves the same purpose but is more precise). The rank position of a "
+             "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consist of "
+             "the word 'oldest' or 'latest', followed by a non-negative integer, followed by an optional '%%' percent "
+             "sign. A rank range consists of a lower rank, followed by a '..' separator, followed by a higher rank. "
+             "If the optional lower rank is missing it is assumed to be 0. Examples:\n\n"
+             "* 'oldest 10%%' aka 'oldest 0..oldest 10%%' (include the oldest 10%% of all snapshots)\n\n"
+             "* 'latest 10%%' aka 'latest 0..latest 10%%' (include the latest 10%% of all snapshots)\n\n"
+             "* 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)\n\n"
+             "* 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)\n\n"
+             "* 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)\n\n"
+             "* 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
+             "* 'oldest 2' aka 'oldest 0..oldest 2' (include the oldest 2 snapshots)\n\n"
+             "* 'oldest 2..oldest 100%%' (include all snapshots except the oldest 2 snapshots)\n\n"
+             "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
+             "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
+             "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
+             "*Note:* The --include-snapshot-ranks filter is applied after all other include/exclude-snapshot-* "
+             "filters have already been applied. Percentage calculations are not based on the number of snapshots "
+             "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
+             "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
+             "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
+             "include one of these two daily snapshots.\n\n"
+             "*Note:* Bookmarks are always retained aka included; the --include-snapshot-ranks filter is only applied "
+             "to snapshots. Bookmarks are 'invisible' to this filter and do not count towards N or N%%. Bookmarks "
+             "bypass this filter.\n\n"
+             "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
+             "over include.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
-        help=("Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
-              f"The value is split on runs of one or more whitespace characters. "
-              f"Default is '{zfs_send_program_opts_default}'. "
-              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
-              "and https://github.com/openzfs/zfs/issues/13024\n\n"))
+        help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
+             "The value is split on runs of one or more whitespace characters. "
+             f"Default is '{zfs_send_program_opts_default}'. "
+             "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
+             "and https://github.com/openzfs/zfs/issues/13024\n\n")
     zfs_recv_program_opts_default = "-u"
     parser.add_argument(
         "--zfs-recv-program-opts", type=str, default=zfs_recv_program_opts_default, metavar="STRING",
-        help=("Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
-              f"The value is split on runs of one or more whitespace characters. "
-              f"Default is '{zfs_recv_program_opts_default}'. "
-              f"Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. "
-              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
-              "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n"))
+        help="Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
+             "The value is split on runs of one or more whitespace characters. "
+             f"Default is '{zfs_recv_program_opts_default}'. "
+             "Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. "
+             "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
+             "and https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html\n\n")
     parser.add_argument(
         "--zfs-recv-program-opt", action="append", default=[], metavar="STRING",
-        help=("Parameter to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
-              "The value can contain spaces and is not split. This option can be specified multiple times. Example: `"
-              "--zfs-recv-program-opt=-o "
-              "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n"))
+        help="Parameter to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
+             "The value can contain spaces and is not split. This option can be specified multiple times. Example: `"
+             "--zfs-recv-program-opt=-o "
+             "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n")
     parser.add_argument(
         "--force-rollback-to-latest-snapshot", action="store_true",
-        help=("Before replication, rollback the destination dataset to its most recent destination snapshot (if there "
-              "is one), via 'zfs rollback', just in case the destination dataset was modified since its most recent "
-              "snapshot. This is much less invasive than --force (see below).\n\n"))
+        help="Before replication, rollback the destination dataset to its most recent destination snapshot (if there "
+             "is one), via 'zfs rollback', just in case the destination dataset was modified since its most recent "
+             "snapshot. This is much less invasive than --force (see below).\n\n")
     parser.add_argument(
         "--force", action="store_true",
-        help=("Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
-              "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
-              "correspondingly before starting replication. Also, if no common snapshot is included then delete all "
-              "destination snapshots before starting replication. Without the --force flag, the destination dataset is "
-              "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
-              "operation is aborted with an error when encountering a conflicting snapshot.\n\n"))
+        help="Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
+             "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
+             "correspondingly before starting replication. Also, if no common snapshot is included then delete all "
+             "destination snapshots before starting replication. Without the --force flag, the destination dataset is "
+             "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
+             "operation is aborted with an error when encountering a conflicting snapshot.\n\n")
     parser.add_argument(
         "--force-unmount", action="store_true",
-        help=("On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' and "
-              "'zfs destroy -f'. That is, --force will add the '-f' flag to 'zfs rollback' and 'zfs destroy'.\n\n"))
+        help="On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' and "
+             "'zfs destroy -f'. That is, --force will add the '-f' flag to 'zfs rollback' and 'zfs destroy'.\n\n")
     parser.add_argument(
         "--force-hard", action="store_true",
-        # help=("On destination, --force will also delete dependents such as clones and bookmarks via "
-        #       "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you
-        #       want!\n\n"))
+        # help="On destination, --force will also delete dependents such as clones and bookmarks via "
+        #      "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you "
+        #      "want!\n\n")
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--force-once", "--f1", action="store_true",
-        help=("Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
-              "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n"))
+        help="Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
+             "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n")
     parser.add_argument(
         "--skip-parent", action="store_true",
         help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
@@ -371,22 +370,22 @@ feature.
              f"`cp -r src/* dst/`\n\n")
     parser.add_argument(
         "--skip-missing-snapshots", choices=["fail", "dataset", "continue"], default="dataset", nargs="?",
-        help=("During replication, handle source datasets that include no snapshots (and no relevant bookmarks) "
-              "as follows:\n\n"
-              "a) 'fail': Abort with an error.\n\n"
-              "b) 'dataset' (default): Skip the source dataset with a warning. Skip descendant datasets if "
-              "--recursive and destination dataset does not exist. Otherwise skip to the next dataset.\n\n"
-              "c) 'continue': Skip nothing. If destination snapshots exist, delete them (with --force) or abort "
-              "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
-              "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
-              "has at least one descendant that includes a snapshot.\n\n"))
+        help="During replication, handle source datasets that include no snapshots (and no relevant bookmarks) "
+             "as follows:\n\n"
+             "a) 'fail': Abort with an error.\n\n"
+             "b) 'dataset' (default): Skip the source dataset with a warning. Skip descendant datasets if "
+             "--recursive and destination dataset does not exist. Otherwise skip to the next dataset.\n\n"
+             "c) 'continue': Skip nothing. If destination snapshots exist, delete them (with --force) or abort "
+             "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
+             "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
+             "has at least one descendant that includes a snapshot.\n\n")
     retries_default = 0
     parser.add_argument(
         "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
-        help=("The maximum number of times a retryable replication step shall be retried if it fails, for example "
-              f"because of network hiccups (default: {retries_default}). "
-              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
-              f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n"))
+        help="The maximum number of times a retryable replication step shall be retried if it fails, for example "
+             f"because of network hiccups (default: {retries_default}). "
+             "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
+             f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n")
     retry_min_sleep_secs_default = 0.125
     parser.add_argument(
         "--retry-min-sleep-secs", type=float, min=0, default=retry_min_sleep_secs_default,
@@ -396,183 +395,183 @@ feature.
     parser.add_argument(
         "--retry-max-sleep-secs", type=float, min=0, default=retry_max_sleep_secs_default,
         action=CheckRange, metavar="FLOAT",
-        help=("The maximum duration to sleep between retries initially starts with --retry-min-sleep-secs (see above), "
-              "and doubles on each retry, up to the final maximum of --retry-max-sleep-secs "
-              f"(default: {retry_max_sleep_secs_default}). On each retry a random sleep time in the "
-              "[--retry-min-sleep-secs, current max] range is picked. The timer resets after each operation.\n\n"))
+        help="The maximum duration to sleep between retries initially starts with --retry-min-sleep-secs (see above), "
+             "and doubles on each retry, up to the final maximum of --retry-max-sleep-secs "
+             f"(default: {retry_max_sleep_secs_default}). On each retry a random sleep time in the "
+             "[--retry-min-sleep-secs, current max] range is picked. The timer resets after each operation.\n\n")
     retry_max_elapsed_secs_default = 60 * 60
     parser.add_argument(
         "--retry-max-elapsed-secs", type=float, min=0, default=retry_max_elapsed_secs_default,
         action=CheckRange, metavar="FLOAT",
-        help=("A single operation (e.g. 'zfs send/receive' of the current dataset) will not be retried (or not "
-              "retried anymore) once this much time has elapsed since the initial start of the operation, including "
-              f"retries. (default: {retry_max_elapsed_secs_default}). The timer resets after each operation "
-              "completes or retries exhaust, such that subsequently failing operations can again be retried.\n\n"))
+        help="A single operation (e.g. 'zfs send/receive' of the current dataset) will not be retried (or not "
+             "retried anymore) once this much time has elapsed since the initial start of the operation, including "
+             f"retries. (default: {retry_max_elapsed_secs_default}). The timer resets after each operation "
+             "completes or retries exhaust, such that subsequently failing operations can again be retried.\n\n")
     parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
-        help=("During replication, if an error is not retryable, or --retries has been exhausted, "
-              "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
-              "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "
-              "error reporting, and situations where consistency trumps availability.\n\n"
-              "b) 'tree': Log the error, skip the dataset tree rooted at the dataset for which the error "
-              "occurred, and continue processing the next (sibling) dataset tree. "
-              "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while processing "
-              "tank/user1. In this case processing skips tank/user1/foo and proceeds with tank/user2.\n\n"
-              "c) 'dataset' (default): Same as 'tree' except if the destination dataset already exists, skip to "
-              "the next dataset instead. "
-              "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while "
-              "processing tank/user1. In this case processing skips tank/user1 and proceeds with tank/user1/foo "
-              "if the destination already contains tank/user1. Otherwise processing continues with tank/user2. "
-              "This mode is for production use cases that require timely forward progress even in the presence of "
-              "partial failures. For example, assume the job is to backup the home directories or virtual machines "
-              "of thousands of users across an organization. Even if replication of some of the datasets for some "
-              "users fails due too conflicts, busy datasets, etc, the replication job will continue for the "
-              "remaining datasets and the remaining users.\n\n"))
+        help="During replication, if an error is not retryable, or --retries has been exhausted, "
+             "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
+             "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "
+             "error reporting, and situations where consistency trumps availability.\n\n"
+             "b) 'tree': Log the error, skip the dataset tree rooted at the dataset for which the error "
+             "occurred, and continue processing the next (sibling) dataset tree. "
+             "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while processing "
+             "tank/user1. In this case processing skips tank/user1/foo and proceeds with tank/user2.\n\n"
+             "c) 'dataset' (default): Same as 'tree' except if the destination dataset already exists, skip to "
+             "the next dataset instead. "
+             "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while "
+             "processing tank/user1. In this case processing skips tank/user1 and proceeds with tank/user1/foo "
+             "if the destination already contains tank/user1. Otherwise processing continues with tank/user2. "
+             "This mode is for production use cases that require timely forward progress even in the presence of "
+             "partial failures. For example, assume the job is to backup the home directories or virtual machines "
+             "of thousands of users across an organization. Even if replication of some of the datasets for some "
+             "users fails due too conflicts, busy datasets, etc, the replication job will continue for the "
+             "remaining datasets and the remaining users.\n\n")
     parser.add_argument(
         "--skip-replication", action="store_true",
         help="Skip replication step (see above) and proceed to the optional --delete-missing-datasets step "
              "immediately (see below).\n\n")
     parser.add_argument(
         "--delete-missing-datasets", action="store_true",
-        help=("After successful replication step, if any, delete existing destination datasets that are included via "
-              "--{include|exclude}-dataset* policy yet do not exist within SRC_DATASET (which can be an empty "
-              "dummy dataset!). Does not recurse without --recursive.\n\n"
-              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
-              "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
-              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
-              "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"))
+        help="After successful replication step, if any, delete existing destination datasets that are included via "
+             "--{include|exclude}-dataset* policy yet do not exist within SRC_DATASET (which can be an empty "
+             "dummy dataset!). Does not recurse without --recursive.\n\n"
+             "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
+             "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
+             "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
+             "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n")
     parser.add_argument(
         "--delete-missing-snapshots", action="store_true",
-        help=("After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
-              "destination snapshots that do not exist within the source dataset (which can be an empty dummy "
-              "dataset!) if they are included by the --include/exclude-snapshot-* policy, and the destination dataset "
-              "is included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
-              "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
-              "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
-              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
-              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
-              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"))
+        help="After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
+             "destination snapshots that do not exist within the source dataset (which can be an empty dummy "
+             "dataset!) if they are included by the --include/exclude-snapshot-* policy, and the destination dataset "
+             "is included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
+             "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
+             "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
+             "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
+             "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
+             "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n")
     parser.add_argument(
         "--delete-empty-datasets", action="store_true",
-        help=("After successful replication step and successful --delete-missing-datasets and successful "
-              "--delete-missing-snapshots steps, if any, delete any included destination dataset that has no snapshot "
-              "if all descendants of that destination dataset do not have a snapshot either (again, only if the "
-              "existing destination dataset is included via --{include|exclude}-dataset* policy). "
-              "Does not recurse without --recursive.\n\n"
-              "For example, if the destination contains datasets h1,d1, and the include/exclude policy effectively "
-              "includes h1,d1, then check if h1,d1 can be deleted. "
-              "On the other hand, if the include/exclude policy effectively only includes h1 then only check if h1 "
-              "can be deleted.\n\n"))
+        help="After successful replication step and successful --delete-missing-datasets and successful "
+             "--delete-missing-snapshots steps, if any, delete any included destination dataset that has no snapshot "
+             "if all descendants of that destination dataset do not have a snapshot either (again, only if the "
+             "existing destination dataset is included via --{include|exclude}-dataset* policy). "
+             "Does not recurse without --recursive.\n\n"
+             "For example, if the destination contains datasets h1,d1, and the include/exclude policy effectively "
+             "includes h1,d1, then check if h1,d1 can be deleted. "
+             "On the other hand, if the include/exclude policy effectively only includes h1 then only check if h1 "
+             "can be deleted.\n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
-        help=("Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
-              "for real (optional). This option treats both the ZFS source and destination as read-only. "
-              "Accepts an optional argument for fine tuning that is handled as follows:\n\n"
-              "a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via "
-              "'zfs receive -n', which discards the received data there.\n\n"
-              "b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less 'realistic' form "
-              "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no snapshot is "
-              "actually transferred between source and destination. This is the default when specifying --dryrun.\n\n"
-              "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n"))
+        help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
+             "for real (optional). This option treats both the ZFS source and destination as read-only. "
+             "Accepts an optional argument for fine tuning that is handled as follows:\n\n"
+             "a) 'recv': Send snapshot data via 'zfs send' to the destination host and receive it there via "
+             "'zfs receive -n', which discards the received data there.\n\n"
+             "b) 'send': Do not execute 'zfs send' and do not execute 'zfs receive'. This is a less 'realistic' form "
+             "of dry run, but much faster, especially for large snapshots and slow networks/disks, as no snapshot is "
+             "actually transferred between source and destination. This is the default when specifying --dryrun.\n\n"
+             "Examples: --dryrun, --dryrun=send, --dryrun=recv\n\n")
     parser.add_argument(
         "--verbose", "-v", action="count", default=0,
-        help=("Print verbose information. This option can be specified multiple times to increase the level of "
-              "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
-              "flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun) are logged such that "
-              "they can be inspected, copy-and-pasted into a terminal shell and run manually to help anticipate or "
-              "diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] "
-              "prefixes, respectively.\n\n"))
+        help="Print verbose information. This option can be specified multiple times to increase the level of "
+             "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
+             "flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun) are logged such that "
+             "they can be inspected, copy-and-pasted into a terminal shell and run manually to help anticipate or "
+             "diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] "
+             "prefixes, respectively.\n\n")
     parser.add_argument(
         "--quiet", "-q", action="store_true",
         help="Suppress non-error, info, debug, and trace output.\n\n")
     parser.add_argument(
         "--no-privilege-elevation", "-p", action="store_true",
-        help=("Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
-              "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
-              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`\n\n"
-              "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
-              "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
-              "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
-              "sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
-              "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL.\n\n"
-              "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
-              "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
-              "user accounts with separate private keys even if both accounts reside on the same machine, per the "
-              "principle of least privilege. Further, if you do not plan to use the --force* flags and "
-              "--delete-* CLI options then ZFS permissions 'rollback,destroy' can "
-              "be omitted. If you do not plan to customize the respective ZFS dataset property then ZFS permissions "
-              "'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be omitted, arriving "
-              "at the absolutely minimal set of required destination permissions: "
-              "`mount,create,receive`.\n\n"
-              "Also see https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
-              "https://tinyurl.com/9h97kh8n and "
-              "https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq\n\n"))
+        help="Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
+             "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
+             "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`\n\n"
+             "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
+             "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
+             "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME send,bookmark $SRC_DATASET; "
+             "sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
+             "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL.\n\n"
+             "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
+             "sending Unix user on the source and the receiving Unix user at the destination should be separate Unix "
+             "user accounts with separate private keys even if both accounts reside on the same machine, per the "
+             "principle of least privilege. Further, if you do not plan to use the --force* flags and "
+             "--delete-* CLI options then ZFS permissions 'rollback,destroy' can "
+             "be omitted. If you do not plan to customize the respective ZFS dataset property then ZFS permissions "
+             "'canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize' can be omitted, arriving "
+             "at the absolutely minimal set of required destination permissions: "
+             "`mount,create,receive`.\n\n"
+             "Also see https://openzfs.github.io/openzfs-docs/man/master/8/zfs-allow.8.html#EXAMPLES and "
+             "https://tinyurl.com/9h97kh8n and "
+             "https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq\n\n")
     parser.add_argument(
         "--no-stream", action="store_true",
-        help=("During replication, only replicate the most recent source snapshot of a dataset (using -i incrementals "
-              "instead of -I incrementals), hence skip all intermediate source snapshots that may exist between that "
-              "and the most recent common snapshot. If there is no common snapshot also skip all other source "
-              "snapshots for the dataset, except for the most recent source snapshot. This option helps the "
-              "destination to 'catch up' with the source ASAP, consuming a minimum of disk space, at the expense "
-              "of reducing reliable options for rolling back to intermediate snapshots in the future.\n\n"))
+        help="During replication, only replicate the most recent source snapshot of a dataset (using -i incrementals "
+             "instead of -I incrementals), hence skip all intermediate source snapshots that may exist between that "
+             "and the most recent common snapshot. If there is no common snapshot also skip all other source "
+             "snapshots for the dataset, except for the most recent source snapshot. This option helps the "
+             "destination to 'catch up' with the source ASAP, consuming a minimum of disk space, at the expense "
+             "of reducing reliable options for rolling back to intermediate snapshots in the future.\n\n")
     parser.add_argument(
         "--no-create-bookmark", action="store_true",
-        help=(f"For increased safety, in normal operation {prog_name} behaves as follows wrt. ZFS bookmark creation, "
-              "if it is autodetected that the source ZFS pool support bookmarks: "
-              f"Whenever it has successfully completed replication of the most recent source snapshot, {prog_name} "
-              "creates a ZFS bookmark of that snapshot and attaches it to the source dataset. "
-              "Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having "
-              "to keep the already replicated snapshot around on the source dataset until the next upcoming snapshot "
-              "has been successfully replicated. This way you can send the snapshot from the source dataset to another "
-              "host, then bookmark the snapshot on the source dataset, then delete the snapshot from the source "
-              "dataset to save disk space, and then still incrementally send the next upcoming snapshot from the "
-              "source dataset to the other host by referring to the bookmark.\n\n"
-              "The --no-create-bookmark option disables this safety feature but is discouraged, because bookmarks "
-              "are tiny and relatively cheap and help to ensure that ZFS replication can continue even if source and "
-              "destination dataset somehow have no common snapshot anymore. "
-              "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
-              "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
-              "the info in the bookmark (the bookmark must still exist in the source dataset) instead of the info in "
-              "the metadata of the (now missing) source snapshot.\n\n"
-              "A ZFS bookmark is a tiny bit of metadata extracted from a ZFS snapshot by the 'zfs bookmark' CLI, and "
-              "attached to a dataset, much like a ZFS snapshot. Note that a ZFS bookmark does not contain user data; "
-              "instead a ZFS bookmark is essentially a tiny pointer in the form of the GUID of the snapshot and 64-bit "
-              "transaction group number of the snapshot and creation time of the snapshot, which is sufficient to tell "
-              "the destination ZFS pool how to find the destination snapshot corresponding to the source bookmark "
-              "and (potentially already deleted) source snapshot. A bookmark can be fed into 'zfs send' as the "
-              "source of an incremental send. Note that while a bookmark allows for its snapshot "
-              "to be deleted on the source after successful replication, it still requires that its snapshot is not "
-              "somehow deleted prematurely on the destination dataset, so be mindful of that. "
-              f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
-              "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
-              f"{prog_name} itself never deletes any bookmark.\n\n"
-              "You can list bookmarks, like so: "
-              "`zfs list -t bookmark -o name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and should) "
-              "periodically prune obsolete bookmarks just like snapshots, like so: "
-              "`zfs destroy $SRC_DATASET#$BOOKMARK`. Typically, bookmarks should be pruned less aggressively "
-              "than snapshots, and destination snapshots should be pruned less aggressively than source snapshots. "
-              "As an example starting point, here is a script that deletes all bookmarks older than X days in a "
-              "given dataset and its descendants: "
-              "`days=90; dataset=tank/foo/bar; zfs list -t bookmark -o name,creation -Hp -r $dataset | "
-              "while read -r BOOKMARK CREATION_TIME; do "
-              "  [ $CREATION_TIME -le $(($(date +%%s) - days * 86400)) ] && echo $BOOKMARK; "
-              "done | xargs -I {} sudo zfs destroy {}` "
-              "A better example starting point can be found in third party tools or this script: "
-              "https://github.com/whoschek/bzfs/blob/main/test/prune_bookmarks.py\n\n"))
+        help=f"For increased safety, in normal operation {prog_name} behaves as follows wrt. ZFS bookmark creation, "
+             "if it is autodetected that the source ZFS pool support bookmarks: "
+             f"Whenever it has successfully completed replication of the most recent source snapshot, {prog_name} "
+             "creates a ZFS bookmark of that snapshot and attaches it to the source dataset. "
+             "Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having "
+             "to keep the already replicated snapshot around on the source dataset until the next upcoming snapshot "
+             "has been successfully replicated. This way you can send the snapshot from the source dataset to another "
+             "host, then bookmark the snapshot on the source dataset, then delete the snapshot from the source "
+             "dataset to save disk space, and then still incrementally send the next upcoming snapshot from the "
+             "source dataset to the other host by referring to the bookmark.\n\n"
+             "The --no-create-bookmark option disables this safety feature but is discouraged, because bookmarks "
+             "are tiny and relatively cheap and help to ensure that ZFS replication can continue even if source and "
+             "destination dataset somehow have no common snapshot anymore. "
+             "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
+             "source dataset in an effort to reclaim disk space, replication can still proceed because it can use "
+             "the info in the bookmark (the bookmark must still exist in the source dataset) instead of the info in "
+             "the metadata of the (now missing) source snapshot.\n\n"
+             "A ZFS bookmark is a tiny bit of metadata extracted from a ZFS snapshot by the 'zfs bookmark' CLI, and "
+             "attached to a dataset, much like a ZFS snapshot. Note that a ZFS bookmark does not contain user data; "
+             "instead a ZFS bookmark is essentially a tiny pointer in the form of the GUID of the snapshot and 64-bit "
+             "transaction group number of the snapshot and creation time of the snapshot, which is sufficient to tell "
+             "the destination ZFS pool how to find the destination snapshot corresponding to the source bookmark "
+             "and (potentially already deleted) source snapshot. A bookmark can be fed into 'zfs send' as the "
+             "source of an incremental send. Note that while a bookmark allows for its snapshot "
+             "to be deleted on the source after successful replication, it still requires that its snapshot is not "
+             "somehow deleted prematurely on the destination dataset, so be mindful of that. "
+             f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
+             "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
+             f"{prog_name} itself never deletes any bookmark.\n\n"
+             "You can list bookmarks, like so: "
+             "`zfs list -t bookmark -o name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and should) "
+             "periodically prune obsolete bookmarks just like snapshots, like so: "
+             "`zfs destroy $SRC_DATASET#$BOOKMARK`. Typically, bookmarks should be pruned less aggressively "
+             "than snapshots, and destination snapshots should be pruned less aggressively than source snapshots. "
+             "As an example starting point, here is a script that deletes all bookmarks older than X days in a "
+             "given dataset and its descendants: "
+             "`days=90; dataset=tank/foo/bar; zfs list -t bookmark -o name,creation -Hp -r $dataset | "
+             "while read -r BOOKMARK CREATION_TIME; do "
+             "  [ $CREATION_TIME -le $(($(date +%%s) - days * 86400)) ] && echo $BOOKMARK; "
+             "done | xargs -I {} sudo zfs destroy {}` "
+             "A better example starting point can be found in third party tools or this script: "
+             "https://github.com/whoschek/bzfs/blob/main/test/prune_bookmarks.py\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
-        help=(f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
-              "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
-              "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks. "
-              "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
-              "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
-              "common snapshot anymore.\n\n"
-              f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
-              "as only the GUID of the bookmark and the GUID of the snapshot is considered for comparison, and ZFS "
-              "guarantees that any bookmark of a given snapshot automatically has the same GUID, transaction group "
-              "number and creation time as the snapshot. Also note that you can create, delete and prune bookmarks "
-              f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
-              "bookmarks currently exist, if any.\n\n"))
+        help=f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
+             "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
+             "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks. "
+             "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
+             "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
+             "common snapshot anymore.\n\n"
+             f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
+             "as only the GUID of the bookmark and the GUID of the snapshot is considered for comparison, and ZFS "
+             "guarantees that any bookmark of a given snapshot automatically has the same GUID, transaction group "
+             "number and creation time as the snapshot. Also note that you can create, delete and prune bookmarks "
+             f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
+             "bookmarks currently exist, if any.\n\n")
 
     ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
     # for speed with confidentiality and integrity
@@ -581,9 +580,9 @@ feature.
     # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
     parser.add_argument(
         "--ssh-cipher", type=str, default=ssh_cipher_default, metavar="STRING",
-        help=f"SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
+        help="SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
-             f"keyword in ssh_config(5) for more information: "
+             "keyword in ssh_config(5) for more information: "
              f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
 
     ssh_private_key_file_default = ".ssh/id_rsa"
@@ -611,23 +610,23 @@ feature.
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-extra-opts", type=str, default="", metavar="STRING",
-            help=(f"Additional options to be passed to ssh CLI when connecting to {loc} host (optional). "
-                  "The value is split on runs of one or more whitespace characters. "
-                  f"Example: `--ssh-{loc}-extra-opts='-v -v'` to debug ssh config issues.\n\n"))
+            help=f"Additional options to be passed to ssh CLI when connecting to {loc} host (optional). "
+                 "The value is split on runs of one or more whitespace characters. "
+                 f"Example: `--ssh-{loc}-extra-opts='-v -v'` to debug ssh config issues.\n\n")
         parser.add_argument(
             f"--ssh-{loc}-extra-opt", action="append", default=[], metavar="STRING",
-            help=(f"Additional option to be passed to ssh CLI when connecting to {loc} host (optional). The value "
-                  "can contain spaces and is not split. This option can be specified multiple times. "
-                  f"Example: `--ssh-{loc}-extra-opt='-oProxyCommand=nc %%h %%p'` to disable the TCP_NODELAY "
-                  "socket option for OpenSSH.\n\n"))
+            help=f"Additional option to be passed to ssh CLI when connecting to {loc} host (optional). The value "
+                 "can contain spaces and is not split. This option can be specified multiple times. "
+                 f"Example: `--ssh-{loc}-extra-opt='-oProxyCommand=nc %%h %%p'` to disable the TCP_NODELAY "
+                 "socket option for OpenSSH.\n\n")
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-config-file", type=str, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
     parser.add_argument(
         "--bwlimit", type=str, metavar="STRING",
-        help=("Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
-              "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n"))
+        help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
+             "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n")
 
     def hlp(program: str) -> str:
         return f"The name or path to the '{program}' executable (optional). Default is '{program}'. "
@@ -681,9 +680,9 @@ feature.
     parser.add_argument(
         "--log-dir", type=str, metavar="DIR",
         help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "
-             f"that is used by default writes log files there, in addition to the console. The current.log symlink "
-             f"always points to the most recent log file. The current.pv symlink always points to the most recent "
-             f"data transfer monitoring log. Run 'tail -f' on both symlinks to follow what's currently going on.\n\n")
+             "that is used by default writes log files there, in addition to the console. The current.log symlink "
+             "always points to the most recent log file. The current.pv symlink always points to the most recent "
+             "data transfer monitoring log. Run 'tail -f' on both symlinks to follow what's currently going on.\n\n")
     parser.add_argument(
         "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
@@ -692,10 +691,10 @@ feature.
              "https://docs.python.org/3/library/logging.handlers.html#sysloghandler\n\n")
     parser.add_argument(
         "--log-syslog-socktype", choices=["UDP", "TCP"], default="UDP",
-        help=f"The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
+        help="The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
     parser.add_argument(
         "--log-syslog-facility", type=int, min=0, max=7, default=1, action=CheckRange, metavar="INT",
-        help=f"The local facility aka category that identifies msg sources in syslog (default: 1, min=0, max=7).\n\n")
+        help="The local facility aka category that identifies msg sources in syslog (default: 1, min=0, max=7).\n\n")
     parser.add_argument(
         "--log-syslog-prefix", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
         help=f"The name to prepend to each message that is sent to syslog; identifies {prog_name} messages as opposed "
@@ -706,51 +705,51 @@ feature.
         help="Only send messages with equal or higher priority than this log level to syslog. Default is 'ERROR'.\n\n")
     parser.add_argument(
         "--log-config-file", default=None, action=NonEmptyStringAction, metavar="STRING",
-        help=("The contents of a JSON file that defines a custom python logging configuration to be used (optional). "
-              "If the option starts with a `+` prefix then the contents are read from the UTF-8 JSON file given "
-              "after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json. "
-              "Here is an example config file that demonstrates usage: "
-              "https://github.com/whoschek/bzfs/blob/main/tests/log_config.json\n\n"
-              "For more examples see "
-              "https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig "
-              "and for details see "
-              "https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema\n\n"
-              "*Note:* Lines starting with a # character are ignored as comments within the JSON. Also, if a line ends "
-              "with a # character the portion between that # character and the preceding # character on the same line "
-              "is ignored as a comment.\n\n"))
+        help="The contents of a JSON file that defines a custom python logging configuration to be used (optional). "
+             "If the option starts with a `+` prefix then the contents are read from the UTF-8 JSON file given "
+             "after the `+` prefix. Examples: +log_config.json, +/path/to/log_config.json. "
+             "Here is an example config file that demonstrates usage: "
+             "https://github.com/whoschek/bzfs/blob/main/tests/log_config.json\n\n"
+             "For more examples see "
+             "https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig "
+             "and for details see "
+             "https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema\n\n"
+             "*Note:* Lines starting with a # character are ignored as comments within the JSON. Also, if a line ends "
+             "with a # character the portion between that # character and the preceding # character on the same line "
+             "is ignored as a comment.\n\n")
     parser.add_argument(
         "--log-config-var", action=LogConfigVariablesAction, nargs="+", default=[], metavar="NAME:VALUE",
-        help=("User defined variables in the form of zero or more NAME:VALUE pairs (optional). "
-              "These variables can be used within the JSON passed with --log-config-file (see above) via "
-              "`${name[:default]}` references, which are substituted (aka interpolated) as follows:\n\n"
-              "If the variable contains a non-empty CLI value then that value is used. Else if a default value for the "
-              "variable exists in the JSON file that default value is used. Else the program aborts with an error. "
-              "Example: In the JSON variable `${syslog_address:/dev/log}`, the variable name is 'syslog_address' "
-              "and the default value is '/dev/log'. The default value is the portion after the optional : colon "
-              "within the variable declaration. The default value is used if the CLI user does not specify a non-empty "
-              "value via --log-config-var, for example via "
-              "--log-config-var syslog_address:/path/to/socket_file or via "
-              "--log-config-var syslog_address:[host,port].\n\n"
-              f"{prog_name} automatically supplies the following convenience variables: "
-              "`${bzfs.log_level}`, `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`, "
-              "`${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. "
-              "For a complete list see the source code of get_dict_config_logger().\n\n"))
+        help="User defined variables in the form of zero or more NAME:VALUE pairs (optional). "
+             "These variables can be used within the JSON passed with --log-config-file (see above) via "
+             "`${name[:default]}` references, which are substituted (aka interpolated) as follows:\n\n"
+             "If the variable contains a non-empty CLI value then that value is used. Else if a default value for the "
+             "variable exists in the JSON file that default value is used. Else the program aborts with an error. "
+             "Example: In the JSON variable `${syslog_address:/dev/log}`, the variable name is 'syslog_address' "
+             "and the default value is '/dev/log'. The default value is the portion after the optional : colon "
+             "within the variable declaration. The default value is used if the CLI user does not specify a non-empty "
+             "value via --log-config-var, for example via "
+             "--log-config-var syslog_address:/path/to/socket_file or via "
+             "--log-config-var syslog_address:[host,port].\n\n"
+             f"{prog_name} automatically supplies the following convenience variables: "
+             "`${bzfs.log_level}`, `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`, "
+             "`${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. "
+             "For a complete list see the source code of get_dict_config_logger().\n\n")
     parser.add_argument(
         "--include-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help=("On program startup, unset all Unix environment variables for which the full environment variable "
-              "name matches at least one of the excludes but none of the includes. If an environment variable is "
-              "included this decision is never reconsidered because include takes precedence over exclude. "
-              "The purpose is to tighten security and help guard against accidental inheritance or malicious "
-              "injection of environment variable values that may have unintended effects.\n\n"
-              "This option can be specified multiple times. "
-              "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
-              "leading `!` character removed does not match. "
-              "The default is to include no environment variables, i.e. to make no exceptions to "
-              "--exclude-envvar-regex. "
-              "Example that retains at least these two env vars: "
-              "`--include-envvar-regex PATH "
-              f"--include-envvar-regex {env_var_prefix}min_pipe_transfer_size`. "
-              "Example that retains all environment variables without tightened security: `'.*'`\n\n"))
+        help="On program startup, unset all Unix environment variables for which the full environment variable "
+             "name matches at least one of the excludes but none of the includes. If an environment variable is "
+             "included this decision is never reconsidered because include takes precedence over exclude. "
+             "The purpose is to tighten security and help guard against accidental inheritance or malicious "
+             "injection of environment variable values that may have unintended effects.\n\n"
+             "This option can be specified multiple times. "
+             "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
+             "leading `!` character removed does not match. "
+             "The default is to include no environment variables, i.e. to make no exceptions to "
+             "--exclude-envvar-regex. "
+             "Example that retains at least these two env vars: "
+             "`--include-envvar-regex PATH "
+             f"--include-envvar-regex {env_var_prefix}min_pipe_transfer_size`. "
+             "Example that retains all environment variables without tightened security: `'.*'`\n\n")
     parser.add_argument(
         "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
