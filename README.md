@@ -162,7 +162,7 @@ bzfs --help # Run the CLI
 
 # Design Aspects
 
-* rsync'ish look and feel.
+* Rsync'ish look and feel.
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.
