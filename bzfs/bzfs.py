@@ -3344,7 +3344,6 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     logging.logProcesses = False
     logging.logThreads = False
     logging.logMultiprocessing = False
-    logging.logAsyncioTasks = False
     return log
 
 
