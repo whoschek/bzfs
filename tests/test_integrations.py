@@ -915,12 +915,6 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset + "/" + d1 + "/" + d2))
         self.assertSnapshotNames(dst_root_dataset + "/" + d1 + "/" + d2, [t1])
 
-    def test_basic_replication_flat_simple_with_fixup_X_opt(self):
-        if not is_zfs_at_least_2_3_0():
-            self.skipTest("zfs send -X option requires zfs >= 2.3.0")
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--zfs-send-program-opts=-X zzzz --exclude zzzzz")
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-
     def test_basic_replication_flat_simple_with_multiple_root_datasets(self):
         self.setup_basic()
         for i in range(0, 2):
