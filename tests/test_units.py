@@ -949,6 +949,9 @@ class TestTimeRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse_args("2024-10-35")  # Month does not have 35 days
 
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--time-or-duration", "60min"])
+
     def test_parse_datetime(self):
         # Test ISO 8601 datetime strings without timezone
         args = self.parse_args("2024-01-01")
