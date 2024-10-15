@@ -981,37 +981,37 @@ class TestTimeRangeAction(unittest.TestCase):
         args = self.parse_args("2024-10-05T14:48:00+02:00")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
 
-    def test_get_snapshot_time_range(self):
+    def test_get_include_snapshot_times(self):
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
-        self.assertIsNone(p.snapshot_time_range)
+        self.assertIsNone(p.include_snapshot_times)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=*..*"])
         p = bzfs.Params(args)
-        self.assertIsNone(p.snapshot_time_range)
+        self.assertIsNone(p.include_snapshot_times)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=1700000000..1700000001"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_time_range)
+        self.assertEqual((1700000000, 1700000001), p.include_snapshot_times)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=1700000001..1700000000"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_time_range)
+        self.assertEqual((1700000000, 1700000001), p.include_snapshot_times)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=0secs..60secs"])
         p = bzfs.Params(args)
-        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_time_range[0], delta=2)
-        self.assertAlmostEqual(int(time.time()), p.snapshot_time_range[1], delta=2)
+        self.assertAlmostEqual(int(time.time() - 60), p.include_snapshot_times[0], delta=2)
+        self.assertAlmostEqual(int(time.time()), p.include_snapshot_times[1], delta=2)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=2024-01-01..*"])
         p = bzfs.Params(args)
-        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_time_range[0])
-        self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_time_range[1])
+        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.include_snapshot_times[0])
+        self.assertLess(int(time.time() + 86400 * 365 * 1000), p.include_snapshot_times[1])
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=*..2024-01-01"])
         p = bzfs.Params(args)
-        self.assertEqual(0, p.snapshot_time_range[0])
-        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_time_range[1])
+        self.assertEqual(0, p.include_snapshot_times[0])
+        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.include_snapshot_times[1])
 
 
 #############################################################################

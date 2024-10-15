@@ -885,7 +885,7 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
-        self.snapshot_time_range: UnixTimeRange = self.get_snapshot_time_range(args)
+        self.include_snapshot_times: UnixTimeRange = self.get_include_snapshot_times(args)
         self.include_snapshot_ranks: List[RankRange] = args.include_snapshot_ranks
 
         self.dry_run: bool = args.dryrun is not None
@@ -1032,7 +1032,7 @@ class Params:
             return program
 
     @staticmethod
-    def get_snapshot_time_range(args: argparse.Namespace) -> UnixTimeRange:
+    def get_include_snapshot_times(args: argparse.Namespace) -> UnixTimeRange:
         def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
             if isinstance(time_spec, timedelta):
                 return int(current_time - time_spec.total_seconds())
@@ -1464,13 +1464,13 @@ class Job:
         if p.delete_missing_snapshots:
             log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
             for dst_dataset in dst_datasets:
-                props = "creation,guid,name" if p.snapshot_time_range else "guid,name"
+                props = "creation,guid,name" if p.include_snapshot_times else "guid,name"
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
                 k = len(dst_snapshots_with_guids)
-                if p.snapshot_time_range:
+                if p.include_snapshot_times:
                     dst_snapshots_with_guids = self.filter_snapshots_by_creation_time(
-                        dst_snapshots_with_guids, p.snapshot_time_range, bookmark_time_range=None
+                        dst_snapshots_with_guids, p.include_snapshot_times, bookmark_time_range=None
                     )
                     dst_snapshots_with_guids = cut(2, lines=dst_snapshots_with_guids)
                 dst_snapshots_with_guids = self.filter_snapshots_by_regex(dst_snapshots_with_guids)
@@ -1567,7 +1567,7 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        if use_bookmark or p.snapshot_time_range:
+        if use_bookmark or p.include_snapshot_times:
             props = "creation,guid,name"
             types = "snapshot,bookmark" if use_bookmark else "snapshot"
         else:
@@ -1582,10 +1582,10 @@ class Job:
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
 
         # ignore irrelevant bookmarks and snapshots wrt. ZFS creation time
-        if use_bookmark or p.snapshot_time_range:
+        if use_bookmark or p.include_snapshot_times:
             src_snapshots_and_bookmarks = self.filter_snapshots_by_creation_time(
                 src_snapshots_and_bookmarks,
-                snapshot_time_range=p.snapshot_time_range,
+                include_snapshot_times=p.include_snapshot_times,
                 bookmark_time_range=(
                     None
                     if not use_bookmark
@@ -2241,7 +2241,7 @@ class Job:
         return results
 
     def filter_snapshots_by_creation_time(
-        self, snapshots: List[str], snapshot_time_range: UnixTimeRange, bookmark_time_range: UnixTimeRange
+        self, snapshots: List[str], include_snapshot_times: UnixTimeRange, bookmark_time_range: UnixTimeRange
     ) -> List[str]:
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
@@ -2257,9 +2257,9 @@ class Job:
                 creation_time = int(snapshot[0 : snapshot.index("\t")])
                 include = bookmark_time_range[0] <= creation_time <= bookmark_time_range[1]
 
-            if snapshot_time_range and include:
+            if include_snapshot_times and include:
                 creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
-                include = snapshot_time_range[0] <= creation_time < snapshot_time_range[1]
+                include = include_snapshot_times[0] <= creation_time < include_snapshot_times[1]
             if include:
                 results.append(snapshot)
                 if is_debug:
