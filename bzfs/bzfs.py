@@ -452,7 +452,10 @@ feature.
              "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
-             "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n")
+             "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
+             "*Note:* To delete snapshots regardless, consider using as source a temporary empty dummy dataset, "
+             "created like so: "
+             "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n")
     parser.add_argument(
         "--delete-empty-datasets", action="store_true",
         help="After successful replication step and successful --delete-missing-datasets and successful "
