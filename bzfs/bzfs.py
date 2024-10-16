@@ -1386,6 +1386,7 @@ class Job:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
+        is_debug = log.isEnabledFor(log_debug)
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
@@ -1477,7 +1478,8 @@ class Job:
                     dst_snapshots_with_guids = cut(2, lines=dst_snapshots_with_guids)
                 dst_snapshots_with_guids = self.filter_snapshots_by_regex(dst_snapshots_with_guids)
                 dst_snapshots_with_guids = self.filter_snapshots_by_rank(dst_snapshots_with_guids)
-
+                for snapshot in dst_snapshots_with_guids:
+                    is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in basis_src_datasets:
                     cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
@@ -1549,6 +1551,7 @@ class Job:
         log = p.log
         src, dst = p.src, p.dst
         done_checking = False
+        is_debug = p.log.isEnabledFor(log_debug)
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
@@ -1615,6 +1618,7 @@ class Job:
         included_src_guids = set()
         for line in src_snapshots_with_guids:
             guid, snapshot = line.split("\t", 1)
+            is_debug and log.debug("Finally included snapshot: %s", snapshot)
             included_src_guids.add(guid)
             if "@" in snapshot:
                 latest_src_snapshot = snapshot
