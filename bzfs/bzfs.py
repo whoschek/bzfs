@@ -25,7 +25,7 @@
 * Control flow starts in main(), far below ..., which kicks off a "Job".
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
 * The core replication algorithm is in run_task() and especially in replicate_dataset().
-* README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update-readme.py.
+* README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.py.
 Simply run that script whenever you change or add ArgumentParser help text.
 """
 

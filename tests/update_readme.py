@@ -17,14 +17,14 @@
 import re
 import sys
 import subprocess
-import os
-from typing import Sequence, Callable, Optional, TypeVar, Union
+
+from tests.test_units import find_match
 
 
 def main():
     """
     Run this script to update README.md from the help info contained in bzfs.py.
-    Example usage: cd ~/repos/bzfs; tests/update-readme.py bzfs/bzfs.py README.md
+    Example usage: cd ~/repos/bzfs; python3 -m tests.update_readme bzfs/bzfs.py README.md
     This essentially does the following steps:
     argparse-manpage --pyfile bzfs/bzfs.py --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
@@ -36,7 +36,7 @@ def main():
     pip install argparse-manpage
     """
     if len(sys.argv) != 3:
-        print(f"Usage: {os.path.basename(sys.argv[0])} /path/to/bzfs.py path/to/README.md")
+        print(f"Usage: cd ~/repos/bzfs; python3 -m tests.update_readme /path/to/bzfs.py path/to/README.md")
         sys.exit(1)
 
     bzfs_py_file, readme_file = sys.argv[1], sys.argv[2]
@@ -120,53 +120,7 @@ def main():
     with open(readme_file, "w", encoding="utf-8") as f:
         f.writelines(readme)
 
-    # os.remove(tmp_manpage1_path)
-    # os.remove(tmp_manpage_md_path)
     print("Done.")
-
-
-T = TypeVar("T")
-
-
-def find_match(
-    seq: Sequence[T],
-    predicate: Callable[[T], bool],
-    start: Optional[int] = None,
-    end: Optional[int] = None,
-    reverse: bool = False,
-    raises: Union[bool, str, Callable[[], str]] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
-) -> int:
-    """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
-    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter,
-    which is a bool indicating whether to raise an error, or a string containing the error message, but can also be a
-    Callable/lambda in order to support efficient deferred generation of error messages.
-    Analog to str.find(), including slicing semantics with parameters start and end.
-    For example, seq can be a list, tuple or str.
-
-    Example usage:
-        lst = ["a", "b", "-c", "d"]
-        i = find_match(lst, lambda arg: arg.startswith("-"), start=1, end=3, reverse=True)
-        if i >= 0:
-            ...
-        i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
-        i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
-    """
-    offset = 0 if start is None else start if start >= 0 else len(seq) + start
-    if start is not None or end is not None:
-        seq = seq[start:end]
-    for i, item in enumerate(reversed(seq) if reverse else seq):
-        if predicate(item):
-            if reverse:
-                return len(seq) - i - 1 + offset
-            else:
-                return i + offset
-    if raises is False or raises is None:
-        return -1
-    if raises is True:
-        raise ValueError("No matching item found in sequence")
-    if callable(raises):
-        raises = raises()
-    raise ValueError(raises)
 
 
 if __name__ == "__main__":
