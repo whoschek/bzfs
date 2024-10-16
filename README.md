@@ -548,7 +548,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     d) a duration that indicates how long ago from the current time,
     using the following syntax: a non-negative integer number,
     immediately followed by a duration unit that is *one* of 's',
-    'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd',
+    'sec[s]', 'min[s]', 'h', 'hour[s]', 'd',
     'day[s]', 'w', 'week[s]'. Examples: '0s', '90min',
     '48h', '90days', '12w'.
 

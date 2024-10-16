@@ -274,7 +274,7 @@ feature.
              "requires Python >= 3.11.\n\n"
              "d) a duration that indicates how long ago from the current time, using the following syntax: "
              "a non-negative integer number, immediately followed by a duration unit that is "
-             "*one* of 's', 'sec[s]', 'm', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
+             "*one* of 's', 'sec[s]', 'min[s]', 'h', 'hour[s]', 'd', 'day[s]', 'w', 'week[s]'. "
              "Examples: '0s', '90min', '48h', '90days', '12w'.\n\n"
              "*Note:* This option compares the specified time against the standard ZFS 'creation' time property of the "
              "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
@@ -3599,7 +3599,6 @@ class TimeRangeAction(argparse.Action):
             "s": 1,
             "sec": 1,
             "secs": 1,
-            "m": 60,
             "min": 60,
             "mins": 60,
             "h": 60 * 60,
@@ -3612,7 +3611,7 @@ class TimeRangeAction(argparse.Action):
             "week": 7 * 86400,
             "weeks": 7 * 86400,
         }
-        match = re.fullmatch(r"(\d+)(s|secs?|m|mins?|h|hours?|d|days?|w|weeks?)", duration)
+        match = re.fullmatch(r"(\d+)(s|secs?|mins?|h|hours?|d|days?|w|weeks?)", duration)
         if not match:
             raise ValueError("Invalid duration format")
         quantity = int(match.group(1))

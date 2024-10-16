@@ -889,7 +889,7 @@ class TestTimeRangeAction(unittest.TestCase):
         args = self.parse_args("5s")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=5))
 
-        args = self.parse_args("30m")
+        args = self.parse_args("30min")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
 
         args = self.parse_args("2h")
@@ -918,7 +918,7 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=1209600))
 
         # Test with spaces
-        args = self.parse_args("  30m")
+        args = self.parse_args("  30mins")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
 
         args = self.parse_args("5s ")
