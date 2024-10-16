@@ -451,7 +451,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  Same syntax as --include-dataset-regex (see above) except that the
     default is `(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*`
-    (exclude tmp datasets). Example: '!.*' (exclude no dataset)
+    (exclude tmp datasets). Example: `!.*` (exclude no dataset)
 
 <!-- -->
 
@@ -585,8 +585,14 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     * 'latest 10%' aka 'latest 0..latest 10%' (include the latest
     10% of all snapshots)
 
+    * 'oldest 90' aka 'oldest 0..oldest 90' (include the oldest 90
+    snapshots)
+
     * 'latest 90' aka 'latest 0..latest 90' (include the latest 90
     snapshots)
+
+    * 'oldest 90..oldest 100%' (include all snapshots except the
+    oldest 90 snapshots)
 
     * 'latest 90..latest 100%' (include all snapshots except the
     latest 90 snapshots)
@@ -611,11 +617,11 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     * 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)
 
     *Note:* The --include-snapshot-ranks filter is applied after all
-    other include/exclude-snapshot-* filters have already been applied.
-    Percentage calculations are not based on the number of snapshots
-    contained in the dataset on disk, but rather based on the number of
-    snapshots arriving at the filter. For example, if only two daily
-    snapshots arrive at the filter because a prior filter excludes
+    other --include/exclude-snapshot-* filters have already been
+    applied. Percentage calculations are not based on the number of
+    snapshots contained in the dataset on disk, but rather based on the
+    number of snapshots arriving at the filter. For example, if only two
+    daily snapshots arrive at the filter because a prior filter excludes
     hourly snapshots, then 'latest 10' will only include these two
     daily snapshots, and 'latest 50%' will only include one of these
     two daily snapshots.

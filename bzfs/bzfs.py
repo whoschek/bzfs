@@ -226,7 +226,7 @@ feature.
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-dataset-regex (see above) except that the default is "
-             f"`{exclude_dataset_regexes_default}` (exclude tmp datasets). Example: '!.*' (exclude no dataset)\n\n")
+             f"`{exclude_dataset_regexes_default}` (exclude tmp datasets). Example: `!.*` (exclude no dataset)\n\n")
     parser.add_argument(
         "--exclude-dataset-property", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="The name of a ZFS dataset user property (optional). If this option is specified, the effective value "
@@ -292,7 +292,9 @@ feature.
              "If the optional lower rank is missing it is assumed to be 0. Examples:\n\n"
              "* 'oldest 10%%' aka 'oldest 0..oldest 10%%' (include the oldest 10%% of all snapshots)\n\n"
              "* 'latest 10%%' aka 'latest 0..latest 10%%' (include the latest 10%% of all snapshots)\n\n"
+             "* 'oldest 90' aka 'oldest 0..oldest 90' (include the oldest 90 snapshots)\n\n"
              "* 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)\n\n"
+             "* 'oldest 90..oldest 100%%' (include all snapshots except the oldest 90 snapshots)\n\n"
              "* 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)\n\n"
              "* 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)\n\n"
              "* 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
@@ -301,7 +303,7 @@ feature.
              "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
              "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
              "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
-             "*Note:* The --include-snapshot-ranks filter is applied after all other include/exclude-snapshot-* "
+             "*Note:* The --include-snapshot-ranks filter is applied after all other --include/exclude-snapshot-* "
              "filters have already been applied. Percentage calculations are not based on the number of snapshots "
              "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
