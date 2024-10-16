@@ -175,10 +175,10 @@ attempt to "abstract away" ZFS concepts and semantics. Keeps simple things simpl
 * All ZFS and SSH commands (even in --dryrun mode) are logged such that they can be inspected, copy-and-pasted into
 a terminal/shell, and run manually to help anticipate or diagnose issues.
 * Supports replicating (or deleting) dataset subsets via powerful include/exclude regexes and other filters, which can
-be combined into a mini pipeline. For example, can replicate (or delete) all except temporary datasets and private
-datasets. Can be told to do such deletions only if a corresponding source dataset does not exist.
+be combined into a mini filter pipeline. For example, can replicate (or delete) all except temporary datasets and
+private datasets. Can be told to do such deletions only if a corresponding source dataset does not exist.
 * Supports replicating (or deleting) snapshot subsets via powerful include/exclude regexes, time based filters, and
-oldest N/latest N filters, which can also be combined into a mini pipeline.
+oldest N/latest N filters, which can also be combined into a mini filter pipeline.
     * For example, can replicate (or delete) daily and weekly snapshots while ignoring hourly and 5 minute snapshots.
 Or, can replicate daily and weekly snapshots to a remote destination while replicating hourly and 5 minute snapshots
 to a local destination.
@@ -1079,7 +1079,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     86400)) ] && echo $BOOKMARK; done | xargs -I {} sudo zfs destroy
     {}` A better example starting point can be found in third party
     tools or this script:
-    https://github.com/whoschek/bzfs/blob/main/test/prune_bookmarks.py
+    https://github.com/whoschek/bzfs/blob/main/tests/prune_bookmarks.py
 
 <!-- -->
 

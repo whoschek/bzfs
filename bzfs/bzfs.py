@@ -562,7 +562,7 @@ feature.
              "  [ $CREATION_TIME -le $(($(date +%%s) - days * 86400)) ] && echo $BOOKMARK; "
              "done | xargs -I {} sudo zfs destroy {}` "
              "A better example starting point can be found in third party tools or this script: "
-             "https://github.com/whoschek/bzfs/blob/main/test/prune_bookmarks.py\n\n")
+             "https://github.com/whoschek/bzfs/blob/main/tests/prune_bookmarks.py\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
@@ -1451,8 +1451,7 @@ class Job:
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
-        # included via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
-        # Does not recurse without --recursive.
+        # included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.
         if p.delete_missing_datasets:
             log.info(p.dry("--delete-missing-datasets: %s"), task_description)
             dst_datasets = set(dst_datasets)
@@ -1463,9 +1462,8 @@ class Job:
             dst_datasets = isorted(dst_datasets.difference(to_delete))
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
-        # match at least one of --include-snapshot-regex but none of --exclude-snapshot-regex, and they fall into the
-        # --include-snapshot-times range, and the destination dataset is included
-        # via --{include|exclude}-dataset-regex --{include|exclude}-dataset --exclude-dataset-property policy.
+        # are included by the --{include/exclude}-snapshot-* policy, and the destination dataset is included
+        # via --{include|exclude}-dataset* policy.
         dst_datasets_having_snapshots = set()
         if p.delete_missing_snapshots:
             log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
@@ -1812,7 +1810,7 @@ class Job:
                 # skip intermediate snapshots
                 steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot)]
             else:
-                # include intermediate src snapshots that pass --{include,exclude}-snapshot-regex policy, using
+                # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
                 steps_todo = self.incremental_send_steps_wrapper(cand_snapshots, cand_guids, included_src_guids)
                 log.trace("steps_todo: %s", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
@@ -2243,10 +2241,9 @@ class Job:
                 i = snapshot.index("@")  # snapshot separator
             if is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
-                if is_debug:
-                    log.debug("Including b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
-            elif is_debug:
-                log.debug("Excluding b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
+                is_debug and log.debug("Including b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
+            else:
+                is_debug and log.debug("Excluding b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
         return results
 
     def filter_snapshots_by_creation_time(
@@ -2271,10 +2268,9 @@ class Job:
                 include = include_snapshot_times[0] <= creation_time < include_snapshot_times[1]
             if include:
                 results.append(snapshot)
-                if is_debug:
-                    log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-            elif is_debug:
-                log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+            else:
+                is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_rank(self, snapshots: List[str]) -> List[str]:
@@ -2303,10 +2299,9 @@ class Job:
                 else:
                     if lo <= i < hi:
                         results.append(snapshot)
-                        if is_debug:
-                            log.debug("Including b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
-                    elif is_debug:
-                        log.debug("Excluding b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                        is_debug and log.debug("Including b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                    else:
+                        is_debug and log.debug("Excluding b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
                     i += 1
             snapshots = results
             n = hi - lo
@@ -2320,10 +2315,9 @@ class Job:
         for propname, propvalue in props.items():
             if is_included(propname, include_regexes, exclude_regexes):
                 results[propname] = propvalue
-                if is_debug:
-                    log.debug("Including b/c property regex: %s", propname)
-            elif is_debug:
-                log.debug("Excluding b/c property regex: %s", propname)
+                is_debug and log.debug("Including b/c property regex: %s", propname)
+            else:
+                is_debug and log.debug("Excluding b/c property regex: %s", propname)
         return results
 
     @staticmethod
@@ -2508,7 +2502,7 @@ class Job:
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], force_convert_I_to_i: bool
     ) -> List[Tuple[str, str, str]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
-        include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-regex
+        include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
         excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists. A step
         corresponds to a single ZFS send/receive operation. Fewer steps translate to better performance, especially
