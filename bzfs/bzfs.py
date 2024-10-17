@@ -2875,7 +2875,7 @@ class Job:
         in parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where
         A replicates to B, and B replicates to C."""
         p = self.params
-        if p.force or not self.is_program_available("ps", remote.location):
+        if not self.is_program_available("ps", remote.location):
             return True
         cmd = p.split_args(f"{p.ps_program} -Ao args")
         procs = (self.try_ssh_command(remote, log_trace, cmd=cmd) or "").splitlines()

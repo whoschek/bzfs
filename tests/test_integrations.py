@@ -1382,7 +1382,9 @@ class LocalTestCase(BZFSTestCase):
     def test_check_zfs_dataset_busy_with_force(self):
         self.setup_basic()
         inject_params = {"is_zfs_dataset_busy": True}
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--force", expected_status=0, inject_params=inject_params)
+        self.run_bzfs(
+            src_root_dataset, dst_root_dataset, "--force", expected_status=die_status, inject_params=inject_params
+        )
 
     def test_periodic_job_locking(self):
         if is_solaris_zfs():
