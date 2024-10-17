@@ -805,7 +805,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-times=10secs..2999-01-01",
+            "--include-snapshot-times=10secs ago..2999-01-01",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertSnapshots(dst_root_dataset, 3, "s")
@@ -826,7 +826,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-times=60secs..2999-01-01",
+            "--include-snapshot-times=60secs ago..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
@@ -838,7 +838,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--no-use-bookmark",
-            "--include-snapshot-times=60secs..2999-01-01",
+            "--include-snapshot-times=60secs ago..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
@@ -2394,7 +2394,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-missing-snapshots",
             "--delete-empty-datasets",
-            "--include-snapshot-times=10secs..2999-01-01",
+            "--include-snapshot-times=10secs ago..2999-01-01",
             **kwargs,
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])

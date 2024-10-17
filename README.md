@@ -546,11 +546,12 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     Python >= 3.11.
 
     d) a duration that indicates how long ago from the current time,
-    using the following syntax: a non-negative integer number,
-    immediately followed by a duration unit that is *one* of 's',
-    'sec[s]', 'min[s]', 'h', 'hour[s]', 'd',
-    'day[s]', 'w', 'week[s]'. Examples: '0s', '90min',
-    '48h', '90days', '12w'.
+    using the following syntax: a non-negative integer, followed by an
+    optional space, followed by a duration unit that is *one* of
+    'seconds', 'secs', 'minutes', 'mins', 'hours', 'days',
+    'weeks', followed by an optional space, followed by the word
+    'ago'. Examples: '0secs ago', '90 mins ago', '48hours ago',
+    '90days ago', '12weeksago'.
 
     *Note:* This option compares the specified time against the
     standard ZFS 'creation' time property of the snapshot (which is a

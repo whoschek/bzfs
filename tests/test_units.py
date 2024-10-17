@@ -875,92 +875,104 @@ class TestTimeRangeAction(unittest.TestCase):
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--time-or-duration", action=bzfs.TimeRangeAction)
 
-    def parse_args(self, arg):
+    def parse_duration(self, arg):
+        return self.parser.parse_args(["--time-or-duration", arg + " ago..*"])
+
+    def parse_timestamp(self, arg):
         return self.parser.parse_args(["--time-or-duration", arg + "..*"])
 
     def test_parse_unix_time(self):  # Test Unix time in integer seconds
-        args = self.parse_args("1696510080")
+        args = self.parse_timestamp("1696510080")
         self.assertEqual(args.time_or_duration[0], 1696510080)
 
-        args = self.parse_args("0")
+        args = self.parse_timestamp("0")
         self.assertEqual(args.time_or_duration[0], 0)
 
     def test_valid_durations(self):
-        args = self.parse_args("5s")
+        args = self.parse_duration("5secs")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=5))
 
-        args = self.parse_args("30min")
+        args = self.parse_duration("5 seconds")
+        self.assertEqual(args.time_or_duration[0], timedelta(seconds=5))
+
+        args = self.parse_duration("30mins")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
 
-        args = self.parse_args("2h")
+        args = self.parse_duration("30minutes")
+        self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
+
+        args = self.parse_duration("2hours")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=2 * 60 * 60))
 
-        args = self.parse_args("0d")
+        args = self.parse_duration("0days")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=0))
 
-        args = self.parse_args("10w")
+        args = self.parse_duration("10weeks")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=6048000))
 
-        args = self.parse_args("15secs")
+        args = self.parse_duration("15secs")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=15))
 
-        args = self.parse_args("60min")
+        args = self.parse_duration("60mins")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=3600))
         self.assertEqual(args.time_or_duration[0].total_seconds(), 3600)
 
-        args = self.parse_args("2hours")
+        args = self.parse_duration("2hours")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=2 * 60 * 60))
 
-        args = self.parse_args("3days")
+        args = self.parse_duration("3days")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=259200))
 
-        args = self.parse_args("2weeks")
+        args = self.parse_duration("2weeks")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=1209600))
 
         # Test with spaces
-        args = self.parse_args("  30mins")
+        args = self.parse_duration("  30mins")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
 
-        args = self.parse_args("5s ")
+        args = self.parse_duration("5secs")
         self.assertEqual(args.time_or_duration[0], timedelta(seconds=5))
 
     def test_invalid_time_spec(self):
         with self.assertRaises(SystemExit):
-            self.parse_args("")  # Empty string
+            self.parse_duration("")  # Empty string
 
         with self.assertRaises(SystemExit):
-            self.parse_args("  ")  # Empty string
+            self.parse_duration("  ")  # Empty string
 
         with self.assertRaises(SystemExit):
-            self.parse_args("10x")  # Invalid unit
+            self.parse_duration("10x")  # Invalid unit
 
         with self.assertRaises(SystemExit):
-            self.parse_args("10   w")  # spaces
+            self.parse_duration("10   weeks")  # spaces
 
         with self.assertRaises(SystemExit):
-            self.parse_args("-5m")  # Negative number
+            self.parse_duration("-5mins")  # Negative number
 
         with self.assertRaises(SystemExit):
-            self.parse_args("abcd")  # Completely invalid format
+            self.parse_duration("abcd")  # Completely invalid format
 
         with self.assertRaises(SystemExit):
-            self.parse_args("2024-1-1")  # must be 2024-01-01
+            self.parse_timestamp("2024-1-1")  # must be 2024-01-01
 
         with self.assertRaises(SystemExit):
-            self.parse_args("2024-10-35")  # Month does not have 35 days
+            self.parse_timestamp("2024-10-35")  # Month does not have 35 days
 
         with self.assertRaises(SystemExit):
-            self.parser.parse_args(["--time-or-duration", "60min"])
+            self.parser.parse_args(["--time-or-duration", "60_mins..*"])  # Missing 'ago'
+
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--time-or-duration", "60_mins_ago"])  # Missing ..
 
     def test_parse_datetime(self):
         # Test ISO 8601 datetime strings without timezone
-        args = self.parse_args("2024-01-01")
+        args = self.parse_timestamp("2024-01-01")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-01-01").timestamp()))
 
-        args = self.parse_args("2024-12-31")
+        args = self.parse_timestamp("2024-12-31")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-12-31").timestamp()))
 
-        args = self.parse_args("2024-10-05T14:48:00")
+        args = self.parse_timestamp("2024-10-05T14:48:00")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00").timestamp()))
         self.assertNotEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
 
@@ -969,16 +981,16 @@ class TestTimeRangeAction(unittest.TestCase):
             self.skipTest("Timezone support in datetime.fromisoformat() requires python >= 3.11")
 
         # Test ISO 8601 datetime strings with timezone info
-        args = self.parse_args("2024-10-05T14:48:00+02")
+        args = self.parse_timestamp("2024-10-05T14:48:00+02")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
 
-        args = self.parse_args("2024-10-05T14:48:00+00:00")
+        args = self.parse_timestamp("2024-10-05T14:48:00+00:00")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00+00:00").timestamp()))
 
-        args = self.parse_args("2024-10-05T14:48:00-04:30")
+        args = self.parse_timestamp("2024-10-05T14:48:00-04:30")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00-04:30").timestamp()))
 
-        args = self.parse_args("2024-10-05T14:48:00+02:00")
+        args = self.parse_timestamp("2024-10-05T14:48:00+02:00")
         self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
 
     def test_get_include_snapshot_times(self):
@@ -998,7 +1010,7 @@ class TestTimeRangeAction(unittest.TestCase):
         p = bzfs.Params(args)
         self.assertEqual((1700000000, 1700000001), p.include_snapshot_times)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=0secs..60secs"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=0secs ago..60secs ago"])
         p = bzfs.Params(args)
         self.assertAlmostEqual(int(time.time() - 60), p.include_snapshot_times[0], delta=2)
         self.assertAlmostEqual(int(time.time()), p.include_snapshot_times[1], delta=2)
