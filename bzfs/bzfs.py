@@ -2588,7 +2588,7 @@ class Job:
             if not self.is_solaris_zfs(remote):
                 run_zfs_set(properties)  # send all properties in a batch
             else:
-                for prop in properties:  # solaris-14.0 does not accept multiple properties per 'zfs set' CLI call
+                for prop in properties:  # solaris-11.4 does not accept multiple properties per 'zfs set' CLI call
                     run_zfs_set([prop])
 
     def zfs_get(
