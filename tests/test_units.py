@@ -1063,7 +1063,7 @@ class TestRankRangeAction(unittest.TestCase):
             self.parse_args("oldest1..oldestx2%")  # non-digits
 
         with self.assertRaises(SystemExit):
-            self.parse_args("oldest1..oldest101%")  # non-digits
+            self.parse_args("oldest1..oldest101%")  # percent > 100
 
         with self.assertRaises(SystemExit):
             self.parse_args("oldest1..xxxx100%")  # unknown param

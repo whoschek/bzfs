@@ -20,8 +20,8 @@
 # ///
 
 """
-* The codebase starts with documentation, definition of input data and associated argument parsing into a "Param" class.
-* All CLI option/parameter values are reachable from the "Param" class.
+* The codebase starts with docs, definition of input data and associated argument parsing into a "Params" class.
+* All CLI option/parameter values are reachable from the "Params" class.
 * Control flow starts in main(), far below ..., which kicks off a "Job".
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
 * The core replication algorithm is in run_task() and especially in replicate_dataset().
@@ -1960,10 +1960,10 @@ class Job:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
                 process = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-                # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
                     log.warning("%s", stderr_to_str(e.stderr).rstrip())
+                # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                 raise RetryableError("Subprocess failed") from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
