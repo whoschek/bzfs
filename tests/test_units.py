@@ -49,7 +49,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(ExcludeSnapshotRegexValidationCase))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     return suite
 
 
@@ -1327,7 +1327,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
 
 #############################################################################
-class ExcludeSnapshotRegexValidationCase(unittest.TestCase):
+class TestIncrementalSendSteps(unittest.TestCase):
 
     def test_basic1(self):
         input_snapshots = ["d1", "h1", "d2", "d3", "d4"]

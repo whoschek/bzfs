@@ -33,7 +33,7 @@ from unittest.mock import patch
 
 from bzfs import bzfs
 from bzfs.bzfs import die_status
-from tests.test_units import ExcludeSnapshotRegexValidationCase, find_match, stop_on_failure_subtest
+from tests.test_units import TestIncrementalSendSteps, find_match, stop_on_failure_subtest
 from tests.zfs_util import (
     bookmark_name,
     bookmarks,
@@ -96,7 +96,7 @@ def suite():
     is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
     suite = unittest.TestSuite()
     if not is_adhoc_test:
-        suite.addTest(ParametrizedTestCase.parametrize(ExcludeSnapshotRegexTestCase, {"verbose": True}))
+        suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -470,7 +470,7 @@ class AdhocTestCase(BZFSTestCase):
 
 
 #############################################################################
-class ExcludeSnapshotRegexTestCase(BZFSTestCase):
+class IncrementalSendStepsTestCase(BZFSTestCase):
 
     def test_snapshot_series_excluding_hourlies(self):
         testcase = {None: ["d1", "h1", "d2", "d3", "d4"]}
@@ -559,7 +559,7 @@ class ExcludeSnapshotRegexTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_foo, [])
 
     def test_snapshot_series_excluding_hourlies_with_permutations(self):
-        for testcase in ExcludeSnapshotRegexValidationCase().permute_snapshot_series(5):
+        for testcase in TestIncrementalSendSteps().permute_snapshot_series(5):
             self.tearDownAndSetup()
             src_foo = create_filesystem(src_root_dataset, "foo")
             dst_foo = dst_root_dataset + "/foo"
