@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import fcntl
 import json
 import os
@@ -615,6 +616,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertTrue(job.is_program_available("zstd", loc))
                     self.assertTrue(job.is_program_available("mbuffer", loc))
                     self.assertTrue(job.is_program_available("pv", loc))
+                    self.assertTrue(job.is_program_available("ps", loc))
 
     def test_basic_replication_recursive1_with_volume(self):
         self.test_basic_replication_recursive1(volume=True)
