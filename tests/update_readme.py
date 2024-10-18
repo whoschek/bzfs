@@ -36,7 +36,7 @@ def main():
     pip install argparse-manpage
     """
     if len(sys.argv) != 3:
-        print(f"Usage: cd ~/repos/bzfs; python3 -m tests.update_readme /path/to/bzfs.py path/to/README.md")
+        print("Usage: cd ~/repos/bzfs; python3 -m tests.update_readme /path/to/bzfs.py path/to/README.md")
         sys.exit(1)
 
     bzfs_py_file, readme_file = sys.argv[1], sys.argv[2]
