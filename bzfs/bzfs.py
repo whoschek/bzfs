@@ -630,7 +630,7 @@ feature.
             f"--ssh-{loc}-config-file", type=str, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
     parser.add_argument(
-        "--bwlimit", type=str, metavar="STRING",
+        "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
              "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n")
 
@@ -943,8 +943,8 @@ class Params:
         self.ps_program: str = self.program_name(args.ps_program)
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
-        if args.bwlimit and args.bwlimit.strip():
-            self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit.strip())}"] + self.pv_program_opts
+        if args.bwlimit:
+            self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit)}"] + self.pv_program_opts
         self.shell_program_local: str = "sh"
         self.shell_program: str = self.program_name(args.shell_program)
         self.ssh_program: str = self.program_name(args.ssh_program)
