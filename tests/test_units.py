@@ -1038,7 +1038,7 @@ class TestRankRangeAction(unittest.TestCase):
 
     def test_valid_ranks(self):
         self.assertEqual((("latest", 0, False), ("latest", 10, True)), self.parse_args("latest0..latest10%").ranks[0])
-        self.assertEqual((("oldest", 10, True), ("latest", 90, True)), self.parse_args("oldest10%..latest90%").ranks[0])
+        self.assertEqual((("oldest", 10, True), ("oldest", 90, True)), self.parse_args("oldest10%..oldest90%").ranks[0])
 
     def test_invalid_ranks(self):
         with self.assertRaises(SystemExit):
@@ -1067,6 +1067,18 @@ class TestRankRangeAction(unittest.TestCase):
 
         with self.assertRaises(SystemExit):
             self.parse_args("oldest1..xxxx100%")  # unknown param
+
+    def test_ambigous_rankrange(self):
+        with self.assertRaises(SystemExit):
+            self.parse_args("latest0..oldest0")
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest0..latest0")
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest1..latest1")
+        with self.assertRaises(SystemExit):
+            self.parse_args("latest1..oldest1")
+        with self.assertRaises(SystemExit):
+            self.parse_args("oldest99%..latest100%")
 
     @staticmethod
     def filter_snapshots_by_rank(snapshots, ranks, ranks2=[]):
@@ -1137,11 +1149,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, "latest 100%"))
 
         self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest1"))
-        self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, "latest0..oldest0"))
-        self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, "oldest0..latest0"))
         self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, "latest100%..latest1"))
-        self.assertListEqual(["\td@1"], self.filter_snapshots_by_rank(lst2, "oldest1..latest1"))
-        self.assertListEqual(["\td@1"], self.filter_snapshots_by_rank(lst2, "latest1..oldest1"))
 
     def test_filter_snapshots_by_rank_with_bookmarks(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]

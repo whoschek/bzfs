@@ -3630,6 +3630,10 @@ class RankRangeAction(argparse.Action):
             if ".." in value:
                 lo, hi = value.split("..", 1)
                 lo, hi = [parse_spec(spec) for spec in [lo, hi]]
+                if lo[0] != hi[0]:
+                    # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
+                    # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
+                    parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
             else:
                 hi = parse_spec(value)
                 lo = parse_spec(hi[0] + "0")
