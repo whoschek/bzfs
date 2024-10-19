@@ -460,14 +460,14 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    # def test_delete_missing_snapshots_flat_with_time_range_full(self):
-    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_full()
-    #
-    # def test_delete_missing_snapshots_with_excludes_recursive(self):
-    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_with_excludes_recursive()
-    #
-    # def test_delete_missing_snapshots_flat_with_time_range_empty(self):
-    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_empty()
+    def test_delete_missing_snapshots_flat_with_time_range_full(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_full()
+
+    def test_delete_missing_snapshots_with_excludes_recursive(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_with_excludes_recursive()
+
+    def test_delete_missing_snapshots_flat_with_time_range_empty(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_empty()
 
     def test_include_snapshot_rank_range_full(self):
         LocalTestCase(param=self.param).test_include_snapshot_rank_range_full()
