@@ -2287,8 +2287,8 @@ class Job:
             return m if kind == "oldest" else n - m
 
         p, log = self.params, self.params.log
-        if len(include_snapshot_ranks) == 0:
-            return snapshots
+        # if len(include_snapshot_ranks) == 0:
+        #     return snapshots
         is_debug = log.isEnabledFor(log_debug)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
         for rank_range in include_snapshot_ranks:
