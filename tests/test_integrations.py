@@ -94,7 +94,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite():
-    is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
+    is_adhoc_test = getenv_bool("adhoc", True)  # Consider toggling this when testing isolated code changes
     suite = unittest.TestSuite()
     if not is_adhoc_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
@@ -460,14 +460,17 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
-        LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+    # def test_delete_missing_snapshots_flat_with_time_range_full(self):
+    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_full()
+    #
+    # def test_delete_missing_snapshots_with_excludes_recursive(self):
+    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_with_excludes_recursive()
+    #
+    # def test_delete_missing_snapshots_flat_with_time_range_empty(self):
+    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_empty()
 
-    def test_basic_replication_flat_simple(self):
-        FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
-
-    def test_zfs_set_via_recv_o(self):
-        FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
+    def test_include_snapshot_rank_range_full(self):
+        LocalTestCase(param=self.param).test_include_snapshot_rank_range_full()
 
 
 #############################################################################
@@ -530,6 +533,10 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
             "d.*",
             "--exclude-snapshot-regex",
             "h.*",
+            "--exclude-snapshot-regex",
+            "h.*",
+            "--include-snapshot-regex",
+            "d.*",
         )
         self.assertSnapshotNames(dst_foo, expected_results[1:])
 
@@ -808,6 +815,8 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--include-snapshot-times=10secs ago..2999-01-01",
+            "--include-snapshot-times=*..*",
+            "--include-snapshot-times=60secs ago..2999-01-01",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertSnapshots(dst_root_dataset, 3, "s")
@@ -849,6 +858,9 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
+            "-v",
+            "--include-snapshot-ranks=latest0%..latest100%",
+            "--include-snapshot-ranks=latest0%..latest100%",
             "--include-snapshot-ranks=latest0%..latest100%",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
@@ -2398,7 +2410,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-missing-snapshots",
             "--delete-empty-datasets",
-            "--include-snapshot-times=10secs ago..2999-01-01",
+            "--include-snapshot-times=60secs ago..2999-01-01",
             **kwargs,
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])

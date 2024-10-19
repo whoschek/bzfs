@@ -54,6 +54,7 @@ import time
 import uuid
 from collections import defaultdict, Counter
 from contextlib import redirect_stderr
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from logging import Logger
 from pathlib import Path
@@ -72,6 +73,9 @@ disable_prg = "-"
 env_var_prefix = prog_name + "_"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
+snap_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
+snap_regex_filter_name = "snapshot_regex"
+snapshot_filters_var = "snapshot_filters_var"
 log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
@@ -304,8 +308,19 @@ feature.
              "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
              "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
              "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
-             "*Note:* The --include-snapshot-ranks filter is applied after all other --include/exclude-snapshot-* "
-             "filters have already been applied. Percentage calculations are not based on the number of snapshots "
+             "*Note:* The --include-snapshot-ranks filter is applied after the --include/exclude-snapshot-regex "
+             "filter has already been applied.\n\n"
+             "*Note:* CLI option order matters: "
+             "--include-snapshot-ranks options that are specified *before* --include/exclude-snapshot-times options on "
+             "the command line are applied *before* said --include/exclude-snapshot-times options. "
+             "--include-snapshot-ranks options that are specified *after* --include/exclude-snapshot-times options on "
+             "the command line are applied *after* said --include/exclude-snapshot-times options. "
+             "For example, --include-snapshot-ranks='latest 90..latest 100%%' "
+             "--include-snapshot-times='*..90 days ago' --delete-missing-snapshots will never delete any of the latest "
+             "90 snapshots, whereas "
+             "--include-snapshot-times='*..90 days ago' --include-snapshot-ranks='latest 90..latest 100%%' "
+             "--delete-missing-snapshots may delete all but 5 snapshots???"
+             "Percentage calculations are not based on the number of snapshots "
              "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
              "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
@@ -891,8 +906,6 @@ class Params:
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
         self.recursive: bool = args.recursive
         self.recursive_flag: str = "-r" if args.recursive else ""
-        self.include_snapshot_times: UnixTimeRange = self.get_include_snapshot_times(args)
-        self.include_snapshot_ranks: List[RankRange] = args.include_snapshot_ranks
 
         self.dry_run: bool = args.dryrun is not None
         self.dry_run_recv: str = "-n" if self.dry_run else ""
@@ -963,8 +976,8 @@ class Params:
         self.platform_platform: str = platform.platform()
 
         # mutable variables:
-        self.exclude_snapshot_regexes: RegexList = []  # deferred to validate_task() phase
-        self.include_snapshot_regexes: RegexList = []  # deferred to validate_task() phase
+        snapshot_filters = args.snapshot_filters_var if hasattr(args, snapshot_filters_var) else []
+        self.snapshot_filters: List[SnapshotFilter] = merge_adjacent_snapshot_filters(snapshot_filters)
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
         self.exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
         self.include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
@@ -1036,25 +1049,6 @@ class Params:
             return "false"  # substitute a program that will error out with non-zero return code
         else:
             return program
-
-    @staticmethod
-    def get_include_snapshot_times(args: argparse.Namespace) -> UnixTimeRange:
-        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
-            if isinstance(time_spec, timedelta):
-                return int(current_time - time_spec.total_seconds())
-            if isinstance(time_spec, int):
-                return int(time_spec)
-            return default
-
-        if args.include_snapshot_times is None:
-            return None
-        if args.include_snapshot_times[0] is None and args.include_snapshot_times[1] is None:
-            return None
-
-        current_time = time.time()
-        lo = utc_unix_time_in_seconds(args.include_snapshot_times[0], default=0)
-        hi = utc_unix_time_in_seconds(args.include_snapshot_times[1], default=1000000000000)  # 33658-09-27 ~ inf
-        return (lo, hi) if lo <= hi else (hi, lo)
 
     def unset_matching_env_vars(self, args: argparse.Namespace) -> None:
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
@@ -1291,8 +1285,11 @@ class Job:
     def validate_once(self) -> None:
         p = self.params
         p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
-        p.exclude_snapshot_regexes = compile_regexes(p.args.exclude_snapshot_regex)
-        p.include_snapshot_regexes = compile_regexes(p.args.include_snapshot_regex or [".*"])
+        for _filter in p.snapshot_filters:
+            if _filter.name == snap_regex_filter_name:
+                exclude_snapshot_regexes = compile_regexes(_filter.options[0])
+                include_snapshot_regexes = compile_regexes(_filter.options[1] or [".*"])
+                _filter.options = (exclude_snapshot_regexes, include_snapshot_regexes)
 
         exclude_regexes = [exclude_dataset_regexes_default]
         if len(p.args.exclude_dataset_regex) > 0:  # some patterns don't exclude anything
@@ -1469,19 +1466,15 @@ class Job:
         if p.delete_missing_snapshots:
             log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
             for dst_dataset in dst_datasets:
-                props = "creation,guid,name" if p.include_snapshot_times else "guid,name"
+                has_include_snapshot_times = any(f.name == "include_snapshot_times" for f in p.snapshot_filters)
+                props = "creation,guid,name" if has_include_snapshot_times else "guid,name"
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
                 k = len(dst_snapshots_with_guids)
-                if p.include_snapshot_times:
-                    dst_snapshots_with_guids = self.filter_snapshots_by_creation_time(
-                        dst_snapshots_with_guids, p.include_snapshot_times, bookmark_time_range=None
-                    )
-                    dst_snapshots_with_guids = cut(2, lines=dst_snapshots_with_guids)
-                dst_snapshots_with_guids = self.filter_snapshots_by_regex(dst_snapshots_with_guids)
-                dst_snapshots_with_guids = self.filter_snapshots_by_rank(dst_snapshots_with_guids)
-                for snapshot in dst_snapshots_with_guids:
-                    is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
+                if has_include_snapshot_times:
+                    dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
+
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in basis_src_datasets:
                     cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
@@ -1553,7 +1546,6 @@ class Job:
         log = p.log
         src, dst = p.src, p.dst
         done_checking = False
-        is_debug = p.log.isEnabledFor(log_debug)
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
@@ -1563,6 +1555,7 @@ class Job:
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
         use_bookmark = use_bookmark and len(dst_snapshots_with_guids) > 0
+        has_include_snapshot_times = any(f.name == "include_snapshot_times" for f in p.snapshot_filters)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -1574,7 +1567,7 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        if use_bookmark or p.include_snapshot_times:
+        if use_bookmark or has_include_snapshot_times:
             props = "creation,guid,name"
             types = "snapshot,bookmark" if use_bookmark else "snapshot"
         else:
@@ -1589,29 +1582,25 @@ class Job:
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
 
         # ignore irrelevant bookmarks and snapshots wrt. ZFS creation time
-        if use_bookmark or p.include_snapshot_times:
+        if use_bookmark:
             src_snapshots_and_bookmarks = self.filter_snapshots_by_creation_time(
                 src_snapshots_and_bookmarks,
-                include_snapshot_times=p.include_snapshot_times,
+                include_snapshot_times=None,
                 bookmark_time_range=(
-                    None
-                    if not use_bookmark
-                    else (
-                        int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
-                        int(dst_snapshots_with_guids[-1].split("\t", 1)[0]),
-                    )
+                    int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
+                    int(dst_snapshots_with_guids[-1].split("\t", 1)[0]),
                 ),
             )
-            src_snapshots_and_bookmarks = cut(field=2, lines=src_snapshots_and_bookmarks)
-            if use_bookmark:
-                dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
+            dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
         src_snapshots_with_guids = src_snapshots_and_bookmarks
         src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
         basis_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots_by_regex(src_snapshots_with_guids)
-        src_snapshots_with_guids = self.filter_snapshots_by_rank(src_snapshots_with_guids)
+        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
+        if use_bookmark or has_include_snapshot_times:
+            src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
+            basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
 
         # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
         # a snapshot is "true" if it is not a bookmark.
@@ -1620,7 +1609,6 @@ class Job:
         included_src_guids = set()
         for line in src_snapshots_with_guids:
             guid, snapshot = line.split("\t", 1)
-            is_debug and log.debug("Finally included snapshot: %s", snapshot)
             included_src_guids.add(guid)
             if "@" in snapshot:
                 latest_src_snapshot = snapshot
@@ -2229,10 +2217,26 @@ class Job:
                     log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
-    def filter_snapshots_by_regex(self, snapshots: List[str]) -> List[str]:
+    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
+        p, log = self.params, self.params.log
+        for _filter in p.snapshot_filters:
+            name = _filter.name
+            if name == snap_regex_filter_name:
+                snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
+            elif name == "include_snapshot_ranks":
+                snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
+            elif name == "include_snapshot_times":
+                snapshots = self.filter_snapshots_by_creation_time(
+                    snapshots, include_snapshot_times=_filter.options, bookmark_time_range=None
+                )
+        is_debug = p.log.isEnabledFor(log_debug)
+        for snapshot in snapshots:
+            is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
+        return snapshots
+
+    def filter_snapshots_by_regex(self, snapshots: List[str], _filter: Tuple[RegexList, RegexList]) -> List[str]:
         """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
-        include_snapshot_regexes = self.params.include_snapshot_regexes
-        exclude_snapshot_regexes = self.params.exclude_snapshot_regexes
+        exclude_snapshot_regexes, include_snapshot_regexes = _filter
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
         results = []
@@ -2274,7 +2278,7 @@ class Job:
                 is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
-    def filter_snapshots_by_rank(self, snapshots: List[str]) -> List[str]:
+    def filter_snapshots_by_rank(self, snapshots: List[str], include_snapshot_ranks: List[RankRange]) -> List[str]:
 
         def get_idx(rank: Tuple[str, int, bool], n: int) -> int:
             kind, num, is_percent = rank
@@ -2283,11 +2287,11 @@ class Job:
             return m if kind == "oldest" else n - m
 
         p, log = self.params, self.params.log
-        if len(p.include_snapshot_ranks) == 0:
+        if len(include_snapshot_ranks) == 0:
             return snapshots
         is_debug = log.isEnabledFor(log_debug)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
-        for rank_range in p.include_snapshot_ranks:
+        for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
             lo = get_idx(lo_rank, n)
             hi = get_idx(hi_rank, n)
@@ -3058,6 +3062,7 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
 
 
 def compile_regexes(regexes: List[str], suffix: str = "") -> RegexList:
+    assert isinstance(regexes, list)
     compiled_regexes = []
     for regex in regexes:
         is_negation = regex.startswith("!")
@@ -3550,19 +3555,23 @@ class FileOrLiteralAction(argparse.Action):
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
+        extra_values = []
         for value in values:
             if not value.startswith("+"):
-                current_values.append(value)
+                extra_values.append(value)
             else:
                 try:
                     with open(value[1:], "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
                             if not line.strip() or line.startswith("#"):
                                 continue  # skip empty lines and comment lines
-                            current_values.append(line)
+                            extra_values.append(line)
                 except FileNotFoundError:
                     parser.error(f"File not found: {value[1:]}")
+        current_values += extra_values
         setattr(namespace, self.dest, current_values)
+        if self.dest in snap_regex_filter_names:
+            add_snapshot_filter(namespace, self.dest, extra_values)
 
 
 #############################################################################
@@ -3586,7 +3595,10 @@ class TimeRangeAction(argparse.Action):
         if ".." not in values:
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {values}")
         lo, hi = [parse_time(time_spec) for time_spec in values.split("..", 1)]
-        setattr(namespace, self.dest, (lo, hi))
+        extra_values = (lo, hi)
+        setattr(namespace, self.dest, extra_values)
+        extra_values = self.get_include_snapshot_times(extra_values)
+        add_snapshot_filter(namespace, self.dest, extra_values)
 
     @staticmethod
     def parse_duration_to_seconds(duration: str) -> int:
@@ -3605,6 +3617,23 @@ class TimeRangeAction(argparse.Action):
         quantity = int(match.group(1))
         unit = match.group(2)
         return quantity * unit_seconds[unit]
+
+    @staticmethod
+    def get_include_snapshot_times(times) -> UnixTimeRange:
+        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
+            if isinstance(time_spec, timedelta):
+                return int(current_time - time_spec.total_seconds())
+            if isinstance(time_spec, int):
+                return int(time_spec)
+            return default
+
+        lo, hi = times
+        if lo is None and hi is None:
+            return None
+        current_time = time.time()
+        lo = utc_unix_time_in_seconds(lo, default=0)
+        hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ inf
+        return (lo, hi) if lo <= hi else (hi, lo)
 
 
 #############################################################################
@@ -3625,6 +3654,7 @@ class RankRangeAction(argparse.Action):
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
+        extra_values = []
         for value in values:
             value = value.strip()
             if ".." in value:
@@ -3637,8 +3667,79 @@ class RankRangeAction(argparse.Action):
             else:
                 hi = parse_spec(value)
                 lo = parse_spec(hi[0] + "0")
-            current_values.append((lo, hi))
+            extra_values.append((lo, hi))
+        current_values += extra_values
         setattr(namespace, self.dest, current_values)
+        add_snapshot_filter(namespace, self.dest, extra_values)
+
+
+#############################################################################
+@dataclass(order=True)
+class SnapshotFilter:
+    name: str
+    options: Any
+
+
+def add_snapshot_filter(args: argparse.Namespace, dest: str, filter_options):
+    if not hasattr(args, snapshot_filters_var):
+        args.snapshot_filters_var = []
+    args.snapshot_filters_var.append(SnapshotFilter(dest, filter_options))
+
+
+def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[SnapshotFilter]:
+    i = len(snapshot_filters) - 1
+    while i >= 0:
+        filter_i = snapshot_filters[i]
+        if isinstance(filter_i.options, list):
+            j = i - 1
+            if j >= 0 and snapshot_filters[j].name == filter_i.name:
+                lst = snapshot_filters[j].options
+                assert isinstance(lst, list)
+                lst += filter_i.options
+                snapshot_filters.pop(i)
+        i -= 1
+    merge_adjacent_snapshot_regexes(snapshot_filters)
+    return snapshot_filters
+
+
+def merge_adjacent_snapshot_regexes(snapshot_filters: List[SnapshotFilter]) -> None:
+    i = len(snapshot_filters) - 1
+    while i >= 0:
+        filter_i = snapshot_filters[i]
+        if filter_i.name in snap_regex_filter_names:
+            assert isinstance(filter_i.options, list)
+            j = i - 1
+            while j >= 0 and snapshot_filters[j].name in snap_regex_filter_names:
+                if snapshot_filters[j].name == filter_i.name:
+                    lst = snapshot_filters[j].options
+                    assert isinstance(lst, list)
+                    lst += filter_i.options
+                    snapshot_filters.pop(i)
+                    break
+                j -= 1
+        i -= 1
+
+    i = len(snapshot_filters) - 1
+    while i >= 0:
+        filter_i = snapshot_filters[i]
+        name = filter_i.name
+        if name in snap_regex_filter_names:
+            j = i - 1
+            if j >= 0 and snapshot_filters[j].name in snap_regex_filter_names:
+                filter_j = snapshot_filters[j]
+                assert filter_j.name != name
+                snapshot_filters.pop(i)
+                i -= 1
+            else:
+                name_j = next(iter(snap_regex_filter_names.difference({name})))
+                filter_j = SnapshotFilter(name_j, [])
+            sorted_filters = sorted([filter_i, filter_j])
+            exclude_snap_regexes = sorted_filters[0].options
+            include_snap_regexes = sorted_filters[1].options
+            snapshot_filters[i] = SnapshotFilter(snap_regex_filter_name, (exclude_snap_regexes, include_snap_regexes))
+        elif filter_i.options is None:
+            snapshot_filters.pop(i)  # optimize away --include-snapshot-times that are a noop
+        i -= 1
 
 
 #############################################################################
