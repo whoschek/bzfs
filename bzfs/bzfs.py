@@ -2225,7 +2225,8 @@ class Job:
                 snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
             elif name == "include_snapshot_ranks":
                 snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
-            elif name == "include_snapshot_times":
+            else:
+                assert name == "include_snapshot_times"
                 snapshots = self.filter_snapshots_by_creation_time(
                     snapshots, include_snapshot_times=_filter.options, bookmark_time_range=None
                 )
