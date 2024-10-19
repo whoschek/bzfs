@@ -94,7 +94,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite():
-    is_adhoc_test = getenv_bool("adhoc", True)  # Consider toggling this when testing isolated code changes
+    is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
     suite = unittest.TestSuite()
     if not is_adhoc_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
