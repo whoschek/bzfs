@@ -1189,6 +1189,7 @@ class Job:
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
 
         self.is_test_mode: bool = False  # for testing only
+        self.creation_prefix = ""  # for testing only
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.inject_params: Dict[str, bool] = {}  # for testing only
@@ -1467,7 +1468,7 @@ class Job:
             log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
             for dst_dataset in dst_datasets:
                 has_include_snapshot_times = any(f.name == "include_snapshot_times" for f in p.snapshot_filters)
-                props = "creation,guid,name" if has_include_snapshot_times else "guid,name"
+                props = self.creation_prefix + "creation,guid,name" if has_include_snapshot_times else "guid,name"
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
                 k = len(dst_snapshots_with_guids)
@@ -1549,7 +1550,7 @@ class Job:
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
-        props = "creation,guid,name" if use_bookmark else "guid,name"
+        props = self.creation_prefix + "creation,guid,name" if use_bookmark else "guid,name"
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
         dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
@@ -1568,7 +1569,7 @@ class Job:
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
         if use_bookmark or has_include_snapshot_times:
-            props = "creation,guid,name"
+            props = self.creation_prefix + "creation,guid,name"
             types = "snapshot,bookmark" if use_bookmark else "snapshot"
         else:
             props = "guid,name"
@@ -3485,6 +3486,11 @@ def validate_log_config_variable_name(name: str):
     return None
 
 
+def unixtime_fromisoformat(datetime_str: str) -> int:
+    """Converts an ISO 8601 datetime into UTC Unix time in integer seconds."""
+    return int(datetime.fromisoformat(datetime_str).timestamp())
+
+
 #############################################################################
 class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
@@ -3588,7 +3594,7 @@ class TimeRangeAction(argparse.Action):
                 return timedelta(seconds=self.parse_duration_to_seconds(time_spec))
             except ValueError:
                 try:  # If it's not a duration, try parsing as an ISO 8601 datetime
-                    return int(datetime.fromisoformat(time_spec).timestamp())
+                    return unixtime_fromisoformat(time_spec)
                 except ValueError:
                     parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
 
