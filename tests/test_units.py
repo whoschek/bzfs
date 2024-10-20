@@ -1140,6 +1140,11 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest100%..oldest0%"))
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest100%..latest0%"))
 
+        self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst1, "oldest2..oldest3"))
+        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, "oldest3..oldest4"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest4..oldest5"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest5..oldest6"))
+
         lst2 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2"]]
         self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, "oldest 51%"))
         self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst2, "oldest 49%"))

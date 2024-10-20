@@ -65,6 +65,7 @@ pool_size_bytes = 100 * 1024 * 1024
 encryption_algo = "aes-256-gcm"
 afix = ""
 zpool_features = None
+creation_prefix = "bzfs_test:"
 
 zfs_encryption_key_fd, zfs_encryption_key = tempfile.mkstemp(prefix="test_bzfs.key_")
 os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
@@ -273,6 +274,7 @@ class BZFSTestCase(ParametrizedTestCase):
         delete_injection_triggers=None,
         inject_params=None,
         max_command_line_bytes=None,
+        creation_prefix=None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -385,6 +387,9 @@ class BZFSTestCase(ParametrizedTestCase):
         if max_command_line_bytes is not None:
             job.max_command_line_bytes = max_command_line_bytes
 
+        if creation_prefix is not None:
+            job.creation_prefix = creation_prefix
+
         returncode = 0
         try:
             job.run_main(bzfs.argument_parser().parse_args(args), args)
@@ -460,17 +465,21 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_delete_missing_snapshots_flat_with_time_range_full(self):
-        LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_full()
+    def test_snapshot_filter_order_matters(self):
+        LocalTestCase(param=self.param).test_snapshot_filter_order_matters()
 
-    def test_delete_missing_snapshots_with_excludes_recursive(self):
-        LocalTestCase(param=self.param).test_delete_missing_snapshots_with_excludes_recursive()
+    def test_snapshot_filter_regexes_dont_merge_across_groups(self):
+        LocalTestCase(param=self.param).test_snapshot_filter_regexes_dont_merge_across_groups()
 
-    def test_delete_missing_snapshots_flat_with_time_range_empty(self):
-        LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_empty()
+    def test_snapshot_filter_ranks_dont_merge_across_groups(self):
+        LocalTestCase(param=self.param).test_snapshot_filter_ranks_dont_merge_across_groups()
 
-    def test_include_snapshot_rank_range_full(self):
-        LocalTestCase(param=self.param).test_include_snapshot_rank_range_full()
+    #
+    # def test_delete_missing_snapshots_flat_with_time_range_empty(self):
+    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_empty()
+    #
+    # def test_include_snapshot_rank_range_full(self):
+    #     LocalTestCase(param=self.param).test_include_snapshot_rank_range_full()
 
 
 #############################################################################
@@ -874,6 +883,74 @@ class LocalTestCase(BZFSTestCase):
             "--include-snapshot-ranks=latest0%..latest0%",
         )
         self.assertSnapshots(dst_root_dataset, 0)
+
+    def run_snapshot_filters(self, filter1, filter2, filter3):
+        self.run_bzfs(src_root_dataset, dst_root_dataset, filter1, filter2, filter3, creation_prefix=creation_prefix)
+
+    def test_snapshot_filter_order_matters(self):
+        # "creation" zfs property cannot be manually set or modified or easily mocked.
+        # Thus, for checks during testing we use the "bzfs_test:creation" property instead of the "creation" property.
+        for snap in ["2024-01-01d", "2024-01-02d", "2024-01-03d", "2024-01-04d", "2024-01-05h"]:
+            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
+
+        regex_filter = "--include-snapshot-regex=.*d.*"  # include dailies only
+        times_filter = "--include-snapshot-times=2024-01-03..*"
+        ranks_filter = "--include-snapshot-ranks=oldest 1"
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(regex_filter, times_filter, ranks_filter)
+        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(regex_filter, ranks_filter, times_filter)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(ranks_filter, regex_filter, times_filter)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(times_filter, regex_filter, ranks_filter)
+        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(times_filter, ranks_filter, regex_filter)
+        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
+
+    def test_snapshot_filter_regexes_dont_merge_across_groups(self):
+        for snap in ["2024-01-01d", "2024-01-02d", "2024-01-03h", "2024-01-04dt"]:
+            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
+
+        regex_filter_daily = "--include-snapshot-regex=.*d.*"  # include dailies only
+        regex_filter_test = "--include-snapshot-regex=.*t.*"
+        ranks_filter = "--include-snapshot-ranks=oldest 1"
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(regex_filter_daily, ranks_filter, regex_filter_test)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(regex_filter_daily, regex_filter_test, ranks_filter)
+        self.assertSnapshotNames(dst_root_dataset, ["2024-01-01d"])
+
+    def test_snapshot_filter_ranks_dont_merge_across_groups(self):
+        for snap in ["2024-01-01d", "2024-01-02h", "2024-01-03d", "2024-01-04dt"]:
+            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
+
+        regex_filter_daily = "--include-snapshot-regex=.*d.*"  # include dailies only
+        ranks_filter1 = "--include-snapshot-ranks=oldest 1..oldest100%"
+        ranks_filter2 = "--include-snapshot-ranks=oldest 1"
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(ranks_filter1, ranks_filter2, regex_filter_daily)
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_snapshot_filters(ranks_filter1, regex_filter_daily, ranks_filter2)
+        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
 
     def test_nostream(self):
         self.setup_basic()
