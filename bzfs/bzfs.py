@@ -944,7 +944,7 @@ class Params:
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
         if args.bwlimit:
-            self.pv_program_opts = [f"--rate-limit={self.validate_arg(args.bwlimit)}"] + self.pv_program_opts
+            self.pv_program_opts += [f"--rate-limit={self.validate_arg(args.bwlimit)}"]
         self.shell_program_local: str = "sh"
         self.shell_program: str = self.program_name(args.shell_program)
         self.ssh_program: str = self.program_name(args.ssh_program)
