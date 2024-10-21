@@ -2230,12 +2230,12 @@ class Job:
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
         p, log = self.params, self.params.log
         basis_snapshots = snapshots
-        is_continuous = True
+        is_continuous_filter = True
         for _filter in p.snapshot_filters:
             name = _filter.name
             if name == snapshot_regex_filter_name:
                 snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
-                is_continuous = False
+                is_continuous_filter = False  # may exclude intermediate snapshots that must nonetheless be remembered
                 continue
             elif name == "include_snapshot_ranks":
                 snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
@@ -2244,7 +2244,7 @@ class Job:
                 snapshots = self.filter_snapshots_by_creation_time(
                     snapshots, include_snapshot_times=_filter.options, bookmark_time_range=None
                 )
-            if is_continuous:
+            if is_continuous_filter:
                 basis_snapshots = snapshots
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
@@ -3791,8 +3791,8 @@ def reorder_snapshot_times(snapshot_filters: List[SnapshotFilter]) -> None:
     --include-snapshot-ranks operators. Within each section, we move --include-snapshot-times operators before
     --include/exclude-snapshot-regex operators because the former involves fast integer comparisons and the latter
     involves more expensive regex matching, and also because time ranges and rank ranges are continuous which means we
-    later don't need to remember as many snapshots in basis_src_snapshots_with_guids (see "is_continuous"), which helps
-    to maintain a small memory footprint.
+    later don't need to remember as many snapshots in basis_src_snapshots_with_guids (see "is_continuous_filter"),
+    which helps to maintain a small memory footprint.
     Example: reorders --include-snapshot-regex .*daily --include-snapshot-times 2024-01-01..2024-04-01 into
     --include-snapshot-times 2024-01-01..2024-04-01 --include-snapshot-regex .*daily"""
 
