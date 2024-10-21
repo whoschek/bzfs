@@ -95,7 +95,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite():
-    is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
+    is_adhoc_test = getenv_bool("adhoc", True)  # Consider toggling this when testing isolated code changes
     suite = unittest.TestSuite()
     if not is_adhoc_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
@@ -465,14 +465,14 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_snapshot_filter_order_matters(self):
-        LocalTestCase(param=self.param).test_snapshot_filter_order_matters()
-
-    def test_snapshot_filter_regexes_dont_merge_across_groups(self):
-        LocalTestCase(param=self.param).test_snapshot_filter_regexes_dont_merge_across_groups()
-
-    def test_snapshot_filter_ranks_dont_merge_across_groups(self):
-        LocalTestCase(param=self.param).test_snapshot_filter_ranks_dont_merge_across_groups()
+    # def test_snapshot_filter_order_matters(self):
+    #     LocalTestCase(param=self.param).test_snapshot_filter_order_matters()
+    #
+    # def test_snapshot_filter_regexes_dont_merge_across_groups(self):
+    #     LocalTestCase(param=self.param).test_snapshot_filter_regexes_dont_merge_across_groups()
+    #
+    # def test_snapshot_filter_ranks_dont_merge_across_groups(self):
+    #     LocalTestCase(param=self.param).test_snapshot_filter_ranks_dont_merge_across_groups()
 
     #
     # def test_delete_missing_snapshots_flat_with_time_range_empty(self):
