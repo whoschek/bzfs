@@ -95,7 +95,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite():
-    is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
+    is_adhoc_test = getenv_bool("adhoc", True)  # Consider toggling this when testing isolated code changes
     suite = unittest.TestSuite()
     if not is_adhoc_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
@@ -464,6 +464,15 @@ class BZFSTestCase(ParametrizedTestCase):
 class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
+
+    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
+        LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+
+    def test_basic_replication_flat_simple(self):
+        FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
+
+    def test_zfs_set_via_recv_o(self):
+        FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
 
     # def test_snapshot_filter_order_matters(self):
     #     LocalTestCase(param=self.param).test_snapshot_filter_order_matters()

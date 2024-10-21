@@ -1604,7 +1604,6 @@ class Job:
         src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
-        # basis_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids, basis_src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
         if use_bookmark or has_include_snapshot_times:
             is_same = src_snapshots_with_guids is basis_src_snapshots_with_guids
