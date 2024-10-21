@@ -1172,6 +1172,59 @@ class TestRankRangeAction(unittest.TestCase):
             ["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%", ["latest1..latest100%"])
         )
 
+    @staticmethod
+    def get_snapshot_filters(cli):
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", *cli])
+        return bzfs.Params(args).snapshot_filters
+
+    def test_merge_adjacent_snapshot_regexes_and_filters(self):
+        include = "--include-snapshot-regex"
+        exclude = "--exclude-snapshot-regex"
+        times = "--include-snapshot-times"
+        cli = [times, "*..*", times, "0..9", include, "f", include, "d", exclude, "w", include, "h", exclude, "m"]
+        times_filter, regex_filter = self.get_snapshot_filters(cli)
+        self.assertEqual("include_snapshot_times", times_filter.name)
+        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual((["w", "m"], ["f", "d", "h"]), regex_filter.options)
+
+    def test_merge_adjacent_snapshot_regexes_doesnt_merge_across_groups(self):
+        include = "--include-snapshot-regex"
+        exclude = "--exclude-snapshot-regex"
+        ranks = "--include-snapshot-ranks"
+        cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", ranks, "oldest 50%", exclude, ".*monthly"]
+        regex_filter1, ranks_filter, regex_filter2 = self.get_snapshot_filters(cli)
+        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter1.name)
+        self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter1.options)
+        self.assertEqual("include_snapshot_ranks", ranks_filter.name)
+        self.assertEqual((("oldest", 0, False), ("oldest", 50, True)), ranks_filter.options[0])
+        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter2.name)
+        self.assertEqual(([".*monthly"], []), regex_filter2.options)
+
+    def test_reorder_snapshot_times_simple(self):
+        include = "--include-snapshot-regex"
+        times = "--include-snapshot-times"
+        cli = [include, ".*daily", times, "0..9"]
+        times_filter, regex_filter = self.get_snapshot_filters(cli)
+        self.assertEqual("include_snapshot_times", times_filter.name)
+        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(([], [".*daily"]), regex_filter.options)
+
+    def test_reorder_snapshot_times_complex(self):
+        include = "--include-snapshot-regex"
+        exclude = "--exclude-snapshot-regex"
+        times = "--include-snapshot-times"
+        ranks = "--include-snapshot-ranks"
+        cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", times, "0..9", ranks, "oldest1"]
+        times_filter, regex_filter, ranks_filter = self.get_snapshot_filters(cli)
+        self.assertEqual("include_snapshot_times", times_filter.name)
+        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter.options)
+        self.assertEqual("include_snapshot_ranks", ranks_filter.name)
+        self.assertEqual((("oldest", 0, False), ("oldest", 1, False)), ranks_filter.options[0])
+
 
 #############################################################################
 class TestLogConfigVariablesAction(unittest.TestCase):
