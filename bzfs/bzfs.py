@@ -977,7 +977,7 @@ class Params:
 
         # mutable variables:
         snapshot_filters = args.snapshot_filters_var if hasattr(args, snapshot_filters_var) else []
-        self.snapshot_filters: List[SnapshotFilter] = merge_adjacent_snapshot_filters(snapshot_filters)
+        self.snapshot_filters: List[SnapshotFilter] = optimize_snapshot_filters(snapshot_filters)
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
         self.exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
         self.include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
@@ -1472,7 +1472,7 @@ class Job:
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
                 k = len(dst_snapshots_with_guids)
-                dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
+                dst_snapshots_with_guids, _ = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
                 if has_include_snapshot_times:
                     dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
 
@@ -1597,8 +1597,8 @@ class Job:
         src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
-        basis_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
+        # basis_src_snapshots_with_guids = src_snapshots_with_guids
+        src_snapshots_with_guids, basis_src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
         if use_bookmark or has_include_snapshot_times:
             src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
             basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
@@ -2220,21 +2220,27 @@ class Job:
 
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
         p, log = self.params, self.params.log
+        basis_snapshots = snapshots
+        has_only_include_snapshot_times = True
         for _filter in p.snapshot_filters:
             name = _filter.name
             if name == snap_regex_filter_name:
                 snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
+                has_only_include_snapshot_times = False
             elif name == "include_snapshot_ranks":
                 snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
+                has_only_include_snapshot_times = False
             else:
                 assert name == "include_snapshot_times"
                 snapshots = self.filter_snapshots_by_creation_time(
                     snapshots, include_snapshot_times=_filter.options, bookmark_time_range=None
                 )
+                if has_only_include_snapshot_times:
+                    basis_snapshots = snapshots
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
             is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
-        return snapshots
+        return snapshots, basis_snapshots
 
     def filter_snapshots_by_regex(self, snapshots: List[str], _filter: Tuple[RegexList, RegexList]) -> List[str]:
         """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
@@ -3687,13 +3693,21 @@ class SnapshotFilter:
     options: Any
 
 
-def add_snapshot_filter(args: argparse.Namespace, dest: str, filter_options):
+def add_snapshot_filter(args: argparse.Namespace, dest: str, filter_options) -> None:
     if not hasattr(args, snapshot_filters_var):
         args.snapshot_filters_var = []
     args.snapshot_filters_var.append(SnapshotFilter(dest, filter_options))
 
 
-def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[SnapshotFilter]:
+def optimize_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[SnapshotFilter]:
+    merge_adjacent_snapshot_filters(snapshot_filters)
+    merge_adjacent_snapshot_regexes(snapshot_filters)
+    snapshot_filters = [f for f in snapshot_filters if f.options is not None]  # drop noop --include-snapshot-times
+    reorder_snapshot_times(snapshot_filters)
+    return snapshot_filters
+
+
+def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> None:
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i = snapshot_filters[i]
@@ -3705,8 +3719,6 @@ def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> L
                 lst += filter_i.options
                 snapshot_filters.pop(i)
         i -= 1
-    merge_adjacent_snapshot_regexes(snapshot_filters)
-    return snapshot_filters
 
 
 def merge_adjacent_snapshot_regexes(snapshot_filters: List[SnapshotFilter]) -> None:
@@ -3744,9 +3756,34 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: List[SnapshotFilter]) -> N
             exclude_snap_regexes = sorted_filters[0].options
             include_snap_regexes = sorted_filters[1].options
             snapshot_filters[i] = SnapshotFilter(snap_regex_filter_name, (exclude_snap_regexes, include_snap_regexes))
-        elif filter_i.options is None:
-            snapshot_filters.pop(i)  # optimize away --include-snapshot-times that are a noop
         i -= 1
+
+
+def reorder_snapshot_times(snapshot_filters: List[SnapshotFilter]) -> None:
+    """Filter operators based on sort order (here: the --include-snapshot-ranks operator) cannot freely be reordered
+    in an execution plan without violating correctness. The filter list is partitioned into sections such that sections
+    are separated by --include-snapshot-ranks operators. Within each section, we move --include-snapshot-times
+    operators before --include/exclude-snapshot-regex operators because the former involves fast integer math and the
+    latter involves more expensive regex matching, and also because time ranges are continous which means we later
+    don't need to remember as many snapshots in basis_src_snapshots_with_guids.
+    Sounds complicated but is actually straightforward."""
+
+    def reorder_times_within_section(i: int, j: int):
+        while j > i:
+            filter_j = snapshot_filters[j]
+            if filter_j.name == "include_snapshot_times":
+                snapshot_filters.pop(j)
+                snapshot_filters.insert(i + 1, filter_j)
+            j -= 1
+
+    i = len(snapshot_filters) - 1
+    j = i
+    while i >= 0:
+        if snapshot_filters[i].name == "include_snapshot_ranks":
+            reorder_times_within_section(i, j)
+            j = i - 1
+        i -= 1
+    reorder_times_within_section(i, j)
 
 
 #############################################################################
