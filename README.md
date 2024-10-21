@@ -508,6 +508,15 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     `!prod_.*`, `.*_(hourly|frequent)`,
     `!.*_(weekly|daily)`
 
+    *Note:* All --include/exclude-snapshot-* CLI option groups are
+    combined into a mini filter pipeline. A filter pipeline is executed
+    in the order given on the command line, left to right. For example
+    if --include-snapshot-ranks (see below) is specified on the command
+    line before --include/exclude-snapshot-regex, then
+    --include-snapshot-ranks will be applied before
+    --include/exclude-snapshot-regex. The pipeline results would not
+    always be the same if the order were reversed. Order matters.
+
 <!-- -->
 
 <div id="--exclude-snapshot-regex"></div>
@@ -617,9 +626,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
     * 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)
 
-    *Note:* The --include-snapshot-ranks filter is applied after all
-    other --include/exclude-snapshot-* filters have already been
-    applied. Percentage calculations are not based on the number of
+    *Note:* Percentage calculations are not based on the number of
     snapshots contained in the dataset on disk, but rather based on the
     number of snapshots arriving at the filter. For example, if only two
     daily snapshots arrive at the filter because a prior filter excludes
