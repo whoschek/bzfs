@@ -873,7 +873,6 @@ class TestFileOrLiteralAction(unittest.TestCase):
 class TestTimeRangeAction(unittest.TestCase):
     def setUp(self):
         self.parser = argparse.ArgumentParser()
-        # self.parser.add_argument("--time-or-duration", action=bzfs.TimeRangeAction)
         self.parser.add_argument("--time-or-duration", action=bzfs.TimeRangeOrRanksAction, nargs="+")
 
     def parse_duration(self, arg):
@@ -1042,7 +1041,6 @@ class TestRankRangeAction(unittest.TestCase):
 
     def setUp(self):
         self.parser = argparse.ArgumentParser()
-        # self.parser.add_argument("--ranks", nargs="+", action=bzfs.RankRangeAction)
         self.parser.add_argument("--ranks", nargs="+", action=bzfs.TimeRangeOrRanksAction)
 
     def parse_args(self, arg):
