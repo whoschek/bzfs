@@ -465,14 +465,29 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
-        LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+    # def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
+    #     LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+    #
+    # def test_basic_replication_flat_simple(self):
+    #     FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
+    #
+    # def test_zfs_set_via_recv_o(self):
+    #     FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
 
-    def test_basic_replication_flat_simple(self):
-        FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
+    def test_snapshot_filter_order_matters(self):
+        LocalTestCase(param=self.param).test_snapshot_filter_order_matters()
 
-    def test_zfs_set_via_recv_o(self):
-        FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
+    def test_snapshot_filter_regexes_dont_merge_across_groups(self):
+        LocalTestCase(param=self.param).test_snapshot_filter_regexes_dont_merge_across_groups()
+
+    def test_snapshot_filter_ranks_dont_merge_across_groups(self):
+        LocalTestCase(param=self.param).test_snapshot_filter_ranks_dont_merge_across_groups()
+
+    def test_delete_missing_snapshots_flat_with_time_range_empty(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_empty()
+
+    def test_include_snapshot_rank_range_full(self):
+        LocalTestCase(param=self.param).test_include_snapshot_rank_range_full()
 
 
 #############################################################################

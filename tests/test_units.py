@@ -1004,26 +1004,26 @@ class TestTimeRangeAction(unittest.TestCase):
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=1700000000..1700000001"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].options)
+        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=1700000001..1700000000"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].options)
+        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=0secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0].options[0], delta=2)
-        self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0].options[1], delta=2)
+        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0].timerange[0], delta=2)
+        self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0].timerange[1], delta=2)
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=2024-01-01..*"])
         p = bzfs.Params(args)
-        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].options[0])
-        self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0].options[1])
+        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[0])
+        self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0].timerange[1])
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=*..2024-01-01"])
         p = bzfs.Params(args)
-        self.assertEqual(0, p.snapshot_filters[0].options[0])
-        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].options[1])
+        self.assertEqual(0, p.snapshot_filters[0].timerange[0])
+        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[1])
 
 
 #############################################################################
@@ -1209,7 +1209,7 @@ class TestRankRangeAction(unittest.TestCase):
         cli = [times, "*..*", times, "0..9", include, "f", include, "d", exclude, "w", include, "h", exclude, "m"]
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
-        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual((0, 9), times_filter.timerange)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual((["w", "m"], ["f", "d", "h"]), regex_filter.options)
 
@@ -1232,7 +1232,7 @@ class TestRankRangeAction(unittest.TestCase):
         cli = [include, ".*daily", times, "0..9"]
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
-        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual((0, 9), times_filter.timerange)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([], [".*daily"]), regex_filter.options)
 
@@ -1244,7 +1244,7 @@ class TestRankRangeAction(unittest.TestCase):
         cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", times, "0..9", ranks, "oldest1"]
         times_filter, regex_filter, ranks_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
-        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual((0, 9), times_filter.timerange)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter.options)
         self.assertEqual("include_snapshot_ranks", ranks_filter.name)

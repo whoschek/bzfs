@@ -54,7 +54,7 @@ import time
 import uuid
 from collections import defaultdict, Counter
 from contextlib import redirect_stderr
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging import Logger
 from pathlib import Path
@@ -268,6 +268,10 @@ feature.
         "--exclude-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
+    parser.add_argument(
+        "--include-snapshot-times-or-ranks", action=TimeRangeOrRanksAction, nargs="+", default=[],
+        metavar="TIMERANGE [RANKRANGE ...]",
+        help="TODO")
     parser.add_argument(
         "--include-snapshot-times", action=TimeRangeAction, default=None, metavar="TIMERANGE",
         help="The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
@@ -2226,10 +2230,14 @@ class Job:
                 is_continuous_filter = False  # may exclude intermediate snapshots; they need to be remembered
             elif name == "include_snapshot_ranks":
                 snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
+            elif name == "include_snapshot_times_or_ranks":
+                timerange, opts = _filter.timerange, _filter.options
+                snapshots, is_continuous = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
+                is_continuous_filter = is_continuous_filter and is_continuous
             else:
                 assert name == "include_snapshot_times"
                 snapshots = self.filter_snapshots_by_creation_time(
-                    snapshots, include_snapshot_times=_filter.options, bookmark_time_range=None
+                    snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
                 )
             if is_continuous_filter:
                 basis_snapshots = snapshots
@@ -2282,6 +2290,75 @@ class Job:
                 is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
+    def filter_snapshots_by_creation_time_or_rank(
+        self, snapshots: List[str], include_snapshot_times: UnixTimeRange, include_snapshot_ranks: List[RankRange]
+    ) -> Tuple[List[str], bool]:
+
+        def get_idx(rank: Tuple[str, int, bool], n: int) -> int:
+            kind, num, is_percent = rank
+            m = round(n * num / 100) if is_percent else min(n, num)
+            assert kind == "latest" or kind == "oldest"
+            return m if kind == "oldest" else n - m
+
+        p, log = self.params, self.params.log
+        is_debug = log.isEnabledFor(log_debug)
+        n = sum(1 for snapshot in snapshots if "@" in snapshot)
+        did_include = False
+        did_exclude = False
+        is_continuous_filter = True
+        lo_time, hi_time = include_snapshot_times or (None, None)
+        for rank_range in include_snapshot_ranks:
+            lo_rank, hi_rank = rank_range
+            lo = get_idx(lo_rank, n)
+            hi = get_idx(hi_rank, n)
+            lo, hi = (lo, hi) if lo <= hi else (hi, lo)
+            i = 0
+            results = []
+            for snapshot in snapshots:
+                if "@" not in snapshot:
+                    results.append(snapshot)  # retain bookmarks, apply filter only to snapshots
+                    # if include_snapshot_times:
+                    #     if lo_time <= int(snap[0 : snap.index("\t")]) < hi_time:
+                    #         results.append(snap)
+                    #         is_debug and log.debug("Including b/c creation time: %s", snap[snap.rindex("\t") + 1 :])
+                    #     else:
+                    #         is_debug and log.debug("Excluding b/c creation time: %s", snap[snap.rindex("\t") + 1 :])
+                    # else:
+                    #     results.append(snap)  # for ranks: retain bookmarks, apply filter only to snapshots
+                else:
+                    msg = None
+                    if lo <= i < hi:
+                        msg = "Including b/c snapshot rank: %s"
+                    elif include_snapshot_times and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
+                        msg = "Including b/c creation time: %s"
+                    if msg:
+                        results.append(snapshot)
+                        if did_include and did_exclude:
+                            is_continuous_filter = False
+                        did_include = True
+                    else:
+                        # if lo <= i < hi:
+                        #     results.append(snapshot)
+                        #     is_debug and log.debug("Including b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                        #     if did_include and did_exclude:
+                        #         is_continuous_filter = False
+                        #     did_include = True
+                        # elif include_snapshot_times and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
+                        #     results.append(snapshot)
+                        #     is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                        #     if did_include and did_exclude:
+                        #         is_continuous_filter = False
+                        #     did_include = True
+                        # else:
+                        msg = "Excluding b/c snapshot rank: %s"
+                        did_exclude = True
+                    is_debug and log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
+                    i += 1
+            snapshots = results
+            n = hi - lo
+        return snapshots, is_continuous_filter
+
+    # TODO: this shall become obsolete
     def filter_snapshots_by_rank(self, snapshots: List[str], include_snapshot_ranks: List[RankRange]) -> List[str]:
 
         def get_idx(rank: Tuple[str, int, bool], n: int) -> int:
@@ -3487,7 +3564,7 @@ def validate_log_config_variable_name(name: str):
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
-    """Converts an ISO 8601 datetime into UTC Unix time in integer seconds."""
+    """Converts an ISO 8601 datetime into a UTC Unix time in integer seconds."""
     return int(datetime.fromisoformat(datetime_str).timestamp())
 
 
@@ -3578,7 +3655,7 @@ class FileOrLiteralAction(argparse.Action):
         current_values += extra_values
         setattr(namespace, self.dest, current_values)
         if self.dest in snapshot_regex_filter_names:
-            add_snapshot_filter(namespace, self.dest, extra_values)
+            add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
 
 
 #############################################################################
@@ -3605,7 +3682,8 @@ class TimeRangeAction(argparse.Action):
         extra_values = (lo, hi)
         setattr(namespace, self.dest, extra_values)
         extra_values = self.get_include_snapshot_times(extra_values)
-        add_snapshot_filter(namespace, self.dest, extra_values)
+        # add_snapshot_filter(namespace, self.dest, extra_values)
+        add_snapshot_filter(namespace, SnapshotFilter(self.dest, extra_values, None))
 
     @staticmethod
     def parse_duration_to_seconds(duration: str) -> int:
@@ -3639,65 +3717,174 @@ class TimeRangeAction(argparse.Action):
             return None
         current_time = time.time()
         lo = utc_unix_time_in_seconds(lo, default=0)
-        hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ inf
+        hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ infinity
+        return (lo, hi) if lo <= hi else (hi, lo)
+
+
+#############################################################################
+class TimeRangeOrRanksAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        def parse_time(time_spec):
+            time_spec = time_spec.strip()
+            if time_spec == "*":
+                return None
+            if time_spec.isdigit():
+                return int(time_spec)  # Input is a Unix time in integer seconds
+            try:
+                return timedelta(seconds=self.parse_duration_to_seconds(time_spec))
+            except ValueError:
+                try:  # If it's not a duration, try parsing as an ISO 8601 datetime
+                    return unixtime_fromisoformat(time_spec)
+                except ValueError:
+                    parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
+
+        current_values = getattr(namespace, self.dest, None)
+        if current_values is None:
+            current_values = []
+        extra_values = []
+        assert len(values) > 0
+        value = values[0].strip()
+        if ".." not in value:
+            parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
+        lo, hi = [parse_time(time_spec) for time_spec in value.split("..", 1)]
+        # extra_values = (lo, hi)
+        extra_values.append((lo, hi))
+
+        extra_values += parse_rankranges(parser, namespace, values[1:], option_string=option_string)
+
+        setattr(namespace, self.dest, extra_values)
+        extra_values = extra_values.copy()
+        extra_values[0] = self.get_include_snapshot_times(extra_values[0])
+        if len(extra_values) == 1:
+            add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", extra_values[0], None))
+        else:
+            add_snapshot_filter(namespace, SnapshotFilter(self.dest, extra_values[0], extra_values[1:]))
+
+    @staticmethod
+    def parse_duration_to_seconds(duration: str) -> int:
+        unit_seconds = {
+            "seconds": 1,
+            "secs": 1,
+            "minutes": 60,
+            "mins": 60,
+            "hours": 60 * 60,
+            "days": 86400,
+            "weeks": 7 * 86400,
+        }
+        match = re.fullmatch(r"(\d+) ?(secs|seconds|mins|minutes|hours|days|weeks) ?ago", duration)
+        if not match:
+            raise ValueError("Invalid duration format")
+        quantity = int(match.group(1))
+        unit = match.group(2)
+        return quantity * unit_seconds[unit]
+
+    @staticmethod
+    def get_include_snapshot_times(times) -> UnixTimeRange:
+        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
+            if isinstance(time_spec, timedelta):
+                return int(current_time - time_spec.total_seconds())
+            if isinstance(time_spec, int):
+                return int(time_spec)
+            return default
+
+        lo, hi = times
+        if lo is None and hi is None:
+            return None
+        current_time = time.time()
+        lo = utc_unix_time_in_seconds(lo, default=0)
+        hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ infinity
         return (lo, hi) if lo <= hi else (hi, lo)
 
 
 #############################################################################
 class RankRangeAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        def parse_spec(spec):
-            spec = spec.strip()
-            match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
-            if not match:
-                parser.error(f"{option_string}: Invalid rank format: {spec}")
-            kind = match.group(1)
-            num = int(match.group(2))
-            is_percent = spec.endswith("%")
-            if is_percent and num > 100:
-                parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
-            return kind, num, is_percent
+        # def parse_spec(spec):
+        #     spec = spec.strip()
+        #     match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
+        #     if not match:
+        #         parser.error(f"{option_string}: Invalid rank format: {spec}")
+        #     kind = match.group(1)
+        #     num = int(match.group(2))
+        #     is_percent = spec.endswith("%")
+        #     if is_percent and num > 100:
+        #         parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
+        #     return kind, num, is_percent
 
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
-        extra_values = []
-        for value in values:
-            value = value.strip()
-            if ".." in value:
-                lo, hi = value.split("..", 1)
-                lo, hi = [parse_spec(spec) for spec in [lo, hi]]
-                if lo[0] != hi[0]:
-                    # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
-                    # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
-                    parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
-            else:
-                hi = parse_spec(value)
-                lo = parse_spec(hi[0] + "0")
-            extra_values.append((lo, hi))
+        extra_values = parse_rankranges(parser, namespace, values, option_string=option_string)
+        # extra_values = []
+        # for value in values:
+        #     value = value.strip()
+        #     if ".." in value:
+        #         lo, hi = value.split("..", 1)
+        #         lo, hi = [parse_spec(spec) for spec in [lo, hi]]
+        #         if lo[0] != hi[0]:
+        #             # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
+        #             # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
+        #             parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
+        #     else:
+        #         hi = parse_spec(value)
+        #         lo = parse_spec(hi[0] + "0")
+        #     extra_values.append((lo, hi))
         current_values += extra_values
         setattr(namespace, self.dest, current_values)
-        add_snapshot_filter(namespace, self.dest, extra_values)
+        add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
+
+
+def parse_rankranges(parser, namespace, values, option_string=None):
+    def parse_spec(spec):
+        spec = spec.strip()
+        match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
+        if not match:
+            parser.error(f"{option_string}: Invalid rank format: {spec}")
+        kind = match.group(1)
+        num = int(match.group(2))
+        is_percent = spec.endswith("%")
+        if is_percent and num > 100:
+            parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
+        return kind, num, is_percent
+
+    extra_values = []
+    for value in values:
+        value = value.strip()
+        if ".." in value:
+            lo, hi = value.split("..", 1)
+            lo, hi = [parse_spec(spec) for spec in [lo, hi]]
+            if lo[0] != hi[0]:
+                # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
+                # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
+                parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
+        else:
+            hi = parse_spec(value)
+            lo = parse_spec(hi[0] + "0")
+        extra_values.append((lo, hi))
+    return extra_values
 
 
 #############################################################################
 @dataclass(order=True)
 class SnapshotFilter:
     name: str
-    options: Any
+    timerange: UnixTimeRange
+    options: Any = field(compare=False, default=None)
 
 
-def add_snapshot_filter(args: argparse.Namespace, dest: str, filter_options: Any) -> None:
+def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
     if not hasattr(args, snapshot_filters_var):
         args.snapshot_filters_var = []
-    args.snapshot_filters_var.append(SnapshotFilter(dest, filter_options))
+    args.snapshot_filters_var.append(_filter)
 
 
 def optimize_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[SnapshotFilter]:
     """Not intended to be a full query execution plan optimizer, but we still apply some basic plan optimizations."""
     merge_adjacent_snapshot_filters(snapshot_filters)
     merge_adjacent_snapshot_regexes(snapshot_filters)
-    snapshot_filters = [f for f in snapshot_filters if f.options is not None]  # drop noop --include-snapshot-times
+    snapshot_filters = [
+        f for f in snapshot_filters if f.timerange is not None or f.options is not None
+    ]  # drop noop --include-snapshot-times
     reorder_snapshot_time_filters(snapshot_filters)
     return snapshot_filters
 
@@ -3713,9 +3900,13 @@ def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> N
         filter_i = snapshot_filters[i]
         if isinstance(filter_i.options, list):
             j = i - 1
-            if j >= 0 and snapshot_filters[j].name == filter_i.name:
+            if j >= 0 and snapshot_filters[j] == filter_i:
                 lst = snapshot_filters[j].options
                 assert isinstance(lst, list)
+                # ranks_filter_name = "include_snapshot_times_or_ranks"
+                # if filter_i.name != ranks_filter_name or lst[0] == filter_i.options[0]:  # compare timerange
+                #     lst += filter_i.options if filter_i.name != ranks_filter_name else filter_i.options[1:]
+                #     snapshot_filters.pop(i)
                 lst += filter_i.options
                 snapshot_filters.pop(i)
         i -= 1
@@ -3762,10 +3953,10 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: List[SnapshotFilter]) -> N
                 i -= 1
             else:
                 name_j = next(iter(snapshot_regex_filter_names.difference({name})))
-                filter_j = SnapshotFilter(name_j, [])
+                filter_j = SnapshotFilter(name_j, None, [])
             sorted_filters = sorted([filter_i, filter_j])
             exclude_regexes, include_regexes = sorted_filters[0].options, sorted_filters[1].options
-            snapshot_filters[i] = SnapshotFilter(snapshot_regex_filter_name, (exclude_regexes, include_regexes))
+            snapshot_filters[i] = SnapshotFilter(snapshot_regex_filter_name, None, (exclude_regexes, include_regexes))
         i -= 1
 
 
@@ -3792,7 +3983,8 @@ def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> Non
     i = len(snapshot_filters) - 1
     j = i
     while i >= 0:
-        if snapshot_filters[i].name == "include_snapshot_ranks":
+        name = snapshot_filters[i].name
+        if name == "include_snapshot_ranks" or name == "include_snapshot_times_or_ranks":
             reorder_time_filters_within_section(i, j)
             j = i - 1
         i -= 1
