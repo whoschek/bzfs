@@ -76,6 +76,7 @@ zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
 snapshot_regex_filter_name = "snapshot_regex"
 snapshot_filters_var = "snapshot_filters_var"
+unixtime_infinity_secs = 1000000000000  # 33658-09-27 ~ infinity
 log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
@@ -2275,7 +2276,8 @@ class Job:
     ) -> List[str]:
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
-        lo_time, hi_time = include_snapshot_times or (None, None)
+        lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
+        lo_booktime, hi_booktime = bookmark_time_range or (0, unixtime_infinity_secs)
         results = []
         for snapshot in snapshots:
             creation_time = None
@@ -2286,12 +2288,12 @@ class Job:
                 # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
-                creation = int(snapshot[0 : snapshot.index("\t")])
-                include = (not bookmark_time_range) or bookmark_time_range[0] <= creation <= bookmark_time_range[1]
+                creation_time = int(snapshot[0 : snapshot.index("\t")])
+                include = lo_booktime <= creation_time <= hi_booktime
 
-            if include_snapshot_times and include:
+            if include:
                 creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
-                include = lo_time <= creation_time < hi_time
+                include = lo_snaptime <= creation_time < hi_snaptime
                 # include = lo < hi and lo <= (creation_time or int(snapshot[0 : snapshot.index("\t")])) < hi
             if include:
                 results.append(snapshot)
@@ -2310,13 +2312,14 @@ class Job:
             assert kind == "latest" or kind == "oldest"
             return m if kind == "oldest" else n - m
 
+        assert isinstance(include_snapshot_ranks, list)
+        assert len(include_snapshot_ranks) > 0
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
-        did_include = False
-        did_exclude = False
+        did_include, did_exclude = False, False
         is_continuous_filter = True
-        lo_time, hi_time = include_snapshot_times or (None, None)
+        lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
         for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
             lo = get_idx(lo_rank, n)
@@ -2327,25 +2330,11 @@ class Job:
             for snapshot in snapshots:
                 if "@" not in snapshot:
                     results.append(snapshot)  # retain bookmarks, apply filter only to snapshots
-                    # if include_snapshot_times:
-                    #     if lo_time <= int(snap[0 : snap.index("\t")]) < hi_time:
-                    #         results.append(snap)
-                    #         is_debug and log.debug("Including b/c creation time: %s", snap[snap.rindex("\t") + 1 :])
-                    #     else:
-                    #         is_debug and log.debug("Excluding b/c creation time: %s", snap[snap.rindex("\t") + 1 :])
-                    # else:
-                    #     results.append(snap)  # for ranks: retain bookmarks, apply filter only to snapshots
                 else:
                     msg = None
                     if lo <= i < hi:
                         msg = "Including b/c snapshot rank: %s"
-                    elif (not include_snapshot_times) or lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
-                        # elif (not include_snapshot_times) or (
-                        #     lo_time < hi_time and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time
-                        # ):
-                        # elif (not include_snapshot_times) or (
-                        #     include_snapshot_times[0] <= int(snapshot[0 : snapshot.index("\t")]) < include_snapshot_times[1]
-                        # ):
+                    elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
                         msg = "Including b/c creation time: %s"
                     if msg:
                         results.append(snapshot)
@@ -2353,19 +2342,6 @@ class Job:
                             is_continuous_filter = False
                         did_include = True
                     else:
-                        # if lo <= i < hi:
-                        #     results.append(snapshot)
-                        #     is_debug and log.debug("Including b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
-                        #     if did_include and did_exclude:
-                        #         is_continuous_filter = False
-                        #     did_include = True
-                        # elif include_snapshot_times and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
-                        #     results.append(snapshot)
-                        #     is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-                        #     if did_include and did_exclude:
-                        #         is_continuous_filter = False
-                        #     did_include = True
-                        # else:
                         msg = "Excluding b/c snapshot rank: %s"
                         did_exclude = True
                     is_debug and log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
@@ -2383,6 +2359,7 @@ class Job:
             assert kind == "latest" or kind == "oldest"
             return m if kind == "oldest" else n - m
 
+        assert False
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
@@ -3734,7 +3711,7 @@ class TimeRangeAction(argparse.Action):
             return None
         current_time = time.time()
         lo = utc_unix_time_in_seconds(lo, default=0)
-        hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ infinity
+        hi = utc_unix_time_in_seconds(hi, default=unixtime_infinity_secs)
         return (lo, hi) if lo <= hi else (hi, lo)
 
 
