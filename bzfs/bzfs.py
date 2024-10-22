@@ -2305,10 +2305,10 @@ class Job:
         assert len(include_snapshot_ranks) > 0
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
-        n = sum(1 for snapshot in snapshots if "@" in snapshot)
         did_include, did_exclude = False, False
         is_continuous_filter = True
         lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
+        n = sum(1 for snapshot in snapshots if "@" in snapshot)
         for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
             lo = get_idx(lo_rank, n)
