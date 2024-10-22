@@ -2305,7 +2305,6 @@ class Job:
         assert len(include_snapshot_ranks) > 0
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
-        did_include, did_exclude = False, False
         is_continuous_filter = True
         lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
@@ -2315,6 +2314,7 @@ class Job:
             hi = get_idx(hi_rank, n)
             lo, hi = (lo, hi) if lo <= hi else (hi, lo)
             i = 0
+            did_include, did_exclude = False, False
             results = []
             for snapshot in snapshots:
                 if "@" not in snapshot:
