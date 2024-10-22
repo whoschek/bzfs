@@ -2229,9 +2229,12 @@ class Job:
                 snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
                 is_continuous_filter = False  # may exclude intermediate snapshots; they need to be remembered
             elif name == "include_snapshot_ranks":
+                assert False
                 snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
             elif name == "include_snapshot_times_or_ranks":
                 timerange, opts = _filter.timerange, _filter.options
+                assert timerange
+                assert opts
                 snapshots, is_continuous = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
                 is_continuous_filter = is_continuous_filter and is_continuous
             else:
@@ -2239,6 +2242,10 @@ class Job:
                 snapshots = self.filter_snapshots_by_creation_time(
                     snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
                 )
+                # timerange, opts = _filter.timerange, _filter.options
+                # opts = [(("oldest", 0, False), ("oldest", 0, False))]
+                # log.info("timerange: %s", timerange)
+                # snapshots, _ = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
             if is_continuous_filter:
                 basis_snapshots = snapshots
         is_debug = p.log.isEnabledFor(log_debug)
@@ -2268,21 +2275,27 @@ class Job:
     ) -> List[str]:
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
+        # if include_snapshot_times and include_snapshot_times[0] >= include_snapshot_times[1]:
+        #     include_snapshot_times = None
+        lo, hi = include_snapshot_times or (None, None)
         results = []
         for snapshot in snapshots:
-            creation_time = None
+            creation = None
             include = "@" in snapshot  # it's a true snapshot?
-            if bookmark_time_range and not include:
+            # if bookmark_time_range and not include:
+            if not include:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
-                creation_time = int(snapshot[0 : snapshot.index("\t")])
-                include = bookmark_time_range[0] <= creation_time <= bookmark_time_range[1]
+                creation = int(snapshot[0 : snapshot.index("\t")])
+                include = (not bookmark_time_range) or bookmark_time_range[0] <= creation <= bookmark_time_range[1]
 
             if include_snapshot_times and include:
-                creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
-                include = include_snapshot_times[0] <= creation_time < include_snapshot_times[1]
+                # creation = creation or int(snapshot[0 : snapshot.index("\t")])
+                # include = include_snapshot_times[0] <= creation < include_snapshot_times[1]
+                include = lo < hi and lo <= (creation or int(snapshot[0 : snapshot.index("\t")])) < hi
+                # include = include_snapshot_times and lo <= (creation or int(snapshot[0 : snapshot.index("\t")])) < hi
             if include:
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -2306,6 +2319,8 @@ class Job:
         did_include = False
         did_exclude = False
         is_continuous_filter = True
+        # if include_snapshot_times and include_snapshot_times[0] >= include_snapshot_times[1]:
+        #     include_snapshot_times = None
         lo_time, hi_time = include_snapshot_times or (None, None)
         for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
@@ -2329,7 +2344,9 @@ class Job:
                     msg = None
                     if lo <= i < hi:
                         msg = "Including b/c snapshot rank: %s"
-                    elif include_snapshot_times and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
+                    elif (not include_snapshot_times) or (
+                        lo_time < hi_time and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time
+                    ):
                         msg = "Including b/c creation time: %s"
                     if msg:
                         results.append(snapshot)
@@ -3675,6 +3692,7 @@ class TimeRangeAction(argparse.Action):
                 except ValueError:
                     parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
 
+        assert False
         values = values.strip()
         if ".." not in values:
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {values}")
@@ -3742,6 +3760,7 @@ class TimeRangeOrRanksAction(argparse.Action):
         if current_values is None:
             current_values = []
         extra_values = []
+        assert isinstance(values, list)
         assert len(values) > 0
         value = values[0].strip()
         if ".." not in value:
@@ -3755,7 +3774,11 @@ class TimeRangeOrRanksAction(argparse.Action):
         setattr(namespace, self.dest, extra_values)
         extra_values = extra_values.copy()
         extra_values[0] = self.get_include_snapshot_times(extra_values[0])
-        if len(extra_values) == 1:
+        if (
+            len(extra_values) == 1
+            or extra_values[0] is None
+            or any(rankrange[0] == rankrange[1] for rankrange in extra_values[1:])
+        ):
             add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", extra_values[0], None))
         else:
             add_snapshot_filter(namespace, SnapshotFilter(self.dest, extra_values[0], extra_values[1:]))
@@ -3811,6 +3834,7 @@ class RankRangeAction(argparse.Action):
         #         parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
         #     return kind, num, is_percent
 
+        assert False
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
