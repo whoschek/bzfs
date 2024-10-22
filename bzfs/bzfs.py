@@ -273,62 +273,62 @@ feature.
         "--include-snapshot-times-or-ranks", action=TimeRangeOrRanksAction, nargs="+", default=[],
         metavar="TIMERANGE [RANKRANGE ...]",
         help="TODO")
-    parser.add_argument(
-        "--include-snapshot-times", action=TimeRangeAction, default=None, metavar="TIMERANGE",
-        help="The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
-             "snapshot to be included (default: `*..*` aka all times). The time range consists of a 'start' time, "
-             "followed by a '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01'. Only "
-             "snapshots (and bookmarks) in the half-closed time range [start, end) are included; other snapshots "
-             "(and bookmarks) are excluded. If a snapshot is excluded this decision is never reconsidered because "
-             "exclude takes precedence over include. Each of the two specified times can take any of the following "
-             "forms:\n\n"
-             "a) a `*` wildcard character representing negative or positive infinity.\n\n"
-             "b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
-             "c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
-             "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
-             "requires Python >= 3.11.\n\n"
-             "d) a duration that indicates how long ago from the current time, using the following syntax: "
-             "a non-negative integer, followed by an optional space, followed by a duration unit that is "
-             "*one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days', 'weeks', "
-             "followed by an optional space, followed by the word 'ago'. "
-             "Examples: '0secs ago', '90 mins ago', '48hours ago', '90days ago', '12weeksago'.\n\n"
-             "*Note:* This option compares the specified time against the standard ZFS 'creation' time property of the "
-             "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
-             "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
-             "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
-             "the -p flag to display UTC Unix time in integer seconds).\n\n")
-    parser.add_argument(
-        "--include-snapshot-ranks", action=RankRangeAction, nargs="+", default=[], metavar="RANKRANGE",
-        help="Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
-             "snapshots (default: include all snapshots). Snapshots are sorted by creation time (actually, by the "
-             "'createtxg' ZFS property, which serves the same purpose but is more precise). The rank position of a "
-             "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consist of "
-             "the word 'oldest' or 'latest', followed by a non-negative integer, followed by an optional '%%' percent "
-             "sign. A rank range consists of a lower rank, followed by a '..' separator, followed by a higher rank. "
-             "If the optional lower rank is missing it is assumed to be 0. Examples:\n\n"
-             "* 'oldest 10%%' aka 'oldest 0..oldest 10%%' (include the oldest 10%% of all snapshots)\n\n"
-             "* 'latest 10%%' aka 'latest 0..latest 10%%' (include the latest 10%% of all snapshots)\n\n"
-             "* 'oldest 90' aka 'oldest 0..oldest 90' (include the oldest 90 snapshots)\n\n"
-             "* 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)\n\n"
-             "* 'oldest 90..oldest 100%%' (include all snapshots except the oldest 90 snapshots)\n\n"
-             "* 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)\n\n"
-             "* 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)\n\n"
-             "* 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
-             "* 'oldest 2' aka 'oldest 0..oldest 2' (include the oldest 2 snapshots)\n\n"
-             "* 'oldest 2..oldest 100%%' (include all snapshots except the oldest 2 snapshots)\n\n"
-             "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
-             "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
-             "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
-             "*Note:* Percentage calculations are not based on the number of snapshots "
-             "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
-             "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
-             "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
-             "include one of these two daily snapshots.\n\n"
-             "*Note:* Bookmarks are always retained aka included; the --include-snapshot-ranks filter is only applied "
-             "to snapshots. Bookmarks are 'invisible' to this filter and do not count towards N or N%%. Bookmarks "
-             "bypass this filter.\n\n"
-             "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
-             "over include.\n\n")
+    # parser.add_argument(
+    #     "--include-snapshot-times", action=TimeRangeAction, default=None, metavar="TIMERANGE",
+    #     help="The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
+    #          "snapshot to be included (default: `*..*` aka all times). The time range consists of a 'start' time, "
+    #          "followed by a '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01'. Only "
+    #          "snapshots (and bookmarks) in the half-closed time range [start, end) are included; other snapshots "
+    #          "(and bookmarks) are excluded. If a snapshot is excluded this decision is never reconsidered because "
+    #          "exclude takes precedence over include. Each of the two specified times can take any of the following "
+    #          "forms:\n\n"
+    #          "a) a `*` wildcard character representing negative or positive infinity.\n\n"
+    #          "b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
+    #          "c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
+    #          "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
+    #          "requires Python >= 3.11.\n\n"
+    #          "d) a duration that indicates how long ago from the current time, using the following syntax: "
+    #          "a non-negative integer, followed by an optional space, followed by a duration unit that is "
+    #          "*one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days', 'weeks', "
+    #          "followed by an optional space, followed by the word 'ago'. "
+    #          "Examples: '0secs ago', '90 mins ago', '48hours ago', '90days ago', '12weeksago'.\n\n"
+    #          "*Note:* This option compares the specified time against the standard ZFS 'creation' time property of the "
+    #          "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
+    #          "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
+    #          "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
+    #          "the -p flag to display UTC Unix time in integer seconds).\n\n")
+    # parser.add_argument(
+    #     "--include-snapshot-ranks", action=RankRangeAction, nargs="+", default=[], metavar="RANKRANGE",
+    #     help="Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
+    #          "snapshots (default: include all snapshots). Snapshots are sorted by creation time (actually, by the "
+    #          "'createtxg' ZFS property, which serves the same purpose but is more precise). The rank position of a "
+    #          "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consist of "
+    #          "the word 'oldest' or 'latest', followed by a non-negative integer, followed by an optional '%%' percent "
+    #          "sign. A rank range consists of a lower rank, followed by a '..' separator, followed by a higher rank. "
+    #          "If the optional lower rank is missing it is assumed to be 0. Examples:\n\n"
+    #          "* 'oldest 10%%' aka 'oldest 0..oldest 10%%' (include the oldest 10%% of all snapshots)\n\n"
+    #          "* 'latest 10%%' aka 'latest 0..latest 10%%' (include the latest 10%% of all snapshots)\n\n"
+    #          "* 'oldest 90' aka 'oldest 0..oldest 90' (include the oldest 90 snapshots)\n\n"
+    #          "* 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)\n\n"
+    #          "* 'oldest 90..oldest 100%%' (include all snapshots except the oldest 90 snapshots)\n\n"
+    #          "* 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)\n\n"
+    #          "* 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)\n\n"
+    #          "* 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
+    #          "* 'oldest 2' aka 'oldest 0..oldest 2' (include the oldest 2 snapshots)\n\n"
+    #          "* 'oldest 2..oldest 100%%' (include all snapshots except the oldest 2 snapshots)\n\n"
+    #          "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
+    #          "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
+    #          "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
+    #          "*Note:* Percentage calculations are not based on the number of snapshots "
+    #          "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
+    #          "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
+    #          "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
+    #          "include one of these two daily snapshots.\n\n"
+    #          "*Note:* Bookmarks are always retained aka included; the --include-snapshot-ranks filter is only applied "
+    #          "to snapshots. Bookmarks are 'invisible' to this filter and do not count towards N or N%%. Bookmarks "
+    #          "bypass this filter.\n\n"
+    #          "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
+    #          "over include.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -2229,19 +2229,16 @@ class Job:
             if name == snapshot_regex_filter_name:
                 snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
                 is_continuous_filter = False  # may exclude intermediate snapshots; they need to be remembered
-            elif name == "include_snapshot_ranks":
-                assert False  # TODO: this shall become obsolete
-                snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
-            elif name == "include_snapshot_times_or_ranks":
+            elif name == "include_snapshot_times":
+                snapshots = self.filter_snapshots_by_creation_time(
+                    snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
+                )
+            else:
+                assert name == "include_snapshot_times_or_ranks"
                 timerange, opts = _filter.timerange, _filter.options
                 assert timerange
                 snapshots, is_continuous = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
                 is_continuous_filter = is_continuous_filter and is_continuous
-            else:
-                assert name == "include_snapshot_times"
-                snapshots = self.filter_snapshots_by_creation_time(
-                    snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
-                )
             if is_continuous_filter:
                 basis_snapshots = snapshots
         is_debug = p.log.isEnabledFor(log_debug)
@@ -3644,70 +3641,6 @@ class FileOrLiteralAction(argparse.Action):
 
 
 #############################################################################
-class TimeRangeAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        def parse_time(time_spec):
-            time_spec = time_spec.strip()
-            if time_spec == "*":
-                return None
-            if time_spec.isdigit():
-                return int(time_spec)  # Input is a Unix time in integer seconds
-            try:
-                return timedelta(seconds=self.parse_duration_to_seconds(time_spec))
-            except ValueError:
-                try:  # If it's not a duration, try parsing as an ISO 8601 datetime
-                    return unixtime_fromisoformat(time_spec)
-                except ValueError:
-                    parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
-
-        assert False
-        values = values.strip()
-        if ".." not in values:
-            parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {values}")
-        lo, hi = [parse_time(time_spec) for time_spec in values.split("..", 1)]
-        extra_values = (lo, hi)
-        setattr(namespace, self.dest, extra_values)
-        extra_values = self.get_include_snapshot_times(extra_values)
-        # add_snapshot_filter(namespace, self.dest, extra_values)
-        add_snapshot_filter(namespace, SnapshotFilter(self.dest, extra_values, None))
-
-    @staticmethod
-    def parse_duration_to_seconds(duration: str) -> int:
-        unit_seconds = {
-            "seconds": 1,
-            "secs": 1,
-            "minutes": 60,
-            "mins": 60,
-            "hours": 60 * 60,
-            "days": 86400,
-            "weeks": 7 * 86400,
-        }
-        match = re.fullmatch(r"(\d+) ?(secs|seconds|mins|minutes|hours|days|weeks) ?ago", duration)
-        if not match:
-            raise ValueError("Invalid duration format")
-        quantity = int(match.group(1))
-        unit = match.group(2)
-        return quantity * unit_seconds[unit]
-
-    @staticmethod
-    def get_include_snapshot_times(times) -> UnixTimeRange:
-        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
-            if isinstance(time_spec, timedelta):
-                return int(current_time - time_spec.total_seconds())
-            if isinstance(time_spec, int):
-                return int(time_spec)
-            return default
-
-        lo, hi = times
-        if lo is None and hi is None:
-            return None
-        current_time = time.time()
-        lo = utc_unix_time_in_seconds(lo, default=0)
-        hi = utc_unix_time_in_seconds(hi, default=unixtime_infinity_secs)
-        return (lo, hi) if lo <= hi else (hi, lo)
-
-
-#############################################################################
 class TimeRangeOrRanksAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         def parse_time(time_spec):
@@ -3770,7 +3703,7 @@ class TimeRangeOrRanksAction(argparse.Action):
             return None
         current_time = time.time()
         lo = utc_unix_time_in_seconds(lo, default=0)
-        hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ infinity
+        hi = utc_unix_time_in_seconds(hi, default=unixtime_infinity_secs)
         return (lo, hi) if lo <= hi else (hi, lo)
 
     @staticmethod
@@ -3802,45 +3735,6 @@ class TimeRangeOrRanksAction(argparse.Action):
                 lo = parse_spec(hi[0] + "0")
             extra_values.append((lo, hi))
         return extra_values
-
-
-#############################################################################
-class RankRangeAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        # def parse_spec(spec):
-        #     spec = spec.strip()
-        #     match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
-        #     if not match:
-        #         parser.error(f"{option_string}: Invalid rank format: {spec}")
-        #     kind = match.group(1)
-        #     num = int(match.group(2))
-        #     is_percent = spec.endswith("%")
-        #     if is_percent and num > 100:
-        #         parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
-        #     return kind, num, is_percent
-
-        assert False  # TODO remove this
-        current_values = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        extra_values = parse_rankranges(parser, namespace, values, option_string=option_string)
-        # extra_values = []
-        # for value in values:
-        #     value = value.strip()
-        #     if ".." in value:
-        #         lo, hi = value.split("..", 1)
-        #         lo, hi = [parse_spec(spec) for spec in [lo, hi]]
-        #         if lo[0] != hi[0]:
-        #             # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
-        #             # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
-        #             parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
-        #     else:
-        #         hi = parse_spec(value)
-        #         lo = parse_spec(hi[0] + "0")
-        #     extra_values.append((lo, hi))
-        current_values += extra_values
-        setattr(namespace, self.dest, current_values)
-        add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
 
 
 #############################################################################
