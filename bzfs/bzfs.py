@@ -2230,12 +2230,11 @@ class Job:
                 snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
                 is_continuous_filter = False  # may exclude intermediate snapshots; they need to be remembered
             elif name == "include_snapshot_ranks":
-                assert False
+                assert False  # TODO: this shall become obsolete
                 snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
             elif name == "include_snapshot_times_or_ranks":
                 timerange, opts = _filter.timerange, _filter.options
                 assert timerange
-                assert opts
                 snapshots, is_continuous = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
                 is_continuous_filter = is_continuous_filter and is_continuous
             else:
@@ -2243,10 +2242,6 @@ class Job:
                 snapshots = self.filter_snapshots_by_creation_time(
                     snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
                 )
-                # timerange, opts = _filter.timerange, _filter.options
-                # opts = [(("oldest", 0, False), ("oldest", 0, False))]
-                # log.info("timerange: %s", timerange)
-                # snapshots, _ = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
             if is_continuous_filter:
                 basis_snapshots = snapshots
         is_debug = p.log.isEnabledFor(log_debug)
@@ -2282,7 +2277,6 @@ class Job:
         for snapshot in snapshots:
             creation_time = None
             include = "@" in snapshot  # it's a true snapshot?
-            # if bookmark_time_range and not include:
             if not include:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
@@ -2290,11 +2284,9 @@ class Job:
                 # accumulate over time without periodic pruning.
                 creation_time = int(snapshot[0 : snapshot.index("\t")])
                 include = lo_booktime <= creation_time <= hi_booktime
-
             if include:
                 creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
                 include = lo_snaptime <= creation_time < hi_snaptime
-                # include = lo < hi and lo <= (creation_time or int(snapshot[0 : snapshot.index("\t")])) < hi
             if include:
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
