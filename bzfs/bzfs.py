@@ -3724,32 +3724,19 @@ class TimeRangeOrRanksAction(argparse.Action):
                 except ValueError:
                     parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
 
-        current_values = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        extra_values = []
         assert isinstance(values, list)
         assert len(values) > 0
         value = values[0].strip()
         if ".." not in value:
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
-        lo, hi = [parse_time(time_spec) for time_spec in value.split("..", 1)]
-        # extra_values = (lo, hi)
-        extra_values.append((lo, hi))
-
-        extra_values += parse_rankranges(parser, namespace, values[1:], option_string=option_string)
-
-        setattr(namespace, self.dest, extra_values)
-        extra_values = extra_values.copy()
-        extra_values[0] = self.get_include_snapshot_times(extra_values[0])
-        if (
-            len(extra_values) == 1
-            or extra_values[0] is None
-            or any(rankrange[0] == rankrange[1] for rankrange in extra_values[1:])
-        ):
-            add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", extra_values[0], None))
+        timerange = [parse_time(time_spec) for time_spec in value.split("..", 1)]
+        rankranges = self.parse_rankranges(parser, values[1:], option_string=option_string)
+        setattr(namespace, self.dest, [timerange] + rankranges)
+        timerange = self.get_include_snapshot_times(timerange)
+        if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
+            add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", timerange, None))
         else:
-            add_snapshot_filter(namespace, SnapshotFilter(self.dest, extra_values[0], extra_values[1:]))
+            add_snapshot_filter(namespace, SnapshotFilter(self.dest, timerange, rankranges))
 
     @staticmethod
     def parse_duration_to_seconds(duration: str) -> int:
@@ -3786,6 +3773,36 @@ class TimeRangeOrRanksAction(argparse.Action):
         hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ infinity
         return (lo, hi) if lo <= hi else (hi, lo)
 
+    @staticmethod
+    def parse_rankranges(parser, values, option_string=None):
+        def parse_spec(spec):
+            spec = spec.strip()
+            match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
+            if not match:
+                parser.error(f"{option_string}: Invalid rank format: {spec}")
+            kind = match.group(1)
+            num = int(match.group(2))
+            is_percent = spec.endswith("%")
+            if is_percent and num > 100:
+                parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
+            return kind, num, is_percent
+
+        extra_values = []
+        for value in values:
+            value = value.strip()
+            if ".." in value:
+                lo, hi = value.split("..", 1)
+                lo, hi = [parse_spec(spec) for spec in [lo, hi]]
+                if lo[0] != hi[0]:
+                    # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
+                    # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
+                    parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
+            else:
+                hi = parse_spec(value)
+                lo = parse_spec(hi[0] + "0")
+            extra_values.append((lo, hi))
+        return extra_values
+
 
 #############################################################################
 class RankRangeAction(argparse.Action):
@@ -3802,7 +3819,7 @@ class RankRangeAction(argparse.Action):
         #         parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
         #     return kind, num, is_percent
 
-        assert False
+        assert False  # TODO remove this
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
@@ -3826,36 +3843,6 @@ class RankRangeAction(argparse.Action):
         add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
 
 
-def parse_rankranges(parser, namespace, values, option_string=None):
-    def parse_spec(spec):
-        spec = spec.strip()
-        match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
-        if not match:
-            parser.error(f"{option_string}: Invalid rank format: {spec}")
-        kind = match.group(1)
-        num = int(match.group(2))
-        is_percent = spec.endswith("%")
-        if is_percent and num > 100:
-            parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
-        return kind, num, is_percent
-
-    extra_values = []
-    for value in values:
-        value = value.strip()
-        if ".." in value:
-            lo, hi = value.split("..", 1)
-            lo, hi = [parse_spec(spec) for spec in [lo, hi]]
-            if lo[0] != hi[0]:
-                # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
-                # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
-                parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
-        else:
-            hi = parse_spec(value)
-            lo = parse_spec(hi[0] + "0")
-        extra_values.append((lo, hi))
-    return extra_values
-
-
 #############################################################################
 @dataclass(order=True)
 class SnapshotFilter:
@@ -3874,9 +3861,7 @@ def optimize_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[Sn
     """Not intended to be a full query execution plan optimizer, but we still apply some basic plan optimizations."""
     merge_adjacent_snapshot_filters(snapshot_filters)
     merge_adjacent_snapshot_regexes(snapshot_filters)
-    snapshot_filters = [
-        f for f in snapshot_filters if f.timerange is not None or f.options is not None
-    ]  # drop noop --include-snapshot-times
+    snapshot_filters = [f for f in snapshot_filters if f.timerange or f.options]  # drop noop --include-snapshot-times
     reorder_snapshot_time_filters(snapshot_filters)
     return snapshot_filters
 
@@ -3895,10 +3880,6 @@ def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> N
             if j >= 0 and snapshot_filters[j] == filter_i:
                 lst = snapshot_filters[j].options
                 assert isinstance(lst, list)
-                # ranks_filter_name = "include_snapshot_times_or_ranks"
-                # if filter_i.name != ranks_filter_name or lst[0] == filter_i.options[0]:  # compare timerange
-                #     lst += filter_i.options if filter_i.name != ranks_filter_name else filter_i.options[1:]
-                #     snapshot_filters.pop(i)
                 lst += filter_i.options
                 snapshot_filters.pop(i)
         i -= 1
@@ -3976,7 +3957,7 @@ def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> Non
     j = i
     while i >= 0:
         name = snapshot_filters[i].name
-        if name == "include_snapshot_ranks" or name == "include_snapshot_times_or_ranks":
+        if name == "include_snapshot_times_or_ranks":
             reorder_time_filters_within_section(i, j)
             j = i - 1
         i -= 1
