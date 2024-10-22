@@ -1092,27 +1092,23 @@ class TestRankRangeAction(unittest.TestCase):
 
     @staticmethod
     def filter_snapshots_by_rank(snapshots, ranks, ranks2=[]):
-        snapshots = ["10\t" + snapshot for snapshot in snapshots]
-        for i in range(0, 2):
-            verbose = [] if i == 0 else ["--verbose"]
-            args = bzfs.argument_parser().parse_args(
-                # args=["src", "dst", "--include-snapshot-times-or-ranks", "0..0", ranks, *ranks2, *verbose]
-                args=["src", "dst", "--include-snapshot-times-or-ranks", "0..1", ranks, *ranks2, *verbose]
-            )
-            log_params = bzfs.LogParams(args)
-            try:
-                job = bzfs.Job()
-                job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
-                result, _ = job.filter_snapshots(snapshots)
-                # result = job.filter_snapshots_by_rank(snapshots, job.params.snapshot_filters[0].options)
-                # timerange = job.params.snapshot_filters[0].timerange
-                # opts = job.params.snapshot_filters[0].options
-                # result, _ = job.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
-                result = [res.split("\t", 1)[1] for res in result]
-                if i > 0:
-                    return result
-            finally:
-                bzfs.reset_logger()
+        args = bzfs.argument_parser().parse_args(
+            # args=["src", "dst", "--include-snapshot-times-or-ranks", "0..0", ranks, *ranks2, "--verbose"]
+            args=["src", "dst", "--include-snapshot-times-or-ranks", "0..1", ranks, *ranks2, "--verbose"]
+        )
+        log_params = bzfs.LogParams(args)
+        try:
+            job = bzfs.Job()
+            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            snapshots = ["10\t" + snapshot for snapshot in snapshots]
+            results, _ = job.filter_snapshots(snapshots)
+            # results = job.filter_snapshots_by_rank(snapshots, job.params.snapshot_filters[0].options)
+            # timerange = job.params.snapshot_filters[0].timerange
+            # opts = job.params.snapshot_filters[0].options
+            # results, _ = job.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
+            return [result.split("\t", 1)[1] for result in results]
+        finally:
+            bzfs.reset_logger()
 
     def test_filter_snapshots_by_rank(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2", "d@3"]]
