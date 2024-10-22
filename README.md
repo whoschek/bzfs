@@ -528,33 +528,51 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-<div id="--include-snapshot-times"></div>
+<div id="--include-snapshot-times-or-ranks"></div>
 
-**--include-snapshot-times** *TIMERANGE*
+**--include-snapshot-times-or-ranks** *TIMERANGE [RANKRANGE ...]*
 
-*  The ZFS 'creation' time of a snapshot (and bookmark) must fall
-    into this time range in order for the snapshot to be included
-    (default: `*..*` aka all times). The time range consists of a
-    'start' time, followed by a '..' separator, followed by an
-    'end' time. For example '2024-01-01..2024-04-01'. Only snapshots
-    (and bookmarks) in the half-closed time range [start, end) are
-    included; other snapshots (and bookmarks) are excluded. If a
-    snapshot is excluded this decision is never reconsidered because
+*  This option takes as input parameters a time range filter and an
+    optional rank range filter. It separately computes the results for
+    each filter and returns aka includes the UNION of both results. For
+    example, you can specify to include all daily snapshots that were
+    created in the last 7 days, and at the same time make sure that at
+    least the oldest 7 daily snapshots are included, regardless of
+    whether they were created within the last 7 days or not. This helps
+    to safely cope with irregular scenarios where no snapshots were
+    created or received within the last 7 days, or where more than 7
+    daily snapshots were created within the last 7 days. It also helps
+    to avoid accidental pruning of the last snapshot that source and
+    destination have in common. To instead use a pure rank range filter
+    (no UNION), or a pure time range filter (no UNION), simply use
+    '0..0' to indicate an empty time range, or omit the rank range,
+    respectively.
+
+    <b>*TIMERANGE:* </b>
+
+    The ZFS 'creation' time of a snapshot (and bookmark) must fall
+    into this time range in order for the snapshot to be included. The
+    time range consists of a 'start' time, followed by a '..'
+    separator, followed by an 'end' time. For example
+    '2024-01-01..2024-04-01' or `*..*` aka all times. Only
+    snapshots (and bookmarks) in the half-closed time range [start,
+    end) are included; other snapshots (and bookmarks) are excluded. If
+    a snapshot is excluded this decision is never reconsidered because
     exclude takes precedence over include. Each of the two specified
     times can take any of the following forms:
 
-    a) a `*` wildcard character representing negative or positive
+    * a) a `*` wildcard character representing negative or positive
     infinity.
 
-    b) a non-negative integer representing a UTC Unix time in seconds.
-    Example: 1728109805
+    * b) a non-negative integer representing a UTC Unix time in
+    seconds. Example: 1728109805
 
-    c) an ISO 8601 datetime string with or without timezone. Examples:
-    '2024-10-05', '2024-10-05T14:48:00', '2024-10-05T14:48:00+02',
-    '2024-10-05T14:48:00-04:30'. Timezone string support requires
-    Python >= 3.11.
+    * c) an ISO 8601 datetime string with or without timezone.
+    Examples: '2024-10-05', '2024-10-05T14:48:00',
+    '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone
+    string support requires Python >= 3.11.
 
-    d) a duration that indicates how long ago from the current time,
+    * d) a duration that indicates how long ago from the current time,
     using the following syntax: a non-negative integer, followed by an
     optional space, followed by a duration unit that is *one* of
     'seconds', 'secs', 'minutes', 'mins', 'hours', 'days',
@@ -562,7 +580,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     'ago'. Examples: '0secs ago', '90 mins ago', '48hours ago',
     '90days ago', '12weeksago'.
 
-    *Note:* This option compares the specified time against the
+    * Note: This option compares the specified time against the
     standard ZFS 'creation' time property of the snapshot (which is a
     UTC Unix time in integer seconds), rather than against a timestamp
     that may be part of the snapshot name. You can list the ZFS creation
@@ -571,13 +589,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     (optionally add the -p flag to display UTC Unix time in integer
     seconds).
 
-<!-- -->
+    <b>*RANKRANGE:* </b>
 
-<div id="--include-snapshot-ranks"></div>
-
-**--include-snapshot-ranks** *RANKRANGE [RANKRANGE ...]*
-
-*  Specifies to include the N (or N%) oldest snapshots or latest
+    Specifies to include the N (or N%) oldest snapshots or latest
     snapshots, and exclude all other snapshots (default: include all
     snapshots). Snapshots are sorted by creation time (actually, by the
     'createtxg' ZFS property, which serves the same purpose but is
@@ -634,10 +648,8 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     daily snapshots, and 'latest 50%' will only include one of these
     two daily snapshots.
 
-    *Note:* Bookmarks are always retained aka included; the
-    --include-snapshot-ranks filter is only applied to snapshots.
-    Bookmarks are 'invisible' to this filter and do not count towards
-    N or N%. Bookmarks bypass this filter.
+    *Note:* Bookmarks are always retained aka included if a rankrange
+    is specified; Bookmarks do not count towards N or N% wrt. rank.
 
     *Note:* If a snapshot is excluded this decision is never
     reconsidered because exclude takes precedence over include.
