@@ -2275,12 +2275,10 @@ class Job:
     ) -> List[str]:
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
-        # if include_snapshot_times and include_snapshot_times[0] >= include_snapshot_times[1]:
-        #     include_snapshot_times = None
-        lo, hi = include_snapshot_times or (None, None)
+        lo_time, hi_time = include_snapshot_times or (None, None)
         results = []
         for snapshot in snapshots:
-            creation = None
+            creation_time = None
             include = "@" in snapshot  # it's a true snapshot?
             # if bookmark_time_range and not include:
             if not include:
@@ -2292,10 +2290,9 @@ class Job:
                 include = (not bookmark_time_range) or bookmark_time_range[0] <= creation <= bookmark_time_range[1]
 
             if include_snapshot_times and include:
-                # creation = creation or int(snapshot[0 : snapshot.index("\t")])
-                # include = include_snapshot_times[0] <= creation < include_snapshot_times[1]
-                include = lo < hi and lo <= (creation or int(snapshot[0 : snapshot.index("\t")])) < hi
-                # include = include_snapshot_times and lo <= (creation or int(snapshot[0 : snapshot.index("\t")])) < hi
+                creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
+                include = lo_time <= creation_time < hi_time
+                # include = lo < hi and lo <= (creation_time or int(snapshot[0 : snapshot.index("\t")])) < hi
             if include:
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -2319,8 +2316,6 @@ class Job:
         did_include = False
         did_exclude = False
         is_continuous_filter = True
-        # if include_snapshot_times and include_snapshot_times[0] >= include_snapshot_times[1]:
-        #     include_snapshot_times = None
         lo_time, hi_time = include_snapshot_times or (None, None)
         for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
@@ -2344,9 +2339,13 @@ class Job:
                     msg = None
                     if lo <= i < hi:
                         msg = "Including b/c snapshot rank: %s"
-                    elif (not include_snapshot_times) or (
-                        lo_time < hi_time and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time
-                    ):
+                    elif (not include_snapshot_times) or lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
+                        # elif (not include_snapshot_times) or (
+                        #     lo_time < hi_time and lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time
+                        # ):
+                        # elif (not include_snapshot_times) or (
+                        #     include_snapshot_times[0] <= int(snapshot[0 : snapshot.index("\t")]) < include_snapshot_times[1]
+                        # ):
                         msg = "Including b/c creation time: %s"
                     if msg:
                         results.append(snapshot)
