@@ -1090,23 +1090,28 @@ class TestRankRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse_args("oldest99%..latest100%")
 
+    def filter_snapshots_by_rank(self, snapshots, ranks, ranks2=[], timerange="0..1"):
+        results, _ = self.filter_snapshots_by_rank2(snapshots, ranks=ranks, ranks2=ranks2, timerange=timerange)
+        return results
+
     @staticmethod
-    def filter_snapshots_by_rank(snapshots, ranks, ranks2=[]):
+    def filter_snapshots_by_rank2(snapshots, ranks, ranks2=[], timerange="0..1"):
         args = bzfs.argument_parser().parse_args(
             # args=["src", "dst", "--include-snapshot-times-or-ranks", "0..0", ranks, *ranks2, "--verbose"]
-            args=["src", "dst", "--include-snapshot-times-or-ranks", "0..1", ranks, *ranks2, "--verbose"]
+            args=["src", "dst", "--include-snapshot-times-or-ranks", timerange, ranks, *ranks2, "--verbose"]
         )
         log_params = bzfs.LogParams(args)
         try:
             job = bzfs.Job()
             job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
-            snapshots = ["10\t" + snapshot for snapshot in snapshots]
-            results, _ = job.filter_snapshots(snapshots)
+            snapshots = [f"{i+1}\t" + snapshot for i, snapshot in enumerate(snapshots)]
+            results, basis_snapshots = job.filter_snapshots(snapshots)
+            is_continuous_filter = results is basis_snapshots
             # results = job.filter_snapshots_by_rank(snapshots, job.params.snapshot_filters[0].options)
             # timerange = job.params.snapshot_filters[0].timerange
             # opts = job.params.snapshot_filters[0].options
             # results, _ = job.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
-            return [result.split("\t", 1)[1] for result in results]
+            return [result.split("\t", 1)[1] for result in results], is_continuous_filter
         finally:
             bzfs.reset_logger()
 
@@ -1182,9 +1187,44 @@ class TestRankRangeAction(unittest.TestCase):
 
     def test_filter_snapshots_by_rank_with_chain(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
-        self.assertListEqual(
-            ["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%", ["latest1..latest100%"])
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "latest1..latest100%", ["latest1..latest100%"])
+        self.assertListEqual(["\td@0", "\td#1"], results)
+        self.assertTrue(is_continuous)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "latest1..latest100%", ["oldest1..oldest100%"])
+        self.assertListEqual(["\td#1", "\td@2"], results)
+        self.assertTrue(is_continuous)
+
+    def test_filter_snapshots_by_rank_with_times(self):
+        lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="0..1")
+        self.assertListEqual(["\td@0", "\td#1"], results)
+        self.assertTrue(is_continuous)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="0..11")
+        self.assertListEqual(lst1, results)
+        self.assertTrue(is_continuous)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="4..11")
+        self.assertListEqual(["\td@0", "\td#1", "\td@3"], results)
+        self.assertFalse(is_continuous)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="3..11")
+        self.assertListEqual(lst1, results)
+        self.assertTrue(is_continuous)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(
+            lst1, "oldest1..oldest2", ["latest 1"], timerange="4..11"
         )
+        self.assertListEqual(["\td#1", "\td@2", "\td@3"], results)
+        self.assertTrue(is_continuous)
+
+        lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3", "d@4"]]
+        results, is_continuous = self.filter_snapshots_by_rank2(
+            lst1, "oldest1..oldest2", ["latest 1"], timerange="5..11"
+        )
+        self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
+        self.assertFalse(is_continuous)
 
     @staticmethod
     def get_snapshot_filters(cli):

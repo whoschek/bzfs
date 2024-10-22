@@ -2317,8 +2317,9 @@ class Job:
             did_include, did_exclude = False, False
             results = []
             for snapshot in snapshots:
+                include = False
                 if "@" not in snapshot:
-                    results.append(snapshot)  # retain bookmarks, apply filter only to snapshots
+                    include = True  # retain bookmarks, apply filter only to snapshots
                 else:
                     msg = None
                     if lo <= i < hi:
@@ -2326,15 +2327,18 @@ class Job:
                     elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
                         msg = "Including b/c creation time: %s"
                     if msg:
-                        results.append(snapshot)
-                        if did_include and did_exclude:
-                            is_continuous_filter = False
-                        did_include = True
+                        include = True
                     else:
                         msg = "Excluding b/c snapshot rank: %s"
-                        did_exclude = True
+                        if did_include:
+                            did_exclude = True
                     is_debug and log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
                     i += 1
+                if include:
+                    results.append(snapshot)
+                    if did_include and did_exclude:
+                        is_continuous_filter = False
+                    did_include = True
             snapshots = results
             n = hi - lo
         return snapshots, is_continuous_filter
