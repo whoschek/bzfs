@@ -77,7 +77,7 @@ zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
 snapshot_regex_filter_name = "snapshot_regex"
 snapshot_filters_var = "snapshot_filters_var"
-unixtime_infinity_secs = 1000000000000  # 33658-09-27 ~ infinity
+unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
@@ -265,7 +265,9 @@ feature.
              "--include-snapshot-ranks (see below) is specified on the command line before "
              "--include/exclude-snapshot-regex, then --include-snapshot-ranks will be applied before "
              "--include/exclude-snapshot-regex. The pipeline results would not always be the same if the order were "
-             "reversed. Order matters.\n\n")
+             "reversed. Order matters.\n\n"
+             "*Note:* Bookmarks are always retained aka included in order to help find common snapshots between source "
+             "and destination.\n\n")
     parser.add_argument(
         "--exclude-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
@@ -308,6 +310,8 @@ feature.
              "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
              "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
              "the -p flag to display UTC Unix time in integer seconds).\n\n"
+             "*Note:* Bookmarks are always retained aka included in order to help find common snapshots between source "
+             "and destination.\n\n"
              ""
              "<b>*RANKRANGE:* </b>\n\n"
              "Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
@@ -335,8 +339,8 @@ feature.
              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
              "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
              "include one of these two daily snapshots.\n\n"
-             "*Note:* Bookmarks are always retained aka included if a non-empty rankrange is specified; Bookmarks do "
-             "not count towards N or N%% wrt. rank.\n\n"
+             "*Note:* Bookmarks are always retained aka included in order to help find common snapshots between source "
+             "and destination. Bookmarks do not count towards N or N%% wrt. rank.\n\n"
              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
              "over include.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
@@ -1469,14 +1473,13 @@ class Job:
         if p.delete_missing_snapshots:
             log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
             for dst_dataset in dst_datasets:
-                has_include_snapshot_times = any(f.name == "include_snapshot_times" for f in p.snapshot_filters)
-                props = self.creation_prefix + "creation,guid,name" if has_include_snapshot_times else "guid,name"
+                filter_needs_creation_time = any(f.timerange is not None for f in p.snapshot_filters)
+                props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
                 cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
                 k = len(dst_snapshots_with_guids)
-                dst_snapshots_with_guids, _ = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
-                _ = None
-                if has_include_snapshot_times:
+                dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
+                if filter_needs_creation_time:
                     dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
 
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
@@ -1559,7 +1562,7 @@ class Job:
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
         use_bookmark = use_bookmark and len(dst_snapshots_with_guids) > 0
-        has_include_snapshot_times = any(f.name == "include_snapshot_times" for f in p.snapshot_filters)
+        filter_needs_creation_time = any(f.timerange is not None for f in p.snapshot_filters)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -1571,7 +1574,7 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        if use_bookmark or has_include_snapshot_times:
+        if use_bookmark or filter_needs_creation_time:
             props = self.creation_prefix + "creation,guid,name"
             types = "snapshot,bookmark" if use_bookmark else "snapshot"
         else:
@@ -1592,7 +1595,7 @@ class Job:
                 include_snapshot_times=None,
                 bookmark_time_range=(
                     int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
-                    int(dst_snapshots_with_guids[-1].split("\t", 1)[0]),
+                    int(dst_snapshots_with_guids[-1].split("\t", 1)[0]) + 1,
                 ),
             )
             dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
@@ -1600,13 +1603,11 @@ class Job:
         src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
-        src_snapshots_with_guids, basis_src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
-        if use_bookmark or has_include_snapshot_times:
-            is_same = src_snapshots_with_guids is basis_src_snapshots_with_guids
+        basis_src_snapshots_with_guids = src_snapshots_with_guids
+        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
+        if use_bookmark or filter_needs_creation_time:
             src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
-            basis_src_snapshots_with_guids = (
-                src_snapshots_with_guids if is_same else cut(field=2, lines=basis_src_snapshots_with_guids)
-            )
+            basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
 
         # find oldest and latest "true" snapshot, as well as GUIDs of all snapshots and bookmarks.
         # a snapshot is "true" if it is not a bookmark.
@@ -2223,46 +2224,41 @@ class Job:
                     log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
-    def filter_snapshots(self, snapshots: List[str]) -> Tuple[List[str], List[str]]:
+    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
         p, log = self.params, self.params.log
-        basis_snapshots = snapshots
-        is_continuous_filter = True
         for _filter in p.snapshot_filters:
             name = _filter.name
             if name == snapshot_regex_filter_name:
-                snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
-                is_continuous_filter = False  # may exclude intermediate snapshots; they need to be remembered
+                snapshots = self.filter_snapshots_by_regex(snapshots, regexes=_filter.options)
             elif name == "include_snapshot_times":
                 snapshots = self.filter_snapshots_by_creation_time(
                     snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
                 )
             else:
                 assert name == "include_snapshot_times_and_ranks"
-                timerange, opts = _filter.timerange, _filter.options
-                snapshots, is_continuous = self.filter_snapshots_by_creation_time_and_rank(snapshots, timerange, opts)
-                is_continuous_filter = is_continuous_filter and is_continuous
-            if is_continuous_filter and getenv_bool("enable_continuous_filter_optimization", True):
-                basis_snapshots = snapshots
+                snapshots = self.filter_snapshots_by_creation_time_and_rank(
+                    snapshots, include_snapshot_times=_filter.timerange, include_snapshot_ranks=_filter.options
+                )
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
             is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
-        return snapshots, basis_snapshots
+        return snapshots
 
-    def filter_snapshots_by_regex(self, snapshots: List[str], _filter: Tuple[RegexList, RegexList]) -> List[str]:
+    def filter_snapshots_by_regex(self, snapshots: List[str], regexes: Tuple[RegexList, RegexList]) -> List[str]:
         """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
-        exclude_snapshot_regexes, include_snapshot_regexes = _filter
+        exclude_snapshot_regexes, include_snapshot_regexes = regexes
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
         results = []
         for snapshot in snapshots:
-            i = snapshot.find("#")  # bookmark separator
+            i = snapshot.find("@")  # snapshot separator
             if i < 0:
-                i = snapshot.index("@")  # snapshot separator
-            if is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
+                results.append(snapshot)  # retain bookmarks to help find common snaps, apply filter only to snapshots
+            elif is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
-                is_debug and log.debug("Including b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
+                is_debug and log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
             else:
-                is_debug and log.debug("Excluding b/c snapshot regex: %s", snapshot[1 + snapshot.find("\t", 0, i) :])
+                is_debug and log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_creation_time(
@@ -2274,28 +2270,26 @@ class Job:
         lo_booktime, hi_booktime = bookmark_time_range or (0, unixtime_infinity_secs)
         results = []
         for snapshot in snapshots:
-            creation_time = None
-            include = "@" in snapshot  # it's a true snapshot?
-            if not include:
+            creation_time = int(snapshot[0 : snapshot.index("\t")])
+            if "@" not in snapshot:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
-                creation_time = int(snapshot[0 : snapshot.index("\t")])
-                include = lo_booktime <= creation_time <= hi_booktime
-            if include:
-                creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
+                include = lo_booktime <= creation_time < hi_booktime
+            else:
                 include = lo_snaptime <= creation_time < hi_snaptime
+                if include:
+                    is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                else:
+                    is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
             if include:
                 results.append(snapshot)
-                is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-            else:
-                is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_creation_time_and_rank(
         self, snapshots: List[str], include_snapshot_times: UnixTimeRange, include_snapshot_ranks: List[RankRange]
-    ) -> Tuple[List[str], bool]:
+    ) -> List[str]:
 
         def get_idx(rank: Tuple[str, int, bool], n: int) -> int:
             kind, num, is_percent = rank
@@ -2307,7 +2301,6 @@ class Job:
         assert len(include_snapshot_ranks) > 0
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
-        is_continuous_filter = True
         lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
         for rank_range in include_snapshot_ranks:
@@ -2316,12 +2309,10 @@ class Job:
             hi = get_idx(hi_rank, n)
             lo, hi = (lo, hi) if lo <= hi else (hi, lo)
             i = 0
-            did_include, did_exclude = False, False
             results = []
             for snapshot in snapshots:
-                include = False
                 if "@" not in snapshot:
-                    include = True  # retain bookmarks, apply filter only to snapshots
+                    results.append(snapshot)  # retain bookmarks to help find common snaps, apply filter only to snaps
                 else:
                     msg = None
                     if lo <= i < hi:
@@ -2329,21 +2320,14 @@ class Job:
                     elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
                         msg = "Including b/c creation time: %s"
                     if msg:
-                        include = True
+                        results.append(snapshot)
                     else:
                         msg = "Excluding b/c snapshot rank: %s"
-                        if did_include:
-                            did_exclude = True
                     is_debug and log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
                     i += 1
-                if include:
-                    results.append(snapshot)
-                    if did_include and did_exclude:
-                        is_continuous_filter = False
-                    did_include = True
             snapshots = results
             n = hi - lo
-        return snapshots, is_continuous_filter
+        return snapshots
 
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
@@ -3814,9 +3798,7 @@ def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> Non
     better execution performance. The filter list is partitioned into sections such that sections are separated by
     --include-snapshot-ranks operators. Within each section, we move --include-snapshot-times operators before
     --include/exclude-snapshot-regex operators because the former involves fast integer comparisons and the latter
-    involves more expensive regex matching, and also because time ranges and rank ranges are continuous which means we
-    later don't need to remember as many snapshots in basis_src_snapshots_with_guids (see "is_continuous_filter"),
-    which helps to maintain a small memory footprint.
+    involves more expensive regex matching.
     Example: reorders --include-snapshot-regex .*daily --include-snapshot-times 2024-01-01..2024-04-01 into
     --include-snapshot-times 2024-01-01..2024-04-01 --include-snapshot-regex .*daily"""
 

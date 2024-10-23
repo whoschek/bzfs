@@ -523,6 +523,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     --include/exclude-snapshot-regex. The pipeline results would not
     always be the same if the order were reversed. Order matters.
 
+    *Note:* Bookmarks are always retained aka included in order to
+    help find common snapshots between source and destination.
+
 <!-- -->
 
 <div id="--exclude-snapshot-regex"></div>
@@ -596,6 +599,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     (optionally add the -p flag to display UTC Unix time in integer
     seconds).
 
+    *Note:* Bookmarks are always retained aka included in order to
+    help find common snapshots between source and destination.
+
     <b>*RANKRANGE:* </b>
 
     Specifies to include the N (or N%) oldest snapshots or latest
@@ -655,9 +661,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     daily snapshots, and 'latest 50%' will only include one of these
     two daily snapshots.
 
-    *Note:* Bookmarks are always retained aka included if a non-empty
-    rankrange is specified; Bookmarks do not count towards N or N% wrt.
-    rank.
+    *Note:* Bookmarks are always retained aka included in order to
+    help find common snapshots between source and destination. Bookmarks
+    do not count towards N or N% wrt. rank.
 
     *Note:* If a snapshot is excluded this decision is never
     reconsidered because exclude takes precedence over include.
