@@ -827,7 +827,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-times-or-ranks=60secs ago..2999-01-01",
+            "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertSnapshots(dst_root_dataset, 3, "s")
@@ -837,7 +837,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-times-or-ranks=2999-01-01..2999-01-01",
+            "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 0)
 
@@ -848,7 +848,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-times-or-ranks=60secs ago..2999-01-01",
+            "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
@@ -860,7 +860,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--no-use-bookmark",
-            "--include-snapshot-times-or-ranks=60secs ago..2999-01-01",
+            "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
@@ -869,7 +869,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-times-or-ranks",
+            "--include-snapshot-times-and-ranks",
             "0..0",
             "latest0%..latest100%",
         )
@@ -881,7 +881,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--include-snapshot-times-or-ranks",
+            "--include-snapshot-times-and-ranks",
             "0..0",
             "latest0%..latest0%",
         )
@@ -898,8 +898,8 @@ class LocalTestCase(BZFSTestCase):
             take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
 
         regex_filter = ["--include-snapshot-regex=.*d.*"]  # include dailies only
-        times_filter = ["--include-snapshot-times-or-ranks=2024-01-03..*"]
-        ranks_filter = ["--include-snapshot-times-or-ranks", "0..0", "oldest 1"]
+        times_filter = ["--include-snapshot-times-and-ranks=2024-01-03..*"]
+        ranks_filter = ["--include-snapshot-times-and-ranks", "0..0", "oldest 1"]
 
         dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(regex_filter, times_filter, ranks_filter)
@@ -928,7 +928,7 @@ class LocalTestCase(BZFSTestCase):
 
         regex_filter_daily = ["--include-snapshot-regex=.*d.*"]  # include dailies only
         regex_filter_test = ["--include-snapshot-regex=.*t.*"]
-        ranks_filter = ["--include-snapshot-times-or-ranks", "0..0", "oldest 1"]
+        ranks_filter = ["--include-snapshot-times-and-ranks", "0..0", "oldest 1"]
 
         dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(regex_filter_daily, ranks_filter, regex_filter_test)
@@ -944,8 +944,8 @@ class LocalTestCase(BZFSTestCase):
             take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
 
         regex_filter_daily = ["--include-snapshot-regex=.*d.*"]  # include dailies only
-        ranks_filter1 = ["--include-snapshot-times-or-ranks", "0..0", "oldest 1..oldest100%"]
-        ranks_filter2 = ["--include-snapshot-times-or-ranks", "0..0", "oldest 1"]
+        ranks_filter1 = ["--include-snapshot-times-and-ranks", "0..0", "oldest 1..oldest100%"]
+        ranks_filter2 = ["--include-snapshot-times-and-ranks", "0..0", "oldest 1"]
 
         dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(ranks_filter1, ranks_filter2, regex_filter_daily)
@@ -2490,7 +2490,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-missing-snapshots",
             "--delete-empty-datasets",
-            "--include-snapshot-times-or-ranks=60secs ago..2999-01-01",
+            "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
             **kwargs,
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2512,7 +2512,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-missing-snapshots",
             "--delete-empty-datasets",
-            "--include-snapshot-times-or-ranks=2999-01-01..2999-01-01",
+            "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
             **kwargs,
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")

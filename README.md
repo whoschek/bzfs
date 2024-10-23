@@ -296,8 +296,7 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--exclude-dataset-property STRING]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
-            [--include-snapshot-times TIMERANGE]
-            [--include-snapshot-ranks RANKRANGE [RANKRANGE ...]]
+            [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
             [--zfs-send-program-opts STRING] [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
             [--force-rollback-to-latest-snapshot] [--force] [--force-unmount]
@@ -533,9 +532,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <!-- -->
 
-<div id="--include-snapshot-times-or-ranks"></div>
+<div id="--include-snapshot-times-and-ranks"></div>
 
-**--include-snapshot-times-or-ranks** *TIMERANGE [RANKRANGE ...]*
+**--include-snapshot-times-and-ranks** *TIMERANGE [RANKRANGE ...]*
 
 *  This option takes as input parameters a time range filter and an
     optional rank range filter. It separately computes the results for

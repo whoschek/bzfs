@@ -873,65 +873,65 @@ class TestFileOrLiteralAction(unittest.TestCase):
 class TestTimeRangeAction(unittest.TestCase):
     def setUp(self):
         self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--time-or-duration", action=bzfs.TimeRangeOrRanksAction, nargs="+")
+        self.parser.add_argument("--time-and-ranks", action=bzfs.TimeRangeAndRankRangeAction, nargs="+")
 
     def parse_duration(self, arg):
-        return self.parser.parse_args(["--time-or-duration", arg + " ago..*"])
+        return self.parser.parse_args(["--time-and-ranks", arg + " ago..*"])
 
     def parse_timestamp(self, arg):
-        return self.parser.parse_args(["--time-or-duration", arg + "..*"])
+        return self.parser.parse_args(["--time-and-ranks", arg + "..*"])
 
     def test_parse_unix_time(self):  # Test Unix time in integer seconds
         args = self.parse_timestamp("1696510080")
-        self.assertEqual(args.time_or_duration[0][0], 1696510080)
+        self.assertEqual(args.time_and_ranks[0][0], 1696510080)
 
         args = self.parse_timestamp("0")
-        self.assertEqual(args.time_or_duration[0][0], 0)
+        self.assertEqual(args.time_and_ranks[0][0], 0)
 
     def test_valid_durations(self):
         args = self.parse_duration("5secs")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=5))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=5))
 
         args = self.parse_duration("5 seconds")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=5))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=5))
 
         args = self.parse_duration("30mins")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=1800))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=1800))
 
         args = self.parse_duration("30minutes")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=1800))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=1800))
 
         args = self.parse_duration("2hours")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=2 * 60 * 60))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=2 * 60 * 60))
 
         args = self.parse_duration("0days")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=0))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=0))
 
         args = self.parse_duration("10weeks")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=6048000))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=6048000))
 
         args = self.parse_duration("15secs")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=15))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=15))
 
         args = self.parse_duration("60mins")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=3600))
-        self.assertEqual(args.time_or_duration[0][0].total_seconds(), 3600)
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=3600))
+        self.assertEqual(args.time_and_ranks[0][0].total_seconds(), 3600)
 
         args = self.parse_duration("2hours")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=2 * 60 * 60))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=2 * 60 * 60))
 
         args = self.parse_duration("3days")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=259200))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=259200))
 
         args = self.parse_duration("2weeks")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=1209600))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=1209600))
 
         # Test with spaces
         args = self.parse_duration("  30mins")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=1800))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=1800))
 
         args = self.parse_duration("5secs")
-        self.assertEqual(args.time_or_duration[0][0], timedelta(seconds=5))
+        self.assertEqual(args.time_and_ranks[0][0], timedelta(seconds=5))
 
     def test_invalid_time_spec(self):
         with self.assertRaises(SystemExit):
@@ -959,22 +959,22 @@ class TestTimeRangeAction(unittest.TestCase):
             self.parse_timestamp("2024-10-35")  # Month does not have 35 days
 
         with self.assertRaises(SystemExit):
-            self.parser.parse_args(["--time-or-duration", "60_mins..*"])  # Missing 'ago'
+            self.parser.parse_args(["--time-and-ranks", "60_mins..*"])  # Missing 'ago'
 
         with self.assertRaises(SystemExit):
-            self.parser.parse_args(["--time-or-duration", "60_mins_ago"])  # Missing ..
+            self.parser.parse_args(["--time-and-ranks", "60_mins_ago"])  # Missing ..
 
     def test_parse_datetime(self):
         # Test ISO 8601 datetime strings without timezone
         args = self.parse_timestamp("2024-01-01")
-        self.assertEqual(args.time_or_duration[0][0], int(datetime.fromisoformat("2024-01-01").timestamp()))
+        self.assertEqual(args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-01-01").timestamp()))
 
         args = self.parse_timestamp("2024-12-31")
-        self.assertEqual(args.time_or_duration[0][0], int(datetime.fromisoformat("2024-12-31").timestamp()))
+        self.assertEqual(args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-12-31").timestamp()))
 
         args = self.parse_timestamp("2024-10-05T14:48:00")
-        self.assertEqual(args.time_or_duration[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00").timestamp()))
-        self.assertNotEqual(args.time_or_duration[0][0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
+        self.assertEqual(args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00").timestamp()))
+        self.assertNotEqual(args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
 
     def test_parse_datetime_with_timezone(self):
         if sys.version_info < (3, 11):
@@ -983,26 +983,26 @@ class TestTimeRangeAction(unittest.TestCase):
         # Test ISO 8601 datetime strings with timezone info
         args = self.parse_timestamp("2024-10-05T14:48:00+02")
         self.assertEqual(
-            args.time_or_duration[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp())
+            args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp())
         )
 
         args = self.parse_timestamp("2024-10-05T14:48:00+00:00")
         self.assertEqual(
-            args.time_or_duration[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+00:00").timestamp())
+            args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+00:00").timestamp())
         )
 
         args = self.parse_timestamp("2024-10-05T14:48:00-04:30")
         self.assertEqual(
-            args.time_or_duration[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00-04:30").timestamp())
+            args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00-04:30").timestamp())
         )
 
         args = self.parse_timestamp("2024-10-05T14:48:00+02:00")
         self.assertEqual(
-            args.time_or_duration[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp())
+            args.time_and_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp())
         )
 
     def test_get_include_snapshot_times(self):
-        times_or_ranks_opt = "--include-snapshot-times-or-ranks="
+        times_or_ranks_opt = "--include-snapshot-times-and-ranks="
 
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
@@ -1041,7 +1041,7 @@ class TestRankRangeAction(unittest.TestCase):
 
     def setUp(self):
         self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--ranks", nargs="+", action=bzfs.TimeRangeOrRanksAction)
+        self.parser.add_argument("--ranks", nargs="+", action=bzfs.TimeRangeAndRankRangeAction)
 
     def parse_args(self, arg):
         return self.parser.parse_args(["--ranks", "0..0", arg])
@@ -1090,15 +1090,15 @@ class TestRankRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse_args("oldest99%..latest100%")
 
-    def filter_snapshots_by_rank(self, snapshots, ranks, ranks2=[], timerange="0..1"):
-        results, _ = self.filter_snapshots_by_rank2(snapshots, ranks=ranks, ranks2=ranks2, timerange=timerange)
+    def filter_snapshots_by_rank(self, snapshots, ranks, timerange="0..1"):
+        results, _ = self.filter_snapshots_by_rank2(snapshots, ranks=[ranks], timerange=timerange)
         return results
 
     @staticmethod
-    def filter_snapshots_by_rank2(snapshots, ranks, ranks2=[], timerange="0..1"):
+    def filter_snapshots_by_rank2(snapshots, ranks=[], timerange="0..1"):
         args = bzfs.argument_parser().parse_args(
-            # args=["src", "dst", "--include-snapshot-times-or-ranks", "0..0", ranks, *ranks2, "--verbose"]
-            args=["src", "dst", "--include-snapshot-times-or-ranks", timerange, ranks, *ranks2, "--verbose"]
+            # args=["src", "dst", "--include-snapshot-times-and-ranks", "0..0", *ranks, "--verbose"]
+            args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"]
         )
         log_params = bzfs.LogParams(args)
         try:
@@ -1187,41 +1187,41 @@ class TestRankRangeAction(unittest.TestCase):
 
     def test_filter_snapshots_by_rank_with_chain(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
-        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "latest1..latest100%", ["latest1..latest100%"])
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["latest1..latest100%", "latest1..latest100%"])
         self.assertListEqual(["\td@0", "\td#1"], results)
         self.assertTrue(is_continuous)
 
-        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "latest1..latest100%", ["oldest1..oldest100%"])
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["latest1..latest100%", "oldest1..oldest100%"])
         self.assertListEqual(["\td#1", "\td@2"], results)
         self.assertTrue(is_continuous)
 
     def test_filter_snapshots_by_rank_with_times(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
-        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="0..1")
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="0..1")
         self.assertListEqual(["\td@0", "\td#1"], results)
         self.assertTrue(is_continuous)
 
-        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="0..11")
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="0..11")
         self.assertListEqual(lst1, results)
         self.assertTrue(is_continuous)
 
-        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="4..11")
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="4..11")
         self.assertListEqual(["\td@0", "\td#1", "\td@3"], results)
         self.assertFalse(is_continuous)
 
-        results, is_continuous = self.filter_snapshots_by_rank2(lst1, "oldest 1", timerange="3..11")
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="3..11")
         self.assertListEqual(lst1, results)
         self.assertTrue(is_continuous)
 
         results, is_continuous = self.filter_snapshots_by_rank2(
-            lst1, "oldest1..oldest2", ["latest 1"], timerange="4..11"
+            lst1, ["oldest1..oldest2", "latest 1"], timerange="4..11"
         )
         self.assertListEqual(["\td#1", "\td@2", "\td@3"], results)
         self.assertTrue(is_continuous)
 
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3", "d@4"]]
         results, is_continuous = self.filter_snapshots_by_rank2(
-            lst1, "oldest1..oldest2", ["latest 1"], timerange="5..11"
+            lst1, ["oldest1..oldest2", "latest 1"], timerange="5..11"
         )
         self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
         self.assertFalse(is_continuous)
@@ -1232,7 +1232,7 @@ class TestRankRangeAction(unittest.TestCase):
         return bzfs.Params(args).snapshot_filters
 
     def test_merge_adjacent_snapshot_regexes_and_filters0(self):
-        ranks = "--include-snapshot-times-or-ranks"
+        ranks = "--include-snapshot-times-and-ranks"
         cli = [ranks, "0..1", "oldest 50%", ranks, "0..0", "oldest 10%"]
         ranks_filter = self.get_snapshot_filters(cli)
         self.assertEqual((0, 1), ranks_filter[0].timerange)
@@ -1241,7 +1241,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertEqual([(("oldest", 0, False), ("oldest", 10, True))], ranks_filter[1].options)
 
     def test_merge_adjacent_snapshot_regexes_and_filters1(self):
-        ranks = "--include-snapshot-times-or-ranks"
+        ranks = "--include-snapshot-times-and-ranks"
         cli = [ranks, "0..0", "oldest 50%", ranks, "0..0", "oldest 10%"]
         ranks_filter = self.get_snapshot_filters(cli)[0]
         self.assertEqual((0, 0), ranks_filter.timerange)
@@ -1254,7 +1254,7 @@ class TestRankRangeAction(unittest.TestCase):
         )
 
     def test_merge_adjacent_snapshot_regexes_and_filters2(self):
-        ranks = "--include-snapshot-times-or-ranks"
+        ranks = "--include-snapshot-times-and-ranks"
         cli = [ranks, "0..0", "oldest 50%", ranks, "0..0", "oldest 10%", ranks, "0..0", "oldest 20%"]
         ranks_filter = self.get_snapshot_filters(cli)[0]
         self.assertEqual((0, 0), ranks_filter.timerange)
@@ -1270,7 +1270,7 @@ class TestRankRangeAction(unittest.TestCase):
     def test_merge_adjacent_snapshot_regexes_and_filters3(self):
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
-        times = "--include-snapshot-times-or-ranks"
+        times = "--include-snapshot-times-and-ranks"
         cli = [times, "*..*", times, "0..9", include, "f", include, "d", exclude, "w", include, "h", exclude, "m"]
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
@@ -1281,20 +1281,20 @@ class TestRankRangeAction(unittest.TestCase):
     def test_merge_adjacent_snapshot_regexes_doesnt_merge_across_groups(self):
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
-        ranks = "--include-snapshot-times-or-ranks"
+        ranks = "--include-snapshot-times-and-ranks"
         cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", ranks, "0..0", "oldest 5%", exclude, ".*m"]
         regex_filter1, ranks_filter, regex_filter2 = self.get_snapshot_filters(cli)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter1.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter1.options)
         self.assertEqual((0, 0), ranks_filter.timerange)
-        self.assertEqual("include_snapshot_times_or_ranks", ranks_filter.name)
+        self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 5, True)), ranks_filter.options[0])
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter2.name)
         self.assertEqual(([".*m"], []), regex_filter2.options)
 
     def test_reorder_snapshot_times_simple(self):
         include = "--include-snapshot-regex"
-        times = "--include-snapshot-times-or-ranks"
+        times = "--include-snapshot-times-and-ranks"
         cli = [include, ".*daily", times, "0..9"]
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
@@ -1305,15 +1305,15 @@ class TestRankRangeAction(unittest.TestCase):
     def test_reorder_snapshot_times_complex(self):
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
-        times = "--include-snapshot-times-or-ranks"
-        ranks = "--include-snapshot-times-or-ranks"
+        times = "--include-snapshot-times-and-ranks"
+        ranks = "--include-snapshot-times-and-ranks"
         cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", times, "0..9", ranks, "0..0", "oldest1"]
         times_filter, regex_filter, ranks_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
         self.assertEqual((0, 9), times_filter.timerange)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter.options)
-        self.assertEqual("include_snapshot_times_or_ranks", ranks_filter.name)
+        self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 1, False)), ranks_filter.options[0])
         self.assertEqual((0, 0), ranks_filter.timerange)
 

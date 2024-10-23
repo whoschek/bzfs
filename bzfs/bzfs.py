@@ -271,7 +271,7 @@ feature.
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
     parser.add_argument(
-        "--include-snapshot-times-or-ranks", action=TimeRangeOrRanksAction, nargs="+", default=[],
+        "--include-snapshot-times-and-ranks", action=TimeRangeAndRankRangeAction, nargs="+", default=[],
         metavar=("TIMERANGE", "RANKRANGE"),
         help="This option takes as input parameters a time range filter and an optional rank range filter. It "
              "separately computes the results for each filter and returns aka includes the UNION of both results. "
@@ -2243,7 +2243,7 @@ class Job:
                     snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
                 )
             else:
-                assert name == "include_snapshot_times_or_ranks"
+                assert name == "include_snapshot_times_and_ranks"
                 timerange, opts = _filter.timerange, _filter.options
                 assert timerange
                 snapshots, is_continuous = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
@@ -3620,7 +3620,7 @@ class FileOrLiteralAction(argparse.Action):
 
 
 #############################################################################
-class TimeRangeOrRanksAction(argparse.Action):
+class TimeRangeAndRankRangeAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         def parse_time(time_spec):
             time_spec = time_spec.strip()
@@ -3830,7 +3830,7 @@ def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> Non
     j = i
     while i >= 0:
         name = snapshot_filters[i].name
-        if name == "include_snapshot_times_or_ranks":
+        if name == "include_snapshot_times_and_ranks":
             reorder_time_filters_within_section(i, j)
             j = i - 1
         i -= 1
