@@ -33,7 +33,7 @@ from collections import Counter
 from unittest.mock import patch
 
 from bzfs import bzfs
-from bzfs.bzfs import die_status
+from bzfs.bzfs import die_status, getenv_any, getenv_bool
 from tests.test_units import TestIncrementalSendSteps, find_match, stop_on_failure_subtest
 from tests.zfs_util import (
     bookmark_name,
@@ -77,14 +77,6 @@ keylocation = f"file://{zfs_encryption_key}"
 
 rng = random.Random(12345)
 has_netcat_prog = shutil.which("nc") is not None
-
-
-def getenv_any(key, default=None):
-    return os.getenv(bzfs.env_var_prefix + key, default)
-
-
-def getenv_bool(key, default=False):
-    return getenv_any(key, str(default).lower()).strip().lower() == "true"
 
 
 ssh_program = getenv_any("test_ssh_program", "ssh")  # also works with "hpnssh"

@@ -955,7 +955,7 @@ class Params:
 
         self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
-        self.reuse_ssh_connection: bool = self.getenv_bool("reuse_ssh_connection", True)
+        self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -975,7 +975,7 @@ class Params:
         self.zpool_program: str = self.program_name(args.zpool_program)
 
         # no point creating complex shell pipeline commands for tiny data transfers:
-        self.min_pipe_transfer_size: int = int(self.getenv("min_pipe_transfer_size", 1024 * 1024))
+        self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
 
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
@@ -998,13 +998,6 @@ class Params:
         self.zfs_recv_ox_names: Set[str] = set()
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
-
-    def getenv(self, key: str, default=None) -> str:
-        """All shell environment variable names used for configuration start with this prefix."""
-        return os.getenv(env_var_prefix + key, default)
-
-    def getenv_bool(self, key: str, default: bool = False) -> bool:
-        return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
         """Splits option string on runs of one or more whitespace into an option list."""
@@ -2248,7 +2241,7 @@ class Job:
                 assert timerange
                 snapshots, is_continuous = self.filter_snapshots_by_creation_time_or_rank(snapshots, timerange, opts)
                 is_continuous_filter = is_continuous_filter and is_continuous
-            if is_continuous_filter:
+            if is_continuous_filter and getenv_bool("enable_continuous_filter_optimization", True):
                 basis_snapshots = snapshots
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
@@ -2537,7 +2530,7 @@ class Job:
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str]
     ) -> List[Tuple[str, str, str]]:
         force_convert_I_to_i = False
-        if self.params.src.use_zfs_delegation and not self.params.getenv_bool("no_force_convert_I_to_i", False):
+        if self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", False):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
@@ -3131,6 +3124,15 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
             regex = f"{regex[0:i]}(?:{regex[i + 1:]}"
         i -= 1
     return regex
+
+
+def getenv_any(key: str, default=None) -> str:
+    """All shell environment variable names used for configuration start with this prefix."""
+    return os.getenv(env_var_prefix + key, default)
+
+
+def getenv_bool(key: str, default: bool = False) -> bool:
+    return getenv_any(key, str(default).lower()).strip().lower() == "true"
 
 
 def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
