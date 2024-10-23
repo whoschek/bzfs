@@ -3720,7 +3720,7 @@ class TimeRangeOrRanksAction(argparse.Action):
 
     @staticmethod
     def parse_rankranges(parser, values, option_string=None):
-        def parse_spec(spec):
+        def parse_rank(spec):
             spec = spec.strip()
             match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
             if not match:
@@ -3732,21 +3732,21 @@ class TimeRangeOrRanksAction(argparse.Action):
                 parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
             return kind, num, is_percent
 
-        extra_values = []
+        rankranges = []
         for value in values:
             value = value.strip()
             if ".." in value:
                 lo, hi = value.split("..", 1)
-                lo, hi = [parse_spec(spec) for spec in [lo, hi]]
+                lo, hi = [parse_rank(spec) for spec in [lo, hi]]
                 if lo[0] != hi[0]:
                     # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
                     # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
                     parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
             else:
-                hi = parse_spec(value)
-                lo = parse_spec(hi[0] + "0")
-            extra_values.append((lo, hi))
-        return extra_values
+                hi = parse_rank(value)
+                lo = parse_rank(hi[0] + "0")
+            rankranges.append((lo, hi))
+        return rankranges
 
 
 #############################################################################
