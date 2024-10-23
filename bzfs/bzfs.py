@@ -472,7 +472,8 @@ feature.
              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
              "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n")
     parser.add_argument(
-        "--delete-missing-snapshots", action="store_true",
+        "--delete-missing-snapshots", choices=["snapshot", "bookmark"], default=None, const="snapshot",
+        nargs="?",
         help="After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
              "destination snapshots that do not exist within the source dataset (which can be an empty dummy "
              "dataset!) if they are included by the --include/exclude-snapshot-* policy, and the destination dataset "
@@ -486,7 +487,8 @@ feature.
              "the --skip-replication flag plus a source that is a temporary empty dummy dataset, created like so: "
              "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n")
     parser.add_argument(
-        "--delete-empty-datasets", action="store_true",
+        "--delete-empty-datasets", choices=["snapshot", "snapshot+bookmark"], default=None,
+        const="snapshot+bookmark", nargs="?",
         help="After successful replication step and successful --delete-missing-datasets and successful "
              "--delete-missing-snapshots steps, if any, delete any included destination dataset that has no snapshot "
              "if all descendants of that destination dataset do not have a snapshot either (again, only if the "
@@ -803,14 +805,13 @@ feature.
                           "its corresponding destination dataset. The 'zfs-recv-o' group of parameters is applied "
                           "before the 'zfs-recv-x' group."))
         target_choices_items = ["full", "incremental"]
-        target_choices_default = ",".join(target_choices_items)
-        target_choices = target_choices_items + [",".join(target_choices_items)]
-        metavar = "{" + "|".join(target_choices_items + [",".join(target_choices_items)]) + "}"
+        target_choices_default = "+".join(target_choices_items)
+        target_choices = target_choices_items + [target_choices_default]
         qq = "'"
         argument_group.add_argument(
-            f"--{grup}-targets", choices=target_choices, default=target_choices_default, metavar=metavar,
+            f"--{grup}-targets", choices=target_choices, default=target_choices_default,
             help=h(f"The zfs send phase or phases during which the extra {flag} options are passed to 'zfs receive'. "
-                   "This is a comma-separated list (no spaces) containing one or more of the following choices: "
+                   "This is a plus-separated list (no spaces) containing one of the following choices: "
                    f"{', '.join([f'{qq}{x}{qq}' for x in target_choices_items])}. "
                    f"Default is '{target_choices_default}'. "
                    "A 'full' send is sometimes also known as an 'initial' send.\n\n"))
@@ -950,9 +951,13 @@ class Params:
         self.skip_on_error: str = args.skip_on_error
         self.retry_policy: RetryPolicy = RetryPolicy(args, self)
         self.skip_replication: bool = args.skip_replication
-        self.delete_missing_snapshots: bool = args.delete_missing_snapshots
+        self.delete_missing_snapshots: bool = args.delete_missing_snapshots is not None
+        self.delete_missing_bookmarks: bool = args.delete_missing_snapshots == "bookmark"
         self.delete_missing_datasets: bool = args.delete_missing_datasets
-        self.delete_empty_datasets: bool = args.delete_empty_datasets
+        self.delete_empty_datasets: bool = args.delete_empty_datasets is not None
+        self.delete_empty_datasets_if_no_bookmarks_and_no_snapshots: bool = (
+            args.delete_empty_datasets == "snapshot+bookmark"
+        )
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.create_bookmark: bool = not args.no_create_bookmark
@@ -1475,16 +1480,20 @@ class Job:
             for dst_dataset in dst_datasets:
                 filter_needs_creation_time = any(f.timerange is not None for f in p.snapshot_filters)
                 props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+                stype = "bookmark" if p.delete_missing_bookmarks else "snapshot"
+                cmd = p.split_args(f"{p.zfs_program} list -t {stype} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
-                k = len(dst_snapshots_with_guids)
+                k = 0 if p.delete_empty_datasets_if_no_bookmarks_and_no_snapshots else len(dst_snapshots_with_guids)
+                if p.delete_missing_bookmarks:
+                    replace_in_lines(dst_snapshots_with_guids, "#", "@")
                 dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
+                if p.delete_missing_bookmarks:
+                    replace_in_lines(dst_snapshots_with_guids, "@", "#")
                 if filter_needs_creation_time:
                     dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
-
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in basis_src_datasets:
-                    cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o guid,name", src_dataset)
+                    cmd = p.split_args(f"{p.zfs_program} list -t {stype} -d 1 -s name -Hp -o guid,name", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
                         set(cut(1, lines=src_snapshots_with_guids))
@@ -1492,8 +1501,12 @@ class Job:
                     missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
                 else:
                     missing_snapshot_tags = dst_snapshots_with_guids
-                missing_snapshot_tags = cut(2, separator="@", lines=missing_snapshot_tags)
-                self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                separator = "#" if p.delete_missing_bookmarks else "@"
+                missing_snapshot_tags = cut(2, separator=separator, lines=missing_snapshot_tags)
+                if p.delete_missing_bookmarks:
+                    self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                else:
+                    self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
                 if p.delete_empty_datasets and k > len(missing_snapshot_tags):
                     dst_datasets_having_snapshots.add(dst_dataset)
 
@@ -1524,12 +1537,16 @@ class Job:
                 skip_dst_dataset = dst_dataset
                 descendants[skip_dst_dataset].append(dst_dataset)
 
-            if not p.delete_missing_snapshots:
+            if p.delete_empty_datasets_if_no_bookmarks_and_no_snapshots or not p.delete_missing_snapshots:
                 # Within all subtrees, find all datasets that have at least one snapshot
-                cmd = p.split_args(f"{p.zfs_program} list -t snapshot -r -s name -Hp -o name")
+                dst_datasets_having_snapshots = set()
+                btype = "bookmark,snapshot" if p.delete_empty_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
+                cmd = p.split_args(f"{p.zfs_program} list -t {btype} -r -s name -Hp -o name")
 
                 def flush_batch(batch: List[str]) -> None:
                     datasets_having_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
+                    if p.delete_empty_datasets_if_no_bookmarks_and_no_snapshots:
+                        replace_in_lines(datasets_having_snapshots, "#", "@")
                     datasets_having_snapshots = set(cut(1, "@", datasets_having_snapshots))
                     dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
 
@@ -2353,6 +2370,16 @@ class Job:
                 results.append(line)
         return results
 
+    def delete_bookmarks(self, remote: Remote, dataset: str, snapshot_tags: List[str] = []) -> None:
+        if len(snapshot_tags) == 0:
+            return
+        p, log = self.params, self.params.log
+        log.info(p.dry("Deleting bookmarks(s): %s"), snapshot_tags)
+        for snapshot_tag in snapshot_tags:
+            log.info(p.dry("Deleting bookmarks: %s"), snapshot_tag)
+            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy", f"{dataset}#{snapshot_tag}")
+            self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str] = []) -> None:
         if len(snapshot_tags) == 0:
             return
@@ -3055,6 +3082,11 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
 def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
     """In a string s, replaces a leading old_prefix string with new_prefix. Assumes the leading string is present."""
     return new_prefix + s[len(old_prefix) :]
+
+
+def replace_in_lines(lines: List[str], old: str, new: str) -> None:
+    for i in range(len(lines)):
+        lines[i] = lines[i].replace(old, new)
 
 
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
