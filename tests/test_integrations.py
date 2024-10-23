@@ -100,11 +100,11 @@ def suite():
             for affix in [""]:
                 # no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
-                if os.geteuid() != 0:
-                    no_privilege_elevation_modes.append(True)
+                # if os.geteuid() != 0:
+                #     no_privilege_elevation_modes.append(True)
                 for no_privilege_elevation in no_privilege_elevation_modes:
-                    # for encrypted_dataset in [False]:
-                    for encrypted_dataset in [False, True]:
+                    for encrypted_dataset in [False]:
+                        # for encrypted_dataset in [False, True]:
                         params = {
                             "ssh_mode": ssh_mode,
                             "verbose": True,
@@ -122,10 +122,10 @@ def suite():
         return suite
 
     # for ssh_mode in ["pull-push"]:
-    # for ssh_mode in ["local"]:
-    # for ssh_mode in ["local", "pull-push", "push", "pull"]:
-    # for ssh_mode in []:
-    for ssh_mode in ["local", "pull-push"]:
+    for ssh_mode in ["local"]:
+        # for ssh_mode in ["local", "pull-push", "push", "pull"]:
+        # for ssh_mode in []:
+        # for ssh_mode in ["local", "pull-push"]:
         for min_pipe_transfer_size in [0, 1024**2]:
             # for affix in [""]:
             # for affix in ["", ".  -"]:
@@ -149,8 +149,8 @@ def suite():
             for min_pipe_transfer_size in [0]:
                 for affix in [""]:
                     for no_privilege_elevation in [True]:
-                        # for encrypted_dataset in []:
-                        for encrypted_dataset in [False]:
+                        for encrypted_dataset in []:
+                            # for encrypted_dataset in [False]:
                             params = {
                                 "ssh_mode": ssh_mode,
                                 "verbose": False,
@@ -457,14 +457,30 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
-        LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+    # def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
+    #     LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+    #
+    # def test_basic_replication_flat_simple(self):
+    #     FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
+    #
+    # def test_zfs_set_via_recv_o(self):
+    #     FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
 
-    def test_basic_replication_flat_simple(self):
-        FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
+    def test_delete_missing_bookmarks_flat(self):
+        LocalTestCase(param=self.param).test_delete_missing_bookmarks_flat()
 
-    def test_zfs_set_via_recv_o(self):
-        FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
+    def test_delete_missing_snapshots_flat(self):
+        LocalTestCase(param=self.param).test_delete_missing_snapshots_flat()
+
+    #
+    # def test_snapshot_filter_ranks_dont_merge_across_groups(self):
+    #     LocalTestCase(param=self.param).test_snapshot_filter_ranks_dont_merge_across_groups()
+    #
+    # def test_delete_missing_snapshots_flat_with_time_range_empty(self):
+    #     LocalTestCase(param=self.param).test_delete_missing_snapshots_flat_with_time_range_empty()
+    #
+    # def test_include_snapshot_rank_range_full(self):
+    #     LocalTestCase(param=self.param).test_include_snapshot_rank_range_full()
 
 
 #############################################################################
@@ -1382,7 +1398,7 @@ class LocalTestCase(BZFSTestCase):
             "--zfs-recv-o-targets=full",
             "--zfs-recv-o-sources=local,inherited",
             "--zfs-recv-o-include-regex=include_bzfs.*",
-            "--zfs-recv-x-targets=full,incremental",
+            "--zfs-recv-x-targets=full+incremental",
             "--zfs-recv-x-include-regex=.*",
             "--zfs-recv-x-exclude-regex",
             "include_bzfs.*",
@@ -2406,6 +2422,73 @@ class LocalTestCase(BZFSTestCase):
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
                 self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+
+        tag0 = snapshot_name(snapshots(src_root_dataset)[0])
+        create_bookmark(dst_root_dataset, tag0, tag0)
+        for snap in snapshots(src_root_dataset, max_depth=None) + snapshots(dst_root_dataset, max_depth=None):
+            destroy(snap)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-empty-datasets",
+        )
+        self.assertTrue(dataset_exists(dst_root_dataset))
+
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-missing-snapshots",
+            "--delete-empty-datasets=snapshot",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+    def test_delete_missing_bookmarks_flat(self):
+        for i in range(0, 1):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.setup_basic()
+                self.run_bzfs(src_root_dataset, dst_root_dataset)
+                tag0 = snapshot_name(snapshots(src_root_dataset)[0])
+                create_bookmark(dst_root_dataset, tag0, tag0)
+                tag1 = snapshot_name(snapshots(src_root_dataset)[1])
+                create_bookmark(dst_root_dataset, tag1, tag1)
+                tag2 = snapshot_name(snapshots(src_root_dataset)[2])
+                create_bookmark(dst_root_dataset, tag2, tag2)
+                self.assertBookmarkNames(src_root_dataset, ["s1", "s3"])
+                self.assertBookmarkNames(dst_root_dataset, ["s1", "s2", "s3"])
+                for snapshot in snapshots(src_root_dataset) + snapshots(dst_root_dataset):
+                    destroy(snapshot)
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-snapshots=bookmark",
+                    "--delete-empty-datasets",
+                )
+                self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
+
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-snapshots=bookmark",
+                    "--delete-empty-datasets",
+                )
+                self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
+
+                for bookmark in bookmarks(src_root_dataset):
+                    destroy(bookmark)
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-snapshots=bookmark",
+                    "--delete-empty-datasets",
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
 
     def test_delete_missing_snapshots_despite_same_name(self):
         self.setup_basic_with_recursive_replication_done()

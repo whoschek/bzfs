@@ -138,8 +138,8 @@ def take_snapshot(dataset, snapshot_tag, recursive=False, props=[]):
     return snapshot
 
 
-def snapshots(dataset):
-    return zfs_list([dataset], types=["snapshot"], max_depth=1)
+def snapshots(dataset, max_depth=1):
+    return zfs_list([dataset], types=["snapshot"], max_depth=max_depth)
 
 
 def create_bookmark(dataset, snapshot_tag, bookmark_tag):
@@ -149,8 +149,8 @@ def create_bookmark(dataset, snapshot_tag, bookmark_tag):
     return bookmark
 
 
-def bookmarks(dataset):
-    return zfs_list([dataset], types=["bookmark"], max_depth=1)
+def bookmarks(dataset, max_depth=1):
+    return zfs_list([dataset], types=["bookmark"], max_depth=max_depth)
 
 
 def snapshot_name(snapshot):
