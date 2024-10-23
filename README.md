@@ -924,9 +924,11 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     h1,h2,h3 then only delete snapshots h1,h2 on the destination dataset
     to make it 'the same'.
 
-    *Note:* To delete snapshots regardless, consider using as source a
-    temporary empty dummy dataset, created like so: dd if=/dev/zero
-    of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy
+    *Note:* To delete snapshots regardless, consider using
+    --delete-missing-snapshots in combination with the
+    --skip-replication flag plus a source that is a temporary empty
+    dummy dataset, created like so: dd if=/dev/zero of=/tmp/dummy bs=1M
+    count=100; zpool create dummy /tmp/dummy
 
 <!-- -->
 

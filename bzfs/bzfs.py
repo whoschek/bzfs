@@ -482,8 +482,8 @@ feature.
              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
-             "*Note:* To delete snapshots regardless, consider using as source a temporary empty dummy dataset, "
-             "created like so: "
+             "*Note:* To delete snapshots regardless, consider using --delete-missing-snapshots in combination with "
+             "the --skip-replication flag plus a source that is a temporary empty dummy dataset, created like so: "
              "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n")
     parser.add_argument(
         "--delete-empty-datasets", action="store_true",
@@ -1450,7 +1450,7 @@ class Job:
 
         if failed or not (p.delete_missing_datasets or p.delete_missing_snapshots or p.delete_empty_datasets):
             return
-        log.info(p.dry("Prepare --delete-missing-*: %s"), task_description)
+        log.info(p.dry("Preparing --delete-missing-*: %s"), task_description)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
         basis_dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
@@ -1467,7 +1467,7 @@ class Job:
             dst_datasets = isorted(dst_datasets.difference(to_delete))
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
-        # are included by the --{include/exclude}-snapshot-* policy, and the destination dataset is included
+        # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
         # via --{include|exclude}-dataset* policy.
         dst_datasets_having_snapshots = set()
         if p.delete_missing_snapshots:
@@ -1588,8 +1588,11 @@ class Job:
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
         src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
 
-        # ignore irrelevant bookmarks and snapshots wrt. ZFS creation time
         if use_bookmark:
+            # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
+            # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
+            # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
+            # accumulate over time without periodic pruning.
             src_snapshots_and_bookmarks = self.filter_snapshots_by_creation_time(
                 src_snapshots_and_bookmarks,
                 include_snapshot_times=None,
@@ -2225,6 +2228,7 @@ class Job:
         return results
 
     def filter_snapshots(self, snapshots: List[str]) -> List[str]:
+        """Returns all snapshots that pass all include/exclude policies."""
         p, log = self.params, self.params.log
         for _filter in p.snapshot_filters:
             name = _filter.name
@@ -2272,10 +2276,6 @@ class Job:
         for snapshot in snapshots:
             creation_time = int(snapshot[0 : snapshot.index("\t")])
             if "@" not in snapshot:
-                # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
-                # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
-                # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
-                # accumulate over time without periodic pruning.
                 include = lo_booktime <= creation_time < hi_booktime
             else:
                 include = lo_snaptime <= creation_time < hi_snaptime
@@ -3634,6 +3634,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
             add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", timerange, None))
         else:
+            assert timerange is not None
             add_snapshot_filter(namespace, SnapshotFilter(self.dest, timerange, rankranges))
 
     @staticmethod
@@ -3729,8 +3730,8 @@ def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> N
     """Merges filter operators of the same kind if they are next to each other and carry an option list, for example
     --include-snapshot-ranks and --include-snapshot-regex and --exclude-snapshot-regex.  This improves execution perf
     and makes handling easier in later stages.
-    Example: merges --include-snapshot-ranks oldest10% --include-snapshot-rank latest20%
-    into --include-snapshot-ranks oldest10% latest20%"""
+    Example: merges --include-snapshot-times-and-ranks 0..99 oldest10% --include-snapshot-times-and-ranks 0..99 latest20%
+    into --include-snapshot-times-and-ranks 0..99 oldest10% latest20%"""
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i = snapshot_filters[i]
@@ -3793,14 +3794,15 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: List[SnapshotFilter]) -> N
 
 
 def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> None:
-    """In an execution plan that contains filter operators based on sort order (the --include-snapshot-ranks operator),
-    filters cannot freely be reordered without violating correctness, but they can still be partially reordered for
-    better execution performance. The filter list is partitioned into sections such that sections are separated by
-    --include-snapshot-ranks operators. Within each section, we move --include-snapshot-times operators before
-    --include/exclude-snapshot-regex operators because the former involves fast integer comparisons and the latter
-    involves more expensive regex matching.
-    Example: reorders --include-snapshot-regex .*daily --include-snapshot-times 2024-01-01..2024-04-01 into
-    --include-snapshot-times 2024-01-01..2024-04-01 --include-snapshot-regex .*daily"""
+    """In an execution plan that contains filter operators based on sort order (the --include-snapshot-times-and-ranks
+    operator with non-empty ranks), filters cannot freely be reordered without violating correctness, but they can
+    still be partially reordered for better execution performance. The filter list is partitioned into sections such
+    that sections are separated by --include-snapshot-times-and-ranks operators with non-empty ranks. Within each
+    section, we move include_snapshot_times operators aka --include-snapshot-times-and-ranks operators with empty ranks
+    before --include/exclude-snapshot-regex operators because the former involves fast integer comparisons and the
+    latter involves more expensive regex matching.
+    Example: reorders --include-snapshot-regex .*daily --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 into
+    --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 --include-snapshot-regex .*daily"""
 
     def reorder_time_filters_within_section(i: int, j: int):
         while j > i:
