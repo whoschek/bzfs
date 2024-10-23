@@ -3676,7 +3676,7 @@ class TimeRangeOrRanksAction(argparse.Action):
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
         timerange = [parse_time(time_spec) for time_spec in value.split("..", 1)]
         rankranges = self.parse_rankranges(parser, values[1:], option_string=option_string)
-        setattr(namespace, self.dest, [timerange] + rankranges)
+        setattr(namespace, self.dest, [timerange] + rankranges)  # for testing only
         timerange = self.get_include_snapshot_times(timerange)
         if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
             add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", timerange, None))
