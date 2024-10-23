@@ -2351,40 +2351,6 @@ class Job:
             n = hi - lo
         return snapshots, is_continuous_filter
 
-    # TODO: this shall become obsolete
-    def filter_snapshots_by_rank(self, snapshots: List[str], include_snapshot_ranks: List[RankRange]) -> List[str]:
-
-        def get_idx(rank: Tuple[str, int, bool], n: int) -> int:
-            kind, num, is_percent = rank
-            m = round(n * num / 100) if is_percent else min(n, num)
-            assert kind == "latest" or kind == "oldest"
-            return m if kind == "oldest" else n - m
-
-        assert False
-        p, log = self.params, self.params.log
-        is_debug = log.isEnabledFor(log_debug)
-        n = sum(1 for snapshot in snapshots if "@" in snapshot)
-        for rank_range in include_snapshot_ranks:
-            lo_rank, hi_rank = rank_range
-            lo = get_idx(lo_rank, n)
-            hi = get_idx(hi_rank, n)
-            lo, hi = (lo, hi) if lo <= hi else (hi, lo)
-            i = 0
-            results = []
-            for snapshot in snapshots:
-                if "@" not in snapshot:
-                    results.append(snapshot)  # retain bookmarks, apply filter only to snapshots
-                else:
-                    if lo <= i < hi:
-                        results.append(snapshot)
-                        is_debug and log.debug("Including b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
-                    else:
-                        is_debug and log.debug("Excluding b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
-                    i += 1
-            snapshots = results
-            n = hi - lo
-        return snapshots
-
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
         p, log = self.params, self.params.log
