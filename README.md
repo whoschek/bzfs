@@ -186,6 +186,11 @@ to a local destination.
 older (or newer) than 12 weeks.
     * For example, can replicate (or delete) all daily snapshots except the latest (or oldest) 90 daily snapshots,
 and all weekly snapshots except the latest (or oldest) 12 weekly snapshots.
+    * For example, can replicate (or delete) all daily snapshots that were created in the last 7 days, and at the
+same time make sure that at least the oldest 7 daily snapshots are included, regardless of whether they were
+created within the last 7 days or not. This helps to safely cope with irregular scenarios where no snapshots were
+created or received within the last 7 days, or where more than 7 daily snapshots were created within the last 7 days.
+It can also help to avoid accidental pruning of the last snapshot that source and destination have in common.
     * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
 * Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
 * Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
@@ -541,12 +546,12 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     whether they were created within the last 7 days or not. This helps
     to safely cope with irregular scenarios where no snapshots were
     created or received within the last 7 days, or where more than 7
-    daily snapshots were created within the last 7 days. It also helps
-    to avoid accidental pruning of the last snapshot that source and
-    destination have in common. To instead use a pure rank range filter
-    (no UNION), or a pure time range filter (no UNION), simply use
-    '0..0' to indicate an empty time range, or omit the rank range,
-    respectively.
+    daily snapshots were created within the last 7 days. It can also
+    help to avoid accidental pruning of the last snapshot that source
+    and destination have in common. To instead use a pure rank range
+    filter (no UNION), or a pure time range filter (no UNION), simply
+    use '0..0' to indicate an empty time range, or omit the rank
+    range, respectively.
 
     <b>*TIMERANGE:* </b>
 

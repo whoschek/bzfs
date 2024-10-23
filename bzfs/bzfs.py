@@ -25,6 +25,7 @@
 * Control flow starts in main(), far below ..., which kicks off a "Job".
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
 * The core replication algorithm is in run_task() and especially in replicate_dataset().
+* The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.py.
 Simply run that script whenever you change or add ArgumentParser help text.
 """
@@ -278,8 +279,8 @@ feature.
              "and at the same time make sure that at least the oldest 7 daily snapshots are included, regardless "
              "of whether they were created within the last 7 days or not. This helps to safely cope with irregular "
              "scenarios where no snapshots were created or received within the last 7 days, or where more than 7 "
-             "daily snapshots were created within the last 7 days. It also helps to avoid accidental pruning of the "
-             "last snapshot that source and destination have in common. "
+             "daily snapshots were created within the last 7 days. It can also help to avoid accidental pruning of "
+             "the last snapshot that source and destination have in common. "
              "To instead use a pure rank range filter (no UNION), or a pure time range filter (no UNION), simply "
              "use '0..0' to indicate an empty time range, or omit the rank range, respectively.\n\n"
              ""
