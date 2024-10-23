@@ -25,6 +25,7 @@
 * Control flow starts in main(), far below ..., which kicks off a "Job".
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
 * The core replication algorithm is in run_task() and especially in replicate_dataset().
+* The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.py.
 Simply run that script whenever you change or add ArgumentParser help text.
 """
@@ -54,7 +55,7 @@ import time
 import uuid
 from collections import defaultdict, Counter
 from contextlib import redirect_stderr
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging import Logger
 from pathlib import Path
@@ -76,6 +77,7 @@ zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
 snapshot_regex_filter_name = "snapshot_regex"
 snapshot_filters_var = "snapshot_filters_var"
+unixtime_infinity_secs = 1000000000000  # 33658-09-27 ~ infinity
 log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
@@ -169,7 +171,7 @@ feature.
 
 * Example with further options:
 
-`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' ssh-dst-private-key /root/.ssh/id_rsa`
+`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' ssh-dst-private-key /root/.ssh/id_rsa`
 """, formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
@@ -269,33 +271,47 @@ feature.
         help="Same syntax as --include-snapshot-regex (see above) except that the default is to exclude no "
              "snapshots.\n\n")
     parser.add_argument(
-        "--include-snapshot-times", action=TimeRangeAction, default=None, metavar="TIMERANGE",
-        help="The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
-             "snapshot to be included (default: `*..*` aka all times). The time range consists of a 'start' time, "
-             "followed by a '..' separator, followed by an 'end' time. For example '2024-01-01..2024-04-01'. Only "
-             "snapshots (and bookmarks) in the half-closed time range [start, end) are included; other snapshots "
+        "--include-snapshot-times-and-ranks", action=TimeRangeAndRankRangeAction, nargs="+", default=[],
+        metavar=("TIMERANGE", "RANKRANGE"),
+        help="This option takes as input parameters a time range filter and an optional rank range filter. It "
+             "separately computes the results for each filter and returns aka includes the UNION of both results. "
+             "For example, you can specify to include all daily snapshots that were created in the last 7 days, "
+             "and at the same time make sure that at least the oldest 7 daily snapshots are included, regardless "
+             "of whether they were created within the last 7 days or not, like so:"
+             "`--include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`. "
+             "This helps to safely cope with irregular scenarios where no snapshots were created or received within "
+             "the last 7 days, or where more than 7 daily snapshots were created within the last 7 days. It can also "
+             "help to avoid accidental pruning of the last snapshot that source and destination have in common. "
+             "To instead use a pure rank range filter (no UNION), or a pure time range filter (no UNION), simply "
+             "use '0..0' to indicate an empty time range, or omit the rank range, respectively.\n\n"
+             ""
+             "<b>*TIMERANGE:* </b>\n\n"
+             "The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
+             "snapshot to be included. The time range consists of a 'start' time, followed by a '..' separator, "
+             "followed by an 'end' time. For example '2024-01-01..2024-04-01' or `*..*` aka all times. Only "
+             "snapshots (and bookmarks) in the half-open time range [start, end) are included; other snapshots "
              "(and bookmarks) are excluded. If a snapshot is excluded this decision is never reconsidered because "
              "exclude takes precedence over include. Each of the two specified times can take any of the following "
              "forms:\n\n"
-             "a) a `*` wildcard character representing negative or positive infinity.\n\n"
-             "b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
-             "c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
+             "* a) a `*` wildcard character representing negative or positive infinity.\n\n"
+             "* b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
+             "* c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
              "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
              "requires Python >= 3.11.\n\n"
-             "d) a duration that indicates how long ago from the current time, using the following syntax: "
+             "* d) a duration that indicates how long ago from the current time, using the following syntax: "
              "a non-negative integer, followed by an optional space, followed by a duration unit that is "
              "*one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days', 'weeks', "
              "followed by an optional space, followed by the word 'ago'. "
              "Examples: '0secs ago', '90 mins ago', '48hours ago', '90days ago', '12weeksago'.\n\n"
-             "*Note:* This option compares the specified time against the standard ZFS 'creation' time property of the "
+             "* Note: This option compares the specified time against the standard ZFS 'creation' time property of the "
              "snapshot (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be "
              "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
              "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
-             "the -p flag to display UTC Unix time in integer seconds).\n\n")
-    parser.add_argument(
-        "--include-snapshot-ranks", action=RankRangeAction, nargs="+", default=[], metavar="RANKRANGE",
-        help="Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
-             "snapshots (default: include all snapshots). Snapshots are sorted by creation time (actually, by the "
+             "the -p flag to display UTC Unix time in integer seconds).\n\n"
+             ""
+             "<b>*RANKRANGE:* </b>\n\n"
+             "Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
+             "snapshots (default: include no snapshots). Snapshots are sorted by creation time (actually, by the "
              "'createtxg' ZFS property, which serves the same purpose but is more precise). The rank position of a "
              "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consist of "
              "the word 'oldest' or 'latest', followed by a non-negative integer, followed by an optional '%%' percent "
@@ -319,9 +335,8 @@ feature.
              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
              "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
              "include one of these two daily snapshots.\n\n"
-             "*Note:* Bookmarks are always retained aka included; the --include-snapshot-ranks filter is only applied "
-             "to snapshots. Bookmarks are 'invisible' to this filter and do not count towards N or N%%. Bookmarks "
-             "bypass this filter.\n\n"
+             "*Note:* Bookmarks are always retained aka included if a non-empty rankrange is specified; Bookmarks do "
+             "not count towards N or N%% wrt. rank.\n\n"
              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
              "over include.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
@@ -941,7 +956,7 @@ class Params:
 
         self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
-        self.reuse_ssh_connection: bool = self.getenv_bool("reuse_ssh_connection", True)
+        self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -961,7 +976,7 @@ class Params:
         self.zpool_program: str = self.program_name(args.zpool_program)
 
         # no point creating complex shell pipeline commands for tiny data transfers:
-        self.min_pipe_transfer_size: int = int(self.getenv("min_pipe_transfer_size", 1024 * 1024))
+        self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
 
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
@@ -984,13 +999,6 @@ class Params:
         self.zfs_recv_ox_names: Set[str] = set()
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
-
-    def getenv(self, key: str, default=None) -> str:
-        """All shell environment variable names used for configuration start with this prefix."""
-        return os.getenv(env_var_prefix + key, default)
-
-    def getenv_bool(self, key: str, default: bool = False) -> bool:
-        return self.getenv(key, str(default).lower()).strip().lower() == "true"
 
     def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
         """Splits option string on runs of one or more whitespace into an option list."""
@@ -2224,14 +2232,16 @@ class Job:
             if name == snapshot_regex_filter_name:
                 snapshots = self.filter_snapshots_by_regex(snapshots, _filter.options)
                 is_continuous_filter = False  # may exclude intermediate snapshots; they need to be remembered
-            elif name == "include_snapshot_ranks":
-                snapshots = self.filter_snapshots_by_rank(snapshots, _filter.options)
-            else:
-                assert name == "include_snapshot_times"
+            elif name == "include_snapshot_times":
                 snapshots = self.filter_snapshots_by_creation_time(
-                    snapshots, include_snapshot_times=_filter.options, bookmark_time_range=None
+                    snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
                 )
-            if is_continuous_filter:
+            else:
+                assert name == "include_snapshot_times_and_ranks"
+                timerange, opts = _filter.timerange, _filter.options
+                snapshots, is_continuous = self.filter_snapshots_by_creation_time_and_rank(snapshots, timerange, opts)
+                is_continuous_filter = is_continuous_filter and is_continuous
+            if is_continuous_filter and getenv_bool("enable_continuous_filter_optimization", True):
                 basis_snapshots = snapshots
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
@@ -2260,21 +2270,22 @@ class Job:
     ) -> List[str]:
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
+        lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
+        lo_booktime, hi_booktime = bookmark_time_range or (0, unixtime_infinity_secs)
         results = []
         for snapshot in snapshots:
             creation_time = None
             include = "@" in snapshot  # it's a true snapshot?
-            if bookmark_time_range and not include:
+            if not include:
                 # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
                 # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
                 # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
                 # accumulate over time without periodic pruning.
                 creation_time = int(snapshot[0 : snapshot.index("\t")])
-                include = bookmark_time_range[0] <= creation_time <= bookmark_time_range[1]
-
-            if include_snapshot_times and include:
+                include = lo_booktime <= creation_time <= hi_booktime
+            if include:
                 creation_time = creation_time or int(snapshot[0 : snapshot.index("\t")])
-                include = include_snapshot_times[0] <= creation_time < include_snapshot_times[1]
+                include = lo_snaptime <= creation_time < hi_snaptime
             if include:
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -2282,7 +2293,9 @@ class Job:
                 is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
-    def filter_snapshots_by_rank(self, snapshots: List[str], include_snapshot_ranks: List[RankRange]) -> List[str]:
+    def filter_snapshots_by_creation_time_and_rank(
+        self, snapshots: List[str], include_snapshot_times: UnixTimeRange, include_snapshot_ranks: List[RankRange]
+    ) -> Tuple[List[str], bool]:
 
         def get_idx(rank: Tuple[str, int, bool], n: int) -> int:
             kind, num, is_percent = rank
@@ -2290,8 +2303,12 @@ class Job:
             assert kind == "latest" or kind == "oldest"
             return m if kind == "oldest" else n - m
 
+        assert isinstance(include_snapshot_ranks, list)
+        assert len(include_snapshot_ranks) > 0
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
+        is_continuous_filter = True
+        lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
         for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
@@ -2299,20 +2316,34 @@ class Job:
             hi = get_idx(hi_rank, n)
             lo, hi = (lo, hi) if lo <= hi else (hi, lo)
             i = 0
+            did_include, did_exclude = False, False
             results = []
             for snapshot in snapshots:
+                include = False
                 if "@" not in snapshot:
-                    results.append(snapshot)  # retain bookmarks, apply filter only to snapshots
+                    include = True  # retain bookmarks, apply filter only to snapshots
                 else:
+                    msg = None
                     if lo <= i < hi:
-                        results.append(snapshot)
-                        is_debug and log.debug("Including b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                        msg = "Including b/c snapshot rank: %s"
+                    elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
+                        msg = "Including b/c creation time: %s"
+                    if msg:
+                        include = True
                     else:
-                        is_debug and log.debug("Excluding b/c snapshot rank: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                        msg = "Excluding b/c snapshot rank: %s"
+                        if did_include:
+                            did_exclude = True
+                    is_debug and log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
                     i += 1
+                if include:
+                    results.append(snapshot)
+                    if did_include and did_exclude:
+                        is_continuous_filter = False
+                    did_include = True
             snapshots = results
             n = hi - lo
-        return snapshots
+        return snapshots, is_continuous_filter
 
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
@@ -2499,7 +2530,7 @@ class Job:
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str]
     ) -> List[Tuple[str, str, str]]:
         force_convert_I_to_i = False
-        if self.params.src.use_zfs_delegation and not self.params.getenv_bool("no_force_convert_I_to_i", False):
+        if self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", False):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
@@ -3095,6 +3126,15 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     return regex
 
 
+def getenv_any(key: str, default=None) -> str:
+    """All shell environment variable names used for configuration start with this prefix."""
+    return os.getenv(env_var_prefix + key, default)
+
+
+def getenv_bool(key: str, default: bool = False) -> bool:
+    return getenv_any(key, str(default).lower()).strip().lower() == "true"
+
+
 def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
     """case-insensitive sort (A < a < B < b and so on)."""
     return sorted(iterable, key=str.casefold, reverse=reverse)
@@ -3487,7 +3527,7 @@ def validate_log_config_variable_name(name: str):
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
-    """Converts an ISO 8601 datetime into UTC Unix time in integer seconds."""
+    """Converts an ISO 8601 datetime into a UTC Unix time in integer seconds."""
     return int(datetime.fromisoformat(datetime_str).timestamp())
 
 
@@ -3578,11 +3618,11 @@ class FileOrLiteralAction(argparse.Action):
         current_values += extra_values
         setattr(namespace, self.dest, current_values)
         if self.dest in snapshot_regex_filter_names:
-            add_snapshot_filter(namespace, self.dest, extra_values)
+            add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
 
 
 #############################################################################
-class TimeRangeAction(argparse.Action):
+class TimeRangeAndRankRangeAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         def parse_time(time_spec):
             time_spec = time_spec.strip()
@@ -3598,14 +3638,19 @@ class TimeRangeAction(argparse.Action):
                 except ValueError:
                     parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
 
-        values = values.strip()
-        if ".." not in values:
-            parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {values}")
-        lo, hi = [parse_time(time_spec) for time_spec in values.split("..", 1)]
-        extra_values = (lo, hi)
-        setattr(namespace, self.dest, extra_values)
-        extra_values = self.get_include_snapshot_times(extra_values)
-        add_snapshot_filter(namespace, self.dest, extra_values)
+        assert isinstance(values, list)
+        assert len(values) > 0
+        value = values[0].strip()
+        if ".." not in value:
+            parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
+        timerange = [parse_time(time_spec) for time_spec in value.split("..", 1)]
+        rankranges = self.parse_rankranges(parser, values[1:], option_string=option_string)
+        setattr(namespace, self.dest, [timerange] + rankranges)  # for testing only
+        timerange = self.get_include_snapshot_times(timerange)
+        if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
+            add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", timerange, None))
+        else:
+            add_snapshot_filter(namespace, SnapshotFilter(self.dest, timerange, rankranges))
 
     @staticmethod
     def parse_duration_to_seconds(duration: str) -> int:
@@ -3639,14 +3684,12 @@ class TimeRangeAction(argparse.Action):
             return None
         current_time = time.time()
         lo = utc_unix_time_in_seconds(lo, default=0)
-        hi = utc_unix_time_in_seconds(hi, default=1000000000000)  # 33658-09-27 ~ inf
+        hi = utc_unix_time_in_seconds(hi, default=unixtime_infinity_secs)
         return (lo, hi) if lo <= hi else (hi, lo)
 
-
-#############################################################################
-class RankRangeAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        def parse_spec(spec):
+    @staticmethod
+    def parse_rankranges(parser, values, option_string=None):
+        def parse_rank(spec):
             spec = spec.strip()
             match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
             if not match:
@@ -3658,46 +3701,42 @@ class RankRangeAction(argparse.Action):
                 parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
             return kind, num, is_percent
 
-        current_values = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        extra_values = []
+        rankranges = []
         for value in values:
             value = value.strip()
             if ".." in value:
                 lo, hi = value.split("..", 1)
-                lo, hi = [parse_spec(spec) for spec in [lo, hi]]
+                lo, hi = [parse_rank(spec) for spec in [lo, hi]]
                 if lo[0] != hi[0]:
                     # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
                     # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
                     parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
             else:
-                hi = parse_spec(value)
-                lo = parse_spec(hi[0] + "0")
-            extra_values.append((lo, hi))
-        current_values += extra_values
-        setattr(namespace, self.dest, current_values)
-        add_snapshot_filter(namespace, self.dest, extra_values)
+                hi = parse_rank(value)
+                lo = parse_rank(hi[0] + "0")
+            rankranges.append((lo, hi))
+        return rankranges
 
 
 #############################################################################
 @dataclass(order=True)
 class SnapshotFilter:
     name: str
-    options: Any
+    timerange: UnixTimeRange
+    options: Any = field(compare=False, default=None)
 
 
-def add_snapshot_filter(args: argparse.Namespace, dest: str, filter_options: Any) -> None:
+def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
     if not hasattr(args, snapshot_filters_var):
         args.snapshot_filters_var = []
-    args.snapshot_filters_var.append(SnapshotFilter(dest, filter_options))
+    args.snapshot_filters_var.append(_filter)
 
 
 def optimize_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[SnapshotFilter]:
     """Not intended to be a full query execution plan optimizer, but we still apply some basic plan optimizations."""
     merge_adjacent_snapshot_filters(snapshot_filters)
     merge_adjacent_snapshot_regexes(snapshot_filters)
-    snapshot_filters = [f for f in snapshot_filters if f.options is not None]  # drop noop --include-snapshot-times
+    snapshot_filters = [f for f in snapshot_filters if f.timerange or f.options]  # drop noop --include-snapshot-times
     reorder_snapshot_time_filters(snapshot_filters)
     return snapshot_filters
 
@@ -3713,7 +3752,7 @@ def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> N
         filter_i = snapshot_filters[i]
         if isinstance(filter_i.options, list):
             j = i - 1
-            if j >= 0 and snapshot_filters[j].name == filter_i.name:
+            if j >= 0 and snapshot_filters[j] == filter_i:
                 lst = snapshot_filters[j].options
                 assert isinstance(lst, list)
                 lst += filter_i.options
@@ -3762,10 +3801,10 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: List[SnapshotFilter]) -> N
                 i -= 1
             else:
                 name_j = next(iter(snapshot_regex_filter_names.difference({name})))
-                filter_j = SnapshotFilter(name_j, [])
+                filter_j = SnapshotFilter(name_j, None, [])
             sorted_filters = sorted([filter_i, filter_j])
             exclude_regexes, include_regexes = sorted_filters[0].options, sorted_filters[1].options
-            snapshot_filters[i] = SnapshotFilter(snapshot_regex_filter_name, (exclude_regexes, include_regexes))
+            snapshot_filters[i] = SnapshotFilter(snapshot_regex_filter_name, None, (exclude_regexes, include_regexes))
         i -= 1
 
 
@@ -3792,7 +3831,8 @@ def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> Non
     i = len(snapshot_filters) - 1
     j = i
     while i >= 0:
-        if snapshot_filters[i].name == "include_snapshot_ranks":
+        name = snapshot_filters[i].name
+        if name == "include_snapshot_times_and_ranks":
             reorder_time_filters_within_section(i, j)
             j = i - 1
         i -= 1

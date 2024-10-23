@@ -32,6 +32,7 @@ from typing import Sequence, Callable, Optional, TypeVar, Union
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
+from bzfs.bzfs import getenv_bool
 from tests.zfs_util import is_solaris_zfs
 
 
@@ -261,24 +262,6 @@ class TestHelperFunctions(unittest.TestCase):
             names(["-x", "-x", "name1=value1"])
         with self.assertRaises(SystemExit):
             names([" -o ", " -o ", "name1=value1"])
-
-    def recv_option_property_names_old(self):
-        def names(lst):
-            return bzfs.Job().recv_option_property_names(lst)
-
-        self.assertSetEqual(set(), names([]))
-        self.assertSetEqual(set(), names(["name1=value1"]))
-        self.assertSetEqual({"name1"}, names(["-o", "name1=value1"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-o", "name1=value1", "-o", "name2=value2"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2", "-F"]))
-        self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-n", "-o", "name2=value2", "-F"]))
-        self.assertSetEqual({"name1"}, names(["-o", "name1"]))
-        self.assertSetEqual({""}, names(["-o", "=value1"]))
-        with self.assertRaises(SystemExit):
-            names(["-o"])
-        with self.assertRaises(SystemExit):
-            names(["-o", "name1=value1", "-o"])
 
     def test_fix_solaris_raw_mode(self):
         self.assertListEqual(["-w", "none"], bzfs.fix_solaris_raw_mode(["-w"]))
@@ -873,65 +856,65 @@ class TestFileOrLiteralAction(unittest.TestCase):
 class TestTimeRangeAction(unittest.TestCase):
     def setUp(self):
         self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--time-or-duration", action=bzfs.TimeRangeAction)
+        self.parser.add_argument("--time-n-ranks", action=bzfs.TimeRangeAndRankRangeAction, nargs="+")
 
     def parse_duration(self, arg):
-        return self.parser.parse_args(["--time-or-duration", arg + " ago..*"])
+        return self.parser.parse_args(["--time-n-ranks", arg + " ago..*"])
 
     def parse_timestamp(self, arg):
-        return self.parser.parse_args(["--time-or-duration", arg + "..*"])
+        return self.parser.parse_args(["--time-n-ranks", arg + "..*"])
 
     def test_parse_unix_time(self):  # Test Unix time in integer seconds
         args = self.parse_timestamp("1696510080")
-        self.assertEqual(args.time_or_duration[0], 1696510080)
+        self.assertEqual(args.time_n_ranks[0][0], 1696510080)
 
         args = self.parse_timestamp("0")
-        self.assertEqual(args.time_or_duration[0], 0)
+        self.assertEqual(args.time_n_ranks[0][0], 0)
 
     def test_valid_durations(self):
         args = self.parse_duration("5secs")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=5))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=5))
 
         args = self.parse_duration("5 seconds")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=5))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=5))
 
         args = self.parse_duration("30mins")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=1800))
 
         args = self.parse_duration("30minutes")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=1800))
 
         args = self.parse_duration("2hours")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=2 * 60 * 60))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=2 * 60 * 60))
 
         args = self.parse_duration("0days")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=0))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=0))
 
         args = self.parse_duration("10weeks")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=6048000))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=6048000))
 
         args = self.parse_duration("15secs")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=15))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=15))
 
         args = self.parse_duration("60mins")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=3600))
-        self.assertEqual(args.time_or_duration[0].total_seconds(), 3600)
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=3600))
+        self.assertEqual(args.time_n_ranks[0][0].total_seconds(), 3600)
 
         args = self.parse_duration("2hours")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=2 * 60 * 60))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=2 * 60 * 60))
 
         args = self.parse_duration("3days")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=259200))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=259200))
 
         args = self.parse_duration("2weeks")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=1209600))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=1209600))
 
         # Test with spaces
         args = self.parse_duration("  30mins")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=1800))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=1800))
 
         args = self.parse_duration("5secs")
-        self.assertEqual(args.time_or_duration[0], timedelta(seconds=5))
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=5))
 
     def test_invalid_time_spec(self):
         with self.assertRaises(SystemExit):
@@ -959,22 +942,22 @@ class TestTimeRangeAction(unittest.TestCase):
             self.parse_timestamp("2024-10-35")  # Month does not have 35 days
 
         with self.assertRaises(SystemExit):
-            self.parser.parse_args(["--time-or-duration", "60_mins..*"])  # Missing 'ago'
+            self.parser.parse_args(["--time-n-ranks", "60_mins..*"])  # Missing 'ago'
 
         with self.assertRaises(SystemExit):
-            self.parser.parse_args(["--time-or-duration", "60_mins_ago"])  # Missing ..
+            self.parser.parse_args(["--time-n-ranks", "60_mins_ago"])  # Missing ..
 
     def test_parse_datetime(self):
         # Test ISO 8601 datetime strings without timezone
         args = self.parse_timestamp("2024-01-01")
-        self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-01-01").timestamp()))
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-01-01").timestamp()))
 
         args = self.parse_timestamp("2024-12-31")
-        self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-12-31").timestamp()))
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-12-31").timestamp()))
 
         args = self.parse_timestamp("2024-10-05T14:48:00")
-        self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00").timestamp()))
-        self.assertNotEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00").timestamp()))
+        self.assertNotEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
 
     def test_parse_datetime_with_timezone(self):
         if sys.version_info < (3, 11):
@@ -982,48 +965,82 @@ class TestTimeRangeAction(unittest.TestCase):
 
         # Test ISO 8601 datetime strings with timezone info
         args = self.parse_timestamp("2024-10-05T14:48:00+02")
-        self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
 
         args = self.parse_timestamp("2024-10-05T14:48:00+00:00")
-        self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00+00:00").timestamp()))
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+00:00").timestamp()))
 
         args = self.parse_timestamp("2024-10-05T14:48:00-04:30")
-        self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00-04:30").timestamp()))
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00-04:30").timestamp()))
 
         args = self.parse_timestamp("2024-10-05T14:48:00+02:00")
-        self.assertEqual(args.time_or_duration[0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
 
     def test_get_include_snapshot_times(self):
+        times_and_ranks_opt = "--include-snapshot-times-and-ranks="
+
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         self.assertListEqual([], p.snapshot_filters)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=*..*"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
         p = bzfs.Params(args)
         self.assertListEqual([], p.snapshot_filters)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=1700000000..1700000001"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].options)
+        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=1700000001..1700000000"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].options)
+        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=0secs ago..60secs ago"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0].options[0], delta=2)
-        self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0].options[1], delta=2)
+        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0].timerange[0], delta=2)
+        self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0].timerange[1], delta=2)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=2024-01-01..*"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01..*"])
         p = bzfs.Params(args)
-        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].options[0])
-        self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0].options[1])
+        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[0])
+        self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0].timerange[1])
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--include-snapshot-times=*..2024-01-01"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "*..2024-01-01"])
         p = bzfs.Params(args)
-        self.assertEqual(0, p.snapshot_filters[0].options[0])
-        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].options[1])
+        self.assertEqual(0, p.snapshot_filters[0].timerange[0])
+        self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[1])
+
+    def test_filter_snapshots_by_times(self):
+        lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
+        self.assertListEqual([], self.filter_snapshots_by_times_and_rank1(lst1, "0..0"))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_times_and_rank1(lst1, "0..1"))
+        self.assertListEqual(["\td@0", "\td#1"], self.filter_snapshots_by_times_and_rank1(lst1, "0..2"))
+        self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_times_and_rank1(lst1, "0..3"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "0..4"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "0..5"))
+        self.assertListEqual(["\td#1", "\td@2"], self.filter_snapshots_by_times_and_rank1(lst1, "1..3"))
+
+    @staticmethod
+    def filter_snapshots_by_times_and_rank1(snapshots, timerange, ranks=[]):
+        results, is_continuous = filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
+        return results
+
+
+def filter_snapshots_by_times_and_rank(snapshots, timerange, ranks=[]):
+    args = bzfs.argument_parser().parse_args(
+        args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"]
+    )
+    log_params = bzfs.LogParams(args)
+    try:
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+        snapshots = [f"{i}\t" + snapshot for i, snapshot in enumerate(snapshots)]  # simulate creation time
+        results, basis_snapshots = job.filter_snapshots(snapshots)
+        is_continuous_filter = results is basis_snapshots
+        results = [result.split("\t", 1)[1] for result in results]  # drop creation time
+        return results, is_continuous_filter
+    finally:
+        bzfs.reset_logger()
 
 
 #############################################################################
@@ -1031,14 +1048,14 @@ class TestRankRangeAction(unittest.TestCase):
 
     def setUp(self):
         self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--ranks", nargs="+", action=bzfs.RankRangeAction)
+        self.parser.add_argument("--ranks", nargs="+", action=bzfs.TimeRangeAndRankRangeAction)
 
     def parse_args(self, arg):
-        return self.parser.parse_args(["--ranks", arg])
+        return self.parser.parse_args(["--ranks", "0..0", arg])
 
     def test_valid_ranks(self):
-        self.assertEqual((("latest", 0, False), ("latest", 2, True)), self.parse_args("latest0..latest2%").ranks[0])
-        self.assertEqual((("oldest", 5, True), ("oldest", 9, True)), self.parse_args("oldest5%..oldest9%").ranks[0])
+        self.assertEqual((("latest", 0, False), ("latest", 2, True)), self.parse_args("latest0..latest2%").ranks[1])
+        self.assertEqual((("oldest", 5, True), ("oldest", 9, True)), self.parse_args("oldest5%..oldest9%").ranks[1])
 
     def test_invalid_ranks(self):
         with self.assertRaises(SystemExit):
@@ -1080,107 +1097,147 @@ class TestRankRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse_args("oldest99%..latest100%")
 
+    def filter_snapshots_by_rank(self, snapshots, ranks, timerange="0..0"):
+        results, _ = self.filter_snapshots_by_rank2(snapshots, timerange=timerange, ranks=ranks)
+        return results
+
     @staticmethod
-    def filter_snapshots_by_rank(snapshots, ranks, ranks2=[]):
-        for i in range(0, 2):
-            verbose = [] if i == 0 else ["--verbose"]
-            args = bzfs.argument_parser().parse_args(
-                args=["src", "dst", "--include-snapshot-ranks", ranks, *ranks2, *verbose]
-            )
-            log_params = bzfs.LogParams(args)
-            try:
-                job = bzfs.Job()
-                job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
-                result = job.filter_snapshots_by_rank(snapshots, job.params.snapshot_filters[0].options)
-                if i > 0:
-                    return result
-            finally:
-                bzfs.reset_logger()
+    def filter_snapshots_by_rank2(snapshots, ranks, timerange="0..0"):
+        return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
 
     def test_filter_snapshots_by_rank(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2", "d@3"]]
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest0..latest0"))
-        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, "latest0..latest1"))
-        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest0..latest2"))
-        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest0..latest3"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest0..latest4"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest0..latest5"))
-        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "latest3..latest4"))
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest4..latest4"))
-        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest2..latest0"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest0..latest0"]))
+        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, ["latest0..latest1"]))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest0..latest2"]))
+        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest0..latest3"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest0..latest4"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest0..latest5"]))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, ["latest3..latest4"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest4..latest4"]))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest2..latest0"]))
 
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest 0"))
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest 0"))
-        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "oldest 1"))
-        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, "latest 1"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest 4"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest 4"))
-        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, "oldest 3"))
-        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 3"))
-        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 2"))
-        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 2"))
-        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "oldest 25%"))
-        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, "latest 25%"))
-        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, "oldest 75%"))
-        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 75%"))
-        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 50%"))
-        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 50%"))
-        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 51%"))
-        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 51%"))
-        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, "oldest 49%"))
-        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, "latest 49%"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest 100%"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest 100%"))
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest 0%"))
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "latest 0%"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["oldest 0"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest 0"]))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, ["oldest 1"]))
+        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 1"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest 4"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest 4"]))
+        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["oldest 3"]))
+        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 3"]))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, ["oldest 2"]))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 2"]))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, ["oldest 25%"]))
+        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 25%"]))
+        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["oldest 75%"]))
+        self.assertListEqual(["\td@1", "\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 75%"]))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, ["oldest 50%"]))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 50%"]))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, ["oldest 51%"]))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 51%"]))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst1, ["oldest 49%"]))
+        self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest 49%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest 100%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest 100%"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["oldest 0%"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest 0%"]))
 
-        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest0%..latest100%"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0%..oldest100%"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest100%..oldest0%"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "latest100%..latest0%"))
+        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["latest1..latest100%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest0%..latest100%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest0%..oldest100%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest100%..oldest0%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest100%..latest0%"]))
 
-        self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst1, "oldest2..oldest3"))
-        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, "oldest3..oldest4"))
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest4..oldest5"))
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, "oldest5..oldest6"))
+        self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst1, ["oldest2..oldest3"]))
+        self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, ["oldest3..oldest4"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["oldest4..oldest5"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["oldest5..oldest6"]))
 
         lst2 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2"]]
-        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, "oldest 51%"))
-        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst2, "oldest 49%"))
-        self.assertListEqual(["\td@1", "\td@2"], self.filter_snapshots_by_rank(lst2, "latest 51%"))
-        self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst2, "latest 49%"))
-        self.assertListEqual([], self.filter_snapshots_by_rank(lst2, "latest 0%"))
-        self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, "latest 100%"))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, ["oldest 51%"]))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst2, ["oldest 49%"]))
+        self.assertListEqual(["\td@1", "\td@2"], self.filter_snapshots_by_rank(lst2, ["latest 51%"]))
+        self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst2, ["latest 49%"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst2, ["latest 0%"]))
+        self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, ["latest 100%"]))
 
-        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest1"))
-        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, "latest100%..latest1"))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest1"]))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, ["latest100%..latest1"]))
 
     def test_filter_snapshots_by_rank_with_bookmarks(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
-        self.assertListEqual(["\td#1"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest0"))
-        self.assertListEqual(["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest1"))
-        self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_rank(lst1, "oldest0..oldest2"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0..oldest3"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0..oldest4"))
-        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, "oldest0..oldest5"))
-        self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%"))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest0"]))
+        self.assertListEqual(["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest1"]))
+        self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest2"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest0..oldest3"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest0..oldest4"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest0..oldest5"]))
+        self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["latest1..latest100%"]))
+
+    def assert_continuous_filter(self, true_value: bool):
+        if getenv_bool("enable_continuous_filter_optimization", True):
+            self.assertTrue(true_value)
 
     def test_filter_snapshots_by_rank_with_chain(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
-        self.assertListEqual(
-            ["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, "latest1..latest100%", ["latest1..latest100%"])
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["latest1..latest100%", "latest1..latest100%"])
+        self.assertListEqual(["\td@0", "\td#1"], results)
+        self.assert_continuous_filter(is_continuous is True)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["latest1..latest100%", "oldest1..oldest100%"])
+        self.assertListEqual(["\td#1", "\td@2"], results)
+        self.assert_continuous_filter(is_continuous is True)
+
+    def test_filter_snapshots_by_rank_with_times(self):
+        lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="0..0")
+        self.assertListEqual(["\td@0", "\td#1"], results)
+        self.assert_continuous_filter(is_continuous is True)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="0..11")
+        self.assertListEqual(lst1, results)
+        self.assert_continuous_filter(is_continuous is True)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="3..11")
+        self.assertListEqual(["\td@0", "\td#1", "\td@3"], results)
+        self.assert_continuous_filter(is_continuous is False)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(lst1, ["oldest 1"], timerange="2..11")
+        self.assertListEqual(lst1, results)
+        self.assert_continuous_filter(is_continuous is True)
+
+        results, is_continuous = self.filter_snapshots_by_rank2(
+            lst1, ["oldest1..oldest2", "latest 1"], timerange="3..11"
         )
+        self.assertListEqual(["\td#1", "\td@2", "\td@3"], results)
+        self.assert_continuous_filter(is_continuous is True)
+
+        lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3", "d@4"]]
+        results, is_continuous = self.filter_snapshots_by_rank2(
+            lst1, ["oldest1..oldest2", "latest 1"], timerange="4..11"
+        )
+        self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
+        self.assert_continuous_filter(is_continuous is False)
 
     @staticmethod
     def get_snapshot_filters(cli):
         args = bzfs.argument_parser().parse_args(args=["src", "dst", *cli])
         return bzfs.Params(args).snapshot_filters
 
+    def test_merge_adjacent_snapshot_regexes_and_filters0(self):
+        ranks = "--include-snapshot-times-and-ranks"
+        cli = [ranks, "0..1", "oldest 50%", ranks, "0..0", "oldest 10%"]
+        ranks_filter = self.get_snapshot_filters(cli)
+        self.assertEqual((0, 1), ranks_filter[0].timerange)
+        self.assertEqual([(("oldest", 0, False), ("oldest", 50, True))], ranks_filter[0].options)
+        self.assertEqual((0, 0), ranks_filter[1].timerange)
+        self.assertEqual([(("oldest", 0, False), ("oldest", 10, True))], ranks_filter[1].options)
+
     def test_merge_adjacent_snapshot_regexes_and_filters1(self):
-        ranks = "--include-snapshot-ranks"
-        cli = [ranks, "oldest 50%", ranks, "oldest 10%"]
+        ranks = "--include-snapshot-times-and-ranks"
+        cli = [ranks, "0..0", "oldest 50%", ranks, "0..0", "oldest 10%"]
         ranks_filter = self.get_snapshot_filters(cli)[0]
+        self.assertEqual((0, 0), ranks_filter.timerange)
         self.assertEqual(
             [
                 (("oldest", 0, False), ("oldest", 50, True)),
@@ -1190,9 +1247,10 @@ class TestRankRangeAction(unittest.TestCase):
         )
 
     def test_merge_adjacent_snapshot_regexes_and_filters2(self):
-        ranks = "--include-snapshot-ranks"
-        cli = [ranks, "oldest 50%", ranks, "oldest 10%", ranks, "oldest 20%"]
+        ranks = "--include-snapshot-times-and-ranks"
+        cli = [ranks, "0..0", "oldest 50%", ranks, "0..0", "oldest 10%", ranks, "0..0", "oldest 20%"]
         ranks_filter = self.get_snapshot_filters(cli)[0]
+        self.assertEqual((0, 0), ranks_filter.timerange)
         self.assertEqual(
             [
                 (("oldest", 0, False), ("oldest", 50, True)),
@@ -1205,50 +1263,52 @@ class TestRankRangeAction(unittest.TestCase):
     def test_merge_adjacent_snapshot_regexes_and_filters3(self):
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
-        times = "--include-snapshot-times"
+        times = "--include-snapshot-times-and-ranks"
         cli = [times, "*..*", times, "0..9", include, "f", include, "d", exclude, "w", include, "h", exclude, "m"]
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
-        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual((0, 9), times_filter.timerange)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual((["w", "m"], ["f", "d", "h"]), regex_filter.options)
 
     def test_merge_adjacent_snapshot_regexes_doesnt_merge_across_groups(self):
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
-        ranks = "--include-snapshot-ranks"
-        cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", ranks, "oldest 50%", exclude, ".*monthly"]
+        ranks = "--include-snapshot-times-and-ranks"
+        cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", ranks, "0..0", "oldest 5%", exclude, ".*m"]
         regex_filter1, ranks_filter, regex_filter2 = self.get_snapshot_filters(cli)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter1.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter1.options)
-        self.assertEqual("include_snapshot_ranks", ranks_filter.name)
-        self.assertEqual((("oldest", 0, False), ("oldest", 50, True)), ranks_filter.options[0])
+        self.assertEqual((0, 0), ranks_filter.timerange)
+        self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
+        self.assertEqual((("oldest", 0, False), ("oldest", 5, True)), ranks_filter.options[0])
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter2.name)
-        self.assertEqual(([".*monthly"], []), regex_filter2.options)
+        self.assertEqual(([".*m"], []), regex_filter2.options)
 
     def test_reorder_snapshot_times_simple(self):
         include = "--include-snapshot-regex"
-        times = "--include-snapshot-times"
+        times = "--include-snapshot-times-and-ranks"
         cli = [include, ".*daily", times, "0..9"]
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
-        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual((0, 9), times_filter.timerange)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([], [".*daily"]), regex_filter.options)
 
     def test_reorder_snapshot_times_complex(self):
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
-        times = "--include-snapshot-times"
-        ranks = "--include-snapshot-ranks"
-        cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", times, "0..9", ranks, "oldest1"]
+        times = "--include-snapshot-times-and-ranks"
+        ranks = "--include-snapshot-times-and-ranks"
+        cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", times, "0..9", ranks, "0..0", "oldest1"]
         times_filter, regex_filter, ranks_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
-        self.assertEqual((0, 9), times_filter.options)
+        self.assertEqual((0, 9), times_filter.timerange)
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter.options)
-        self.assertEqual("include_snapshot_ranks", ranks_filter.name)
+        self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 1, False)), ranks_filter.options[0])
+        self.assertEqual((0, 0), ranks_filter.timerange)
 
 
 #############################################################################
