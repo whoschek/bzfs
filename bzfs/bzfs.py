@@ -278,15 +278,25 @@ feature.
         metavar=("TIMERANGE", "RANKRANGE"),
         help="This option takes as input parameters a time range filter and an optional rank range filter. It "
              "separately computes the results for each filter and returns aka includes the UNION of both results. "
-             "For example, you can specify to include all daily snapshots that were created in the last 7 days, "
-             "and at the same time make sure that at least the oldest 7 daily snapshots are included, regardless "
-             "of whether they were created within the last 7 days or not, like so:"
-             "`--include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`. "
+             "To instead use a pure rank range filter (no UNION), or a pure time range filter (no UNION), simply "
+             "use '0..0' to indicate an empty time range, or omit the rank range, respectively. "
+             "This option can be specified multiple times.\n\n"
+             "<b>*Replication Example (UNION):* </b>\n\n"
+             "Specify to replicate all daily snapshots that were created during the last 7 days, "
+             "and at the same time ensure that at least the latest 7 daily snapshots are replicated regardless "
+             "of when they were created, like so: "
+             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`\n\n"
+             "<b>*Deletion Example (no UNION):* </b>\n\n"
+             "Specify to delete all daily snapshots that were created more than 7 days ago, "
+             "yet ensure that at least the latest 7 daily snapshots are not deleted regardless "
+             "of when they were created, like so: "
+             "`--skip-replication --delete-missing-snapshots --include-snapshot-regex '.*_daily' "
+             "--include-snapshot-times-and-ranks 'latest 7..latest 100%%' --include-snapshot-times-and-ranks "
+             "'*..7 days ago'`"
+             "\n\n"
              "This helps to safely cope with irregular scenarios where no snapshots were created or received within "
              "the last 7 days, or where more than 7 daily snapshots were created within the last 7 days. It can also "
-             "help to avoid accidental pruning of the last snapshot that source and destination have in common. "
-             "To instead use a pure rank range filter (no UNION), or a pure time range filter (no UNION), simply "
-             "use '0..0' to indicate an empty time range, or omit the rank range, respectively.\n\n"
+             "help to avoid accidental pruning of the last snapshot that source and destination have in common.\n\n"
              ""
              "<b>*TIMERANGE:* </b>\n\n"
              "The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
@@ -491,7 +501,7 @@ feature.
              "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n"
              "*Note:* Use --delete-missing-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are included and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
-             "snapshots."
+             "snapshots wrt. filtering."
              "\n\n")
     parser.add_argument(
         "--delete-empty-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
@@ -596,14 +606,12 @@ feature.
              "periodically prune obsolete bookmarks just like snapshots, like so: "
              "`zfs destroy $SRC_DATASET#$BOOKMARK`. Typically, bookmarks should be pruned less aggressively "
              "than snapshots, and destination snapshots should be pruned less aggressively than source snapshots. "
-             "As an example starting point, here is a script that deletes all bookmarks older than X days in a "
-             "given dataset and its descendants: "
-             "`days=90; dataset=tank/foo/bar; zfs list -t bookmark -o name,creation -Hp -r $dataset | "
-             "while read -r BOOKMARK CREATION_TIME; do "
-             "  [ $CREATION_TIME -le $(($(date +%%s) - days * 86400)) ] && echo $BOOKMARK; "
-             "done | xargs -I {} sudo zfs destroy {}` "
-             "A better example starting point can be found in third party tools or this script: "
-             "https://github.com/whoschek/bzfs/blob/main/tests/prune_bookmarks.py\n\n")
+             "As an example starting point, here is a script that deletes all bookmarks older than 90 days in a "
+             "given dataset and its descendants, yet, for each dataset, does not delete the latest 100 bookmarks "
+             "regardless of when they were created: "
+             f"`{prog_name} ... --recursive --skip-replication --delete-missing-snapshots=bookmarks "
+             "--include-snapshot-times-and-ranks 'latest 100..latest 100%%' "
+             "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
@@ -2417,7 +2425,7 @@ class Job:
             return
         # Unfortunately ZFS has no syntax yet to delete multiple bookmarks in a single CLI invocation
         p, log = self.params, self.params.log
-        log.info(p.dry(f"Deleting bookmark(s): %s"), list_formatter(snapshot_tags, separator=", "))
+        log.info(p.dry(f"Deleting bookmark(s): %s"), dataset + "#" + ",".join(snapshot_tags))
         for i, snapshot_tag in enumerate(snapshot_tags):
             log.debug(p.dry(f"Deleting bookmark {i+1}/{len(snapshot_tags)}: %s"), snapshot_tag)
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy", f"{dataset}#{snapshot_tag}")

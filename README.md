@@ -188,11 +188,13 @@ to a local destination.
 older (or newer) than 12 weeks.
     * For example, can replicate (or delete) all daily snapshots except the latest (or oldest) 90 daily snapshots,
 and all weekly snapshots except the latest (or oldest) 12 weekly snapshots.
-    * For example, can replicate (or delete) all daily snapshots that were created in the last 7 days, and at the
-same time make sure that at least the oldest 7 daily snapshots are included, regardless of whether they were
-created within the last 7 days or not. This helps to safely cope with irregular scenarios where no snapshots were
-created or received within the last 7 days, or where more than 7 daily snapshots were created within the last 7 days.
-It can also help to avoid accidental pruning of the last snapshot that source and destination have in common.
+    * For example, can replicate all daily snapshots that were created during the last 7 days, and at the
+same time ensure that at least the latest 7 daily snapshots are replicated regardless of when they were created.
+This helps to safely cope with irregular scenarios where no snapshots were created or received within the last 7 days,
+or where more than 7 daily snapshots were created within the last 7 days.
+    * For example, can delete all daily snapshots that were created more than 7 days ago, yet ensure that at least
+the latest 7 daily snapshots are not deleted regardless of when they were created. It can help to avoid accidental
+pruning of the last snapshot that source and destination have in common.
     * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
 * Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
 * Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
@@ -347,8 +349,8 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
 ```
 
 <!--
-Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update README.md below, like so:
-./test/update-readme.py bzfs/bzfs.py README.md
+Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update README.md below
+via tests/update_readme.py
 -->
 <!-- BEGIN HELP DETAIL SECTION -->
 <div id="SRC_DATASET_DST_DATASET"></div>
@@ -545,20 +547,36 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 *  This option takes as input parameters a time range filter and an
     optional rank range filter. It separately computes the results for
-    each filter and returns aka includes the UNION of both results. For
-    example, you can specify to include all daily snapshots that were
-    created in the last 7 days, and at the same time make sure that at
-    least the oldest 7 daily snapshots are included, regardless of
-    whether they were created within the last 7 days or not, like
-    so:`--include-snapshot-times-and-ranks '7 days ago..*' 'latest
-    7'`. This helps to safely cope with irregular scenarios where no
+    each filter and returns aka includes the UNION of both results. To
+    instead use a pure rank range filter (no UNION), or a pure time
+    range filter (no UNION), simply use '0..0' to indicate an empty
+    time range, or omit the rank range, respectively. This option can be
+    specified multiple times.
+
+    <b>*Replication Example (UNION):* </b>
+
+    Specify to replicate all daily snapshots that were created during
+    the last 7 days, and at the same time ensure that at least the
+    latest 7 daily snapshots are replicated regardless of when they were
+    created, like so: `--include-snapshot-regex '.*_daily'
+    --include-snapshot-times-and-ranks '7 days ago..*' 'latest
+    7'`
+
+    <b>*Deletion Example (no UNION):* </b>
+
+    Specify to delete all daily snapshots that were created more than 7
+    days ago, yet ensure that at least the latest 7 daily snapshots are
+    not deleted regardless of when they were created, like so:
+    `--skip-replication --delete-missing-snapshots
+    --include-snapshot-regex '.*_daily'
+    --include-snapshot-times-and-ranks 'latest 7..latest 100%'
+    --include-snapshot-times-and-ranks '*..7 days ago'`
+
+    This helps to safely cope with irregular scenarios where no
     snapshots were created or received within the last 7 days, or where
     more than 7 daily snapshots were created within the last 7 days. It
     can also help to avoid accidental pruning of the last snapshot that
-    source and destination have in common. To instead use a pure rank
-    range filter (no UNION), or a pure time range filter (no UNION),
-    simply use '0..0' to indicate an empty time range, or omit the
-    rank range, respectively.
+    source and destination have in common.
 
     <b>*TIMERANGE:* </b>
 
@@ -937,7 +955,7 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     *Note:* Use --delete-missing-snapshots=bookmarks to delete
     bookmarks instead of snapshots, in which case no snapshots are
     included and the --{include|exclude}-snapshot-* filter options
-    treat bookmarks as snapshots.
+    treat bookmarks as snapshots wrt. filtering.
 
 <!-- -->
 
@@ -1121,14 +1139,13 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     bookmarks should be pruned less aggressively than snapshots, and
     destination snapshots should be pruned less aggressively than source
     snapshots. As an example starting point, here is a script that
-    deletes all bookmarks older than X days in a given dataset and its
-    descendants: `days=90; dataset=tank/foo/bar; zfs list -t bookmark
-    -o name,creation -Hp -r $dataset | while read -r BOOKMARK
-    CREATION_TIME; do [ $CREATION_TIME -le $(($(date +%s) - days *
-    86400)) ] && echo $BOOKMARK; done | xargs -I {} sudo zfs destroy
-    {}` A better example starting point can be found in third party
-    tools or this script:
-    https://github.com/whoschek/bzfs/blob/main/tests/prune_bookmarks.py
+    deletes all bookmarks older than 90 days in a given dataset and its
+    descendants, yet, for each dataset, does not delete the latest 100
+    bookmarks regardless of when they were created: `bzfs ...
+    --recursive --skip-replication
+    --delete-missing-snapshots=bookmarks
+    --include-snapshot-times-and-ranks 'latest 100..latest 100%'
+    --include-snapshot-times-and-ranks '*..90 days ago'`
 
 <!-- -->
 
