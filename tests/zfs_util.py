@@ -122,8 +122,8 @@ def create_filesystem(dataset, path=None, no_mount=True, props=[]):
     return dataset
 
 
-def datasets(dataset, max_depth=1):
-    return zfs_list([dataset], types=["filesystem", "volume"], max_depth=max_depth)[1:]
+def datasets(dataset):
+    return zfs_list([dataset], types=["filesystem", "volume"], max_depth=1)[1:]
 
 
 def take_snapshot(dataset, snapshot_tag, recursive=False, props=[]):
