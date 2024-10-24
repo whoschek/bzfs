@@ -2380,6 +2380,13 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
 
+    def test_delete_missing_bookmarks_flat_with_replication(self):
+        self.setup_basic()
+        self.run_bzfs(
+            src_root_dataset, dst_root_dataset, "--delete-missing-snapshots=bookmarks", "--delete-empty-datasets"
+        )
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+
     def test_delete_missing_snapshots_flat(self):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -2400,12 +2407,84 @@ class LocalTestCase(BZFSTestCase):
                     dst_root_dataset,
                     "--skip-replication",
                     "--delete-missing-snapshots",
-                    "--delete-empty-datasets",
+                    "--delete-empty-datasets=snapshots",
                     **kwargs,
                 )
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
                 self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+
+        if is_zpool_bookmarks_feature_enabled_or_active("src"):
+            tag0 = snapshot_name(snapshots(src_root_dataset)[0])
+            create_bookmark(dst_root_dataset, tag0, tag0)
+            for snap in snapshots(src_root_dataset, max_depth=None) + snapshots(dst_root_dataset, max_depth=None):
+                destroy(snap)
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                "--skip-replication",
+                "--delete-empty-datasets",
+            )
+            self.assertTrue(dataset_exists(dst_root_dataset))
+        else:
+            for snap in snapshots(src_root_dataset, max_depth=None) + snapshots(dst_root_dataset, max_depth=None):
+                destroy(snap)
+
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-empty-datasets=snapshots",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+    def test_delete_missing_bookmarks_flat(self):
+        if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        for i in range(0, 1):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.setup_basic()
+                self.run_bzfs(src_root_dataset, dst_root_dataset)
+                tag0 = snapshot_name(snapshots(src_root_dataset)[0])
+                create_bookmark(dst_root_dataset, tag0, tag0)
+                tag1 = snapshot_name(snapshots(src_root_dataset)[1])
+                create_bookmark(dst_root_dataset, tag1, tag1)
+                tag2 = snapshot_name(snapshots(src_root_dataset)[2])
+                create_bookmark(dst_root_dataset, tag2, tag2)
+                self.assertBookmarkNames(src_root_dataset, ["s1", "s3"])
+                self.assertBookmarkNames(dst_root_dataset, ["s1", "s2", "s3"])
+                for snapshot in snapshots(src_root_dataset) + snapshots(dst_root_dataset):
+                    destroy(snapshot)
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-snapshots=bookmarks",
+                    "--delete-empty-datasets",
+                )
+                self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
+
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-snapshots=bookmarks",
+                    "--delete-empty-datasets",
+                )
+                self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
+
+                for bookmark in bookmarks(src_root_dataset):
+                    destroy(bookmark)
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-snapshots=bookmarks",
+                    "--delete-empty-datasets",
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
 
     def test_delete_missing_snapshots_despite_same_name(self):
         self.setup_basic_with_recursive_replication_done()

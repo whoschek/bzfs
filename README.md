@@ -307,10 +307,12 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--retries INT] [--retry-min-sleep-secs FLOAT]
             [--retry-max-sleep-secs FLOAT] [--retry-max-elapsed-secs FLOAT]
             [--skip-on-error {fail,tree,dataset}] [--skip-replication]
-            [--delete-missing-datasets] [--delete-missing-snapshots]
-            [--delete-empty-datasets] [--dryrun [{recv,send}]] [--verbose]
-            [--quiet] [--no-privilege-elevation] [--no-stream]
-            [--no-create-bookmark] [--no-use-bookmark] [--ssh-cipher STRING]
+            [--delete-missing-datasets]
+            [--delete-missing-snapshots [{snapshots,bookmarks}]]
+            [--delete-empty-datasets [{snapshots,snapshots+bookmarks}]]
+            [--dryrun [{recv,send}]] [--verbose] [--quiet]
+            [--no-privilege-elevation] [--no-stream] [--no-create-bookmark]
+            [--no-use-bookmark] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -888,8 +890,9 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 **--delete-missing-datasets**
 
-*  After successful replication step, if any, delete existing
-    destination datasets that are included via
+*  Do nothing if the --delete-missing-datasets option is missing.
+    Otherwise, after successful replication step, if any, delete
+    existing destination datasets that are included via
     --{include|exclude}-dataset* policy yet do not exist within
     SRC_DATASET (which can be an empty dummy dataset!). Does not recurse
     without --recursive.
@@ -905,9 +908,10 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
 
 <div id="--delete-missing-snapshots"></div>
 
-**--delete-missing-snapshots**
+**--delete-missing-snapshots** *[{snapshots,bookmarks}]*
 
-*  After successful replication, and successful
+*  Do nothing if the --delete-missing-snapshots option is missing.
+    Otherwise, after successful replication, and successful
     --delete-missing-datasets step, if any, delete existing destination
     snapshots that do not exist within the source dataset (which can be
     an empty dummy dataset!) if they are included by the
@@ -930,26 +934,35 @@ Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update
     dummy dataset, created like so: dd if=/dev/zero of=/tmp/dummy bs=1M
     count=100; zpool create dummy /tmp/dummy
 
+    *Note:* Use --delete-missing-snapshots=bookmarks to delete
+    bookmarks instead of snapshots, in which case no snapshots are
+    included and the --{include|exclude}-snapshot-* filter options
+    treat bookmarks as snapshots.
+
 <!-- -->
 
 <div id="--delete-empty-datasets"></div>
 
-**--delete-empty-datasets**
+**--delete-empty-datasets** *[{snapshots,snapshots+bookmarks}]*
 
-*  After successful replication step and successful
+*  Do nothing if the --delete-empty-datasets option is missing.
+    Otherwise, after successful replication step and successful
     --delete-missing-datasets and successful
     --delete-missing-snapshots steps, if any, delete any included
-    destination dataset that has no snapshot if all descendants of that
-    destination dataset do not have a snapshot either (again, only if
-    the existing destination dataset is included via
-    --{include|exclude}-dataset* policy). Does not recurse without
-    --recursive.
+    destination dataset that has no snapshot and no bookmark if all
+    descendants of that destination dataset do not have a snapshot or
+    bookmark either (again, only if the existing destination dataset is
+    included via --{include|exclude}-dataset* policy). Does not
+    recurse without --recursive.
 
     For example, if the destination contains datasets h1,d1, and the
     include/exclude policy effectively includes h1,d1, then check if
     h1,d1 can be deleted. On the other hand, if the include/exclude
     policy effectively only includes h1 then only check if h1 can be
     deleted.
+
+    *Note:* Use --delete-empty-datasets=snapshots to delete
+    snapshot-less datasets even if they still contain bookmarks.
 
 <!-- -->
 
