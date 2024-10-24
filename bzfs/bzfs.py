@@ -472,7 +472,7 @@ feature.
              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
              "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n")
     parser.add_argument(
-        "--delete-missing-snapshots", choices=["snapshot", "bookmark"], default=None, const="snapshot",
+        "--delete-missing-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
         nargs="?",
         help="After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
              "destination snapshots that do not exist within the source dataset (which can be an empty dummy "
@@ -487,8 +487,8 @@ feature.
              "the --skip-replication flag plus a source that is a temporary empty dummy dataset, created like so: "
              "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n")
     parser.add_argument(
-        "--delete-empty-datasets", choices=["snapshot", "snapshot+bookmark"], default=None,
-        const="snapshot+bookmark", nargs="?",
+        "--delete-empty-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
+        const="snapshots+bookmarks", nargs="?",
         help="After successful replication step and successful --delete-missing-datasets and successful "
              "--delete-missing-snapshots steps, if any, delete any included destination dataset that has no snapshot "
              "if all descendants of that destination dataset do not have a snapshot either (again, only if the "
@@ -952,11 +952,11 @@ class Params:
         self.retry_policy: RetryPolicy = RetryPolicy(args, self)
         self.skip_replication: bool = args.skip_replication
         self.delete_missing_snapshots: bool = args.delete_missing_snapshots is not None
-        self.delete_missing_bookmarks: bool = args.delete_missing_snapshots == "bookmark"
+        self.delete_missing_bookmarks: bool = args.delete_missing_snapshots == "bookmarks"
         self.delete_missing_datasets: bool = args.delete_missing_datasets
         self.delete_empty_datasets: bool = args.delete_empty_datasets is not None
         self.delete_empty_datasets_if_no_bookmarks_and_no_snapshots: bool = (
-            args.delete_empty_datasets == "snapshot+bookmark"
+            args.delete_empty_datasets == "snapshots+bookmarks"
         )
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream

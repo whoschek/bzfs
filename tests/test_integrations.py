@@ -2416,7 +2416,7 @@ class LocalTestCase(BZFSTestCase):
                     dst_root_dataset,
                     "--skip-replication",
                     "--delete-missing-snapshots",
-                    "--delete-empty-datasets=snapshot",
+                    "--delete-empty-datasets=snapshots",
                     **kwargs,
                 )
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2439,8 +2439,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            # "--delete-missing-snapshots",
-            "--delete-empty-datasets=snapshot",
+            "--delete-empty-datasets=snapshots",
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
@@ -2465,7 +2464,7 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-snapshots=bookmark",
+                    "--delete-missing-snapshots=bookmarks",
                     "--delete-empty-datasets",
                 )
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
@@ -2474,7 +2473,7 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-snapshots=bookmark",
+                    "--delete-missing-snapshots=bookmarks",
                     "--delete-empty-datasets",
                 )
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
@@ -2485,7 +2484,7 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-snapshots=bookmark",
+                    "--delete-missing-snapshots=bookmarks",
                     "--delete-empty-datasets",
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
