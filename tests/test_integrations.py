@@ -2439,7 +2439,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--delete-missing-snapshots",
+            # "--delete-missing-snapshots",
             "--delete-empty-datasets=snapshot",
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
