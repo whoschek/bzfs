@@ -464,9 +464,10 @@ feature.
              "immediately (see below).\n\n")
     parser.add_argument(
         "--delete-missing-datasets", action="store_true",
-        help="After successful replication step, if any, delete existing destination datasets that are included via "
-             "--{include|exclude}-dataset* policy yet do not exist within SRC_DATASET (which can be an empty "
-             "dummy dataset!). Does not recurse without --recursive.\n\n"
+        help="Do nothing if the --delete-missing-datasets option is missing. Otherwise, after successful replication "
+             "step, if any, delete existing destination datasets that are included via --{include|exclude}-dataset* "
+             "policy yet do not exist within SRC_DATASET (which can be an empty dummy dataset!). Does not recurse "
+             "without --recursive.\n\n"
              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
              "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
@@ -474,10 +475,11 @@ feature.
     parser.add_argument(
         "--delete-missing-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
         nargs="?",
-        help="After successful replication, and successful --delete-missing-datasets step, if any, delete existing "
-             "destination snapshots that do not exist within the source dataset (which can be an empty dummy "
-             "dataset!) if they are included by the --include/exclude-snapshot-* policy, and the destination dataset "
-             "is included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
+        help="Do nothing if the --delete-missing-snapshots option is missing. Otherwise, after successful "
+             "replication, and successful --delete-missing-datasets step, if any, delete existing destination "
+             "snapshots that do not exist within the source dataset (which can be an empty dummy dataset!) if they "
+             "are included by the --include/exclude-snapshot-* policy, and the destination dataset is included via "
+             "--{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
              "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
              "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
@@ -485,19 +487,25 @@ feature.
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
              "*Note:* To delete snapshots regardless, consider using --delete-missing-snapshots in combination with "
              "the --skip-replication flag plus a source that is a temporary empty dummy dataset, created like so: "
-             "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n")
+             "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n"
+             "*Note:* Use --delete-missing-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
+             "case no snapshots are included and the --include-snapshot-* filter options treat bookmarks as snapshots."
+             "\n\n")
     parser.add_argument(
         "--delete-empty-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
         const="snapshots+bookmarks", nargs="?",
-        help="After successful replication step and successful --delete-missing-datasets and successful "
-             "--delete-missing-snapshots steps, if any, delete any included destination dataset that has no snapshot "
-             "if all descendants of that destination dataset do not have a snapshot either (again, only if the "
-             "existing destination dataset is included via --{include|exclude}-dataset* policy). "
+        help="Do nothing if the --delete-empty-datasets option is missing. Otherwise, after successful replication "
+             "step and successful --delete-missing-datasets and successful --delete-missing-snapshots steps, if any, "
+             "delete any included destination dataset that has no snapshot and no bookmark if all descendants of "
+             "that destination dataset do not have a snapshot or bookmark either "
+             "(again, only if the existing destination dataset is included via --{include|exclude}-dataset* policy). "
              "Does not recurse without --recursive.\n\n"
              "For example, if the destination contains datasets h1,d1, and the include/exclude policy effectively "
              "includes h1,d1, then check if h1,d1 can be deleted. "
              "On the other hand, if the include/exclude policy effectively only includes h1 then only check if h1 "
-             "can be deleted.\n\n")
+             "can be deleted.\n\n"
+             "*Note:* Use --delete-empty-datasets=snapshots to delete snapshot-less datasets even if they still "
+             "contain bookmarks.\n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
