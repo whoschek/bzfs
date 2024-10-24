@@ -53,6 +53,7 @@ import sys
 import tempfile
 import time
 import uuid
+from argparse import Namespace
 from collections import defaultdict, Counter
 from contextlib import redirect_stderr
 from dataclasses import dataclass, field
@@ -1486,9 +1487,9 @@ class Job:
         if p.delete_missing_snapshots:
             log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
             if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_missing_bookmarks:
-                filter_needs_creation_time = any(f.timerange is not None for f in p.snapshot_filters)
-                props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
                 kind = "bookmark" if p.delete_missing_bookmarks else "snapshot"
+                filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
+                props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
                 for dst_dataset in dst_datasets:
                     cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                     dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
@@ -1590,7 +1591,7 @@ class Job:
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
         use_bookmark = use_bookmark and len(dst_snapshots_with_guids) > 0
-        filter_needs_creation_time = any(f.timerange is not None for f in p.snapshot_filters)
+        filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -3675,11 +3676,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         rankranges = self.parse_rankranges(parser, values[1:], option_string=option_string)
         setattr(namespace, self.dest, [timerange] + rankranges)  # for testing only
         timerange = self.get_include_snapshot_times(timerange)
-        if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
-            add_snapshot_filter(namespace, SnapshotFilter("include_snapshot_times", timerange, None))
-        else:
-            assert timerange is not None
-            add_snapshot_filter(namespace, SnapshotFilter(self.dest, timerange, rankranges))
+        add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
 
     @staticmethod
     def parse_duration_to_seconds(duration: str) -> int:
@@ -3759,6 +3756,19 @@ def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> No
     if not hasattr(args, snapshot_filters_var):
         args.snapshot_filters_var = []
     args.snapshot_filters_var.append(_filter)
+
+
+def add_time_and_rank_snapshot_filter(args: Namespace, dst: str, timerange: UnixTimeRange, rankranges: List[RankRange]):
+    if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
+        add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
+    else:
+        assert timerange is not None
+        add_snapshot_filter(args, SnapshotFilter(dst, timerange, rankranges))
+
+
+def has_timerange_filter(snapshot_filters: List[SnapshotFilter]) -> bool:
+    """Interacts with add_time_and_rank_snapshot_filter() and optimize_snapshot_filters()"""
+    return any(f.timerange is not None for f in snapshot_filters)
 
 
 def optimize_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[SnapshotFilter]:
