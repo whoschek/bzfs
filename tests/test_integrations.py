@@ -2416,7 +2416,7 @@ class LocalTestCase(BZFSTestCase):
                     dst_root_dataset,
                     "--skip-replication",
                     "--delete-missing-snapshots",
-                    "--delete-empty-datasets",
+                    "--delete-empty-datasets=snapshot",
                     **kwargs,
                 )
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
