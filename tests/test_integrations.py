@@ -1382,7 +1382,7 @@ class LocalTestCase(BZFSTestCase):
             "--zfs-recv-o-targets=full",
             "--zfs-recv-o-sources=local,inherited",
             "--zfs-recv-o-include-regex=include_bzfs.*",
-            "--zfs-recv-x-targets=full,incremental",
+            "--zfs-recv-x-targets=full+incremental",
             "--zfs-recv-x-include-regex=.*",
             "--zfs-recv-x-exclude-regex",
             "include_bzfs.*",

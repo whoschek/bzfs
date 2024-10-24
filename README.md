@@ -332,11 +332,11 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--log-config-var NAME:VALUE [NAME:VALUE ...]]
             [--include-envvar-regex REGEX [REGEX ...]]
             [--exclude-envvar-regex REGEX [REGEX ...]]
-            [--zfs-recv-o-targets {full|incremental|full,incremental}]
+            [--zfs-recv-o-targets {full,incremental,full+incremental}]
             [--zfs-recv-o-sources STRING]
             [--zfs-recv-o-include-regex REGEX [REGEX ...]]
             [--zfs-recv-o-exclude-regex REGEX [REGEX ...]]
-            [--zfs-recv-x-targets {full|incremental|full,incremental}]
+            [--zfs-recv-x-targets {full,incremental,full+incremental}]
             [--zfs-recv-x-sources STRING]
             [--zfs-recv-x-include-regex REGEX [REGEX ...]]
             [--zfs-recv-x-exclude-regex REGEX [REGEX ...]] [--version]
@@ -1596,12 +1596,12 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
 
 <div id="--zfs-recv-o-targets"></div>
 
-**--zfs-recv-o-targets** *{full|incremental|full,incremental}*
+**--zfs-recv-o-targets** *{full,incremental,full+incremental}*
 
 *  The zfs send phase or phases during which the extra '-o' options
-    are passed to 'zfs receive'. This is a comma-separated list (no
-    spaces) containing one or more of the following choices: 'full',
-    'incremental'. Default is 'full,incremental'. A 'full' send is
+    are passed to 'zfs receive'. This is a plus-separated list (no
+    spaces) containing one of the following choices: 'full',
+    'incremental'. Default is 'full+incremental'. A 'full' send is
     sometimes also known as an 'initial' send.
 
 <!-- -->
@@ -1674,12 +1674,12 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
 
 <div id="--zfs-recv-x-targets"></div>
 
-**--zfs-recv-x-targets** *{full|incremental|full,incremental}*
+**--zfs-recv-x-targets** *{full,incremental,full+incremental}*
 
 *  The zfs send phase or phases during which the extra '-x' options
-    are passed to 'zfs receive'. This is a comma-separated list (no
-    spaces) containing one or more of the following choices: 'full',
-    'incremental'. Default is 'full,incremental'. A 'full' send is
+    are passed to 'zfs receive'. This is a plus-separated list (no
+    spaces) containing one of the following choices: 'full',
+    'incremental'. Default is 'full+incremental'. A 'full' send is
     sometimes also known as an 'initial' send.
 
 <!-- -->

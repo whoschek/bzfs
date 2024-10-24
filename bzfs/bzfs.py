@@ -803,14 +803,13 @@ feature.
                           "its corresponding destination dataset. The 'zfs-recv-o' group of parameters is applied "
                           "before the 'zfs-recv-x' group."))
         target_choices_items = ["full", "incremental"]
-        target_choices_default = ",".join(target_choices_items)
-        target_choices = target_choices_items + [",".join(target_choices_items)]
-        metavar = "{" + "|".join(target_choices_items + [",".join(target_choices_items)]) + "}"
+        target_choices_default = "+".join(target_choices_items)
+        target_choices = target_choices_items + [target_choices_default]
         qq = "'"
         argument_group.add_argument(
-            f"--{grup}-targets", choices=target_choices, default=target_choices_default, metavar=metavar,
+            f"--{grup}-targets", choices=target_choices, default=target_choices_default,
             help=h(f"The zfs send phase or phases during which the extra {flag} options are passed to 'zfs receive'. "
-                   "This is a comma-separated list (no spaces) containing one or more of the following choices: "
+                   "This is a plus-separated list (no spaces) containing one of the following choices: "
                    f"{', '.join([f'{qq}{x}{qq}' for x in target_choices_items])}. "
                    f"Default is '{target_choices_default}'. "
                    "A 'full' send is sometimes also known as an 'initial' send.\n\n"))
