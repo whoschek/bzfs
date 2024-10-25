@@ -1511,38 +1511,42 @@ class Job:
         # via --{include|exclude}-dataset* policy.
         if p.delete_dst_snapshots:
             log.info(p.dry("--delete-dst-snapshots: %s"), task_description)
+            kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
+            filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
+            props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+
+            def delete_destination_snapshots(dst_dataset: str) -> None:
+                cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+                dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
+                if p.delete_dst_bookmarks:
+                    replace_in_lines(dst_snapshots_with_guids, old="#", new="@")  # treat bookmarks as snapshots
+                dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
+                if p.delete_dst_bookmarks:
+                    replace_in_lines(dst_snapshots_with_guids, old="@", new="#")  # restore pre-filtering bookmark state
+                if filter_needs_creation_time:
+                    dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
+                src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
+                if src_dataset in basis_src_datasets and (
+                    self.is_zpool_bookmarks_feature_enabled_or_active(src) or not p.delete_dst_bookmarks
+                ):
+                    cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s name -Hp -o guid,name", src_dataset)
+                    src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
+                    missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
+                        set(cut(1, lines=src_snapshots_with_guids))
+                    )
+                    missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
+                else:
+                    missing_snapshot_tags = dst_snapshots_with_guids
+                separator = "#" if p.delete_dst_bookmarks else "@"
+                missing_snapshot_tags = cut(field=2, separator=separator, lines=missing_snapshot_tags)
+                if p.delete_dst_bookmarks:
+                    self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                else:
+                    self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+
             if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_dst_bookmarks:
-                kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
-                filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
-                props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
                 for dst_dataset in dst_datasets:
-                    cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
-                    dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
-                    if p.delete_dst_bookmarks:
-                        replace_in_lines(dst_snapshots_with_guids, old="#", new="@")  # treat bookmarks as snapshots
-                    dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
-                    if p.delete_dst_bookmarks:
-                        replace_in_lines(dst_snapshots_with_guids, old="@", new="#")  # restore pre-filtr bookmark state
-                    if filter_needs_creation_time:
-                        dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
-                    src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                    if src_dataset in basis_src_datasets and (
-                        self.is_zpool_bookmarks_feature_enabled_or_active(src) or not p.delete_dst_bookmarks
-                    ):
-                        cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s name -Hp -o guid,name", src_dataset)
-                        src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
-                        missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
-                            set(cut(1, lines=src_snapshots_with_guids))
-                        )
-                        missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
-                    else:
-                        missing_snapshot_tags = dst_snapshots_with_guids
-                    separator = "#" if p.delete_dst_bookmarks else "@"
-                    missing_snapshot_tags = cut(field=2, separator=separator, lines=missing_snapshot_tags)
-                    if p.delete_dst_bookmarks:
-                        self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
-                    else:
-                        self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                    self.run_with_retries(p.retry_policy, lambda: delete_destination_snapshots(dst_dataset))
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
         # of that dataset do not have a snapshot or bookmark either. To do so, we walk the dataset list (conceptually,
@@ -2175,12 +2179,14 @@ class Job:
                 xprint(log, process.stderr, run=print_stderr, end="")
                 return process.stdout
 
-    def try_ssh_command(self, remote: Remote, level: int, is_dry=False, cmd=None, error_trigger: Optional[str] = None):
+    def try_ssh_command(
+        self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, error_trigger=None
+    ):
         """Convenience method that helps react to a dataset or pool that potentially doesn't exist anymore."""
         log = self.params.log
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-            return self.run_ssh_command(remote, level=level, is_dry=is_dry, cmd=cmd)
+            return self.run_ssh_command(remote, level=level, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
                 stderr = stderr_to_str(e.stderr)
@@ -2192,6 +2198,18 @@ class Job:
                 ):
                     return None
                 log.warning("%s", stderr.rstrip())
+            raise RetryableError("Subprocess failed") from e
+
+    def retryable_ssh_command(
+        self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, error_trigger=None
+    ):
+        log = self.params.log
+        try:
+            self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
+            return self.run_ssh_command(remote, level=level, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+            if not isinstance(e, UnicodeDecodeError):
+                log.warning("%s", stderr_to_str(e.stderr).rstrip())
             raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
@@ -2429,7 +2447,7 @@ class Job:
         log.info(p.dry("Deleting snapshot(s): %s"), snaps_to_delete)
         cmd = self.delete_snapshot_cmd(remote, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
-        self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        self.retryable_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
 
     def delete_snapshot_cmd(self, r: Remote, snaps_to_delete: str) -> List[str]:
         p = self.params
@@ -2446,7 +2464,7 @@ class Job:
         for i, snapshot_tag in enumerate(snapshot_tags):
             log.debug(p.dry(f"Deleting bookmark {i+1}/{len(snapshot_tags)}: %s"), snapshot_tag)
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy", f"{dataset}#{snapshot_tag}")
-            self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            self.retryable_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
     def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
         """Deletes the given datasets via zfs destroy -r on the given remote."""
@@ -2976,7 +2994,7 @@ class Job:
             procs += ["sudo zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
         if not self.is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send):
             return True
-        op = "zfs {destroy|receive|rollback" + ("|send" if busy_if_send else "") + "} operation"
+        op = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
         except SystemExit as e:
@@ -2990,7 +3008,7 @@ class Job:
 
     @staticmethod
     def get_is_zfs_dataset_busy_regexes() -> Tuple[re.Pattern, re.Pattern]:
-        zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas) )?([^ ]*?/)?zfs (destroy|receive|recv|rollback"
+        zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas) )?([^ ]*?/)?zfs (receive|recv"
         zfs_dataset_busy_if_mods = (zfs_dataset_busy_prefix + ") .*").replace("(", "(?:")
         zfs_dataset_busy_if_send = (zfs_dataset_busy_prefix + "|send) .*").replace("(", "(?:")
         return re.compile(zfs_dataset_busy_if_mods), re.compile(zfs_dataset_busy_if_send)
