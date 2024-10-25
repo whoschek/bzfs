@@ -489,7 +489,7 @@ feature.
         "--delete-dst-datasets", action="store_true",
         help="Do nothing if the --delete-dst-datasets option is missing. Otherwise, after successful replication "
              "step, if any, delete existing destination datasets that are included via --{include|exclude}-dataset* "
-             "policy yet do not exist within SRC_DATASET (which can be an empty dataset, such as the virtual "
+             "policy yet do not exist within SRC_DATASET (which can be an empty dataset, such as the hardcoded virtual "
              f"dataset named '{dummy_dataset}'!). Does not recurse without --recursive.\n\n"
              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
              "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
@@ -512,7 +512,7 @@ feature.
              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
              "*Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination with "
-             f"a source that is an empty dataset, such as the virtual dataset named '{dummy_dataset}', like so: "
+             f"a source that is an empty dataset, such as the hardcoded virtual dataset named '{dummy_dataset}', like so: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
              "--include-dataset-regex '.*_daily' --recursive`\n\n"
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
@@ -1490,7 +1490,7 @@ class Job:
 
         if failed or not (p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets):
             return
-        log.info(p.dry("Prep --delete-dst-*: %s"), task_description)
+        log.info(p.dry("Preparing --delete-dst-*: %s"), task_description)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
         basis_dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy

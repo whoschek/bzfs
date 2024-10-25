@@ -933,8 +933,9 @@ via tests/update_readme.py
     Otherwise, after successful replication step, if any, delete
     existing destination datasets that are included via
     --{include|exclude}-dataset* policy yet do not exist within
-    SRC_DATASET (which can be an empty dataset, such as the virtual
-    dataset named 'dummy'!). Does not recurse without --recursive.
+    SRC_DATASET (which can be an empty dataset, such as the hardcoded
+    virtual dataset named 'dummy'!). Does not recurse without
+    --recursive.
 
     For example, if the destination contains datasets h1,h2,h3,d1
     whereas source only contains h3, and the include/exclude policy
@@ -974,10 +975,10 @@ via tests/update_readme.py
 
     *Note:* To delete snapshots regardless, consider using
     --delete-dst-snapshots in combination with a source that is an
-    empty dataset, such as the virtual dataset named 'dummy', like so:
-    `bzfs dummy tank2/boo/bar --dryrun --skip-replication
-    --delete-dst-snapshots --include-dataset-regex '.*_daily'
-    --recursive`
+    empty dataset, such as the hardcoded virtual dataset named
+    'dummy', like so: `bzfs dummy tank2/boo/bar --dryrun
+    --skip-replication --delete-dst-snapshots --include-dataset-regex
+    '.*_daily' --recursive`
 
     *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks
     instead of snapshots, in which case no snapshots are included and
