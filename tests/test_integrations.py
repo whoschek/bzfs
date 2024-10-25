@@ -2198,6 +2198,22 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_delete_missing_datasets_recursive_with_dummy_src(self):
+        self.setup_basic_with_recursive_replication_done()
+        for i in range(0, 3):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    bzfs.dummy_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-missing-datasets",
+                    dry_run=(i == 0),
+                )
+                if i == 0:
+                    self.assertTrue(dataset_exists(dst_root_dataset))
+                else:
+                    self.assertFalse(dataset_exists(dst_root_dataset))
+
     def test_delete_missing_datasets_flat_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
         take_snapshot(create_filesystem(dst_root_dataset, "bar"), "b1")
@@ -2530,6 +2546,23 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
+
+    def test_delete_missing_snapshots_recursive_with_delete_empty_datasets_with_dummy(self):
+        self.setup_basic_with_recursive_replication_done()
+        for i in range(0, 3):
+            self.run_bzfs(
+                bzfs.dummy_dataset,
+                dst_root_dataset,
+                "--recursive",
+                "--skip-replication",
+                "--delete-missing-snapshots",
+                "--delete-empty-datasets",
+                dry_run=(i == 0),
+            )
+            if i == 0:
+                self.assertSnapshots(dst_root_dataset, 3, "s")
+            else:
+                self.assertFalse(dataset_exists(dst_root_dataset))
 
     def test_delete_missing_snapshots_flat_with_time_range_full(self):
         self.setup_basic_with_recursive_replication_done()
@@ -2880,6 +2913,9 @@ class MinimalRemoteTestCase(BZFSTestCase):
 
     def test_basic_replication_recursive1(self):
         LocalTestCase(param=self.param).test_basic_replication_recursive1()
+
+    def test_delete_missing_datasets_recursive_with_dummy_src(self):
+        LocalTestCase(param=self.param).test_delete_missing_datasets_recursive_with_dummy_src()
 
     def test_inject_unavailable_sudo(self):
         expected_error = die_status if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0

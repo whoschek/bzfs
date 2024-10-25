@@ -131,6 +131,28 @@ have drastically diverged:
 ` bzfs tank1/foo/bar tank2/boo/bar --recursive --force
 --delete-missing-datasets --delete-missing-snapshots`
 
+* Replicate all daily snapshots that were created during the last 7
+days, and at the same time ensure that the latest 7 daily snapshots are
+replicated regardless of when they were created:
+
+` bzfs tank1/foo/bar tank2/boo/bar --recursive
+--include-snapshot-regex '.*_daily'
+--include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
+
+* Delete all daily snapshots that were created more than 7 days ago,
+yet ensure that the latest 7 daily snapshots are not deleted regardless
+of when they were created:
+
+` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
+--delete-missing-snapshots --include-snapshot-regex '.*_daily'
+--include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-times-and-ranks '*..7 days ago'`
+
+* Delete all tmp datasets within tank2/boo/bar:
+
+` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
+--delete-missing-datasets --include-dataset-regex 'tmp.*'`
+
 * Example with further options:
 
 ` bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
@@ -556,19 +578,18 @@ via tests/update_readme.py
     <b>*Replication Example (UNION):* </b>
 
     Specify to replicate all daily snapshots that were created during
-    the last 7 days, and at the same time ensure that at least the
-    latest 7 daily snapshots are replicated regardless of when they were
-    created, like so: `--include-snapshot-regex '.*_daily'
+    the last 7 days, and at the same time ensure that at the latest 7
+    daily snapshots are replicated regardless of when they were created,
+    like so: `--include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks '7 days ago..*' 'latest
     7'`
 
     <b>*Deletion Example (no UNION):* </b>
 
     Specify to delete all daily snapshots that were created more than 7
-    days ago, yet ensure that at least the latest 7 daily snapshots are
-    not deleted regardless of when they were created, like so:
-    `--skip-replication --delete-missing-snapshots
-    --include-snapshot-regex '.*_daily'
+    days ago, yet ensure that the latest 7 daily snapshots are not
+    deleted regardless of when they were created, like so:
+    `--include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks 'latest 7..latest 100%'
     --include-snapshot-times-and-ranks '*..7 days ago'`
 
@@ -912,8 +933,8 @@ via tests/update_readme.py
     Otherwise, after successful replication step, if any, delete
     existing destination datasets that are included via
     --{include|exclude}-dataset* policy yet do not exist within
-    SRC_DATASET (which can be an empty dummy dataset!). Does not recurse
-    without --recursive.
+    SRC_DATASET (which can be an empty dataset, such as the virtual
+    dataset named 'dummy'!). Does not recurse without --recursive.
 
     For example, if the destination contains datasets h1,h2,h3,d1
     whereas source only contains h3, and the include/exclude policy
@@ -921,6 +942,11 @@ via tests/update_readme.py
     the destination to make it 'the same'. On the other hand, if the
     include/exclude policy effectively only includes h1,h2,h3 then only
     delete datasets h1,h2 on the destination to make it 'the same'.
+
+    Example to delete all tmp datasets within tank2/boo/bar: `bzfs
+    dummy tank2/boo/bar --dryrun --skip-replication
+    --delete-missing-datasets --include-dataset-regex 'tmp.*'
+    --recursive`
 
 <!-- -->
 
@@ -947,10 +973,11 @@ via tests/update_readme.py
     to make it 'the same'.
 
     *Note:* To delete snapshots regardless, consider using
-    --delete-missing-snapshots in combination with the
-    --skip-replication flag plus a source that is a temporary empty
-    dummy dataset, created like so: dd if=/dev/zero of=/tmp/dummy bs=1M
-    count=100; zpool create dummy /tmp/dummy
+    --delete-missing-snapshots in combination with a source that is an
+    empty dataset, such as the virtual dataset named 'dummy', like so:
+    `bzfs dummy tank2/boo/bar --dryrun --skip-replication
+    --delete-missing-snapshots --include-dataset-regex '.*_daily'
+    --recursive`
 
     *Note:* Use --delete-missing-snapshots=bookmarks to delete
     bookmarks instead of snapshots, in which case no snapshots are
@@ -1141,8 +1168,8 @@ via tests/update_readme.py
     snapshots. As an example starting point, here is a script that
     deletes all bookmarks older than 90 days in a given dataset and its
     descendants, yet, for each dataset, does not delete the latest 100
-    bookmarks regardless of when they were created: `bzfs ...
-    --recursive --skip-replication
+    bookmarks regardless of when they were created: `bzfs dummy
+    tank2/boo/bar --dryrun --recursive --skip-replication
     --delete-missing-snapshots=bookmarks
     --include-snapshot-times-and-ranks 'latest 100..latest 100%'
     --include-snapshot-times-and-ranks '*..90 days ago'`
@@ -1629,10 +1656,10 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
 **--zfs-recv-o-targets** *{full,incremental,full+incremental}*
 
 *  The zfs send phase or phases during which the extra '-o' options
-    are passed to 'zfs receive'. This is a plus-separated list (no
-    spaces) containing one of the following choices: 'full',
-    'incremental'. Default is 'full+incremental'. A 'full' send is
-    sometimes also known as an 'initial' send.
+    are passed to 'zfs receive'. This can be one of the following
+    choices: 'full', 'incremental', 'full+incremental'. Default is
+    'full+incremental'. A 'full' send is sometimes also known as an
+    'initial' send.
 
 <!-- -->
 
@@ -1707,10 +1734,10 @@ dataset. The 'zfs-recv-o' group of parameters is applied before the
 **--zfs-recv-x-targets** *{full,incremental,full+incremental}*
 
 *  The zfs send phase or phases during which the extra '-x' options
-    are passed to 'zfs receive'. This is a plus-separated list (no
-    spaces) containing one of the following choices: 'full',
-    'incremental'. Default is 'full+incremental'. A 'full' send is
-    sometimes also known as an 'initial' send.
+    are passed to 'zfs receive'. This can be one of the following
+    choices: 'full', 'incremental', 'full+incremental'. Default is
+    'full+incremental'. A 'full' send is sometimes also known as an
+    'initial' send.
 
 <!-- -->
 

@@ -73,6 +73,7 @@ if sys.version_info < (3, 7):
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
+dummy_dataset = "dummy"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
@@ -169,6 +170,18 @@ feature.
 * Example that makes destination identical to source even if the two have drastically diverged:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-missing-datasets --delete-missing-snapshots`
+
+* Replicate all daily snapshots that were created during the last 7 days, and at the same time ensure that the latest 7 daily snapshots are replicated regardless of when they were created:
+
+`   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
+
+* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots are not deleted regardless of when they were created:
+
+`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-missing-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
+
+* Delete all tmp datasets within tank2/boo/bar:
+
+`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-missing-datasets --include-dataset-regex 'tmp.*'`
 
 * Example with further options:
 
@@ -283,16 +296,15 @@ feature.
              "This option can be specified multiple times.\n\n"
              "<b>*Replication Example (UNION):* </b>\n\n"
              "Specify to replicate all daily snapshots that were created during the last 7 days, "
-             "and at the same time ensure that at least the latest 7 daily snapshots are replicated regardless "
+             "and at the same time ensure that at the latest 7 daily snapshots are replicated regardless "
              "of when they were created, like so: "
              "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`\n\n"
              "<b>*Deletion Example (no UNION):* </b>\n\n"
              "Specify to delete all daily snapshots that were created more than 7 days ago, "
-             "yet ensure that at least the latest 7 daily snapshots are not deleted regardless "
+             "yet ensure that the latest 7 daily snapshots are not deleted regardless "
              "of when they were created, like so: "
-             "`--skip-replication --delete-missing-snapshots --include-snapshot-regex '.*_daily' "
-             "--include-snapshot-times-and-ranks 'latest 7..latest 100%%' --include-snapshot-times-and-ranks "
-             "'*..7 days ago'`"
+             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%%' "
+             "--include-snapshot-times-and-ranks '*..7 days ago'`"
              "\n\n"
              "This helps to safely cope with irregular scenarios where no snapshots were created or received within "
              "the last 7 days, or where more than 7 daily snapshots were created within the last 7 days. It can also "
@@ -477,12 +489,15 @@ feature.
         "--delete-missing-datasets", action="store_true",
         help="Do nothing if the --delete-missing-datasets option is missing. Otherwise, after successful replication "
              "step, if any, delete existing destination datasets that are included via --{include|exclude}-dataset* "
-             "policy yet do not exist within SRC_DATASET (which can be an empty dummy dataset!). Does not recurse "
-             "without --recursive.\n\n"
+             "policy yet do not exist within SRC_DATASET (which can be an empty dataset, such as the virtual "
+             f"dataset named '{dummy_dataset}'!). Does not recurse without --recursive.\n\n"
              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
              "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
              "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
-             "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n")
+             "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"
+             "Example to delete all tmp datasets within tank2/boo/bar: "
+             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication "
+             "--delete-missing-datasets --include-dataset-regex 'tmp.*' --recursive`\n\n")
     parser.add_argument(
         "--delete-missing-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
         nargs="?",
@@ -497,8 +512,9 @@ feature.
              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
              "*Note:* To delete snapshots regardless, consider using --delete-missing-snapshots in combination with "
-             "the --skip-replication flag plus a source that is a temporary empty dummy dataset, created like so: "
-             "dd if=/dev/zero of=/tmp/dummy bs=1M count=100; zpool create dummy /tmp/dummy\n\n"
+             f"a source that is an empty dataset, such as the virtual dataset named '{dummy_dataset}', like so: "
+             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-missing-snapshots "
+             "--include-dataset-regex '.*_daily' --recursive`\n\n"
              "*Note:* Use --delete-missing-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are included and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
              "snapshots wrt. filtering."
@@ -609,8 +625,8 @@ feature.
              "As an example starting point, here is a script that deletes all bookmarks older than 90 days in a "
              "given dataset and its descendants, yet, for each dataset, does not delete the latest 100 bookmarks "
              "regardless of when they were created: "
-             f"`{prog_name} ... --recursive --skip-replication --delete-missing-snapshots=bookmarks "
-             "--include-snapshot-times-and-ranks 'latest 100..latest 100%%' "
+             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
+             "--delete-missing-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 100..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
@@ -829,8 +845,8 @@ feature.
         argument_group.add_argument(
             f"--{grup}-targets", choices=target_choices, default=target_choices_default,
             help=h(f"The zfs send phase or phases during which the extra {flag} options are passed to 'zfs receive'. "
-                   "This is a plus-separated list (no spaces) containing one of the following choices: "
-                   f"{', '.join([f'{qq}{x}{qq}' for x in target_choices_items])}. "
+                   "This can be one of the following choices: "
+                   f"{', '.join([f'{qq}{x}{qq}' for x in target_choices])}. "
                    f"Default is '{target_choices_default}'. "
                    "A 'full' send is sometimes also known as an 'initial' send.\n\n"))
         msg = "Thus, -x opts do not benefit from source != 'local' (which is the default already)." \
@@ -1417,7 +1433,6 @@ class Job:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
-        is_debug = log.isEnabledFor(log_debug)
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
@@ -1425,17 +1440,19 @@ class Job:
             p.recursive_flag,
             src.root_dataset,
         )
-        src_datasets_with_record_sizes = (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines()
+        src_datasets_with_sizes = []
+        if not self.is_dummy_src(src):
+            src_datasets_with_sizes = (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines()
         src_datasets = []
         src_properties = {}
-        for line in src_datasets_with_record_sizes:
+        for line in src_datasets_with_sizes:
             volblocksize, recordsize, src_dataset = line.split("\t", 2)
             src_properties[src_dataset] = {
                 "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
             }
             src_datasets.append(src_dataset)
         self.src_properties = src_properties
-        src_datasets_with_record_sizes = None  # help gc
+        src_datasets_with_sizes = None  # help gc
 
         basis_src_datasets = set(src_datasets)
         src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
@@ -1473,7 +1490,7 @@ class Job:
 
         if failed or not (p.delete_missing_datasets or p.delete_missing_snapshots or p.delete_empty_datasets):
             return
-        log.info(p.dry("Preparing --delete-missing-*: %s"), task_description)
+        log.info(p.dry("Prep --delete-missing-*: %s"), task_description)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
         basis_dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
@@ -2770,7 +2787,7 @@ class Job:
             if subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
                 self.disable_program("sh", ["local"])
 
-        for r in [p.src, p.dst]:
+        for r in [p.dst, p.src]:
             loc = r.location
             remote_conf_cache_key = r.cache_key()
             cache_item = self.remote_conf_cache.get(remote_conf_cache_key)
@@ -2823,7 +2840,7 @@ class Job:
         for key, value in available_programs.items():
             log.debug(f"available_programs[{key}]: %s", list_formatter(value, separator=", "))
 
-        for r in [p.src, p.dst]:
+        for r in [p.dst, p.src]:
             if r.sudo and not self.is_program_available("sudo", r.location):
                 die(f"{p.sudo_program} CLI is not available on {r.location} host: {r.ssh_user_host or 'localhost'}")
 
@@ -2903,11 +2920,18 @@ class Job:
     def is_solaris_zfs(self, remote: Remote) -> bool:
         return self.params.available_programs[remote.location].get("zfs") == "notOpenZFS"
 
+    @staticmethod
+    def is_dummy_src(r: Remote) -> bool:
+        return r.root_dataset == dummy_dataset and r.location == "src"
+
     def detect_zpool_features(self, remote: Remote) -> None:
         p = params = self.params
         r, loc, log = remote, remote.location, p.log
-        features = {}
         lines = []
+        features = {}
+        if self.is_dummy_src(r):
+            params.zpool_features[loc] = {}
+            return
         if params.zpool_program != disable_prg:
             cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
             try:
