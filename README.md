@@ -129,7 +129,7 @@ ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
 have drastically diverged:
 
 ` bzfs tank1/foo/bar tank2/boo/bar --recursive --force
---delete-missing-datasets --delete-missing-snapshots`
+--delete-dst-datasets --delete-dst-snapshots`
 
 * Replicate all daily snapshots that were created during the last 7
 days, and at the same time ensure that the latest 7 daily snapshots are
@@ -144,14 +144,14 @@ yet ensure that the latest 7 daily snapshots are not deleted regardless
 of when they were created:
 
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-missing-snapshots --include-snapshot-regex '.*_daily'
+--delete-dst-snapshots --include-snapshot-regex '.*_daily'
 --include-snapshot-times-and-ranks 'latest 7..latest 100%'
 --include-snapshot-times-and-ranks '*..7 days ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
 
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-missing-datasets --include-dataset-regex 'tmp.*'`
+--delete-dst-datasets --include-dataset-regex 'tmp.*'`
 
 * Example with further options:
 
@@ -331,9 +331,9 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--retries INT] [--retry-min-sleep-secs FLOAT]
             [--retry-max-sleep-secs FLOAT] [--retry-max-elapsed-secs FLOAT]
             [--skip-on-error {fail,tree,dataset}] [--skip-replication]
-            [--delete-missing-datasets]
-            [--delete-missing-snapshots [{snapshots,bookmarks}]]
-            [--delete-empty-datasets [{snapshots,snapshots+bookmarks}]]
+            [--delete-dst-datasets]
+            [--delete-dst-snapshots [{snapshots,bookmarks}]]
+            [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream] [--no-create-bookmark]
             [--no-use-bookmark] [--ssh-cipher STRING]
@@ -921,15 +921,15 @@ via tests/update_readme.py
 **--skip-replication**
 
 *  Skip replication step (see above) and proceed to the optional
-    --delete-missing-datasets step immediately (see below).
+    --delete-dst-datasets step immediately (see below).
 
 <!-- -->
 
-<div id="--delete-missing-datasets"></div>
+<div id="--delete-dst-datasets"></div>
 
-**--delete-missing-datasets**
+**--delete-dst-datasets**
 
-*  Do nothing if the --delete-missing-datasets option is missing.
+*  Do nothing if the --delete-dst-datasets option is missing.
     Otherwise, after successful replication step, if any, delete
     existing destination datasets that are included via
     --{include|exclude}-dataset* policy yet do not exist within
@@ -945,18 +945,18 @@ via tests/update_readme.py
 
     Example to delete all tmp datasets within tank2/boo/bar: `bzfs
     dummy tank2/boo/bar --dryrun --skip-replication
-    --delete-missing-datasets --include-dataset-regex 'tmp.*'
+    --delete-dst-datasets --include-dataset-regex 'tmp.*'
     --recursive`
 
 <!-- -->
 
-<div id="--delete-missing-snapshots"></div>
+<div id="--delete-dst-snapshots"></div>
 
-**--delete-missing-snapshots** *[{snapshots,bookmarks}]*
+**--delete-dst-snapshots** *[{snapshots,bookmarks}]*
 
-*  Do nothing if the --delete-missing-snapshots option is missing.
+*  Do nothing if the --delete-dst-snapshots option is missing.
     Otherwise, after successful replication, and successful
-    --delete-missing-datasets step, if any, delete existing destination
+    --delete-dst-datasets step, if any, delete existing destination
     snapshots that do not exist within the source dataset (which can be
     an empty dummy dataset!) if they are included by the
     --include/exclude-snapshot-* policy, and the destination dataset
@@ -973,32 +973,31 @@ via tests/update_readme.py
     to make it 'the same'.
 
     *Note:* To delete snapshots regardless, consider using
-    --delete-missing-snapshots in combination with a source that is an
+    --delete-dst-snapshots in combination with a source that is an
     empty dataset, such as the virtual dataset named 'dummy', like so:
     `bzfs dummy tank2/boo/bar --dryrun --skip-replication
-    --delete-missing-snapshots --include-dataset-regex '.*_daily'
+    --delete-dst-snapshots --include-dataset-regex '.*_daily'
     --recursive`
 
-    *Note:* Use --delete-missing-snapshots=bookmarks to delete
-    bookmarks instead of snapshots, in which case no snapshots are
-    included and the --{include|exclude}-snapshot-* filter options
-    treat bookmarks as snapshots wrt. filtering.
+    *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks
+    instead of snapshots, in which case no snapshots are included and
+    the --{include|exclude}-snapshot-* filter options treat bookmarks
+    as snapshots wrt. filtering.
 
 <!-- -->
 
-<div id="--delete-empty-datasets"></div>
+<div id="--delete-empty-dst-datasets"></div>
 
-**--delete-empty-datasets** *[{snapshots,snapshots+bookmarks}]*
+**--delete-empty-dst-datasets** *[{snapshots,snapshots+bookmarks}]*
 
-*  Do nothing if the --delete-empty-datasets option is missing.
+*  Do nothing if the --delete-empty-dst-datasets option is missing.
     Otherwise, after successful replication step and successful
-    --delete-missing-datasets and successful
-    --delete-missing-snapshots steps, if any, delete any included
-    destination dataset that has no snapshot and no bookmark if all
-    descendants of that destination dataset do not have a snapshot or
-    bookmark either (again, only if the existing destination dataset is
-    included via --{include|exclude}-dataset* policy). Does not
-    recurse without --recursive.
+    --delete-dst-datasets and successful --delete-dst-snapshots steps,
+    if any, delete any included destination dataset that has no snapshot
+    and no bookmark if all descendants of that destination dataset do
+    not have a snapshot or bookmark either (again, only if the existing
+    destination dataset is included via --{include|exclude}-dataset*
+    policy). Does not recurse without --recursive.
 
     For example, if the destination contains datasets h1,d1, and the
     include/exclude policy effectively includes h1,d1, then check if
@@ -1006,7 +1005,7 @@ via tests/update_readme.py
     policy effectively only includes h1 then only check if h1 can be
     deleted.
 
-    *Note:* Use --delete-empty-datasets=snapshots to delete
+    *Note:* Use --delete-empty-dst-datasets=snapshots to delete
     snapshot-less datasets even if they still contain bookmarks.
 
 <!-- -->
@@ -1170,7 +1169,7 @@ via tests/update_readme.py
     descendants, yet, for each dataset, does not delete the latest 100
     bookmarks regardless of when they were created: `bzfs dummy
     tank2/boo/bar --dryrun --recursive --skip-replication
-    --delete-missing-snapshots=bookmarks
+    --delete-dst-snapshots=bookmarks
     --include-snapshot-times-and-ranks 'latest 100..latest 100%'
     --include-snapshot-times-and-ranks '*..90 days ago'`
 

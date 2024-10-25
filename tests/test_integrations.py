@@ -760,7 +760,7 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
-                    src_root_dataset, dst_root_dataset, "--skip-parent", "--delete-missing-datasets", dry_run=(i == 0)
+                    src_root_dataset, dst_root_dataset, "--skip-parent", "--delete-dst-datasets", dry_run=(i == 0)
                 )
                 self.assertSnapshots(src_root_dataset, 3, "s")
                 self.assertTrue(dataset_exists(dst_root_dataset))
@@ -788,7 +788,7 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-parent",
-                    "--delete-missing-datasets",
+                    "--delete-dst-datasets",
                     "--recursive",
                     dry_run=(i == 0),
                 )
@@ -1010,8 +1010,8 @@ class LocalTestCase(BZFSTestCase):
                     dst_root_dataset,
                     src_root_dataset + "_nonexistingdataset2",
                     dst_root_dataset,
-                    "--delete-missing-snapshots",
-                    "--delete-missing-datasets",
+                    "--delete-dst-snapshots",
+                    "--delete-dst-datasets",
                     dry_run=(i == 0),
                     skip_on_error="dataset",
                     expected_status=die_status,
@@ -2181,7 +2181,7 @@ class LocalTestCase(BZFSTestCase):
                     )  # nothing has changed
                     self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t12"])
 
-    def test_delete_missing_datasets_with_missing_src_root(self):
+    def test_delete_dst_datasets_with_missing_src_root(self):
         destroy(src_root_dataset, recursive=True)
         recreate_filesystem(dst_root_dataset)
         for i in range(0, 3):
@@ -2190,7 +2190,7 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-datasets",
+                    "--delete-dst-datasets",
                     dry_run=(i == 0),
                 )
                 if i == 0:
@@ -2198,7 +2198,7 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertFalse(dataset_exists(dst_root_dataset))
 
-    def test_delete_missing_datasets_recursive_with_dummy_src(self):
+    def test_delete_dst_datasets_recursive_with_dummy_src(self):
         self.setup_basic_with_recursive_replication_done()
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
@@ -2206,7 +2206,7 @@ class LocalTestCase(BZFSTestCase):
                     bzfs.dummy_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-datasets",
+                    "--delete-dst-datasets",
                     dry_run=(i == 0),
                 )
                 if i == 0:
@@ -2214,19 +2214,19 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertFalse(dataset_exists(dst_root_dataset))
 
-    def test_delete_missing_datasets_flat_nothing_todo(self):
+    def test_delete_dst_datasets_flat_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
         take_snapshot(create_filesystem(dst_root_dataset, "bar"), "b1")
         destroy(build(src_root_dataset + "/foo"), recursive=True)
         self.assertFalse(dataset_exists(src_root_dataset + "/foo"))
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo"))
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-missing-datasets")
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-datasets")
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/bar"))
 
-    def test_delete_missing_datasets_recursive1(self):
+    def test_delete_dst_datasets_recursive1(self):
         self.setup_basic_with_recursive_replication_done()
         take_snapshot(create_filesystem(dst_root_dataset, "bar"), fix("b1"))
         take_snapshot(create_filesystem(dst_root_dataset, "zoo"), fix("z1"))
@@ -2234,15 +2234,13 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(src_root_dataset + "/foo"))
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo"))
-        self.run_bzfs(
-            src_root_dataset, dst_root_dataset, "--recursive", "--skip-replication", "--delete-missing-datasets"
-        )
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-replication", "--delete-dst-datasets")
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/bar"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
 
-    def test_delete_missing_datasets_with_exclude_regex1(self):
+    def test_delete_dst_datasets_with_exclude_regex1(self):
         self.setup_basic_with_recursive_replication_done()
         take_snapshot(create_filesystem(dst_root_dataset, "bar"), fix("b1"))
         take_snapshot(create_filesystem(dst_root_dataset, "zoo"), fix("z1"))
@@ -2255,7 +2253,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-missing-datasets",
+            "--delete-dst-datasets",
             "--exclude-dataset-regex",
             "bar?",
             "--exclude-dataset-regex",
@@ -2266,7 +2264,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset + "/bar"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/zoo"))
 
-    def test_delete_missing_datasets_with_exclude_regex2(self):
+    def test_delete_dst_datasets_with_exclude_regex2(self):
         self.setup_basic_with_recursive_replication_done()
         take_snapshot(create_filesystem(dst_root_dataset, "bar"), fix("b1"))
         take_snapshot(create_filesystem(dst_root_dataset, "zoo"), fix("z1"))
@@ -2279,7 +2277,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-missing-datasets",
+            "--delete-dst-datasets",
             "--exclude-dataset-regex",
             "!bar",
         )
@@ -2288,7 +2286,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/bar"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/zoo"))
 
-    def test_delete_missing_datasets_with_exclude_dataset(self):
+    def test_delete_dst_datasets_with_exclude_dataset(self):
         self.setup_basic_with_recursive_replication_done()
         take_snapshot(create_filesystem(dst_root_dataset, "bar"), fix("b1"))
         take_snapshot(create_filesystem(dst_root_dataset, "zoo"), fix("z1"))
@@ -2301,7 +2299,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-missing-datasets",
+            "--delete-dst-datasets",
             "--exclude-dataset",
             "foo",
             "--exclude-dataset",
@@ -2318,7 +2316,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/bar"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/zoo"))
 
-    def test_delete_missing_datasets_and_empty_datasets(self):
+    def test_delete_dst_datasets_and_empty_datasets(self):
         create_filesystems("axe")
         create_filesystems("foo/a")
         create_filesystems("foo/a/b")
@@ -2336,8 +2334,8 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-missing-datasets",
-            "--delete-empty-datasets",
+            "--delete-dst-datasets",
+            "--delete-empty-dst-datasets",
             "--exclude-dataset",
             "boo",
         )
@@ -2350,7 +2348,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
 
-    def test_delete_missing_snapshots_and_empty_datasets(self):
+    def test_delete_dst_snapshots_and_empty_datasets(self):
         create_filesystems("axe")
         create_filesystems("foo/a")
         create_filesystems("foo/a/b")
@@ -2368,8 +2366,8 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-empty-datasets",
-            "--delete-missing-snapshots",
+            "--delete-empty-dst-datasets",
+            "--delete-dst-snapshots",
             "--exclude-dataset",
             "boo",
         )
@@ -2382,7 +2380,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
 
-    def test_delete_missing_snapshots_nothing_todo(self):
+    def test_delete_dst_snapshots_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
         self.assertTrue(dataset_exists(src_root_dataset + "/foo/b"))
         self.assertEqual(0, len(snapshots(build(src_root_dataset + "/foo/b"))))
@@ -2391,19 +2389,19 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset + "/foo/b",
             dst_root_dataset + "/foo/b",
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
 
-    def test_delete_missing_bookmarks_flat_with_replication(self):
+    def test_delete_dst_bookmarks_flat_with_replication(self):
         self.setup_basic()
         self.run_bzfs(
-            src_root_dataset, dst_root_dataset, "--delete-missing-snapshots=bookmarks", "--delete-empty-datasets"
+            src_root_dataset, dst_root_dataset, "--delete-dst-snapshots=bookmarks", "--delete-empty-dst-datasets"
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
-    def test_delete_missing_snapshots_flat(self):
+    def test_delete_dst_snapshots_flat(self):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
@@ -2422,8 +2420,8 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-snapshots",
-                    "--delete-empty-datasets=snapshots",
+                    "--delete-dst-snapshots",
+                    "--delete-empty-dst-datasets=snapshots",
                     **kwargs,
                 )
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2439,7 +2437,7 @@ class LocalTestCase(BZFSTestCase):
                 src_root_dataset,
                 dst_root_dataset,
                 "--skip-replication",
-                "--delete-empty-datasets",
+                "--delete-empty-dst-datasets",
             )
             self.assertTrue(dataset_exists(dst_root_dataset))
         else:
@@ -2450,11 +2448,11 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--delete-empty-datasets=snapshots",
+            "--delete-empty-dst-datasets=snapshots",
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
-    def test_delete_missing_bookmarks_flat(self):
+    def test_delete_dst_bookmarks_flat(self):
         if not is_zpool_bookmarks_feature_enabled_or_active("src"):
             self.skipTest("ZFS has no bookmark feature")
         for i in range(0, 1):
@@ -2477,8 +2475,8 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-snapshots=bookmarks",
-                    "--delete-empty-datasets",
+                    "--delete-dst-snapshots=bookmarks",
+                    "--delete-empty-dst-datasets",
                 )
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
 
@@ -2486,8 +2484,8 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-snapshots=bookmarks",
-                    "--delete-empty-datasets",
+                    "--delete-dst-snapshots=bookmarks",
+                    "--delete-empty-dst-datasets",
                 )
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
 
@@ -2497,21 +2495,21 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
-                    "--delete-missing-snapshots=bookmarks",
-                    "--delete-empty-datasets",
+                    "--delete-dst-snapshots=bookmarks",
+                    "--delete-empty-dst-datasets",
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
-    def test_delete_missing_snapshots_despite_same_name(self):
+    def test_delete_dst_snapshots_despite_same_name(self):
         self.setup_basic_with_recursive_replication_done()
         destroy(snapshots(src_root_dataset)[2])
         destroy(snapshots(src_root_dataset)[0])
         take_snapshot(src_root_dataset, fix("s1"))  # Note: not the same as prior snapshot (has different GUID)
         take_snapshot(src_root_dataset, fix("s3"))  # Note: not the same as prior snapshot (has different GUID)
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-missing-snapshots")
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots")
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
 
-    def test_delete_missing_snapshots_recursive(self):
+    def test_delete_dst_snapshots_recursive(self):
         self.setup_basic_with_recursive_replication_done()
         destroy(snapshots(src_root_dataset)[2])
         destroy(snapshots(src_root_dataset)[0])
@@ -2519,15 +2517,13 @@ class LocalTestCase(BZFSTestCase):
         destroy(snapshots(src_foo)[1])
         src_foo_a = build(src_root_dataset + "/foo/a")
         destroy(src_foo_a, recursive=True)
-        self.run_bzfs(
-            src_root_dataset, dst_root_dataset, "--recursive", "--skip-replication", "--delete-missing-snapshots"
-        )
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-replication", "--delete-dst-snapshots")
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo/a"))
         self.assertSnapshotNames(dst_root_dataset + "/foo/a", [])
 
-    def test_delete_missing_snapshots_recursive_with_delete_empty_datasets(self):
+    def test_delete_dst_snapshots_recursive_with_delete_empty_dst_datasets(self):
         self.setup_basic_with_recursive_replication_done()
         destroy(snapshots(src_root_dataset)[2])
         destroy(snapshots(src_root_dataset)[0])
@@ -2540,14 +2536,14 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
 
-    def test_delete_missing_snapshots_recursive_with_delete_empty_datasets_with_dummy(self):
+    def test_delete_dst_snapshots_recursive_with_delete_empty_dst_datasets_with_dummy(self):
         self.setup_basic_with_recursive_replication_done()
         for i in range(0, 3):
             self.run_bzfs(
@@ -2555,8 +2551,8 @@ class LocalTestCase(BZFSTestCase):
                 dst_root_dataset,
                 "--recursive",
                 "--skip-replication",
-                "--delete-missing-snapshots",
-                "--delete-empty-datasets",
+                "--delete-dst-snapshots",
+                "--delete-empty-dst-datasets",
                 dry_run=(i == 0),
             )
             if i == 0:
@@ -2564,7 +2560,7 @@ class LocalTestCase(BZFSTestCase):
             else:
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
-    def test_delete_missing_snapshots_flat_with_time_range_full(self):
+    def test_delete_dst_snapshots_flat_with_time_range_full(self):
         self.setup_basic_with_recursive_replication_done()
         destroy(snapshots(src_root_dataset)[2])
         destroy(snapshots(src_root_dataset)[0])
@@ -2577,8 +2573,8 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
             **kwargs,
         )
@@ -2586,7 +2582,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
-    def test_delete_missing_snapshots_flat_with_time_range_empty(self):
+    def test_delete_dst_snapshots_flat_with_time_range_empty(self):
         self.setup_basic_with_recursive_replication_done()
         destroy(snapshots(src_root_dataset)[2])
         destroy(snapshots(src_root_dataset)[0])
@@ -2599,8 +2595,8 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
             "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
             **kwargs,
         )
@@ -2608,14 +2604,14 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
-    def test_delete_missing_snapshots_with_excludes_flat_nothing_todo(self):
+    def test_delete_dst_snapshots_with_excludes_flat_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             "xxxx*",
         )
@@ -2623,7 +2619,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
-    def test_delete_missing_snapshots_with_excludes_flat(self):
+    def test_delete_dst_snapshots_with_excludes_flat(self):
         self.setup_basic_with_recursive_replication_done()
         for snap in snapshots(src_root_dataset):
             destroy(snap)
@@ -2633,8 +2629,8 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             r"!.*s[1-2]+.*",
         )
@@ -2642,7 +2638,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
-    def test_delete_missing_snapshots_with_excludes_recursive(self):
+    def test_delete_dst_snapshots_with_excludes_recursive(self):
         self.setup_basic_with_recursive_replication_done()
         for snap in snapshots(src_root_dataset):
             destroy(snap)
@@ -2653,8 +2649,8 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             ".*s[1-2]+.*",
             "--exclude-snapshot-regex",
@@ -2666,7 +2662,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1"])
         self.assertSnapshotNames(dst_root_dataset + "/foo/a", ["u1", "u2", "u3"])
 
-    def test_delete_missing_snapshots_with_excludes_recursive_and_excluding_dataset_regex(self):
+    def test_delete_dst_snapshots_with_excludes_recursive_and_excluding_dataset_regex(self):
         self.setup_basic_with_recursive_replication_done()
         for snap in snapshots(src_root_dataset):
             destroy(snap)
@@ -2677,8 +2673,8 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-missing-snapshots",
-            "--delete-empty-datasets",
+            "--delete-dst-snapshots",
+            "--delete-empty-dst-datasets",
             "--exclude-dataset-regex",
             "foo",
             "--exclude-snapshot-regex",
@@ -2914,8 +2910,8 @@ class MinimalRemoteTestCase(BZFSTestCase):
     def test_basic_replication_recursive1(self):
         LocalTestCase(param=self.param).test_basic_replication_recursive1()
 
-    def test_delete_missing_datasets_recursive_with_dummy_src(self):
-        LocalTestCase(param=self.param).test_delete_missing_datasets_recursive_with_dummy_src()
+    def test_delete_dst_datasets_recursive_with_dummy_src(self):
+        LocalTestCase(param=self.param).test_delete_dst_datasets_recursive_with_dummy_src()
 
     def test_inject_unavailable_sudo(self):
         expected_error = die_status if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0

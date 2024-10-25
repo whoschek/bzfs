@@ -169,7 +169,7 @@ feature.
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
-`   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-missing-datasets --delete-missing-snapshots`
+`   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets --delete-dst-snapshots`
 
 * Replicate all daily snapshots that were created during the last 7 days, and at the same time ensure that the latest 7 daily snapshots are replicated regardless of when they were created:
 
@@ -177,11 +177,11 @@ feature.
 
 * Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots are not deleted regardless of when they were created:
 
-`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-missing-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
+`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
 
-`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-missing-datasets --include-dataset-regex 'tmp.*'`
+`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets --include-dataset-regex 'tmp.*'`
 
 * Example with further options:
 
@@ -483,11 +483,11 @@ feature.
              "remaining datasets and the remaining users.\n\n")
     parser.add_argument(
         "--skip-replication", action="store_true",
-        help="Skip replication step (see above) and proceed to the optional --delete-missing-datasets step "
+        help="Skip replication step (see above) and proceed to the optional --delete-dst-datasets step "
              "immediately (see below).\n\n")
     parser.add_argument(
-        "--delete-missing-datasets", action="store_true",
-        help="Do nothing if the --delete-missing-datasets option is missing. Otherwise, after successful replication "
+        "--delete-dst-datasets", action="store_true",
+        help="Do nothing if the --delete-dst-datasets option is missing. Otherwise, after successful replication "
              "step, if any, delete existing destination datasets that are included via --{include|exclude}-dataset* "
              "policy yet do not exist within SRC_DATASET (which can be an empty dataset, such as the virtual "
              f"dataset named '{dummy_dataset}'!). Does not recurse without --recursive.\n\n"
@@ -497,12 +497,12 @@ feature.
              "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"
              "Example to delete all tmp datasets within tank2/boo/bar: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication "
-             "--delete-missing-datasets --include-dataset-regex 'tmp.*' --recursive`\n\n")
+             "--delete-dst-datasets --include-dataset-regex 'tmp.*' --recursive`\n\n")
     parser.add_argument(
-        "--delete-missing-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
+        "--delete-dst-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
         nargs="?",
-        help="Do nothing if the --delete-missing-snapshots option is missing. Otherwise, after successful "
-             "replication, and successful --delete-missing-datasets step, if any, delete existing destination "
+        help="Do nothing if the --delete-dst-snapshots option is missing. Otherwise, after successful "
+             "replication, and successful --delete-dst-datasets step, if any, delete existing destination "
              "snapshots that do not exist within the source dataset (which can be an empty dummy dataset!) if they "
              "are included by the --include/exclude-snapshot-* policy, and the destination dataset is included via "
              "--{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
@@ -511,19 +511,19 @@ feature.
              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
-             "*Note:* To delete snapshots regardless, consider using --delete-missing-snapshots in combination with "
+             "*Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination with "
              f"a source that is an empty dataset, such as the virtual dataset named '{dummy_dataset}', like so: "
-             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-missing-snapshots "
+             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
              "--include-dataset-regex '.*_daily' --recursive`\n\n"
-             "*Note:* Use --delete-missing-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
+             "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are included and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
              "snapshots wrt. filtering."
              "\n\n")
     parser.add_argument(
-        "--delete-empty-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
+        "--delete-empty-dst-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
         const="snapshots+bookmarks", nargs="?",
-        help="Do nothing if the --delete-empty-datasets option is missing. Otherwise, after successful replication "
-             "step and successful --delete-missing-datasets and successful --delete-missing-snapshots steps, if any, "
+        help="Do nothing if the --delete-empty-dst-datasets option is missing. Otherwise, after successful replication "
+             "step and successful --delete-dst-datasets and successful --delete-dst-snapshots steps, if any, "
              "delete any included destination dataset that has no snapshot and no bookmark if all descendants of "
              "that destination dataset do not have a snapshot or bookmark either "
              "(again, only if the existing destination dataset is included via --{include|exclude}-dataset* policy). "
@@ -532,7 +532,7 @@ feature.
              "includes h1,d1, then check if h1,d1 can be deleted. "
              "On the other hand, if the include/exclude policy effectively only includes h1 then only check if h1 "
              "can be deleted.\n\n"
-             "*Note:* Use --delete-empty-datasets=snapshots to delete snapshot-less datasets even if they still "
+             "*Note:* Use --delete-empty-dst-datasets=snapshots to delete snapshot-less datasets even if they still "
              "contain bookmarks.\n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
@@ -626,7 +626,7 @@ feature.
              "given dataset and its descendants, yet, for each dataset, does not delete the latest 100 bookmarks "
              "regardless of when they were created: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
-             "--delete-missing-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 100..latest 100%%' "
+             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 100..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
@@ -985,12 +985,12 @@ class Params:
         self.skip_on_error: str = args.skip_on_error
         self.retry_policy: RetryPolicy = RetryPolicy(args, self)
         self.skip_replication: bool = args.skip_replication
-        self.delete_missing_snapshots: bool = args.delete_missing_snapshots is not None
-        self.delete_missing_bookmarks: bool = args.delete_missing_snapshots == "bookmarks"
-        self.delete_missing_datasets: bool = args.delete_missing_datasets
-        self.delete_empty_datasets: bool = args.delete_empty_datasets is not None
-        self.delete_empty_datasets_if_no_bookmarks_and_no_snapshots: bool = (
-            args.delete_empty_datasets == "snapshots+bookmarks"
+        self.delete_dst_snapshots: bool = args.delete_dst_snapshots is not None
+        self.delete_dst_bookmarks: bool = args.delete_dst_snapshots == "bookmarks"
+        self.delete_dst_datasets: bool = args.delete_dst_datasets
+        self.delete_empty_dst_datasets: bool = args.delete_empty_dst_datasets is not None
+        self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
+            args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
@@ -1488,17 +1488,17 @@ class Job:
                     log.error("%s", str(e))
                     log.error(f"#{len(self.all_exceptions)}: Done replicating: %s", f"{src_dataset} --> {dst_dataset}")
 
-        if failed or not (p.delete_missing_datasets or p.delete_missing_snapshots or p.delete_empty_datasets):
+        if failed or not (p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets):
             return
-        log.info(p.dry("Prep --delete-missing-*: %s"), task_description)
+        log.info(p.dry("Prep --delete-dst-*: %s"), task_description)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
         basis_dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.
-        if p.delete_missing_datasets:
-            log.info(p.dry("--delete-missing-datasets: %s"), task_description)
+        if p.delete_dst_datasets:
+            log.info(p.dry("--delete-dst-datasets: %s"), task_description)
             dst_datasets = set(dst_datasets)
             to_delete = dst_datasets.difference(
                 {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
@@ -1509,25 +1509,25 @@ class Job:
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
         # via --{include|exclude}-dataset* policy.
-        if p.delete_missing_snapshots:
-            log.info(p.dry("--delete-missing-snapshots: %s"), task_description)
-            if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_missing_bookmarks:
-                kind = "bookmark" if p.delete_missing_bookmarks else "snapshot"
+        if p.delete_dst_snapshots:
+            log.info(p.dry("--delete-dst-snapshots: %s"), task_description)
+            if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_dst_bookmarks:
+                kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
                 filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
                 props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
                 for dst_dataset in dst_datasets:
                     cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                     dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
-                    if p.delete_missing_bookmarks:
+                    if p.delete_dst_bookmarks:
                         replace_in_lines(dst_snapshots_with_guids, old="#", new="@")  # treat bookmarks as snapshots
                     dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
-                    if p.delete_missing_bookmarks:
+                    if p.delete_dst_bookmarks:
                         replace_in_lines(dst_snapshots_with_guids, old="@", new="#")  # restore pre-filtr bookmark state
                     if filter_needs_creation_time:
                         dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
                     src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                     if src_dataset in basis_src_datasets and (
-                        self.is_zpool_bookmarks_feature_enabled_or_active(src) or not p.delete_missing_bookmarks
+                        self.is_zpool_bookmarks_feature_enabled_or_active(src) or not p.delete_dst_bookmarks
                     ):
                         cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s name -Hp -o guid,name", src_dataset)
                         src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
@@ -1537,9 +1537,9 @@ class Job:
                         missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
                     else:
                         missing_snapshot_tags = dst_snapshots_with_guids
-                    separator = "#" if p.delete_missing_bookmarks else "@"
+                    separator = "#" if p.delete_dst_bookmarks else "@"
                     missing_snapshot_tags = cut(field=2, separator=separator, lines=missing_snapshot_tags)
-                    if p.delete_missing_bookmarks:
+                    if p.delete_dst_bookmarks:
                         self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
                     else:
                         self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
@@ -1550,10 +1550,10 @@ class Job:
         # already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in a reverse
         # sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct children but
         # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
-        if p.delete_empty_datasets:
-            log.info(p.dry("--delete-empty-datasets: %s"), task_description)
-            delete_empty_datasets_if_no_bookmarks_and_no_snapshots = (
-                p.delete_empty_datasets_if_no_bookmarks_and_no_snapshots
+        if p.delete_empty_dst_datasets:
+            log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
+            delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
+                p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots
                 and self.is_zpool_bookmarks_feature_enabled_or_active(dst)
             )
 
@@ -1577,12 +1577,12 @@ class Job:
 
             # Within all subtrees, find all datasets that have at least one snapshot
             dst_datasets_having_snapshots = set()
-            btype = "bookmark,snapshot" if delete_empty_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
+            btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
             cmd = p.split_args(f"{p.zfs_program} list -t {btype} -r -s name -Hp -o name")
 
             def flush_batch(batch: List[str]) -> None:
                 datasets_having_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
-                if delete_empty_datasets_if_no_bookmarks_and_no_snapshots:
+                if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                     replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
                 datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
                 dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
