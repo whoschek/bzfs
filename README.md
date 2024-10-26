@@ -333,6 +333,7 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--skip-on-error {fail,tree,dataset}] [--skip-replication]
             [--delete-dst-datasets]
             [--delete-dst-snapshots [{snapshots,bookmarks}]]
+            [--delete-dst-snapshots-no-crosscheck]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream] [--no-create-bookmark]
@@ -958,11 +959,11 @@ via tests/update_readme.py
 *  Do nothing if the --delete-dst-snapshots option is missing.
     Otherwise, after successful replication, and successful
     --delete-dst-datasets step, if any, delete existing destination
-    snapshots that do not exist within the source dataset (which can be
-    an empty dummy dataset!) if they are included by the
-    --include/exclude-snapshot-* policy, and the destination dataset
-    is included via --{include|exclude}-dataset* policy. Does not
-    recurse without --recursive.
+    snapshots whose GUID does not exist within the source dataset (which
+    can be an empty dummy dataset!) if the destination snapshots are
+    included by the --include/exclude-snapshot-* policy, and the
+    destination dataset is included via --{include|exclude}-dataset*
+    policy. Does not recurse without --recursive.
 
     For example, if the destination dataset contains snapshots
     h1,h2,h3,d1 (h=hourly, d=daily) whereas the source dataset only
@@ -984,6 +985,20 @@ via tests/update_readme.py
     instead of snapshots, in which case no snapshots are included and
     the --{include|exclude}-snapshot-* filter options treat bookmarks
     as snapshots wrt. filtering.
+
+<!-- -->
+
+<div id="--delete-dst-snapshots-no-crosscheck"></div>
+
+**--delete-dst-snapshots-no-crosscheck**
+
+*  This flag indicates that --delete-dst-snapshots=snapshots shall
+    check the source dataset only for a snapshot with the same GUID, and
+    ignore whether a bookmark with the same GUID is present in the
+    source dataset. Similarly, it also indicates that
+    --delete-dst-snapshots=bookmarks shall check the source dataset
+    only for a bookmark with the same GUID, and ignore whether a
+    snapshot with the same GUID is present in the source dataset.
 
 <!-- -->
 

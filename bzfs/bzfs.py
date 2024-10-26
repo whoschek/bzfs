@@ -503,10 +503,10 @@ feature.
         "--delete-dst-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
         nargs="?",
         help="Do nothing if the --delete-dst-snapshots option is missing. Otherwise, after successful "
-             "replication, and successful --delete-dst-datasets step, if any, delete existing destination "
-             "snapshots that do not exist within the source dataset (which can be an empty dummy dataset!) if they "
-             "are included by the --include/exclude-snapshot-* policy, and the destination dataset is included via "
-             "--{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
+             "replication, and successful --delete-dst-datasets step, if any, delete existing destination snapshots "
+             "whose GUID does not exist within the source dataset (which can be an empty dummy dataset!) if the "
+             "destination snapshots are included by the --include/exclude-snapshot-* policy, and the destination "
+             "dataset is included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
              "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
              "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
@@ -520,6 +520,13 @@ feature.
              "case no snapshots are included and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
              "snapshots wrt. filtering."
              "\n\n")
+    parser.add_argument(
+        "--delete-dst-snapshots-no-crosscheck", action="store_true",
+        help="This flag indicates that --delete-dst-snapshots=snapshots shall check the source dataset only for "
+             "a snapshot with the same GUID, and ignore whether a bookmark with the same GUID is present in the "
+             "source dataset. Similarly, it also indicates that --delete-dst-snapshots=bookmarks shall check the "
+             "source dataset only for a bookmark with the same GUID, and ignore whether a snapshot with the same GUID "
+             "is present in the source dataset.")
     parser.add_argument(
         "--delete-empty-dst-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
         const="snapshots+bookmarks", nargs="?",
@@ -988,6 +995,7 @@ class Params:
         self.skip_replication: bool = args.skip_replication
         self.delete_dst_snapshots: bool = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: bool = args.delete_dst_snapshots == "bookmarks"
+        self.delete_dst_snapshots_no_crosscheck: bool = args.delete_dst_snapshots_no_crosscheck
         self.delete_dst_datasets: bool = args.delete_dst_datasets
         self.delete_empty_dst_datasets: bool = args.delete_empty_dst_datasets is not None
         self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
@@ -1544,10 +1552,11 @@ class Job:
                 if src_dataset in basis_src_datasets and (
                     self.is_zpool_bookmarks_feature_enabled_or_active(src) or not p.delete_dst_bookmarks
                 ):
-                    cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s name -Hp -o guid,name", src_dataset)
+                    src_kind = kind if p.delete_dst_snapshots_no_crosscheck else "snapshot,bookmark"
+                    cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
-                        set(cut(1, lines=src_snapshots_with_guids))
+                        set(src_snapshots_with_guids)
                     )
                     missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
                 else:

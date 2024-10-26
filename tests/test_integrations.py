@@ -2416,6 +2416,40 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
+    def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self):
+        self.setup_basic()
+        for j in range(0, 2):
+            for i in range(0, 3):
+                with stop_on_failure_subtest(i=j * 3 + i):
+                    for snapshot in (
+                        snapshots(src_root_dataset) + bookmarks(src_root_dataset) + snapshots(dst_root_dataset)
+                    ):
+                        destroy(snapshot)
+                    take_snapshot(src_root_dataset, fix("s1"))
+                    take_snapshot(src_root_dataset, fix("s2"))
+                    take_snapshot(src_root_dataset, fix("s3"))
+                    self.run_bzfs(src_root_dataset, dst_root_dataset)
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    if i > 0:
+                        for snapshot in snapshots(src_root_dataset):
+                            destroy(snapshot)
+                    if i > 1:
+                        for bookmark in bookmarks(src_root_dataset):
+                            destroy(bookmark)
+                    crosscheck = [] if j == 0 else ["--delete-dst-snapshots-no-crosscheck"]
+                    self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots", *crosscheck
+                    )
+                    if i == 0:
+                        self.assertSnapshots(dst_root_dataset, 3, "s")
+                    elif i == 1:
+                        if j == 0:
+                            self.assertSnapshotNames(dst_root_dataset, ["s1", "s3"])
+                        else:
+                            self.assertSnapshotNames(dst_root_dataset, [])
+                    else:
+                        self.assertSnapshotNames(dst_root_dataset, [])
+
     def test_delete_dst_snapshots_flat(self):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -2436,6 +2470,7 @@ class LocalTestCase(BZFSTestCase):
                     dst_root_dataset,
                     "--skip-replication",
                     "--delete-dst-snapshots",
+                    "--delete-dst-snapshots-no-crosscheck",
                     "--delete-empty-dst-datasets=snapshots",
                     **kwargs,
                 )
@@ -2521,7 +2556,13 @@ class LocalTestCase(BZFSTestCase):
         destroy(snapshots(src_root_dataset)[0])
         take_snapshot(src_root_dataset, fix("s1"))  # Note: not the same as prior snapshot (has different GUID)
         take_snapshot(src_root_dataset, fix("s3"))  # Note: not the same as prior snapshot (has different GUID)
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots")
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
+        )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
 
     def test_delete_dst_snapshots_recursive(self):
@@ -2532,7 +2573,14 @@ class LocalTestCase(BZFSTestCase):
         destroy(snapshots(src_foo)[1])
         src_foo_a = build(src_root_dataset + "/foo/a")
         destroy(src_foo_a, recursive=True)
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-replication", "--delete-dst-snapshots")
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--recursive",
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
+        )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo/a"))
@@ -2552,6 +2600,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2567,6 +2616,7 @@ class LocalTestCase(BZFSTestCase):
                 "--recursive",
                 "--skip-replication",
                 "--delete-dst-snapshots",
+                "--delete-dst-snapshots-no-crosscheck",
                 "--delete-empty-dst-datasets",
                 dry_run=(i == 0),
             )
@@ -2583,6 +2633,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
@@ -2598,6 +2649,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--recursive",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--retries=2",
             error_injection_triggers={"before": counter},
         )
@@ -2616,6 +2668,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--recursive",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             delete_injection_triggers={"before": counter},
         )
         self.assertEqual(0, counter["zfs_list_delete_dst_snapshots"])
@@ -2634,6 +2687,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
@@ -2655,6 +2709,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
             "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
             **kwargs,
@@ -2670,6 +2725,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             "xxxx*",
@@ -2689,6 +2745,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             r"!.*s[1-2]+.*",
@@ -2709,6 +2766,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             ".*s[1-2]+.*",
@@ -2733,6 +2791,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--skip-replication",
             "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
             "--exclude-dataset-regex",
             "foo",
