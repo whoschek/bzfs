@@ -84,6 +84,7 @@ log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway i
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
+DONT_SKIP_DATASET = ""
 PIPE = subprocess.PIPE
 
 
@@ -1467,12 +1468,12 @@ class Job:
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             log.trace("Retry policy: %s", p.retry_policy)
-            skip_src_dataset = ""
+            skip_src_dataset = DONT_SKIP_DATASET
             for src_dataset in src_datasets:
                 if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
                     # skip_src_dataset shall be ignored or has been deleted by some third party while we're running
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
-                skip_src_dataset = ""
+                skip_src_dataset = DONT_SKIP_DATASET
                 dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
                 log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"])))]
@@ -1558,12 +1559,12 @@ class Job:
                 return True
 
             if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_dst_bookmarks:
-                skip_dst_dataset = ""
+                skip_dst_dataset = DONT_SKIP_DATASET
                 for dst_dataset in dst_datasets:
                     if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
                         # skip_dst_dataset has been deleted by some third party while we're running
                         continue  # nothing to do anymore for this dataset subtree (note that dst_datasets is sorted)
-                    skip_dst_dataset = ""
+                    skip_dst_dataset = DONT_SKIP_DATASET
                     if not self.run_with_retries(p.retry_policy, lambda: delete_destination_snapshots(dst_dataset)):
                         skip_dst_dataset = dst_dataset
 
@@ -1589,7 +1590,7 @@ class Job:
             # find the roots of all subtrees, and the descendants of each root
             descendants = defaultdict(list)
             dst_dataset_roots = []
-            skip_dst_dataset = ""
+            skip_dst_dataset = DONT_SKIP_DATASET
             for dst_dataset in dst_datasets:
                 if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
                     descendants[skip_dst_dataset].append(dst_dataset)
@@ -2283,12 +2284,12 @@ class Job:
         p, log = self.params, self.params.log
         results = []
         localhostname = None
-        skip_dataset = ""
+        skip_dataset = DONT_SKIP_DATASET
         for dataset in datasets:
             if is_descendant(dataset, of_root_dataset=skip_dataset):
                 # skip_dataset shall be ignored or has been deleted by some third party while we're running
                 continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
-            skip_dataset = ""
+            skip_dataset = DONT_SKIP_DATASET
             # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset
@@ -2490,7 +2491,7 @@ class Job:
         # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
         p, log = self.params, self.params.log
-        last_deleted_dataset = ""
+        last_deleted_dataset = DONT_SKIP_DATASET
         for dataset in isorted(datasets):
             if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
                 continue
