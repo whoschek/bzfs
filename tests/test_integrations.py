@@ -1587,7 +1587,7 @@ class LocalTestCase(BZFSTestCase):
         if expected_status == 0:
             self.assertSnapshots(dst_root_dataset, 3, "s")
 
-    def basic_replication_flat_simple_with_retryable_run_tasks_error(self):
+    def test_basic_replication_flat_simple_with_retryable_run_tasks_error(self):
         self.setup_basic()
 
         # inject failures before this many tries. only after that succeed the operation

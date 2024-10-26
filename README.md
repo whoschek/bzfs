@@ -132,16 +132,16 @@ have drastically diverged:
 --delete-dst-datasets --delete-dst-snapshots`
 
 * Replicate all daily snapshots that were created during the last 7
-days, and at the same time ensure that the latest 7 daily snapshots are
-replicated regardless of when they were created:
+days, and at the same time ensure that the latest 7 daily snapshots (per
+dataset) are replicated regardless of when they were created:
 
 ` bzfs tank1/foo/bar tank2/boo/bar --recursive
 --include-snapshot-regex '.*_daily'
 --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
 
 * Delete all daily snapshots that were created more than 7 days ago,
-yet ensure that the latest 7 daily snapshots are not deleted regardless
-of when they were created:
+yet ensure that the latest 7 daily snapshots (per dataset) are not
+deleted regardless of when they were created:
 
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots --include-snapshot-regex '.*_daily'
@@ -579,16 +579,16 @@ via tests/update_readme.py
 
     Specify to replicate all daily snapshots that were created during
     the last 7 days, and at the same time ensure that at the latest 7
-    daily snapshots are replicated regardless of when they were created,
-    like so: `--include-snapshot-regex '.*_daily'
+    daily snapshots (per dataset) are replicated regardless of when they
+    were created, like so: `--include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks '7 days ago..*' 'latest
     7'`
 
     <b>*Deletion Example (no UNION):* </b>
 
     Specify to delete all daily snapshots that were created more than 7
-    days ago, yet ensure that the latest 7 daily snapshots are not
-    deleted regardless of when they were created, like so:
+    days ago, yet ensure that the latest 7 daily snapshots (per dataset)
+    are not deleted regardless of when they were created, like so:
     `--include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks 'latest 7..latest 100%'
     --include-snapshot-times-and-ranks '*..7 days ago'`
@@ -1167,11 +1167,11 @@ via tests/update_readme.py
     destination snapshots should be pruned less aggressively than source
     snapshots. As an example starting point, here is a script that
     deletes all bookmarks older than 90 days in a given dataset and its
-    descendants, yet, for each dataset, does not delete the latest 100
-    bookmarks regardless of when they were created: `bzfs dummy
-    tank2/boo/bar --dryrun --recursive --skip-replication
+    descendants, yet, for each dataset, does not delete the latest 200
+    bookmarks (per dataset) regardless of when they were created: `bzfs
+    dummy tank2/boo/bar --dryrun --recursive --skip-replication
     --delete-dst-snapshots=bookmarks
-    --include-snapshot-times-and-ranks 'latest 100..latest 100%'
+    --include-snapshot-times-and-ranks 'latest 200..latest 100%'
     --include-snapshot-times-and-ranks '*..90 days ago'`
 
 <!-- -->

@@ -172,11 +172,11 @@ feature.
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets --delete-dst-snapshots`
 
-* Replicate all daily snapshots that were created during the last 7 days, and at the same time ensure that the latest 7 daily snapshots are replicated regardless of when they were created:
+* Replicate all daily snapshots that were created during the last 7 days, and at the same time ensure that the latest 7 daily snapshots (per dataset) are replicated regardless of when they were created:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
 
-* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots are not deleted regardless of when they were created:
+* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless of when they were created:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
 
@@ -297,12 +297,12 @@ feature.
              "This option can be specified multiple times.\n\n"
              "<b>*Replication Example (UNION):* </b>\n\n"
              "Specify to replicate all daily snapshots that were created during the last 7 days, "
-             "and at the same time ensure that at the latest 7 daily snapshots are replicated regardless "
+             "and at the same time ensure that at the latest 7 daily snapshots (per dataset) are replicated regardless "
              "of when they were created, like so: "
              "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`\n\n"
              "<b>*Deletion Example (no UNION):* </b>\n\n"
              "Specify to delete all daily snapshots that were created more than 7 days ago, "
-             "yet ensure that the latest 7 daily snapshots are not deleted regardless "
+             "yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless "
              "of when they were created, like so: "
              "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..7 days ago'`"
@@ -624,10 +624,10 @@ feature.
              "`zfs destroy $SRC_DATASET#$BOOKMARK`. Typically, bookmarks should be pruned less aggressively "
              "than snapshots, and destination snapshots should be pruned less aggressively than source snapshots. "
              "As an example starting point, here is a script that deletes all bookmarks older than 90 days in a "
-             "given dataset and its descendants, yet, for each dataset, does not delete the latest 100 bookmarks "
-             "regardless of when they were created: "
+             "given dataset and its descendants, yet, for each dataset, does not delete the latest 200 bookmarks "
+             "(per dataset) regardless of when they were created: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
-             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 100..latest 100%%' "
+             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 200..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
@@ -1469,25 +1469,26 @@ class Job:
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             log.trace("Retry policy: %s", p.retry_policy)
-            skip_src_dataset = DONT_SKIP_DATASET
+            skip_dataset = DONT_SKIP_DATASET
             for src_dataset in src_datasets:
-                if is_descendant(src_dataset, of_root_dataset=skip_src_dataset):
-                    # skip_src_dataset shall be ignored or has been deleted by some third party while we're running
+                if is_descendant(src_dataset, of_root_dataset=skip_dataset):
+                    # skip_dataset shall be ignored or has been deleted by some third party while we're running
                     continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
-                skip_src_dataset = DONT_SKIP_DATASET
+                skip_dataset = DONT_SKIP_DATASET
                 dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
                 log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
                 self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"])))]
                 self.mbuffer_current_opts += p.mbuffer_program_opts
                 try:
-                    if not self.run_with_retries(p.retry_policy, self.replicate_dataset, src_dataset, dst_dataset):
-                        skip_src_dataset = src_dataset
+                    retrypolicy = p.retry_policy
+                    if not self.run_with_retries(retrypolicy, lambda: self.replicate_dataset(src_dataset, dst_dataset)):
+                        skip_dataset = src_dataset
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                     failed = True
                     if p.skip_on_error == "fail":
                         raise
                     elif p.skip_on_error == "tree" or not self.dst_dataset_exists[dst_dataset]:
-                        skip_src_dataset = src_dataset
+                        skip_dataset = src_dataset
                     self.first_exception = self.first_exception or e
                     self.all_exceptions.append(str(e))
                     log.error("%s", str(e))
@@ -1560,14 +1561,14 @@ class Job:
                 return True
 
             if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_dst_bookmarks:
-                skip_dst_dataset = DONT_SKIP_DATASET
+                skip_dataset = DONT_SKIP_DATASET
                 for dst_dataset in dst_datasets:
-                    if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
-                        # skip_dst_dataset has been deleted by some third party while we're running
+                    if is_descendant(dst_dataset, of_root_dataset=skip_dataset):
+                        # skip_dataset has been deleted by some third party while we're running
                         continue  # nothing to do anymore for this dataset subtree (note that dst_datasets is sorted)
-                    skip_dst_dataset = DONT_SKIP_DATASET
+                    skip_dataset = DONT_SKIP_DATASET
                     if not self.run_with_retries(p.retry_policy, lambda: delete_destination_snapshots(dst_dataset)):
-                        skip_dst_dataset = dst_dataset
+                        skip_dataset = dst_dataset
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
         # of that dataset do not have a snapshot or bookmark either. To do so, we walk the dataset list (conceptually,
@@ -1591,14 +1592,14 @@ class Job:
             # find the roots of all subtrees, and the descendants of each root
             descendants = defaultdict(list)
             dst_dataset_roots = []
-            skip_dst_dataset = DONT_SKIP_DATASET
+            skip_dataset = DONT_SKIP_DATASET
             for dst_dataset in dst_datasets:
-                if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
-                    descendants[skip_dst_dataset].append(dst_dataset)
+                if is_descendant(dst_dataset, of_root_dataset=skip_dataset):
+                    descendants[skip_dataset].append(dst_dataset)
                     continue
                 dst_dataset_roots.append(dst_dataset)
-                skip_dst_dataset = dst_dataset
-                descendants[skip_dst_dataset].append(dst_dataset)
+                skip_dataset = dst_dataset
+                descendants[skip_dataset].append(dst_dataset)
 
             # Within all subtrees, find all datasets that have at least one snapshot
             dst_datasets_having_snapshots = set()
@@ -2201,7 +2202,7 @@ class Job:
                 return process.stdout
 
     def try_ssh_command(
-        self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, error_trigger=None
+        self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, exists=True, error_trigger=None
     ):
         """Convenience method that helps react to a dataset or pool that potentially doesn't exist anymore."""
         log = self.params.log
@@ -2211,7 +2212,7 @@ class Job:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
                 stderr = stderr_to_str(e.stderr)
-                if (
+                if exists and (
                     ": dataset does not exist" in stderr
                     or ": filesystem does not exist" in stderr  # solaris 11.4.0
                     or ": does not exist" in stderr  # solaris 11.4.0 'zfs send' with missing snapshot
@@ -2219,18 +2220,6 @@ class Job:
                 ):
                     return None
                 log.warning("%s", stderr.rstrip())
-            raise RetryableError("Subprocess failed") from e
-
-    def retryable_ssh_command(
-        self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, error_trigger=None
-    ):
-        log = self.params.log
-        try:
-            self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-            return self.run_ssh_command(remote, level=level, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-            if not isinstance(e, UnicodeDecodeError):
-                log.warning("%s", stderr_to_str(e.stderr).rstrip())
             raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
@@ -2469,13 +2458,13 @@ class Job:
                 remote, self.delete_snapshot_cmd(remote, dataset + "@"), snapshot_tags, flush_batch
             )
 
-    def delete_snapshot(self, remote: Remote, snaps_to_delete: str) -> None:
+    def delete_snapshot(self, r: Remote, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
         log.info(p.dry("Deleting snapshot(s): %s"), snaps_to_delete)
-        cmd = self.delete_snapshot_cmd(remote, snaps_to_delete)
-        is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
-        self.retryable_ssh_command(
-            remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd, error_trigger="zfs_delete_snapshot"
+        cmd = self.delete_snapshot_cmd(r, snaps_to_delete)
+        is_dry = p.dry_run and self.is_solaris_zfs(r)  # solaris-11.4 knows no 'zfs destroy -n' flag
+        self.try_ssh_command(
+            r, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd, exists=False, error_trigger="zfs_delete_snapshot"
         )
 
     def delete_snapshot_cmd(self, r: Remote, snaps_to_delete: str) -> List[str]:
@@ -2493,7 +2482,7 @@ class Job:
         for i, snapshot_tag in enumerate(snapshot_tags):
             log.debug(p.dry(f"Deleting bookmark {i+1}/{len(snapshot_tags)}: %s"), snapshot_tag)
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy", f"{dataset}#{snapshot_tag}")
-            self.retryable_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            self.try_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
 
     def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
         """Deletes the given datasets via zfs destroy -r on the given remote."""
