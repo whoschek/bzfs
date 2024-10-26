@@ -1132,6 +1132,8 @@ class Params:
         key = (tuple(self.root_dataset_pairs), self.args.recursive, self.args.exclude_dataset_property,
                tuple(self.args.include_dataset), tuple(self.args.exclude_dataset),
                tuple(self.args.include_dataset_regex), tuple(self.args.exclude_dataset_regex),
+               tuple(self.snapshot_filters), self.args.skip_replication,
+               self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_empty_dst_datasets,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
