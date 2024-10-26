@@ -40,6 +40,14 @@ def destroy(name, recursive=False, force=False):
     run_cmd(cmd)
 
 
+def destroy_snapshots(dataset, snapshots=[]):
+    if len(snapshots) == 0:
+        return
+    cmd = sudo_cmd + ["zfs", "destroy"]
+    cmd += [dataset + "@" + ",".join([snap[snap.find("@") + 1 :] for snap in snapshots])]
+    run_cmd(cmd)
+
+
 def create_volume(dataset, path=None, mk_parents=True, size=None, props=[], blocksize=None, sparse=False):
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"

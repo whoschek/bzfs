@@ -47,6 +47,7 @@ from tests.zfs_util import (
     datasets,
     destroy,
     destroy_pool,
+    destroy_snapshots,
     is_solaris_zfs,
     run_cmd,
     set_sudo_cmd,
@@ -2421,18 +2422,17 @@ class LocalTestCase(BZFSTestCase):
         for j in range(0, 2):
             for i in range(0, 3):
                 with stop_on_failure_subtest(i=j * 3 + i):
-                    for snapshot in (
-                        snapshots(src_root_dataset) + bookmarks(src_root_dataset) + snapshots(dst_root_dataset)
-                    ):
-                        destroy(snapshot)
+                    destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
+                    destroy_snapshots(dst_root_dataset, snapshots(dst_root_dataset))
+                    for bookmark in bookmarks(src_root_dataset):
+                        destroy(bookmark)
                     take_snapshot(src_root_dataset, fix("s1"))
                     take_snapshot(src_root_dataset, fix("s2"))
                     take_snapshot(src_root_dataset, fix("s3"))
                     self.run_bzfs(src_root_dataset, dst_root_dataset)
                     self.assertSnapshots(dst_root_dataset, 3, "s")
                     if i > 0:
-                        for snapshot in snapshots(src_root_dataset):
-                            destroy(snapshot)
+                        destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
                     if i > 1:
                         for bookmark in bookmarks(src_root_dataset):
                             destroy(bookmark)

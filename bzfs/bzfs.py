@@ -190,9 +190,8 @@ feature.
 
 * Delete all bookmarks that were created more than 90 days ago, yet do not delete the latest 200 bookmarks (per dataset) regardless of when they were created:
 
-`   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 200..latest 100%' --include-snapshot-times-and-ranks '*..90 days ago'` 
+`   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 200..latest 100%' --include-snapshot-times-and-ranks '*..90 days ago'`
 
-             
 * Delete all tmp datasets within tank2/boo/bar:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets --include-dataset-regex 'tmp.*'`
