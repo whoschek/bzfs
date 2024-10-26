@@ -2560,6 +2560,34 @@ class LocalTestCase(BZFSTestCase):
             else:
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_delete_dst_snapshots_flat_with_nonexisting_destination(self):
+        self.setup_basic()
+        destroy(dst_root_dataset, recursive=True)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+    def test_delete_dst_snapshots_recursive_with_injected_dataset_deletes(self):
+        self.setup_basic_with_recursive_replication_done()
+        self.assertTrue(dataset_exists(dst_root_dataset))
+
+        # inject deletes for this many times. only after that stop deleting datasets
+        counter = Counter(zfs_list_delete_dst_snapshots=1)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--recursive",
+            "--delete-dst-snapshots",
+            delete_injection_triggers={"before": counter},
+        )
+        self.assertEqual(0, counter["zfs_list_delete_dst_snapshots"])
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
     def test_delete_dst_snapshots_flat_with_time_range_full(self):
         self.setup_basic_with_recursive_replication_done()
         destroy(snapshots(src_root_dataset)[2])

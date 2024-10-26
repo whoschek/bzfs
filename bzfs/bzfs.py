@@ -1290,8 +1290,11 @@ class Job:
                     f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
                 )
                 try:
-                    self.validate_task()
-                    self.run_task()
+                    try:
+                        self.validate_task()
+                        self.run_task()
+                    except RetryableError as retryable_error:
+                        raise retryable_error.__cause__
                 except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                     log.error("%s", str(e))
                     if p.skip_on_error == "fail":
@@ -1492,7 +1495,11 @@ class Job:
             return
         log.info(p.dry("Preparing --delete-dst-*: %s"), task_description)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
-        basis_dst_datasets = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
+        basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
+        if basis_dst_datasets is None:
+            log.warning("Destination dataset does not exist: %s", dst.root_dataset)
+            return
+        basis_dst_datasets = basis_dst_datasets.splitlines()
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
@@ -1515,9 +1522,14 @@ class Job:
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
 
-            def delete_destination_snapshots(dst_dataset: str) -> None:
+            def delete_destination_snapshots(dst_dataset: str) -> bool:
                 cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
-                dst_snapshots_with_guids = self.run_ssh_command(dst, log_trace, check=False, cmd=cmd).splitlines()
+                self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
+                dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd)
+                if dst_snapshots_with_guids is None:
+                    log.warning("Third party deleted destination: %s", dst_dataset)
+                    return False
+                dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines()
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snapshots_with_guids, old="#", new="@")  # treat bookmarks as snapshots
                 dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
@@ -1543,10 +1555,17 @@ class Job:
                     self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
                 else:
                     self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                return True
 
             if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_dst_bookmarks:
+                skip_dst_dataset = ""
                 for dst_dataset in dst_datasets:
-                    self.run_with_retries(p.retry_policy, lambda: delete_destination_snapshots(dst_dataset))
+                    if is_descendant(dst_dataset, of_root_dataset=skip_dst_dataset):
+                        # skip_dst_dataset has been deleted by some third party while we're running
+                        continue  # nothing to do anymore for this dataset subtree (note that dst_datasets is sorted)
+                    skip_dst_dataset = ""
+                    if not self.run_with_retries(p.retry_policy, lambda: delete_destination_snapshots(dst_dataset)):
+                        skip_dst_dataset = dst_dataset
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
         # of that dataset do not have a snapshot or bookmark either. To do so, we walk the dataset list (conceptually,
