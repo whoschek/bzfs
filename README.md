@@ -133,7 +133,8 @@ have drastically diverged:
 
 * Replicate all daily snapshots that were created during the last 7
 days, and at the same time ensure that the latest 7 daily snapshots (per
-dataset) are replicated regardless of when they were created:
+dataset) are replicated regardless of whether they were created earlier
+or later:
 
 ` bzfs tank1/foo/bar tank2/boo/bar --recursive
 --include-snapshot-regex '.*_daily'
@@ -141,7 +142,7 @@ dataset) are replicated regardless of when they were created:
 
 * Delete all daily snapshots that were created more than 7 days ago,
 yet ensure that the latest 7 daily snapshots (per dataset) are not
-deleted regardless of when they were created:
+deleted regardless of whether they were created earlier or later:
 
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots --include-snapshot-regex '.*_daily'
@@ -150,10 +151,10 @@ deleted regardless of when they were created:
 
 * Delete all daily snapshots that were created more than 7 days ago,
 yet ensure that the latest 7 daily snapshots (per dataset) are not
-deleted regardless of when they were created, and ensure that a snapshot
-is only deleted if no corresponding snapshot or bookmark exists in the
-source dataset (same as above except for replacing the 'dummy' source
-with 'tank1/foo/bar'):
+deleted regardless of whether they were created earlier or later, and
+ensure that a snapshot is only deleted if no corresponding snapshot or
+bookmark exists in the source dataset (same as above except for
+replacing the 'dummy' source with 'tank1/foo/bar'):
 
 ` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
@@ -162,9 +163,10 @@ with 'tank1/foo/bar'):
 
 * Delete all daily snapshots that were created more than 7 days ago,
 yet ensure that the latest 7 daily snapshots (per dataset) are not
-deleted regardless of when they were created, and ensure that a snapshot
-is only deleted if no corresponding snapshot exists in the source
-dataset (same as above except for appending 'no-crosscheck'):
+deleted regardless of whether they were created earlier or later, and
+ensure that a snapshot is only deleted if no corresponding snapshot
+exists in the source dataset (same as above except for appending
+'no-crosscheck'):
 
 ` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
@@ -173,8 +175,8 @@ dataset (same as above except for appending 'no-crosscheck'):
 --delete-dst-snapshots-no-crosscheck`
 
 * Delete all bookmarks that were created more than 90 days ago, yet do
-not delete the latest 200 bookmarks (per dataset) regardless of when
-they were created:
+not delete the latest 200 bookmarks (per dataset) regardless of whether
+they were created earlier or later:
 
 ` bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks
@@ -613,8 +615,9 @@ via tests/update_readme.py
 
     Specify to replicate all daily snapshots that were created during
     the last 7 days, and at the same time ensure that at the latest 7
-    daily snapshots (per dataset) are replicated regardless of when they
-    were created, like so: `--include-snapshot-regex '.*_daily'
+    daily snapshots (per dataset) are replicated regardless of whether
+    they were created earlier or later, like so:
+    `--include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks '7 days ago..*' 'latest
     7'`
 
@@ -622,8 +625,8 @@ via tests/update_readme.py
 
     Specify to delete all daily snapshots that were created more than 7
     days ago, yet ensure that the latest 7 daily snapshots (per dataset)
-    are not deleted regardless of when they were created, like so:
-    `--include-snapshot-regex '.*_daily'
+    are not deleted regardless of whether they were created earlier or
+    later, like so: `--include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks 'latest 7..latest 100%'
     --include-snapshot-times-and-ranks '*..7 days ago'`
 
@@ -1205,7 +1208,6 @@ via tests/update_readme.py
     mindful of that. By convention, a bookmark created by bzfs has the
     same name as its corresponding snapshot, the only difference being
     the leading '#' separator instead of the leading '@' separator.
-    bzfs itself never deletes any bookmark.
 
     You can list bookmarks, like so: `zfs list -t bookmark -o
     name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and
@@ -1213,11 +1215,12 @@ via tests/update_readme.py
     like so: `zfs destroy $SRC_DATASET#$BOOKMARK`. Typically,
     bookmarks should be pruned less aggressively than snapshots, and
     destination snapshots should be pruned less aggressively than source
-    snapshots. As an example starting point, here is a script that
+    snapshots. As an example starting point, here is a command that
     deletes all bookmarks that were created more than 90 days ago, yet
     does not delete the latest 200 bookmarks (per dataset) regardless of
-    when they were created: `bzfs dummy tank2/boo/bar --dryrun
-    --recursive --skip-replication --delete-dst-snapshots=bookmarks
+    whether they were created earlier or later: `bzfs dummy
+    tank2/boo/bar --dryrun --recursive --skip-replication
+    --delete-dst-snapshots=bookmarks
     --include-snapshot-times-and-ranks 'latest 200..latest 100%'
     --include-snapshot-times-and-ranks '*..90 days ago'`
 

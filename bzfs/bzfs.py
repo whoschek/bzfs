@@ -172,23 +172,23 @@ feature.
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets --delete-dst-snapshots`
 
-* Replicate all daily snapshots that were created during the last 7 days, and at the same time ensure that the latest 7 daily snapshots (per dataset) are replicated regardless of when they were created:
+* Replicate all daily snapshots that were created during the last 7 days, and at the same time ensure that the latest 7 daily snapshots (per dataset) are replicated regardless of whether they were created earlier or later:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
 
-* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless of when they were created:
+* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless of whether they were created earlier or later:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
 
-* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless of when they were created, and ensure that a snapshot is only deleted if no corresponding snapshot or bookmark exists in the source dataset (same as above except for replacing the 'dummy' source with 'tank1/foo/bar'):
+* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless of whether they were created earlier or later, and ensure that a snapshot is only deleted if no corresponding snapshot or bookmark exists in the source dataset (same as above except for replacing the 'dummy' source with 'tank1/foo/bar'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
 
-* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless of when they were created, and ensure that a snapshot is only deleted if no corresponding snapshot exists in the source dataset (same as above except for appending 'no-crosscheck'):
+* Delete all daily snapshots that were created more than 7 days ago, yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless of whether they were created earlier or later, and ensure that a snapshot is only deleted if no corresponding snapshot exists in the source dataset (same as above except for appending 'no-crosscheck'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago' --delete-dst-snapshots-no-crosscheck`
 
-* Delete all bookmarks that were created more than 90 days ago, yet do not delete the latest 200 bookmarks (per dataset) regardless of when they were created:
+* Delete all bookmarks that were created more than 90 days ago, yet do not delete the latest 200 bookmarks (per dataset) regardless of whether they were created earlier or later:
 
 `   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 200..latest 100%' --include-snapshot-times-and-ranks '*..90 days ago'`
 
@@ -310,12 +310,12 @@ feature.
              "<b>*Replication Example (UNION):* </b>\n\n"
              "Specify to replicate all daily snapshots that were created during the last 7 days, "
              "and at the same time ensure that at the latest 7 daily snapshots (per dataset) are replicated regardless "
-             "of when they were created, like so: "
+             "of whether they were created earlier or later, like so: "
              "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`\n\n"
              "<b>*Deletion Example (no UNION):* </b>\n\n"
              "Specify to delete all daily snapshots that were created more than 7 days ago, "
              "yet ensure that the latest 7 daily snapshots (per dataset) are not deleted regardless "
-             "of when they were created, like so: "
+             "of whether they were created earlier or later, like so: "
              "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..7 days ago'`"
              "\n\n"
@@ -635,16 +635,15 @@ feature.
              "to be deleted on the source after successful replication, it still requires that its snapshot is not "
              "somehow deleted prematurely on the destination dataset, so be mindful of that. "
              f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
-             "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
-             f"{prog_name} itself never deletes any bookmark.\n\n"
+             "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator.\n\n"
              "You can list bookmarks, like so: "
              "`zfs list -t bookmark -o name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and should) "
              "periodically prune obsolete bookmarks just like snapshots, like so: "
              "`zfs destroy $SRC_DATASET#$BOOKMARK`. Typically, bookmarks should be pruned less aggressively "
              "than snapshots, and destination snapshots should be pruned less aggressively than source snapshots. "
-             "As an example starting point, here is a script that deletes all bookmarks that were created more than 90 "
-             "days ago, yet does not delete the latest 200 bookmarks (per dataset) regardless of when they were "
-             "created: "
+             "As an example starting point, here is a command that deletes all bookmarks that were created more than "
+             "90 days ago, yet does not delete the latest 200 bookmarks (per dataset) regardless of whether they were "
+             "created earlier or later: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
              "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 200..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
