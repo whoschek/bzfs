@@ -1587,6 +1587,21 @@ class LocalTestCase(BZFSTestCase):
         if expected_status == 0:
             self.assertSnapshots(dst_root_dataset, 3, "s")
 
+    def basic_replication_flat_simple_with_retryable_run_tasks_error(self):
+        self.setup_basic()
+
+        # inject failures before this many tries. only after that succeed the operation
+        counter = Counter(retryable_run_tasks=1)
+
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            expected_status=die_status,
+            error_injection_triggers={"before": counter},
+        )
+        self.assertEqual(0, counter["retryable_run_tasks"])
+        self.assertEqual(0, len(snapshots(dst_root_dataset, max_depth=None)))
+
     def test_basic_replication_recursive_simple_with_force_unmount(self):
         if self.is_encryption_mode():
             self.skipTest("encryption key not loaded")
@@ -2571,6 +2586,24 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_delete_dst_snapshots_recursive_with_injected_errors(self):
+        self.setup_basic_with_recursive_replication_done()
+        self.assertTrue(dataset_exists(dst_root_dataset))
+
+        # inject send failures before this many tries. only after that succeed the operation
+        counter = Counter(zfs_delete_snapshot=2)
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--recursive",
+            "--delete-dst-snapshots",
+            "--retries=2",
+            error_injection_triggers={"before": counter},
+        )
+        self.assertEqual(0, counter["zfs_delete_snapshot"])
+        self.assertEqual(0, len(snapshots(dst_root_dataset, max_depth=None)))
+
     def test_delete_dst_snapshots_recursive_with_injected_dataset_deletes(self):
         self.setup_basic_with_recursive_replication_done()
         self.assertTrue(dataset_exists(dst_root_dataset))
@@ -2596,7 +2629,6 @@ class LocalTestCase(BZFSTestCase):
         destroy(snapshots(src_foo)[1])
         src_foo_a = build(src_root_dataset + "/foo/a")
         destroy(snapshots(src_foo_a)[2])
-        kwargs = {}
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
@@ -2604,7 +2636,6 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots",
             "--delete-empty-dst-datasets",
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
-            **kwargs,
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")

@@ -1292,6 +1292,7 @@ class Job:
                 )
                 try:
                     try:
+                        self.maybe_inject_error(cmd=None, error_trigger="retryable_run_tasks")
                         self.validate_task()
                         self.run_task()
                     except RetryableError as retryable_error:
@@ -2238,9 +2239,15 @@ class Job:
             counter = self.error_injection_triggers.get("before")
             if counter and counter[error_trigger] > 0:
                 counter[error_trigger] -= 1
-                raise subprocess.CalledProcessError(
-                    returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ": dataset is busy"
-                )
+                if not error_trigger.startswith("retryable_"):
+                    raise subprocess.CalledProcessError(
+                        returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ": dataset is busy"
+                    )
+                else:
+                    try:
+                        die(error_trigger)
+                    except SystemExit as e:
+                        raise RetryableError("Subprocess failed") from e
 
     def maybe_inject_delete(self, remote: Remote, dataset=None, delete_trigger=None) -> None:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
@@ -2467,7 +2474,9 @@ class Job:
         log.info(p.dry("Deleting snapshot(s): %s"), snaps_to_delete)
         cmd = self.delete_snapshot_cmd(remote, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
-        self.retryable_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        self.retryable_ssh_command(
+            remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd, error_trigger="zfs_delete_snapshot"
+        )
 
     def delete_snapshot_cmd(self, r: Remote, snaps_to_delete: str) -> List[str]:
         p = self.params
