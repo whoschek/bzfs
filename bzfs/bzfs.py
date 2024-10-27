@@ -1564,8 +1564,9 @@ class Job:
                     dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in basis_src_datasets and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
-                    src_kind_with_crosscheck = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
-                    src_kind = kind if p.delete_dst_snapshots_no_crosscheck else src_kind_with_crosscheck
+                    src_kind = kind
+                    if not p.delete_dst_snapshots_no_crosscheck:
+                        src_kind = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
                     cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
