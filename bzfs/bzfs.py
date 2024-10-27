@@ -188,9 +188,9 @@ feature.
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago' --delete-dst-snapshots-no-crosscheck`
 
-* Delete all bookmarks that were created more than 90 days ago, yet do not delete the latest 200 bookmarks (per dataset) regardless of whether they were created earlier or later:
+* Delete all daily bookmarks that were created more than 90 days ago, yet do not delete the latest 200 daily bookmarks (per dataset) regardless of whether they were created earlier or later:
 
-`   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 200..latest 100%' --include-snapshot-times-and-ranks '*..90 days ago'`
+`   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 200..latest 100%' --include-snapshot-times-and-ranks '*..90 days ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
 
