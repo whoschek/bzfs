@@ -194,7 +194,7 @@ snapshot exists in the source dataset (same as above except append
 /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
 --exclude-dataset-regex
 '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'
-ssh-dst-private-key /root/.ssh/id_rsa`
+--ssh-dst-private-key /root/.ssh/id_rsa`
 
 <!-- END DESCRIPTION SECTION -->
 # How To Install and Run

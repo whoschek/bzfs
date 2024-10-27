@@ -2848,10 +2848,10 @@ class LocalTestCase(BZFSTestCase):
         if "Ubuntu" not in platform.version():
             self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
         config_str = """
-# This is an example log_config.json file that demonstrates how to configure bzfs logging via the standard 
+# This is an example log_config.json file that demonstrates how to configure bzfs logging via the standard
 # python logging.config.dictConfig mechanism.
 #
-# For more examples see 
+# For more examples see
 # https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig
 # and for details see https://docs.python.org/3/library/logging.config.html#configuration-dictionary-schema
 #
@@ -2859,25 +2859,25 @@ class LocalTestCase(BZFSTestCase):
 # Also, if a line ends with a # character the portion between that # character and the preceding # character on
 # the same line is ignored as a comment.
 #
-# User defined variables and their values can be specified via the --log-config-var=name:value CLI option. These 
-# variables can be used in the JSON config via ${name[:default]} references, which are substituted (aka interpolated) 
+# User defined variables and their values can be specified via the --log-config-var=name:value CLI option. These
+# variables can be used in the JSON config via ${name[:default]} references, which are substituted (aka interpolated)
 # as follows:
-# If the variable contains a non-empty CLI value then that value is used. Else if a default value for the 
+# If the variable contains a non-empty CLI value then that value is used. Else if a default value for the
 # variable exists in the JSON file that default value is used. Else the program aborts with an error.
-# Example: In the JSON variable ${syslog_address:/dev/log}, the variable name is "syslog_address" 
+# Example: In the JSON variable ${syslog_address:/dev/log}, the variable name is "syslog_address"
 # and the default value is "/dev/log". The default value is the portion after the optional : colon within the
-# variable declaration. The default value is used if the CLI user does not specify a non-empty value via 
-# --log-config-var, for example via 
+# variable declaration. The default value is used if the CLI user does not specify a non-empty value via
+# --log-config-var, for example via
 # --log-config-var syslog_address:/path/to/socket_file
 #
 # bzfs automatically supplies the following convenience variables:
-# ${bzfs.log_level}, ${bzfs.log_dir}, ${bzfs.log_file}, ${bzfs.sub.logger}, 
-# ${bzfs.get_default_log_formatter}, ${bzfs.timestamp}. 
+# ${bzfs.log_level}, ${bzfs.log_dir}, ${bzfs.log_file}, ${bzfs.sub.logger},
+# ${bzfs.get_default_log_formatter}, ${bzfs.timestamp}.
 # For a complete list see the source code of get_dict_config_logger().
 {
     "version": 1,
     "disable_existing_loggers": false,
-    "formatters": {  # formatters specify how to convert a log record to a string message # 
+    "formatters": {  # formatters specify how to convert a log record to a string message #
         "bzfs": {
             # () specifies factory function to call in order to return a formatter.
             "()": "${bzfs.get_default_log_formatter}"
@@ -2921,7 +2921,7 @@ class LocalTestCase(BZFSTestCase):
             "handlers": ["console", "file", "syslog"]  # forward records to these handlers, which format and print em #
             # "handlers": ["file", "syslog"]  # use default console handler instead of a custom handler #
         }
-    }            
+    }
 }
         """
         for i in range(0, 2):

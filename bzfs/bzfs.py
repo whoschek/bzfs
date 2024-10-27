@@ -130,12 +130,12 @@ ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
-versions >= 3.7 (including latest stable which is currently python-3.13). 
+versions >= 3.7 (including latest stable which is currently python-3.13).
 
-{prog_name} is a stand-alone program with zero required dependencies, consisting of a single file, akin to a 
-stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server 
-environments. No external Python packages are required; indeed no Python package management at all is required. 
-You can just copy the file wherever you like, for example into /usr/local/bin or similar, and simply run it like 
+{prog_name} is a stand-alone program with zero required dependencies, consisting of a single file, akin to a
+stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server
+environments. No external Python packages are required; indeed no Python package management at all is required.
+You can just copy the file wherever you like, for example into /usr/local/bin or similar, and simply run it like
 any stand-alone shell script or binary executable.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
@@ -164,7 +164,8 @@ feature.
 
 `   {prog_name} root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
 
-* Example in local mode (no network, no ssh) to recursively replicate ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
+* Example in local mode (no network, no ssh) to recursively replicate ZFS dataset tank1/foo/bar and its descendant
+datasets to tank2/boo/bar:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive`
 
@@ -172,33 +173,54 @@ feature.
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets --delete-dst-snapshots`
 
-* Replicate all daily snapshots created during the last 7 days, and at the same time ensure that the latest 7 daily snapshots (per dataset) are replicated regardless of creation time:
+* Replicate all daily snapshots created during the last 7 days, and at the same time ensure that the latest 7 daily
+snapshots (per dataset) are replicated regardless of creation time:
 
-`   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
+`   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily'
+--include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
 
-* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained regardless of creation time:
+* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
+regardless of creation time:
 
-`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
+`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-times-and-ranks '*..7 days ago'`
 
-* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot or bookmark exists in the source dataset (same as above except replace the 'dummy' source with 'tank1/foo/bar'):
+* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
+regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot or bookmark exists in
+the source dataset (same as above except replace the 'dummy' source with 'tank1/foo/bar'):
 
-`   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'`
+`   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-times-and-ranks '*..7 days ago'`
 
-* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot exists in the source dataset (same as above except append 'no-crosscheck'):
+* Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
+regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot exists in the source
+dataset (same as above except append 'no-crosscheck'):
 
-`   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago' --delete-dst-snapshots-no-crosscheck`
+`   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-times-and-ranks '*..7 days ago' --delete-dst-snapshots-no-crosscheck`
 
-* Delete all daily bookmarks older than 90 days, but retain the latest 200 daily bookmarks (per dataset) regardless of creation time:
+* Delete all daily bookmarks older than 90 days, but retain the latest 200 daily bookmarks (per dataset) regardless
+of creation time:
 
-`   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 200..latest 100%' --include-snapshot-times-and-ranks '*..90 days ago'`
+`   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 200..latest 100%'
+--include-snapshot-times-and-ranks '*..90 days ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
 
-`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets --include-dataset-regex 'tmp.*'`
+`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
+--include-dataset-regex 'tmp.*'`
 
 * Example with further options:
 
-`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive  --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' ssh-dst-private-key /root/.ssh/id_rsa`
+`   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
+--exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*'
+--include-snapshot-times-and-ranks '7 days ago..*' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
+--exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
+--exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' --ssh-dst-private-key /root/.ssh/id_rsa`
 """, formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
@@ -523,9 +545,9 @@ feature.
              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
              "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
-             "*Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination with "
-             f"a source that is an empty dataset, such as the hardcoded virtual dataset named '{dummy_dataset}', like so: "
-             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
+             "*Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination with a "
+             f"source that is an empty dataset, such as the hardcoded virtual dataset named '{dummy_dataset}', like so:"
+             f" `{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
              "--include-dataset-regex '.*_daily' --recursive`\n\n"
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are included and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
@@ -2511,7 +2533,7 @@ class Job:
         for dataset in isorted(datasets):
             if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
                 continue
-            log.info(p.dry("Delete missing dataset tree: %s"), f"{dataset} ...")
+            log.info(p.dry("Deleting dataset tree: %s"), f"{dataset} ...")
             cmd = p.split_args(
                 f"{remote.sudo} {p.zfs_program} destroy -r",
                 p.force_unmount,
@@ -3870,8 +3892,8 @@ def merge_adjacent_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> N
     """Merges filter operators of the same kind if they are next to each other and carry an option list, for example
     --include-snapshot-ranks and --include-snapshot-regex and --exclude-snapshot-regex.  This improves execution perf
     and makes handling easier in later stages.
-    Example: merges --include-snapshot-times-and-ranks 0..99 oldest10% --include-snapshot-times-and-ranks 0..99 latest20%
-    into --include-snapshot-times-and-ranks 0..99 oldest10% latest20%"""
+    Example: merges --include-snapshot-times-and-ranks 0..9 oldest10% --include-snapshot-times-and-ranks 0..9 latest20%
+    into --include-snapshot-times-and-ranks 0..9 oldest10% latest20%"""
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i = snapshot_filters[i]
