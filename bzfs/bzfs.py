@@ -1543,6 +1543,7 @@ class Job:
         if p.delete_dst_snapshots:
             log.info(p.dry("--delete-dst-snapshots: %s"), task_description)
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
+            src_has_bookmark_feature = self.is_zpool_bookmarks_feature_enabled_or_active(src)
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
 
@@ -1562,10 +1563,9 @@ class Job:
                 if filter_needs_creation_time:
                     dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in basis_src_datasets and (
-                    self.is_zpool_bookmarks_feature_enabled_or_active(src) or not p.delete_dst_bookmarks
-                ):
-                    src_kind = kind if p.delete_dst_snapshots_no_crosscheck else "snapshot,bookmark"
+                if src_dataset in basis_src_datasets and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
+                    src_kind_with_crosscheck = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
+                    src_kind = kind if p.delete_dst_snapshots_no_crosscheck else src_kind_with_crosscheck
                     cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(

@@ -43,9 +43,13 @@ def destroy(name, recursive=False, force=False):
 def destroy_snapshots(dataset, snapshots=[]):
     if len(snapshots) == 0:
         return
-    cmd = sudo_cmd + ["zfs", "destroy"]
-    cmd += [dataset + "@" + ",".join([snap[snap.find("@") + 1 :] for snap in snapshots])]
-    run_cmd(cmd)
+    if is_solaris_zfs():  # solaris-11.4 does support passing multiple snapshots per CLI invocation
+        for snapshot in snapshots:
+            destroy(snapshot)
+    else:
+        cmd = sudo_cmd + ["zfs", "destroy"]
+        cmd += [dataset + "@" + ",".join([snap[snap.find("@") + 1 :] for snap in snapshots])]
+        run_cmd(cmd)
 
 
 def create_volume(dataset, path=None, mk_parents=True, size=None, props=[], blocksize=None, sparse=False):

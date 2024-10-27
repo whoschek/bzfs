@@ -2424,8 +2424,9 @@ class LocalTestCase(BZFSTestCase):
                 with stop_on_failure_subtest(i=j * 3 + i):
                     destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
                     destroy_snapshots(dst_root_dataset, snapshots(dst_root_dataset))
-                    for bookmark in bookmarks(src_root_dataset):
-                        destroy(bookmark)
+                    if is_zpool_bookmarks_feature_enabled_or_active("src"):
+                        for bookmark in bookmarks(src_root_dataset):
+                            destroy(bookmark)
                     take_snapshot(src_root_dataset, fix("s1"))
                     take_snapshot(src_root_dataset, fix("s2"))
                     take_snapshot(src_root_dataset, fix("s3"))
@@ -2433,7 +2434,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertSnapshots(dst_root_dataset, 3, "s")
                     if i > 0:
                         destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
-                    if i > 1:
+                    if i > 1 and is_zpool_bookmarks_feature_enabled_or_active("src"):
                         for bookmark in bookmarks(src_root_dataset):
                             destroy(bookmark)
                     crosscheck = [] if j == 0 else ["--delete-dst-snapshots-no-crosscheck"]
@@ -2443,7 +2444,7 @@ class LocalTestCase(BZFSTestCase):
                     if i == 0:
                         self.assertSnapshots(dst_root_dataset, 3, "s")
                     elif i == 1:
-                        if j == 0:
+                        if j == 0 and is_zpool_bookmarks_feature_enabled_or_active("src"):
                             self.assertSnapshotNames(dst_root_dataset, ["s1", "s3"])
                         else:
                             self.assertSnapshotNames(dst_root_dataset, [])
