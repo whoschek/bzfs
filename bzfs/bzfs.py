@@ -1473,23 +1473,20 @@ class Job:
         src_properties = {}
         for line in src_datasets_with_sizes:
             volblocksize, recordsize, src_dataset = line.split("\t", 2)
-            src_properties[src_dataset] = {
-                "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
-            }
+            src_properties[src_dataset] = {"recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize)}
             src_datasets.append(src_dataset)
         self.src_properties = src_properties
         src_datasets_with_sizes = None  # help gc
-
         basis_src_datasets = set(src_datasets)
-        src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
         failed = False
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
             log.info("Starting replication task: %s", task_description)
-            if len(basis_src_datasets) == 0:
+            if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             log.trace("Retry policy: %s", p.retry_policy)
+            src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
             skip_dataset = DONT_SKIP_DATASET
             for src_dataset in src_datasets:
                 if is_descendant(src_dataset, of_root_dataset=skip_dataset):
