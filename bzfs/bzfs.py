@@ -2678,12 +2678,26 @@ class Job:
         The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
         Also: 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
         src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
-        is a bookmark we convert a -I step to one or more -i steps.
+        is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
         """
-        guids = src_guids
-        assert len(guids) == len(src_snapshots)
+
+        def append_run(i: int, label: str) -> int:
+            step = ("-I", src_snapshots[start], src_snapshots[i])
+            # print(f"{label} {self.send_step_to_str(step)}")
+            if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
+                steps.append(step)
+            elif "@" in src_snapshots[start]:
+                for j in range(start, i):  # convert -I step to -i steps
+                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
+            else:  # it's a bookmark source; convert -I step to -i step followed by zero or more -i/-I steps
+                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1]))
+                i = start + 1
+            return i - 1
+
+        assert len(src_guids) == len(src_snapshots)
         assert len(included_guids) >= 0
         steps = []
+        guids = src_guids
         n = len(guids)
         i = 0
         while i < n and guids[i] not in included_guids:  # skip hourlies
@@ -2707,29 +2721,14 @@ class Job:
                         # print(f"r1 {self.send_step_to_str(step)}")
                         steps.append(step)
                         i -= 1
-                else:
-                    # it's a run of more than one daily
+                else:  # it's a run of more than one daily
                     i -= 1
                     assert start != i
-                    step = ("-I", src_snapshots[start], src_snapshots[i])
-                    # print(f"r2 {self.send_step_to_str(step)}")
-                    if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
-                        steps.append(step)
-                    else:  # convert -I step to -i steps
-                        for j in range(start, i):
-                            steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
-                    i -= 1
-            else:
-                # finish up run of trailing dailies
+                    i = append_run(i, "r2")
+            else:  # finish up run of trailing dailies
                 i -= 1
                 if start != i:
-                    step = ("-I", src_snapshots[start], src_snapshots[i])
-                    # print(f"r3 {self.send_step_to_str(step)}")
-                    if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
-                        steps.append(step)
-                    else:  # convert -I step to -i steps
-                        for j in range(start, i):
-                            steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
+                    i = append_run(i, "r3")
             i += 1
         return steps
 
