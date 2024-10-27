@@ -1514,18 +1514,17 @@ class TestIncrementalSendSteps(unittest.TestCase):
     def validate_incremental_send_steps(self, input_snapshots, expected_results):
         """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input
         snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
-        # src_dataset = "s@"
-        src_dataset = ""
-        for force_convert_I_to_i in [False, True]:
-            steps = self.incremental_send_steps1(
-                input_snapshots, src_dataset=src_dataset, force_convert_I_to_i=force_convert_I_to_i
-            )
-            # print(f"input_snapshots:" + ','.join(input_snapshots))
-            # print("steps: " + ','.join([self.send_step_to_str(step) for step in steps]))
-            output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
-            output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
-            # print(f"output_snapshots:" + ','.join(output_snapshots))
-            self.assertListEqual(expected_results, output_snapshots)
+        for src_dataset in ["", "s@"]:
+            for force_convert_I_to_i in [False, True]:
+                steps = self.incremental_send_steps1(
+                    input_snapshots, src_dataset=src_dataset, force_convert_I_to_i=force_convert_I_to_i
+                )
+                # print(f"input_snapshots:" + ",".join(input_snapshots))
+                # print("steps: " + ",".join([self.send_step_to_str(step) for step in steps]))
+                output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
+                output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
+                # print(f"output_snapshots:" + ','.join(output_snapshots))
+                self.assertListEqual(expected_results, output_snapshots)
 
     def send_step_to_str(self, step):
         # return str(step)
@@ -1536,6 +1535,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
         for incr_flag, start_snapshot, end_snapshot in steps:
+            start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
+            end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
             start = input_snapshots.index(start_snapshot)
             end = input_snapshots.index(end_snapshot)
             if incr_flag == "-I":
