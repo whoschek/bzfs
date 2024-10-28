@@ -89,8 +89,9 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 def suite():
     is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
+    is_functional_test = getenv_bool("functional", False)  # Consider toggling this when testing isolated code changes
     suite = unittest.TestSuite()
-    if not is_adhoc_test:
+    if not is_adhoc_test and not is_functional_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
 
     # for ssh_mode in ["pull-push"]:
@@ -101,11 +102,13 @@ def suite():
             for affix in [""]:
                 # no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
-                if os.geteuid() != 0:
+                if os.geteuid() != 0 and not is_adhoc_test and not is_functional_test:
                     no_privilege_elevation_modes.append(True)
                 for no_privilege_elevation in no_privilege_elevation_modes:
-                    # for encrypted_dataset in [False]:
-                    for encrypted_dataset in [False, True]:
+                    encrypted_datasets = [False]
+                    if not is_adhoc_test and not is_functional_test:
+                        encrypted_datasets += [True]
+                    for encrypted_dataset in encrypted_datasets:
                         params = {
                             "ssh_mode": ssh_mode,
                             "verbose": True,
@@ -122,12 +125,16 @@ def suite():
     if is_adhoc_test:
         return suite
 
-    # for ssh_mode in ["pull-push"]:
-    # for ssh_mode in ["local"]:
-    # for ssh_mode in ["local", "pull-push", "push", "pull"]:
-    # for ssh_mode in []:
-    for ssh_mode in ["local", "pull-push"]:
-        for min_pipe_transfer_size in [0, 1024**2]:
+    # ssh_modes = []
+    # ssh_modes = ["pull-push"]
+    # ssh_modes = ["local", "pull-push", "push", "pull"]
+    # ssh_modes = ["local"]
+    ssh_modes = ["local", "pull-push"]
+    ssh_modes = ["local"] if is_functional_test else ssh_modes
+    for ssh_mode in ssh_modes:
+        min_pipe_transfer_sizes = [0, 1024**2]
+        min_pipe_transfer_sizes = [0] if is_functional_test else min_pipe_transfer_sizes
+        for min_pipe_transfer_size in min_pipe_transfer_sizes:
             # for affix in [""]:
             # for affix in ["", ".  -"]:
             for affix in [".  -"]:
@@ -145,7 +152,7 @@ def suite():
                         }
                         suite.addTest(ParametrizedTestCase.parametrize(FullRemoteTestCase, params))
 
-    if os.geteuid() != 0:
+    if os.geteuid() != 0 and not is_functional_test:
         for ssh_mode in ["pull-push", "pull", "push"]:
             for min_pipe_transfer_size in [0]:
                 for affix in [""]:
