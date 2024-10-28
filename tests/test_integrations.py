@@ -1614,7 +1614,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            expected_status=die_status,
+            expected_status=1,
             error_injection_triggers={"before": counter},
         )
         self.assertEqual(0, counter["retryable_run_tasks"])

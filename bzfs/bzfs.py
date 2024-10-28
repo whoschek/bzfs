@@ -1274,7 +1274,6 @@ def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log
 class Job:
     def __init__(self):
         self.params: Params
-        self.zfs_dataset_busy_if_mods, self.zfs_dataset_busy_if_send = self.get_is_zfs_dataset_busy_regexes()  # Pattern
         self.all_dst_dataset_exists: Dict[str, Dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: Dict[str, bool] = {}
         self.src_properties: Dict[str, Dict[str, str | int]] = {}
@@ -1282,6 +1281,7 @@ class Job:
         self.all_exceptions: List[str] = []
         self.first_exception: Optional[BaseException] = None
         self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
+        self.zfs_dataset_busy_if_mods, self.zfs_dataset_busy_if_send = self.get_is_zfs_dataset_busy_regexes()  # Pattern
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
 
         self.is_test_mode: bool = False  # for testing only
@@ -1342,7 +1342,7 @@ class Job:
                 )
                 try:
                     try:
-                        self.maybe_inject_error(cmd=None, error_trigger="retryable_run_tasks")
+                        self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
                         self.validate_task()
                         self.run_task()
                     except RetryableError as retryable_error:
@@ -1621,10 +1621,10 @@ class Job:
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
         # of that dataset do not have a snapshot or bookmark either. To do so, we walk the dataset list (conceptually,
-        # a tree) depth-first (i.e. sorted descending). If a dst dataset has zero snapshots and all its children are
-        # already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in a reverse
-        # sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct children but
-        # the entire tree. Finally, delete all orphan datasets in an efficient batched way.
+        # a tree) depth-first (i.e. sorted descending). If a dst dataset has zero snapshots and zero bookmarks and all
+        # its children are already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in
+        # a reverse sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct
+        # children but the entire tree. Finally, delete all orphan datasets in an efficient batched way.
         if p.delete_empty_dst_datasets:
             log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
             delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
@@ -2278,15 +2278,13 @@ class Job:
             counter = self.error_injection_triggers.get("before")
             if counter and counter[error_trigger] > 0:
                 counter[error_trigger] -= 1
-                if not error_trigger.startswith("retryable_"):
-                    raise subprocess.CalledProcessError(
-                        returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ": dataset is busy"
-                    )
-                else:
-                    try:
-                        die(error_trigger)
-                    except SystemExit as e:
+                try:
+                    raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
+                except subprocess.CalledProcessError as e:
+                    if error_trigger.startswith("retryable_"):
                         raise RetryableError("Subprocess failed") from e
+                    else:
+                        raise
 
     def maybe_inject_delete(self, remote: Remote, dataset=None, delete_trigger=None) -> None:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
