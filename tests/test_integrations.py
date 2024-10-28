@@ -540,7 +540,12 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
         self.run_bzfs(
-            src_foo, dst_foo, "--force", "--skip-missing-snapshots=continue", "--exclude-snapshot-regex", ".*"
+            src_foo,
+            dst_foo,
+            "--force",
+            "--skip-missing-snapshots=continue",
+            "--exclude-snapshot-regex",
+            ".*",
         )
         self.assertSnapshotNames(dst_foo, [])
 
@@ -553,7 +558,12 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
         self.run_bzfs(
-            src_foo, dst_foo, "--force", "--skip-missing-snapshots=continue", "--include-snapshot-regex", "!.*"
+            src_foo,
+            dst_foo,
+            "--force",
+            "--skip-missing-snapshots=continue",
+            "--include-snapshot-regex",
+            "!.*",
         )
         self.assertSnapshotNames(dst_foo, [])
 
@@ -672,7 +682,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(dst_pool, fix("q1"))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_pool, dst_pool, "--force-once", dry_run=(i == 0))
+                self.run_bzfs(src_pool, dst_pool, "--force", "--force-once", dry_run=(i == 0))
                 if i == 0:
                     self.assertSnapshots(dst_pool, 1, "q")
                 else:
@@ -1615,7 +1625,13 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(dst_foo, fix("x1"))  # --force will need to rollback that dst snap
         take_snapshot(dst_foo_a, fix("y1"))  # --force will need to rollback that dst snap
         # self.run_bzfs(src_root_dataset, dst_root_dataset, '--force', '--recursive')
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--force", "--recursive", "--force-unmount")
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--force-rollback-to-latest-common-snapshot",
+            "--recursive",
+            "--force-unmount",
+        )
         self.assertSnapshots(dst_root_dataset, 3, "s")
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
@@ -1845,7 +1861,13 @@ class LocalTestCase(BZFSTestCase):
         # resolve conflict via dst rollback to most recent common snapshot
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", "--force-once", dry_run=(i == 0))
+                self.run_bzfs(
+                    src_root_dataset + "/foo",
+                    dst_root_dataset + "/foo",
+                    "--force-rollback-to-latest-common-snapshot",
+                    "--force-once",
+                    dry_run=(i == 0),
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
@@ -1879,6 +1901,7 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
                     dst_root_dataset + "/foo",
+                    "--force-rollback-to-latest-common-snapshot",
                     "--force-once",
                     dry_run=(i == 0),
                     no_create_bookmark=True,
@@ -1943,6 +1966,7 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
                     dst_root_dataset + "/foo",
+                    "--force",
                     "--f1",
                     dry_run=(i == 0),
                     no_create_bookmark=True,
@@ -1970,7 +1994,7 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
                     dst_root_dataset + "/foo",
-                    "--force",
+                    "--force-rollback-to-latest-common-snapshot",
                     dry_run=(i == 0),
                     no_create_bookmark=True,
                 )
@@ -2051,7 +2075,13 @@ class LocalTestCase(BZFSTestCase):
         # resolve conflict via dst rollback to most recent common snapshot
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", "--force-once", dry_run=(i == 0))
+                self.run_bzfs(
+                    src_root_dataset + "/foo",
+                    dst_root_dataset + "/foo",
+                    "--force-rollback-to-latest-common-snapshot",
+                    "--force-once",
+                    dry_run=(i == 0),
+                )
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
@@ -2082,7 +2112,11 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
-                    src_root_dataset + "/foo", dst_root_dataset + "/foo", "--force-once", dry_run=(i == 0)
+                    src_root_dataset + "/foo",
+                    dst_root_dataset + "/foo",
+                    "--force-rollback-to-latest-common-snapshot",
+                    "--force-once",
+                    dry_run=(i == 0),
                 )  # resolve conflict via dst rollback
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
@@ -2181,7 +2215,12 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_foo, fix("t12"))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", "--force", dry_run=(i == 0))
+                self.run_bzfs(
+                    src_root_dataset + "/foo",
+                    dst_root_dataset + "/foo",
+                    "--force-rollback-to-latest-common-snapshot",
+                    dry_run=(i == 0),
+                )
                 if not volume:
                     self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
                 if i == 0:

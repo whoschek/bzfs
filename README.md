@@ -346,7 +346,8 @@ bzfs-test
 
 <!-- Docs: The blurb below is copied from the output of bzfs/bzfs.py --help -->
 ```
-usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
+usage: bzfs [-h] [--recursive]
+            [--include-dataset DATASET [DATASET ...]]
             [--exclude-dataset DATASET [DATASET ...]]
             [--include-dataset-regex REGEX [REGEX ...]]
             [--exclude-dataset-regex REGEX [REGEX ...]]
@@ -356,8 +357,9 @@ usage: bzfs [-h] [--recursive] [--include-dataset DATASET [DATASET ...]]
             [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
             [--zfs-send-program-opts STRING] [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
-            [--force-rollback-to-latest-snapshot] [--force] [--force-unmount]
-            [--force-once] [--skip-parent]
+            [--force-rollback-to-latest-snapshot]
+            [--force-rollback-to-latest-common-snapshot] [--force]
+            [--force-unmount] [--force-once] [--skip-parent]
             [--skip-missing-snapshots [{fail,dataset,continue}]]
             [--retries INT] [--retry-min-sleep-secs FLOAT]
             [--retry-max-sleep-secs FLOAT] [--retry-max-elapsed-secs FLOAT]
@@ -791,8 +793,20 @@ via tests/update_readme.py
 *  Before replication, rollback the destination dataset to its most
     recent destination snapshot (if there is one), via 'zfs rollback',
     just in case the destination dataset was modified since its most
-    recent snapshot. This is much less invasive than --force (see
-    below).
+    recent snapshot. This is much less invasive than the other
+    --force* options (see below).
+
+<!-- -->
+
+<div id="--force-rollback-to-latest-common-snapshot"></div>
+
+**--force-rollback-to-latest-common-snapshot**
+
+*  Before replication, delete destination ZFS snapshots that are more
+    recent than the most recent common snapshot included on the source
+    ('conflicting snapshots'), via 'zfs rollback'. Abort with an
+    error if no common snapshot is included but the destination already
+    contains a (non-common) snapshot.
 
 <!-- -->
 
@@ -800,15 +814,18 @@ via tests/update_readme.py
 
 **--force**
 
-*  Before replication, delete destination ZFS snapshots that are more
-    recent than the most recent common snapshot included on the source
-    ('conflicting snapshots') and rollback the destination dataset
-    correspondingly before starting replication. Also, if no common
-    snapshot is included then delete all destination snapshots before
-    starting replication. Without the --force flag, the destination
-    dataset is treated as append-only, hence no destination snapshot
-    that already exists is deleted, and instead the operation is aborted
-    with an error when encountering a conflicting snapshot.
+*  Same as --force-rollback-to-latest-common-snapshot (see above),
+    except that additionally, if no common snapshot is included, then
+    delete all destination snapshots before starting replication.
+    Without the --force* flags, the destination dataset is treated as
+    append-only, hence no destination snapshot that already exists is
+    deleted, and instead the operation is aborted with an error when
+    encountering a conflicting snapshot.
+
+    Analogy: --force-rollback-to-latest-snapshot is a tiny hammer,
+    whereas --force-rollback-to-latest-common-snapshot is a medium
+    sized hammer, and --force is a large hammer. Use the smallest
+    hammer that can fix the problem. By default no hammer is ever used.
 
 <!-- -->
 
@@ -816,9 +833,9 @@ via tests/update_readme.py
 
 **--force-unmount**
 
-*  On destination, --force will also forcibly unmount file systems via
-    'zfs rollback -f' and 'zfs destroy -f'. That is, --force will
-    add the '-f' flag to 'zfs rollback' and 'zfs destroy'.
+*  On destination, --force and
+    --force-rollback-to-latest-common-snapshot will add the '-f' flag
+    to their use of 'zfs rollback' and 'zfs destroy'.
 
 <!-- -->
 
@@ -826,9 +843,11 @@ via tests/update_readme.py
 
 **--force-once**, **--f1**
 
-*  Use the --force option at most once to resolve a conflict, then
-    abort with an error on any subsequent conflict. This helps to
-    interactively resolve conflicts, one conflict at a time.
+*  Use the --force option or
+    --force-rollback-to-latest-common-snapshot option at most once to
+    resolve a conflict, then abort with an error on any subsequent
+    conflict. This helps to interactively resolve conflicts, one
+    conflict at a time.
 
 <!-- -->
 

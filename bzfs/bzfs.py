@@ -427,19 +427,26 @@ of creation time:
         "--force-rollback-to-latest-snapshot", action="store_true",
         help="Before replication, rollback the destination dataset to its most recent destination snapshot (if there "
              "is one), via 'zfs rollback', just in case the destination dataset was modified since its most recent "
-             "snapshot. This is much less invasive than --force (see below).\n\n")
+             "snapshot. This is much less invasive than the other --force* options (see below).\n\n")
+    parser.add_argument(
+        "--force-rollback-to-latest-common-snapshot", action="store_true",
+        help="Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
+             "snapshot included on the source ('conflicting snapshots'), via 'zfs rollback'. Abort with an error if "
+             "no common snapshot is included but the destination already contains a (non-common) snapshot.\n\n")
     parser.add_argument(
         "--force", action="store_true",
-        help="Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
-             "snapshot included on the source ('conflicting snapshots') and rollback the destination dataset "
-             "correspondingly before starting replication. Also, if no common snapshot is included then delete all "
-             "destination snapshots before starting replication. Without the --force flag, the destination dataset is "
-             "treated as append-only, hence no destination snapshot that already exists is deleted, and instead the "
-             "operation is aborted with an error when encountering a conflicting snapshot.\n\n")
+        help="Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if no common "
+             "snapshot is included, then delete all destination snapshots before starting replication. Without the "
+             "--force* flags, the destination dataset is treated as append-only, hence no destination snapshot that "
+             "already exists is deleted, and instead the operation is aborted with an error when encountering a "
+             "conflicting snapshot.\n\n"
+             "Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas "
+             "--force-rollback-to-latest-common-snapshot is a medium sized hammer, and --force is a large hammer. "
+             "Use the smallest hammer that can fix the problem. By default no hammer is ever used.\n\n")
     parser.add_argument(
         "--force-unmount", action="store_true",
-        help="On destination, --force will also forcibly unmount file systems via 'zfs rollback -f' and "
-             "'zfs destroy -f'. That is, --force will add the '-f' flag to 'zfs rollback' and 'zfs destroy'.\n\n")
+        help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
+             "use of 'zfs rollback' and 'zfs destroy'.\n\n")
     parser.add_argument(
         "--force-hard", action="store_true",
         # help="On destination, --force will also delete dependents such as clones and bookmarks via "
@@ -448,8 +455,9 @@ of creation time:
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--force-once", "--f1", action="store_true",
-        help="Use the --force option at most once to resolve a conflict, then abort with an error on any subsequent "
-             "conflict. This helps to interactively resolve conflicts, one conflict at a time.\n\n")
+        help="Use the --force option or --force-rollback-to-latest-common-snapshot option at most once to resolve a "
+             "conflict, then abort with an error on any subsequent conflict. This helps to interactively resolve "
+             "conflicts, one conflict at a time.\n\n")
     parser.add_argument(
         "--skip-parent", action="store_true",
         help="Skip processing of the SRC_DATASET and DST_DATASET and only process their descendant datasets, i.e. "
@@ -1014,8 +1022,9 @@ class Params:
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
 
         self.force_rollback_to_latest_snapshot: bool = args.force_rollback_to_latest_snapshot
+        self.force_rollback_to_latest_common_snapshot: bool = args.force_rollback_to_latest_common_snapshot
+        self.force: bool = args.force
         self.force_once: bool = args.force_once
-        self.force: bool = args.force or args.force_once
         self.force_unmount: str = "-f" if args.force_unmount else ""
         self.force_hard: str = "-R" if args.force_hard else ""
 
@@ -1795,16 +1804,17 @@ class Job:
             log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
 
             if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
-                # found common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
+                # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
                 _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
-                if not params.force:
+                if not (params.force_rollback_to_latest_common_snapshot or params.force):
                     die(
                         f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
                         f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
-                        "for example via --force option."
+                        "for example via --force-rollback-to-latest-common-snapshot (or --force) option."
                     )
                 if params.force_once:
                     params.force = False
+                    params.force_rollback_to_latest_common_snapshot = False
                 log.info(
                     p.dry("Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot
                 )
