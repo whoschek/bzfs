@@ -43,7 +43,7 @@ def destroy(name, recursive=False, force=False):
 def destroy_snapshots(dataset, snapshots=[]):
     if len(snapshots) == 0:
         return
-    if is_solaris_zfs():  # solaris-11.4 does support passing multiple snapshots per CLI invocation
+    if is_solaris_zfs():  # solaris-11.4 does not support passing multiple snapshots per CLI invocation
         for snapshot in snapshots:
             destroy(snapshot)
     else:

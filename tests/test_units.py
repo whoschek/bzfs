@@ -952,8 +952,8 @@ class TestTimeRangeAction(unittest.TestCase):
         args = self.parse_timestamp("2024-12-31")
         self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-12-31").timestamp()))
 
-        args = self.parse_timestamp("2024-10-05T14:48:00")
-        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00").timestamp()))
+        args = self.parse_timestamp("2024-10-05T14:48:55")
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:55").timestamp()))
         self.assertNotEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
 
     def test_parse_datetime_with_timezone(self):
@@ -961,17 +961,17 @@ class TestTimeRangeAction(unittest.TestCase):
             self.skipTest("Timezone support in datetime.fromisoformat() requires python >= 3.11")
 
         # Test ISO 8601 datetime strings with timezone info
-        args = self.parse_timestamp("2024-10-05T14:48:00+02")
-        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
+        args = self.parse_timestamp("2024-10-05T14:48:55+02")
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:55+02:00").timestamp()))
 
-        args = self.parse_timestamp("2024-10-05T14:48:00+00:00")
-        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+00:00").timestamp()))
+        args = self.parse_timestamp("2024-10-05T14:48:55+00:00")
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:55+00:00").timestamp()))
 
-        args = self.parse_timestamp("2024-10-05T14:48:00-04:30")
-        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00-04:30").timestamp()))
+        args = self.parse_timestamp("2024-10-05T14:48:55-04:30")
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:55-04:30").timestamp()))
 
-        args = self.parse_timestamp("2024-10-05T14:48:00+02:00")
-        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:00+02:00").timestamp()))
+        args = self.parse_timestamp("2024-10-05T14:48:55+02:00")
+        self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:55+02:00").timestamp()))
 
     def test_get_include_snapshot_times(self):
         times_and_ranks_opt = "--include-snapshot-times-and-ranks="

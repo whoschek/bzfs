@@ -331,7 +331,7 @@ of creation time:
              "This option can be specified multiple times.\n\n"
              "<b>*Replication Example (UNION):* </b>\n\n"
              "Specify to replicate all daily snapshots created during the last 7 days, "
-             "and at the same time ensure that at the latest 7 daily snapshots (per dataset) are replicated regardless "
+             "and at the same time ensure that the latest 7 daily snapshots (per dataset) are replicated regardless "
              "of creation time, like so: "
              "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`\n\n"
              "<b>*Deletion Example (no UNION):* </b>\n\n"
@@ -355,7 +355,7 @@ of creation time:
              "* a) a `*` wildcard character representing negative or positive infinity.\n\n"
              "* b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
              "* c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
-             "'2024-10-05T14:48:00', '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone string support "
+             "'2024-10-05T14:48:55', '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. Timezone string support "
              "requires Python >= 3.11.\n\n"
              "* d) a duration that indicates how long ago from the current time, using the following syntax: "
              "a non-negative integer, followed by an optional space, followed by a duration unit that is "
@@ -432,7 +432,7 @@ of creation time:
         "--force-rollback-to-latest-common-snapshot", action="store_true",
         help="Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
              "snapshot included on the source ('conflicting snapshots'), via 'zfs rollback'. Abort with an error if "
-             "no common snapshot is included but the destination already contains a (non-common) snapshot.\n\n")
+             "no common snapshot is included but the destination already contains a snapshot.\n\n")
     parser.add_argument(
         "--force", action="store_true",
         help="Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if no common "
@@ -442,7 +442,7 @@ of creation time:
              "conflicting snapshot.\n\n"
              "Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas "
              "--force-rollback-to-latest-common-snapshot is a medium sized hammer, and --force is a large hammer. "
-             "Use the smallest hammer that can fix the problem. By default no hammer is ever used.\n\n")
+             "Consider using the smallest hammer that can fix the problem. No hammer is ever used by default.\n\n")
     parser.add_argument(
         "--force-unmount", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
@@ -478,8 +478,8 @@ of creation time:
     retries_default = 0
     parser.add_argument(
         "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
-        help="The maximum number of times a retryable replication step shall be retried if it fails, for example "
-             f"because of network hiccups (default: {retries_default}). "
+        help="The maximum number of times a retryable replication or deletion step shall be retried if it fails, for "
+             f"example because of network hiccups (default: {retries_default}). "
              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
              f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n")
     retry_min_sleep_secs_default = 0.125
@@ -499,10 +499,11 @@ of creation time:
     parser.add_argument(
         "--retry-max-elapsed-secs", type=float, min=0, default=retry_max_elapsed_secs_default,
         action=CheckRange, metavar="FLOAT",
-        help="A single operation (e.g. 'zfs send/receive' of the current dataset) will not be retried (or not "
-             "retried anymore) once this much time has elapsed since the initial start of the operation, including "
-             f"retries. (default: {retry_max_elapsed_secs_default}). The timer resets after each operation "
-             "completes or retries exhaust, such that subsequently failing operations can again be retried.\n\n")
+        help="A single operation (e.g. 'zfs send/receive' of the current dataset, or deletion of a list of snapshots "
+             "within the current dataset) will not be retried (or not retried anymore) once this much time has elapsed "
+             f"since the initial start of the operation, including retries (default: {retry_max_elapsed_secs_default})."
+             " The timer resets after each operation completes or retries exhaust, such that subsequently failing "
+             "operations can again be retried.\n\n")
     parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
         help="During replication, if an error is not retryable, or --retries has been exhausted, "
@@ -677,8 +678,8 @@ of creation time:
              "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
-        help=f"For increased safety, in normal operation {prog_name} also looks for bookmarks (in addition to "
-             "snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
+        help=f"For increased safety, in normal replication operation {prog_name} also looks for bookmarks (in addition "
+             "to snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
              "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks. "
              "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
              "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
@@ -2543,10 +2544,7 @@ class Job:
                 continue
             log.info(p.dry("Deleting dataset tree: %s"), f"{dataset} ...")
             cmd = p.split_args(
-                f"{remote.sudo} {p.zfs_program} destroy -r",
-                p.force_unmount,
-                p.force_hard,
-                p.verbose_destroy,
+                f"{remote.sudo} {p.zfs_program} destroy -r {p.force_unmount} {p.force_hard} {p.verbose_destroy}",
                 p.dry_run_destroy,
                 dataset,
             )
@@ -3069,7 +3067,7 @@ class Job:
         regex = self.zfs_dataset_busy_if_send if busy_if_send else self.zfs_dataset_busy_if_mods
         suffix = " " + dataset
         infix = " " + dataset + "@"
-        return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)
+        return any(filter(lambda proc: (proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc), procs))
 
     @staticmethod
     def get_is_zfs_dataset_busy_regexes() -> Tuple[re.Pattern, re.Pattern]:

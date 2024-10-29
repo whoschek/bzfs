@@ -242,12 +242,12 @@ older (or newer) than 12 weeks.
     * For example, can replicate (or delete) all daily snapshots except the latest (or oldest) 90 daily snapshots,
 and all weekly snapshots except the latest (or oldest) 12 weekly snapshots.
     * For example, can replicate all daily snapshots that were created during the last 7 days, and at the
-same time ensure that at least the latest 7 daily snapshots are replicated regardless of when they were created.
+same time ensure that at least the latest 7 daily snapshots are replicated regardless of creation time.
 This helps to safely cope with irregular scenarios where no snapshots were created or received within the last 7 days,
-or where more than 7 daily snapshots were created within the last 7 days.
-    * For example, can delete all daily snapshots that were created more than 7 days ago, yet ensure that at least
-the latest 7 daily snapshots are not deleted regardless of when they were created. It can help to avoid accidental
-pruning of the last snapshot that source and destination have in common.
+or where more than 7 daily snapshots were created or received within the last 7 days.
+    * For example, can delete all daily snapshots older than 7 days, but retain the latest 7 daily
+snapshots regardless of creation time. It can help to avoid accidental pruning of the last snapshot that source and
+destination have in common.
     * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
 * Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
 * Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
@@ -612,9 +612,9 @@ via tests/update_readme.py
     <b>*Replication Example (UNION):* </b>
 
     Specify to replicate all daily snapshots created during the last 7
-    days, and at the same time ensure that at the latest 7 daily
-    snapshots (per dataset) are replicated regardless of creation time,
-    like so: `--include-snapshot-regex '.*_daily'
+    days, and at the same time ensure that the latest 7 daily snapshots
+    (per dataset) are replicated regardless of creation time, like so:
+    `--include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks '7 days ago..*' 'latest
     7'`
 
@@ -653,8 +653,8 @@ via tests/update_readme.py
     seconds. Example: 1728109805
 
     * c) an ISO 8601 datetime string with or without timezone.
-    Examples: '2024-10-05', '2024-10-05T14:48:00',
-    '2024-10-05T14:48:00+02', '2024-10-05T14:48:00-04:30'. Timezone
+    Examples: '2024-10-05', '2024-10-05T14:48:55',
+    '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. Timezone
     string support requires Python >= 3.11.
 
     * d) a duration that indicates how long ago from the current time,
@@ -806,7 +806,7 @@ via tests/update_readme.py
     recent than the most recent common snapshot included on the source
     ('conflicting snapshots'), via 'zfs rollback'. Abort with an
     error if no common snapshot is included but the destination already
-    contains a (non-common) snapshot.
+    contains a snapshot.
 
 <!-- -->
 
@@ -824,8 +824,9 @@ via tests/update_readme.py
 
     Analogy: --force-rollback-to-latest-snapshot is a tiny hammer,
     whereas --force-rollback-to-latest-common-snapshot is a medium
-    sized hammer, and --force is a large hammer. Use the smallest
-    hammer that can fix the problem. By default no hammer is ever used.
+    sized hammer, and --force is a large hammer. Consider using the
+    smallest hammer that can fix the problem. No hammer is ever used by
+    default.
 
 <!-- -->
 
@@ -889,8 +890,8 @@ via tests/update_readme.py
 
 **--retries** *INT*
 
-*  The maximum number of times a retryable replication step shall be
-    retried if it fails, for example because of network hiccups
+*  The maximum number of times a retryable replication or deletion step
+    shall be retried if it fails, for example because of network hiccups
     (default: 0). Also consider this option if a periodic pruning script
     may simultaneously delete a dataset or snapshot or bookmark while
     bzfs is running and attempting to access it.
@@ -923,9 +924,10 @@ via tests/update_readme.py
 **--retry-max-elapsed-secs** *FLOAT*
 
 *  A single operation (e.g. 'zfs send/receive' of the current
+    dataset, or deletion of a list of snapshots within the current
     dataset) will not be retried (or not retried anymore) once this much
     time has elapsed since the initial start of the operation, including
-    retries. (default: 3600). The timer resets after each operation
+    retries (default: 3600). The timer resets after each operation
     completes or retries exhaust, such that subsequently failing
     operations can again be retried.
 
@@ -1243,14 +1245,14 @@ via tests/update_readme.py
 
 **--no-use-bookmark**
 
-*  For increased safety, in normal operation bzfs also looks for
-    bookmarks (in addition to snapshots) on the source dataset in order
-    to find the most recent common snapshot wrt. the destination
-    dataset, if it is auto-detected that the source ZFS pool support
-    bookmarks. The --no-use-bookmark option disables this safety
-    feature but is discouraged, because bookmarks help to ensure that
-    ZFS replication can continue even if source and destination dataset
-    somehow have no common snapshot anymore.
+*  For increased safety, in normal replication operation bzfs also
+    looks for bookmarks (in addition to snapshots) on the source dataset
+    in order to find the most recent common snapshot wrt. the
+    destination dataset, if it is auto-detected that the source ZFS pool
+    support bookmarks. The --no-use-bookmark option disables this
+    safety feature but is discouraged, because bookmarks help to ensure
+    that ZFS replication can continue even if source and destination
+    dataset somehow have no common snapshot anymore.
 
     Note that it does not matter whether a bookmark was created by bzfs
     or a third party script, as only the GUID of the bookmark and the
