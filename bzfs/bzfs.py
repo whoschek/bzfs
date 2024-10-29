@@ -958,8 +958,8 @@ class LogParams:
         os.makedirs(self.log_dir, exist_ok=True)
         fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}_", dir=self.log_dir)
         os.close(fd)
-        fd, self.pv_log_file = tempfile.mkstemp(suffix=".pv", prefix=f"{self.timestamp}_", dir=self.log_dir)
-        os.close(fd)
+        self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
+        Path(self.pv_log_file).touch()
         create_symlink(self.log_file, self.log_dir, "current.log")
         create_symlink(self.pv_log_file, self.log_dir, "current.pv")
         self.log_config_file = args.log_config_file
@@ -1428,7 +1428,7 @@ class Job:
         if src.ssh_host == dst.ssh_host:
             if src.root_dataset == dst.root_dataset:
                 die(
-                    f"Source and destination dataset must not be the same! "
+                    "Source and destination dataset must not be the same! "
                     f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
             if p.recursive and (
@@ -1436,7 +1436,7 @@ class Job:
                 or is_descendant(dst.root_dataset, of_root_dataset=src.root_dataset)
             ):
                 die(
-                    f"Source and destination dataset trees must not overlap! "
+                    "Source and destination dataset trees must not overlap! "
                     f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
 
