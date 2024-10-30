@@ -944,9 +944,9 @@ via tests/update_readme.py
 
 **--skip-on-error** *{fail,tree,dataset}*
 
-*  During replication, if an error is not retryable, or --retries has
-    been exhausted, or --skip-missing-snapshots raises an error,
-    proceed as follows:
+*  During replication and deletion, if an error is not retryable, or
+    --retries has been exhausted, or --skip-missing-snapshots raises
+    an error, proceed as follows:
 
     a) 'fail': Abort the program with an error. This mode is ideal
     for testing, clear error reporting, and situations where consistency

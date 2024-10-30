@@ -510,7 +510,7 @@ of creation time:
              "operations can again be retried.\n\n")
     parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
-        help="During replication, if an error is not retryable, or --retries has been exhausted, "
+        help="During replication and deletion, if an error is not retryable, or --retries has been exhausted, "
              "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
              "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "
              "error reporting, and situations where consistency trumps availability.\n\n"
@@ -1489,6 +1489,40 @@ class Job:
         else:
             return "", True
 
+    def process_datasets_fault_tolerant(
+        self,
+        datasets: List[str],
+        process_dataset: Callable[[str], bool],  # callback
+        skip_tree_on_error: Callable[[str], bool],  # callback
+        task_name: str,
+        task_description: str,
+    ) -> bool:
+        """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling + retries.
+        Assumes that the input dataset list is sorted."""
+        p, log = self.params, self.params.log
+        log.trace("Retry policy: %s", p.retry_policy)
+        failed = False
+        skip_dataset = DONT_SKIP_DATASET
+        for dataset in datasets:
+            if is_descendant(dataset, of_root_dataset=skip_dataset):
+                # skip_dataset has been deleted by some third party while we're running
+                continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
+            skip_dataset = DONT_SKIP_DATASET
+            try:
+                if not self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset)):
+                    skip_dataset = dataset
+            except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                failed = True
+                if p.skip_on_error == "fail":
+                    raise
+                elif p.skip_on_error == "tree" or skip_tree_on_error(dataset):
+                    skip_dataset = dataset
+                self.first_exception = self.first_exception or e
+                self.all_exceptions.append(str(e))
+                log.error("%s", str(e))
+                log.error(f"#{len(self.all_exceptions)}: Done {task_name}: %s", task_description)
+        return failed
+
     def run_task(self) -> None:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
@@ -1519,32 +1553,16 @@ class Job:
             log.info("Starting replication task: %s", task_description)
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            log.trace("Retry policy: %s", p.retry_policy)
             src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
-            skip_dataset = DONT_SKIP_DATASET
-            for src_dataset in src_datasets:
-                if is_descendant(src_dataset, of_root_dataset=skip_dataset):
-                    # skip_dataset shall be ignored or has been deleted by some third party while we're running
-                    continue  # nothing to do anymore for this dataset subtree (note that src_datasets is sorted)
-                skip_dataset = DONT_SKIP_DATASET
-                dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
-                log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
-                self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(src_properties[src_dataset]["recordsize"])))]
-                self.mbuffer_current_opts += p.mbuffer_program_opts
-                try:
-                    retrypolicy = p.retry_policy
-                    if not self.run_with_retries(retrypolicy, lambda: self.replicate_dataset(src_dataset, dst_dataset)):
-                        skip_dataset = src_dataset
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                    failed = True
-                    if p.skip_on_error == "fail":
-                        raise
-                    elif p.skip_on_error == "tree" or not self.dst_dataset_exists[dst_dataset]:
-                        skip_dataset = src_dataset
-                    self.first_exception = self.first_exception or e
-                    self.all_exceptions.append(str(e))
-                    log.error("%s", str(e))
-                    log.error(f"#{len(self.all_exceptions)}: Done replicating: %s", f"{src_dataset} --> {dst_dataset}")
+            failed = self.process_datasets_fault_tolerant(
+                src_datasets,
+                process_dataset=lambda dataset: self.replicate_dataset(dataset),
+                skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
+                    replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
+                ],
+                task_name="replicating",
+                task_description=task_description,
+            )
 
         if failed or not (p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets):
             return
@@ -1615,14 +1633,13 @@ class Job:
                 return True
 
             if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_dst_bookmarks:
-                skip_dataset = DONT_SKIP_DATASET
-                for dst_dataset in dst_datasets:
-                    if is_descendant(dst_dataset, of_root_dataset=skip_dataset):
-                        # skip_dataset has been deleted by some third party while we're running
-                        continue  # nothing to do anymore for this dataset subtree (note that dst_datasets is sorted)
-                    skip_dataset = DONT_SKIP_DATASET
-                    if not self.run_with_retries(p.retry_policy, lambda: delete_destination_snapshots(dst_dataset)):
-                        skip_dataset = dst_dataset
+                failed = self.process_datasets_fault_tolerant(
+                    dst_datasets,
+                    process_dataset=lambda dataset: delete_destination_snapshots(dataset),
+                    skip_tree_on_error=lambda dataset: False,
+                    task_name="--delete-dst-snapshots",
+                    task_description=task_description,
+                )
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
         # of that dataset do not have a snapshot or bookmark either. To do so, we walk the dataset list (conceptually,
@@ -1630,7 +1647,7 @@ class Job:
         # its children are already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in
         # a reverse sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct
         # children but the entire tree. Finally, delete all orphan datasets in an efficient batched way.
-        if p.delete_empty_dst_datasets:
+        if p.delete_empty_dst_datasets and not failed:
             log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
             delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
                 p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots
@@ -1680,13 +1697,15 @@ class Job:
                             orphans.add(dst_dataset)
             self.delete_datasets(dst, orphans)
 
-    def replicate_dataset(self, src_dataset: str, dst_dataset: str) -> bool:
+    def replicate_dataset(self, src_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
 
         p = params = self.params
         log = p.log
         src, dst = p.src, p.dst
         done_checking = False
+        dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
+        log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
         use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
@@ -1836,6 +1855,8 @@ class Job:
 
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
         log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
+        self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"])))]
+        self.mbuffer_current_opts += p.mbuffer_program_opts
         dry_run_no_send = False
         if not latest_common_src_snapshot:
             # no common snapshot was found. delete all dst snapshots, if any
