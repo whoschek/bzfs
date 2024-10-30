@@ -434,10 +434,10 @@ via tests/update_readme.py
     character. Example: `+root_dataset_names.txt`,
     `+/path/to/root_dataset_names.txt`
 
-    DST_DATASET: Destination ZFS dataset for replication. Has same
-    naming format as SRC_DATASET. During replication, destination
-    datasets that do not yet exist are created as necessary, along with
-    their parent and ancestors.
+    DST_DATASET: Destination ZFS dataset for replication and deletion.
+    Has same naming format as SRC_DATASET. During replication,
+    destination datasets that do not yet exist are created as necessary,
+    along with their parent and ancestors.
 
 
 
@@ -445,9 +445,9 @@ via tests/update_readme.py
 
 **--recursive**, **-r**
 
-*  During replication, also consider descendant datasets, i.e. datasets
-    within the dataset tree, including children, and children of
-    children, etc.
+*  During replication and deletion, also consider descendant datasets,
+    i.e. datasets within the dataset tree, including children, and
+    children of children, etc.
 
 <!-- -->
 
@@ -455,12 +455,13 @@ via tests/update_readme.py
 
 **--include-dataset** *DATASET [DATASET ...]*
 
-*  During replication, include any ZFS dataset (and its descendants)
-    that is contained within SRC_DATASET if its dataset name is one of
-    the given include dataset names but none of the exclude dataset
-    names. If a dataset is excluded its descendants are automatically
-    excluded too, and this decision is never reconsidered even for the
-    descendants because exclude takes precedence over include.
+*  During replication and deletion, include any ZFS dataset (and its
+    descendants) that is contained within SRC_DATASET (DST_DATASET in
+    case of deletion) if its dataset name is one of the given include
+    dataset names but none of the exclude dataset names. If a dataset is
+    excluded its descendants are automatically excluded too, and this
+    decision is never reconsidered even for the descendants because
+    exclude takes precedence over include.
 
     A dataset name is absolute if the specified dataset is prefixed by
     `/`, e.g. `/tank/baz/tmp`. Otherwise the dataset name is
@@ -493,11 +494,12 @@ via tests/update_readme.py
 
 **--include-dataset-regex** *REGEX [REGEX ...]*
 
-*  During replication, include any ZFS dataset (and its descendants)
-    that is contained within SRC_DATASET if its relative dataset path
-    (e.g. `baz/tmp`) wrt SRC_DATASET matches at least one of the given
-    include regular expressions but none of the exclude regular
-    expressions. If a dataset is excluded its descendants are
+*  During replication (and deletion), include any ZFS dataset (and its
+    descendants) that is contained within SRC_DATASET (DST_DATASET in
+    case of deletion) if its relative dataset path (e.g. `baz/tmp`)
+    wrt. SRC_DATASET (DST_DATASET in case of deletion) matches at least
+    one of the given include regular expressions but none of the exclude
+    regular expressions. If a dataset is excluded its descendants are
     automatically excluded too, and this decision is never reconsidered
     even for the descendants because exclude takes precedence over
     include.
@@ -560,8 +562,8 @@ via tests/update_readme.py
 
 **--include-snapshot-regex** *REGEX [REGEX ...]*
 
-*  During replication, include any source ZFS snapshot or bookmark that
-    has a name (i.e. the part after the '@' and '#') that matches at
+*  During replication and deletion, include any source ZFS snapshot
+    that has a name (i.e. the part after the '@') that matches at
     least one of the given include regular expressions but none of the
     exclude regular expressions. If a snapshot is excluded this decision
     is never reconsidered because exclude takes precedence over include.
@@ -583,8 +585,9 @@ via tests/update_readme.py
     --include/exclude-snapshot-regex. The pipeline results would not
     always be the same if the order were reversed. Order matters.
 
-    *Note:* Bookmarks are always retained aka included in order to
-    help find common snapshots between source and destination.
+    *Note:* During replication, bookmarks are always retained aka
+    included in order to help find common snapshots between source and
+    destination.
 
 <!-- -->
 
@@ -674,8 +677,9 @@ via tests/update_readme.py
     (optionally add the -p flag to display UTC Unix time in integer
     seconds).
 
-    *Note:* Bookmarks are always retained aka included in order to
-    help find common snapshots between source and destination.
+    *Note:* During replication, bookmarks are always retained aka
+    included in order to help find common snapshots between source and
+    destination.
 
     <b>*RANKRANGE:* </b>
 
@@ -736,9 +740,9 @@ via tests/update_readme.py
     daily snapshots, and 'latest 50%' will only include one of these
     two daily snapshots.
 
-    *Note:* Bookmarks are always retained aka included in order to
-    help find common snapshots between source and destination. Bookmarks
-    do not count towards N or N% wrt. rank.
+    *Note:* During replication, bookmarks are always retained aka
+    included in order to help find common snapshots between source and
+    destination. Bookmarks do not count towards N or N% wrt. rank.
 
     *Note:* If a snapshot is excluded this decision is never
     reconsidered because exclude takes precedence over include.
@@ -816,11 +820,11 @@ via tests/update_readme.py
 
 *  Same as --force-rollback-to-latest-common-snapshot (see above),
     except that additionally, if no common snapshot is included, then
-    delete all destination snapshots before starting replication.
-    Without the --force* flags, the destination dataset is treated as
-    append-only, hence no destination snapshot that already exists is
-    deleted, and instead the operation is aborted with an error when
-    encountering a conflicting snapshot.
+    delete all destination snapshots before starting replication, and
+    proceed without aborting. Without the --force* flags, the
+    destination dataset is treated as append-only, hence no destination
+    snapshot that already exists is deleted, and instead the operation
+    is aborted with an error when encountering a conflicting snapshot.
 
     Analogy: --force-rollback-to-latest-snapshot is a tiny hammer,
     whereas --force-rollback-to-latest-common-snapshot is a medium
@@ -856,11 +860,14 @@ via tests/update_readme.py
 
 **--skip-parent**
 
-*  Skip processing of the SRC_DATASET and DST_DATASET and only process
-    their descendant datasets, i.e. children, and children of children,
-    etc (with --recursive). No dataset is processed unless --recursive
-    is also specified. Analogy: `bzfs --recursive --skip-parent src
-    dst` is akin to Unix `cp -r src/* dst/`
+*  During replication and deletion, skip processing of the SRC_DATASET
+    and DST_DATASET and only process their descendant datasets, i.e.
+    children, and children of children, etc (with --recursive). No
+    dataset is processed unless --recursive is also specified. Analogy:
+    `bzfs --recursive --skip-parent src dst` is akin to Unix `cp -r
+    src/* dst/` whereas `bzfs --recursive --skip-parent
+    --skip-replication --delete-dst-datasets dummy dst` is akin to
+    Unix `rm -r dst/*`
 
 <!-- -->
 
