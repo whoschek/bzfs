@@ -1511,7 +1511,7 @@ class Job:
             try:
                 if not self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset)):
                     skip_dataset = dataset
-            except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                 failed = True
                 if p.skip_on_error == "fail":
                     raise
@@ -1530,8 +1530,7 @@ class Job:
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
-            f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name -s name",
-            p.recursive_flag,
+            f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name -s name {p.recursive_flag}",
             src.root_dataset,
         )
         src_datasets_with_sizes = []
@@ -1545,7 +1544,6 @@ class Job:
             src_datasets.append(src_dataset)
         self.src_properties = src_properties
         src_datasets_with_sizes = None  # help gc
-        basis_src_datasets = set(src_datasets)
         failed = False
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
@@ -1553,9 +1551,9 @@ class Job:
             log.info("Starting replication task: %s", task_description)
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
+            filtered_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
             failed = self.process_datasets_fault_tolerant(
-                src_datasets,
+                filtered_src_datasets,
                 process_dataset=lambda dataset: self.replicate_dataset(dataset),
                 skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
                     replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
@@ -1581,7 +1579,7 @@ class Job:
             log.info(p.dry("--delete-dst-datasets: %s"), task_description)
             dst_datasets = set(dst_datasets)
             to_delete = dst_datasets.difference(
-                {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
+                {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in src_datasets}
             )
             self.delete_datasets(dst, to_delete)
             dst_datasets = isorted(dst_datasets.difference(to_delete))
@@ -1589,6 +1587,7 @@ class Job:
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
         # via --{include|exclude}-dataset* policy.
+        src_datasets = set(src_datasets)
         if p.delete_dst_snapshots:
             log.info(p.dry("--delete-dst-snapshots: %s"), task_description)
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
@@ -1612,7 +1611,7 @@ class Job:
                 if filter_needs_creation_time:
                     dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in basis_src_datasets and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
+                if src_dataset in src_datasets and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
                     src_kind = kind
                     if not p.delete_dst_snapshots_no_crosscheck:
                         src_kind = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
