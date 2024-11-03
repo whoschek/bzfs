@@ -423,11 +423,17 @@ jobs:
           path: site/branch
       - name: Prepare
         run: |
-          mv site/branch site/$BRANCH_NAME
-          mv site/$BRANCH_NAME/htmlcov site/$BRANCH_NAME/coverage
-          mkdir -p site/$BRANCH_NAME/docs
-          echo "<!DOCTYPE HTML><meta charset='UTF-8'><meta http-equiv='refresh' content='0; url=./coverage/index.html'>" > site/$BRANCH_NAME/index.html
+          branchname=$(echo "$BRANCH_NAME" | tr '/' '_')
+          mv site/branch "site/$branchname"
+          mv "site/$branchname/htmlcov" "site/$branchname/coverage"
+          mkdir -p "site/$branchname/docs"
+          echo "<!DOCTYPE HTML><meta charset='UTF-8'><meta http-equiv='refresh' content='0; url=./coverage/index.html'>" > "site/$branchname/index.html"
           echo "<!DOCTYPE HTML><meta charset='UTF-8'><meta http-equiv='refresh' content='0; url=./$BRANCH_NAME/coverage/index.html'>" > site/index.html
+          if [ "$branchname" != "$BRANCH_NAME"]; then
+            mkdir -p "site/$BRANCH_NAME"
+            mv "site/$branchname"/* "site/$BRANCH_NAME/"
+            rm -fr "site/$branchname"
+          fi
       - name: Upload site to workflow run page
         uses: actions/upload-artifact@v4  # see https://github.com/actions/upload-artifact
         with:
