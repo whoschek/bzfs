@@ -41,7 +41,7 @@ tuser=test
 thome=/home/$tuser
 #pw userdel -n $tuser || true
 pw useradd $tuser -d $thome -m
-echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /usr/local/etc/sudoers
+echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool),$(command -v dd)" >> /usr/local/etc/sudoers
 
 mkdir -p $thome/.ssh
 cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $HOME/.ssh/authorized_keys $thome/.ssh/

@@ -79,6 +79,7 @@ zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
 snapshot_regex_filter_name = "snapshot_regex"
 snapshot_filters_var = "snapshot_filters_var"
+inject_dst_pipe_fail_kbytes = 400
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
@@ -479,7 +480,7 @@ of creation time:
              "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
              "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
              "has at least one descendant that includes a snapshot.\n\n")
-    retries_default = 0
+    retries_default = 2
     parser.add_argument(
         "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
         help="The maximum number of times a retryable replication or deletion step shall be retried if it fails, for "
@@ -640,6 +641,25 @@ of creation time:
              "snapshots for the dataset, except for the most recent source snapshot. This option helps the "
              "destination to 'catch up' with the source ASAP, consuming a minimum of disk space, at the expense "
              "of reducing reliable options for rolling back to intermediate snapshots in the future.\n\n")
+    parser.add_argument(
+        "--no-resume-recv", action="store_true",
+        help="Replication of snapshots via 'zfs send/receive' can be interrupted by intermittent network hiccups, "
+             "hardware issues, etc. Interrupted 'zfs send/receive' operations are retried if the --retries "
+             f"and --retry-* options enable it (see above). In normal operation {prog_name} automatically retries "
+             "such that only the portion of the snapshot is transmitted that has not yet been fully received on the "
+             "destination. For example, this helps to progressively transfer a large individual snapshot over a "
+             "wireless network in a timely manner despite frequent intermittent network hiccups. This optimization is "
+             "called 'resume receive' and uses the 'zfs receive -s' and 'zfs send -t' feature.\n\n"
+             "The --no-resume-recv option disables this optimization such that a retry now retransmits the entire "
+             "snapshot from scratch, which could slow down or even prohibit progress in case of frequent network "
+             f"hiccups. {prog_name} automatically falls back to using the --no-resume-recv option if it is "
+             "auto-detected that the ZFS pool does not reliably support the 'resume receive' optimization.\n\n"
+             "*Note:* Snapshots that have already been fully transferred as part of the current 'zfs send/receive' "
+             "operation need not be retransmitted regardless of the --no-resume-recv flag. For example, assume "
+             "a single 'zfs send/receive' operation is transferring incremental snapshots 1 through 10 via "
+             "'zfs send -I', but the operation fails while transferring snapshot 10, then snapshots 1 through 9 "
+             "need not be retransmitted regardless of the --no-resume-recv flag, as these snapshots have already "
+             "been successfully received at the destination either way.\n\n")
     parser.add_argument(
         "--no-create-bookmark", action="store_true",
         help=f"For increased safety, in normal operation {prog_name} behaves as follows wrt. ZFS bookmark creation, "
@@ -1048,6 +1068,7 @@ class Params:
         )
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
+        self.resume_recv: bool = not args.no_resume_recv
         self.create_bookmark: bool = not args.no_create_bookmark
         self.use_bookmark: bool = not args.no_use_bookmark
 
@@ -1293,6 +1314,7 @@ class Job:
         self.creation_prefix = ""  # for testing only
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
+        self.param_injection_triggers: Dict[str, Dict[str, bool]] = {}  # for testing only
         self.inject_params: Dict[str, bool] = {}  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
@@ -1492,8 +1514,8 @@ class Job:
     def process_datasets_fault_tolerant(
         self,
         datasets: List[str],
-        process_dataset: Callable[[str], bool],  # callback
-        skip_tree_on_error: Callable[[str], bool],  # callback
+        process_dataset: Callable[[str], bool],  # lambda
+        skip_tree_on_error: Callable[[str], bool],  # lambda
         task_name: str,
         task_description: str,
     ) -> bool:
@@ -1901,12 +1923,15 @@ class Job:
                         if dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
 
-                size_bytes = self.estimate_zfs_send_size(src, oldest_src_snapshot)
+                recv_resume_token, send_resume_opts, recv_resume_opts = self.get_receive_resume_token(dst_dataset)
+                size_bytes = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
                 size_human = human_readable_bytes(size_bytes)
-                send_cmd = p.split_args(
-                    f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, oldest_src_snapshot
-                )
-                recv_opts = p.zfs_full_recv_opts.copy()
+                if recv_resume_token:
+                    send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+                else:
+                    send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
+                send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
+                recv_opts = p.zfs_full_recv_opts.copy() + recv_resume_opts
                 recv_opts, set_opts = self.add_recv_property_options(True, recv_opts, src_dataset, props_cache)
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
@@ -1914,8 +1939,9 @@ class Job:
                 log.info(p.dry("Full zfs send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 dry_run_no_send = dry_run_no_send or params.dry_run_no_send
+                self.maybe_inject_params(error_trigger="full_zfs_send_params")
                 self.run_zfs_send_receive(
-                    send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="full_zfs_send"
+                    dst_dataset, send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, "full_zfs_send"
                 )
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not dry_run_no_send and not params.dry_run:
@@ -1958,7 +1984,8 @@ class Job:
                 # bookmark whose snapshot has been deleted on src.
                 return True  # nothing more tbd
 
-            recv_opts = p.zfs_recv_program_opts.copy()
+            recv_resume_token, send_resume_opts, recv_resume_opts = self.get_receive_resume_token(dst_dataset)
+            recv_opts = p.zfs_recv_program_opts.copy() + recv_resume_opts
             recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
             if p.no_stream:
                 # skip intermediate snapshots
@@ -1966,14 +1993,18 @@ class Job:
             else:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
-                steps_todo = self.incremental_send_steps_wrapper(cand_snapshots, cand_guids, included_src_guids)
+                steps_todo = self.incremental_send_steps_wrapper(
+                    cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
+                )
                 log.trace("steps_todo: %s", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
             for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo):
-                size_bytes = self.estimate_zfs_send_size(src, incr_flag, from_snap, to_snap)
+                size_bytes = self.estimate_send_size(src, dst_dataset, recv_resume_token, incr_flag, from_snap, to_snap)
                 size_human = human_readable_bytes(size_bytes)
-                send_cmd = p.split_args(
-                    f"{src.sudo} {p.zfs_program} send", p.curr_zfs_send_program_opts, incr_flag, from_snap, to_snap
-                )
+                if recv_resume_token:
+                    send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+                else:
+                    send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
+                send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
@@ -1985,9 +2016,11 @@ class Job:
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
                     dry_run_no_send = True
                 dry_run_no_send = dry_run_no_send or params.dry_run_no_send
+                self.maybe_inject_params(error_trigger="incr_zfs_send_params")
                 self.run_zfs_send_receive(
-                    send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, error_trigger="incr_zfs_send"
+                    dst_dataset, send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, "incr_zfs_send"
                 )
+                recv_resume_token = None
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
             self.zfs_set(set_opts, dst, dst_dataset)
@@ -1995,6 +2028,7 @@ class Job:
 
     def run_zfs_send_receive(
         self,
+        dst_dataset: str,
         send_cmd: List[str],
         recv_cmd: List[str],
         size_estimate_bytes: int,
@@ -2076,8 +2110,8 @@ class Job:
         if pv_dst_cmd != "" and pv_dst_cmd != "cat":
             dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
         if self.inject_params.get("inject_dst_pipe_fail", False):
-            # for testing; initially forward some bytes and then fail
-            dst_pipe = f"{dst_pipe} | dd bs=64 count=1 2>/dev/null && false"
+            # interrupt zfs receive for testing retry/resume; initially forward some bytes and then stop forwarding
+            dst_pipe = f"{dst_pipe} | dd bs=1024 count={inject_dst_pipe_fail_kbytes} 2>/dev/null"
         if self.inject_params.get("inject_dst_pipe_garble", False):
             dst_pipe = f"{dst_pipe} | base64"  # for testing; forward garbled bytes
         if dst_pipe.startswith(" |"):
@@ -2113,14 +2147,84 @@ class Job:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
                 process = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                no_sleep = False
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
                     log.warning("%s", stderr_to_str(e.stderr).rstrip())
+                if isinstance(e, subprocess.CalledProcessError):
+                    no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, e.stderr)
                 # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                raise RetryableError("Subprocess failed") from e
+                raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
+
+    def clear_resumable_recv_state_if_necessary(self, dst_dataset: str, stderr: str) -> bool:
+        def clear_resumable_recv_state() -> bool:
+            """Abort an interrupted zfs receive -s, deleting its saved partially received state."""
+            log.warning(
+                p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset
+            )
+            cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
+            self.try_ssh_command(p.dst, log_trace, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            log.trace(p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
+            return True
+
+        p, log = self.params, self.params.log
+        # "cannot resume send: 'wb_src/tmp/src@s1' is no longer the same snapshot used in the initial send"
+        # "cannot resume send: 'wb_src/tmp/src@s1' used in the initial send no longer exists"
+        # "cannot resume send: incremental source 0xa000000000000000 no longer exists"
+        if "cannot resume send" in stderr and (
+            "is no longer the same snapshot used in the initial send" in stderr
+            or "used in the initial send no longer exists" in stderr
+            or re.match(r"incremental source [0-9a-fx]+ no longer exists", stderr)
+        ):
+            return clear_resumable_recv_state()
+
+        # "cannot receive resume stream: incompatible embedded data stream feature with encrypted receive."
+        #     see https://github.com/openzfs/zfs/issues/12480
+        # 'cannot receive new filesystem stream: destination xx contains partially-complete state from "zfs receive -s"'
+        #     this indicates that --no-resume-recv detects that dst contains a previously interrupted recv -s
+        elif "cannot receive" in stderr and (
+            "cannot receive resume stream: incompatible embedded data stream feature with encrypted receive" in stderr
+            or 'contains partially-complete state from "zfs receive -s"' in stderr
+        ):
+            return clear_resumable_recv_state()
+
+        elif (
+            "cannot receive new filesystem stream: checksum mismatch or incomplete stream" in stderr
+            and "Partially received snapshot is saved" in stderr
+        ):
+            return True  # this signals normal behavior on interrupt of 'zfs receive -s' if running without --no-resume-recv
+
+        return False
+
+    def get_receive_resume_token(self, dst_dataset: str) -> Tuple[Optional[str], List[str], List[str]]:
+        """Get receive_resume_token ZFS property from dst_dataset and return corresponding opts to use for send+recv"""
+        p, log = self.params, self.params.log
+        if not p.resume_recv:
+            return None, [], []
+        warning = None
+        if not self.is_zpool_feature_enabled_or_active(p.dst, "feature@extensible_dataset"):
+            warning = "not available on destination dataset"
+        elif not (self.is_program_available(zfs_version_is_at_least_2_1_0, "dst") or self.is_solaris_zfs(p.dst)):
+            warning = "unreliable as zfs version is too old"  # e.g. zfs-0.8.3 "internal error: Unknown error 1040"
+        if warning:
+            log.warning(f"zfs receive resume feature is {warning}. Falling back to --no-resume-recv: %s", dst_dataset)
+            return None, [], []
+        recv_resume_token = None
+        send_resume_opts = []
+        if self.dst_dataset_exists[dst_dataset]:
+            cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
+            recv_resume_token = self.run_ssh_command(p.dst, log_trace, cmd=cmd).rstrip()
+            if recv_resume_token == "-" or not recv_resume_token:
+                recv_resume_token = None
+            else:
+                send_resume_opts += ["-n"] if p.dry_run else []
+                send_resume_opts += ["-v"] if p.verbose_zfs else []
+                send_resume_opts += ["-t", recv_resume_token]
+        recv_resume_opts = ["-s"]
+        return recv_resume_token, send_resume_opts, recv_resume_opts
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
         """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
@@ -2320,6 +2424,16 @@ class Job:
             p, log = self.params, self.params.log
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
             self.run_ssh_command(remote, log_debug, print_stdout=True, cmd=cmd)
+
+    def maybe_inject_params(self, error_trigger: str) -> None:
+        """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
+        assert error_trigger
+        counter = self.error_injection_triggers.get("before")
+        if counter and counter[error_trigger] > 0:
+            counter[error_trigger] -= 1
+            self.inject_params = self.param_injection_triggers[error_trigger]
+        elif error_trigger in self.param_injection_triggers:
+            self.inject_params = {}
 
     def squote(self, ssh_cmd: List[str], arg: str) -> str:
         return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
@@ -2615,15 +2729,26 @@ class Job:
                         print(e.stderr, file=sys.stderr, end="")
                         raise
 
-    def estimate_zfs_send_size(self, remote: Remote, *items) -> int:
+    def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: str, *items) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
         p, log = self.params, self.params.log
         if self.is_solaris_zfs(remote):
             return 0  # solaris-11.4 does not have a --parsable equivalent
         zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
+        if recv_resume_token:
+            zfs_send_program_opts = ["-Pnv", "-t", recv_resume_token]
+            items = ""
         cmd = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
-        lines = self.try_ssh_command(remote, log_trace, cmd=cmd)
+        try:
+            lines = self.try_ssh_command(remote, log_trace, cmd=cmd)
+        except RetryableError as retryable_error:
+            if recv_resume_token:
+                e = retryable_error.__cause__
+                stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+                retryable_error.no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
+            # op isn't idempotent so retries regather current state from the start of replicate_dataset()
+            raise retryable_error
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
         size = lines.splitlines()[-1]
@@ -2666,11 +2791,13 @@ class Job:
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
                 if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
+                    log.info(f"Retrying [{retry_count + 1}/{policy.retries}] soon ...")
+                    retry_count = retry_count + 1
+                    if retryable_error.no_sleep and retry_count <= 1:
+                        continue
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(policy.min_sleep_nanos, max_sleep_mark)
-                    log.info(f"Retrying [{retry_count + 1}/{policy.retries}] soon ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
-                    retry_count = retry_count + 1
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
                     if policy.retries > 0:
@@ -2682,17 +2809,17 @@ class Job:
                     raise retryable_error.__cause__
 
     def incremental_send_steps_wrapper(
-        self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str]
+        self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
     ) -> List[Tuple[str, str, str]]:
         force_convert_I_to_i = False
         if self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", False):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True
-        return self.incremental_send_steps(src_snapshots, src_guids, included_guids, force_convert_I_to_i)
+        return self.incremental_send_steps(src_snapshots, src_guids, included_guids, is_resume, force_convert_I_to_i)
 
     def incremental_send_steps(
-        self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], force_convert_I_to_i: bool
+        self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume, force_convert_I_to_i
     ) -> List[Tuple[str, str, str]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
@@ -2705,21 +2832,25 @@ class Job:
         Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
         -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
         -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
-        The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
-        Also: 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
+        * The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
+        * 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
         src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
         is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
+        * The is_resume param is necessary as 'zfs send -t' does not support sending more than a single snapshot
+        on resuming a previously interrupted 'zfs receive -s'. Thus, here too, we convert a -I step to a -i step
+        followed by zero or more -i/-I steps.
         """
 
         def append_run(i: int, label: str) -> int:
             step = ("-I", src_snapshots[start], src_snapshots[i])
             # print(f"{label} {self.send_step_to_str(step)}")
-            if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start]:
+            is_not_resume = len(steps) > 0 or not is_resume
+            if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start] and is_not_resume:
                 steps.append(step)
-            elif "@" in src_snapshots[start]:
+            elif "@" in src_snapshots[start] and is_not_resume:
                 for j in range(start, i):  # convert -I step to -i steps
                     steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
-            else:  # it's a bookmark source; convert -I step to -i step followed by zero or more -i/-I steps
+            else:  # it's a bookmark src or zfs send -t; convert -I step to -i step followed by zero or more -i/-I steps
                 steps.append(("-i", src_snapshots[start], src_snapshots[start + 1]))
                 i = start + 1
             return i - 1
@@ -3701,8 +3832,9 @@ def unixtime_fromisoformat(datetime_str: str) -> int:
 class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
 
-    def __init__(self, message):
+    def __init__(self, message, no_sleep: bool = False):
         super().__init__(message)
+        self.no_sleep: bool = no_sleep
 
 
 #############################################################################

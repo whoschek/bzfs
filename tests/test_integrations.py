@@ -269,9 +269,11 @@ class BZFSTestCase(ParametrizedTestCase):
         no_create_bookmark=False,
         no_use_bookmark=False,
         skip_on_error="fail",
+        retries=0,
         expected_status=0,
         error_injection_triggers=None,
         delete_injection_triggers=None,
+        param_injection_triggers=None,
         inject_params=None,
         max_command_line_bytes=None,
         creation_prefix=None,
@@ -316,6 +318,8 @@ class BZFSTestCase(ParametrizedTestCase):
                     args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
                 elif r % 3 == 1:
                     args = args + ["--ssh-dst-extra-opt=-oProxyCommand=nc %h %p"]
+
+        args += [f"--retries={retries}"]
 
         if params and "skip_missing_snapshots" in params:
             i = find_match(args, lambda arg: arg.startswith("-"))
@@ -380,6 +384,9 @@ class BZFSTestCase(ParametrizedTestCase):
 
         if delete_injection_triggers is not None:
             job.delete_injection_triggers = delete_injection_triggers
+
+        if param_injection_triggers is not None:
+            job.param_injection_triggers = param_injection_triggers
 
         if inject_params is not None:
             job.inject_params = inject_params
@@ -458,6 +465,30 @@ class BZFSTestCase(ParametrizedTestCase):
             "bzfs:prop6": "/tmp/foo  bar\t\t\nbaz\n\n\n",
             "bzfs:prop7": "/tmp/foo\\bar",
         }
+
+    def generate_recv_resume_token(self, from_snapshot, to_snapshot, dst_dataset):
+        snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
+        send = f"sudo zfs send --props --raw --compressed -v {snapshot_opts}"
+        c = bzfs.inject_dst_pipe_fail_kbytes
+        cmd = ["sh", "-c", f"{send} | dd bs=1024 count={c} 2>/dev/null | sudo zfs receive -v -F -u -s {dst_dataset}"]
+        try:
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"generate_recv_resume_token stdout: {e.stdout}")
+            self.assertIn("Partially received snapshot is saved", e.stderr)
+        receive_resume_token = dataset_property(dst_dataset, "receive_resume_token")
+        self.assertTrue(receive_resume_token)
+        self.assertNotEqual("-", receive_resume_token)
+        self.assertNotIn(dst_dataset + to_snapshot[to_snapshot.index("@") :], snapshots(dst_dataset))
+
+    def assert_receive_resume_token(self, dataset, exists) -> str:
+        receive_resume_token = dataset_property(dataset, "receive_resume_token")
+        if exists:
+            self.assertTrue(receive_resume_token)
+            self.assertNotEqual("-", receive_resume_token)
+        else:
+            self.assertEqual("-", receive_resume_token)
+        return receive_resume_token
 
 
 #############################################################################
@@ -1595,7 +1626,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            f"--retries={retries}",
+            retries=retries,
             expected_status=expected_status,
             error_injection_triggers={"before": counter},
         )
@@ -2243,6 +2274,179 @@ class LocalTestCase(BZFSTestCase):
                     )  # nothing has changed
                     self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t12"])
 
+    @staticmethod
+    def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024):
+        """large enough to be interruptable and resumable. interacts with bzfs.py/inject_dst_pipe_fail"""
+        run_cmd(f"sudo zfs mount {src_root_dataset}".split())
+        for j in range(lo, hi):
+            tmp_file = "/" + src_root_dataset + "/tmpfile"
+            run_cmd(f"sudo dd if=/dev/urandom of={tmp_file} bs={size_in_bytes} count=1".split())
+            take_snapshot(src_root_dataset, fix(f"s{j}"))
+        run_cmd(f"sudo zfs unmount {src_root_dataset}".split())
+
+    def test_all_snapshots_are_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        n = 4
+        self.create_resumable_snapshots(1, n)
+        prev_token = None
+        max_iters = 20
+        for i in range(0, max_iters):
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                "-v",
+                expected_status=[0, 1],
+                inject_params={"inject_dst_pipe_fail": True},  # interrupt every 'zfs receive' prematurely
+            )
+            if len(snapshots(dst_root_dataset)) == n - 1:
+                break
+            curr_token = self.assert_receive_resume_token(dst_root_dataset, exists=True)
+            self.assertIsNotNone(curr_token)  # assert clear_resumable_recv_state() didn't get called
+            self.assertNotEqual(prev_token, curr_token)  # assert send/recv transfers are making progress
+            prev_token = curr_token
+        print(f"iterations to fully replicate all snapshots: {i}")
+        self.assert_receive_resume_token(dst_root_dataset, exists=False)
+        self.assertSnapshots(dst_root_dataset, n - 1, "s")
+        self.assertLess(i, max_iters - 1)
+        self.assertGreater(i, 2)
+
+    def test_send_full_no_resume_recv_with_resume_token_present(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.create_resumable_snapshots(1, 4)
+                self.generate_recv_resume_token(None, src_root_dataset + "@s1", dst_root_dataset)
+                self.assertSnapshots(dst_root_dataset, 0, "s")
+                if i == 0:
+                    self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=1)
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                else:
+                    self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0, expected_status=1)
+                    self.assertSnapshots(dst_root_dataset, 0, "s")
+                    self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0)
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+
+    def test_send_incr_no_resume_recv_with_resume_token_present(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.create_resumable_snapshots(1, 2)
+                self.run_bzfs(src_root_dataset, dst_root_dataset)
+                self.assert_receive_resume_token(dst_root_dataset, exists=False)
+                self.assertSnapshots(dst_root_dataset, 1, "s")
+                n = 4
+                self.create_resumable_snapshots(2, n)
+                self.generate_recv_resume_token(src_root_dataset + "@s1", src_root_dataset + "@s3", dst_root_dataset)
+                self.assertSnapshots(dst_root_dataset, 1, "s")
+                if i == 0:
+                    self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=1)
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                else:
+                    self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0, expected_status=1)
+                    self.assertSnapshots(dst_root_dataset, 1, "s")
+                    self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0)
+                    self.assertSnapshots(dst_root_dataset, 3, "s")
+
+    def test_send_incr_resume_recv(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        for i in range(0, 3):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                self.create_resumable_snapshots(1, 2)
+                self.run_bzfs(src_root_dataset, dst_root_dataset)
+                self.assert_receive_resume_token(dst_root_dataset, exists=False)
+                self.assertSnapshots(dst_root_dataset, 1, "s")
+                for bookmark in bookmarks(src_root_dataset):
+                    destroy(bookmark)
+                n = 4
+                self.create_resumable_snapshots(2, n)
+                if i == 0:
+                    # inject send failures before this many tries. only after that succeed the operation
+                    counter = Counter(incr_zfs_send_params=1)
+                    self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        retries=1,
+                        error_injection_triggers={"before": counter},
+                        param_injection_triggers={"incr_zfs_send_params": {"inject_dst_pipe_fail": True}},
+                    )
+                    self.assertEqual(0, counter["incr_zfs_send_params"])
+                else:
+                    self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "-v",
+                        expected_status=1,
+                        inject_params={"inject_dst_pipe_fail": True},
+                    )
+                    self.assert_receive_resume_token(dst_root_dataset, exists=True)
+                    self.assertSnapshots(dst_root_dataset, 1, "s")
+                    if i == 1:
+                        self.run_bzfs(src_root_dataset, dst_root_dataset)
+                    else:
+                        destroy_snapshots(src_root_dataset, snapshots(src_root_dataset)[1:])
+                        self.create_resumable_snapshots(2, n)
+                        self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=255)
+                        self.assert_receive_resume_token(dst_root_dataset, exists=False)
+                        self.assertSnapshots(dst_root_dataset, 1, "s")
+                        self.run_bzfs(src_root_dataset, dst_root_dataset)
+                self.assert_receive_resume_token(dst_root_dataset, exists=False)
+                self.assertSnapshots(dst_root_dataset, n - 1, "s")
+
+    def test_send_full_resume_recv(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        for i in range(0, 3):
+            with stop_on_failure_subtest(i=i):
+                if i > 0:
+                    self.tearDownAndSetup()
+                destroy(dst_root_dataset, recursive=True)
+                self.create_resumable_snapshots(1, 2)
+                if i == 0:
+                    # inject send failures before this many tries. only after that succeed the operation
+                    counter = Counter(full_zfs_send_params=1)
+                    self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        retries=1,
+                        error_injection_triggers={"before": counter},
+                        param_injection_triggers={"full_zfs_send_params": {"inject_dst_pipe_fail": True}},
+                    )
+                    self.assertEqual(0, counter["full_zfs_send_params"])
+                else:
+                    self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "-v",
+                        expected_status=1,
+                        inject_params={"inject_dst_pipe_fail": True},
+                    )
+                    self.assert_receive_resume_token(dst_root_dataset, exists=True)
+                    self.assertTrue(dataset_exists(dst_root_dataset))
+                    self.assertSnapshots(dst_root_dataset, 0, "s")
+                    if i == 1:
+                        self.run_bzfs(src_root_dataset, dst_root_dataset)
+                    elif i == 2:
+                        destroy(snapshots(src_root_dataset)[0])
+                        self.create_resumable_snapshots(1, 2)
+                        self.assertTrue(dataset_exists(dst_root_dataset))
+                        self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=255)
+                        # cannot resume send: 'wb_src/tmp/src@s1' is no longer the same snapshot used in the initial send
+                        self.assertFalse(dataset_exists(dst_root_dataset))
+
+                        self.run_bzfs(src_root_dataset, dst_root_dataset)
+                self.assert_receive_resume_token(dst_root_dataset, exists=False)
+                self.assertSnapshots(dst_root_dataset, 1, "s")
+
     def test_delete_dst_datasets_with_missing_src_root(self):
         destroy(src_root_dataset, recursive=True)
         recreate_filesystem(dst_root_dataset)
@@ -2697,7 +2901,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
-            "--retries=2",
+            retries=2,
             error_injection_triggers={"before": counter},
         )
         self.assertEqual(0, counter["zfs_delete_snapshot"])
@@ -3155,9 +3359,6 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_inject_src_pipe_fail(self):
         self.inject_pipe_error("inject_src_pipe_fail", expected_error=[1, die_status])
 
-    def test_inject_dst_pipe_fail(self):
-        self.inject_pipe_error("inject_dst_pipe_fail", expected_error=die_status)
-
     def test_inject_src_pipe_garble(self):
         self.inject_pipe_error("inject_src_pipe_garble")
 
@@ -3279,6 +3480,12 @@ def is_zpool_bookmarks_feature_enabled_or_active(location):
     )
 
 
+def is_zpool_recv_resume_feature_enabled_or_active():
+    return is_zpool_feature_enabled_or_active("src", "feature@extensible_dataset") and (
+        is_zfs_at_least_2_1_0() or is_solaris_zfs()
+    )
+
+
 def fix(s):
     """Generate names containing leading and trailing whitespace, forbidden characters, etc."""
     return afix + s + afix
@@ -3317,6 +3524,15 @@ def is_zfs_at_least_2_3_0():
     if ver is None:
         return False
     return bzfs.is_version_at_least(ver, "2.3.0")
+
+
+def is_zfs_at_least_2_1_0():
+    if is_solaris_zfs():
+        return False
+    ver = zfs_version()
+    if ver is None:
+        return False
+    return bzfs.is_version_at_least(ver, "2.1.0")
 
 
 def os_username():

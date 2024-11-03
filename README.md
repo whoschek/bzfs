@@ -254,6 +254,8 @@ destination have in common.
 * Can be told what ZFS dataset properties to copy, also via include/exclude regexes.
 * Full and precise ZFS bookmark support for additional safety, or to reclaim disk space earlier.
 * Can be strict or told to be tolerant of runtime errors.
+* Automatically resumes ZFS send/receive operations that have been interrupted by network hiccups or other
+intermittent failures, via efficient 'zfs receive -s' and 'zfs send -t'.
 * Multiple bzfs processes can run in parallel. If multiple processes attempt to write to the same destination dataset
 simultaneously this is detected and the operation can be auto-retried safely.
 * A job that runs periodically declines to start if the same previous periodic job is still running without
@@ -369,8 +371,8 @@ usage: bzfs [-h] [--recursive]
             [--delete-dst-snapshots-no-crosscheck]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
-            [--no-privilege-elevation] [--no-stream] [--no-create-bookmark]
-            [--no-use-bookmark] [--ssh-cipher STRING]
+            [--no-privilege-elevation] [--no-stream] [--no-resume-recv]
+            [--no-create-bookmark] [--no-use-bookmark] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -899,7 +901,7 @@ via tests/update_readme.py
 
 *  The maximum number of times a retryable replication or deletion step
     shall be retried if it fails, for example because of network hiccups
-    (default: 0). Also consider this option if a periodic pruning script
+    (default: 2). Also consider this option if a periodic pruning script
     may simultaneously delete a dataset or snapshot or bookmark while
     bzfs is running and attempting to access it.
 
@@ -1182,6 +1184,41 @@ via tests/update_readme.py
     destination to 'catch up' with the source ASAP, consuming a
     minimum of disk space, at the expense of reducing reliable options
     for rolling back to intermediate snapshots in the future.
+
+<!-- -->
+
+<div id="--no-resume-recv"></div>
+
+**--no-resume-recv**
+
+*  Replication of snapshots via 'zfs send/receive' can be interrupted
+    by intermittent network hiccups, hardware issues, etc. Interrupted
+    'zfs send/receive' operations are retried if the --retries and
+    --retry-* options enable it (see above). In normal operation bzfs
+    automatically retries such that only the portion of the snapshot is
+    transmitted that has not yet been fully received on the destination.
+    For example, this helps to progressively transfer a large individual
+    snapshot over a wireless network in a timely manner despite frequent
+    intermittent network hiccups. This optimization is called 'resume
+    receive' and uses the 'zfs receive -s' and 'zfs send -t'
+    feature.
+
+    The --no-resume-recv option disables this optimization such that a
+    retry now retransmits the entire snapshot from scratch, which could
+    slow down or even prohibit progress in case of frequent network
+    hiccups. bzfs automatically falls back to using the
+    --no-resume-recv option if it is auto-detected that the ZFS pool
+    does not reliably support the 'resume receive' optimization.
+
+    *Note:* Snapshots that have already been fully transferred as part
+    of the current 'zfs send/receive' operation need not be
+    retransmitted regardless of the --no-resume-recv flag. For example,
+    assume a single 'zfs send/receive' operation is transferring
+    incremental snapshots 1 through 10 via 'zfs send -I', but the
+    operation fails while transferring snapshot 10, then snapshots 1
+    through 9 need not be retransmitted regardless of the
+    --no-resume-recv flag, as these snapshots have already been
+    successfully received at the destination either way.
 
 <!-- -->
 

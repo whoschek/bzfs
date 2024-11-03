@@ -1514,17 +1514,21 @@ class TestIncrementalSendSteps(unittest.TestCase):
     def validate_incremental_send_steps(self, input_snapshots, expected_results):
         """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input
         snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
-        for src_dataset in ["", "s@"]:
-            for force_convert_I_to_i in [False, True]:
-                steps = self.incremental_send_steps1(
-                    input_snapshots, src_dataset=src_dataset, force_convert_I_to_i=force_convert_I_to_i
-                )
-                # print(f"input_snapshots:" + ",".join(input_snapshots))
-                # print("steps: " + ",".join([self.send_step_to_str(step) for step in steps]))
-                output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
-                output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
-                # print(f"output_snapshots:" + ','.join(output_snapshots))
-                self.assertListEqual(expected_results, output_snapshots)
+        for is_resume in [False, True]:  # via --no-resume-recv
+            for src_dataset in ["", "s@"]:
+                for force_convert_I_to_i in [False, True]:
+                    steps = self.incremental_send_steps1(
+                        input_snapshots,
+                        src_dataset=src_dataset,
+                        is_resume=is_resume,
+                        force_convert_I_to_i=force_convert_I_to_i,
+                    )
+                    # print(f"input_snapshots:" + ",".join(input_snapshots))
+                    # print("steps: " + ",".join([self.send_step_to_str(step) for step in steps]))
+                    output_snapshots = [] if len(expected_results) == 0 else [expected_results[0]]
+                    output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
+                    # print(f"output_snapshots:" + ','.join(output_snapshots))
+                    self.assertListEqual(expected_results, output_snapshots)
 
     def send_step_to_str(self, step):
         # return str(step)
@@ -1546,15 +1550,17 @@ class TestIncrementalSendSteps(unittest.TestCase):
                 output_snapshots.append(input_snapshots[end])
         return output_snapshots
 
-    def incremental_send_steps1(self, input_snapshots, src_dataset=None, force_convert_I_to_i=False):
+    def incremental_send_steps1(self, input_snapshots, src_dataset=None, is_resume=False, force_convert_I_to_i=False):
         origin_src_snapshots_with_guids = []
         guid = 1
         for snapshot in input_snapshots:
             origin_src_snapshots_with_guids.append(f"{guid}\t{src_dataset}{snapshot}")
             guid += 1
-        return self.incremental_send_steps2(origin_src_snapshots_with_guids, force_convert_I_to_i=force_convert_I_to_i)
+        return self.incremental_send_steps2(
+            origin_src_snapshots_with_guids, is_resume=is_resume, force_convert_I_to_i=force_convert_I_to_i
+        )
 
-    def incremental_send_steps2(self, origin_src_snapshots_with_guids, force_convert_I_to_i=False):
+    def incremental_send_steps2(self, origin_src_snapshots_with_guids, is_resume=False, force_convert_I_to_i=False):
         guids = []
         input_snapshots = []
         included_guids = set()
@@ -1567,7 +1573,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
             if snapshot[0:1] == "d":
                 included_guids.add(guid)
         return bzfs.Job().incremental_send_steps(
-            input_snapshots, guids, included_guids=included_guids, force_convert_I_to_i=force_convert_I_to_i
+            input_snapshots,
+            guids,
+            included_guids=included_guids,
+            is_resume=is_resume,
+            force_convert_I_to_i=force_convert_I_to_i,
         )
 
 
