@@ -14,7 +14,7 @@ elif [ "$(uname -s)" = "SunOS" ]; then
   echo "Running on SunOS"
 else
   python3 -m pip install --upgrade pip
-  python3 -m pip install coverage
+  python3 -m pip install --upgrade "coverage==7.*"
 fi
 
 # see https://coverage.readthedocs.io/

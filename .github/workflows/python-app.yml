@@ -90,12 +90,12 @@ jobs:
     - name: Run mypy static type checker
       shell: bash
       run: |
-        pip install mypy
+        pip install --upgrade "mypy==1.*"
         mypy --check-untyped-defs bzfs/bzfs.py || true  # see https://mypy.readthedocs.io
     - name: Lint with flake8
       shell: bash
       run: |
-        pip install flake8
+        pip install --upgrade "flake8==7.*"
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide. https://www.flake8rules.com
@@ -398,7 +398,7 @@ jobs:
           coverage xml
       - name: Generate coverage badge
         run: |
-          pip install genbadge[coverage]  # see https://smarie.github.io/python-genbadge/
+          pip install --upgrade "genbadge[coverage]==1.1.*"  # see https://smarie.github.io/python-genbadge/
           mkdir -p badges
           genbadge coverage -v -i coverage.xml -o badges/coverage-badge.svg
       - name: Merge badges
@@ -429,7 +429,7 @@ jobs:
           mkdir -p "site/$branchname/docs"
           echo "<!DOCTYPE HTML><meta charset='UTF-8'><meta http-equiv='refresh' content='0; url=./coverage/index.html'>" > "site/$branchname/index.html"
           echo "<!DOCTYPE HTML><meta charset='UTF-8'><meta http-equiv='refresh' content='0; url=./$BRANCH_NAME/coverage/index.html'>" > site/index.html
-          if [ "$branchname" != "$BRANCH_NAME"]; then
+          if [ "$branchname" != "$BRANCH_NAME" ]; then
             mkdir -p "site/$BRANCH_NAME"
             mv "site/$branchname"/* "site/$BRANCH_NAME/"
             rm -fr "site/$branchname"
