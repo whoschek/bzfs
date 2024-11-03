@@ -901,9 +901,9 @@ via tests/update_readme.py
 
 *  The maximum number of times a retryable replication or deletion step
     shall be retried if it fails, for example because of network hiccups
-    (default: 2). Also consider this option if a periodic pruning script
-    may simultaneously delete a dataset or snapshot or bookmark while
-    bzfs is running and attempting to access it.
+    (default: 2, min: 0). Also consider this option if a periodic
+    pruning script may simultaneously delete a dataset or snapshot or
+    bookmark while bzfs is running and attempting to access it.
 
 <!-- -->
 

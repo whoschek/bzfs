@@ -484,7 +484,7 @@ of creation time:
     parser.add_argument(
         "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
         help="The maximum number of times a retryable replication or deletion step shall be retried if it fails, for "
-             f"example because of network hiccups (default: {retries_default}). "
+             f"example because of network hiccups (default: {retries_default}, min: 0). "
              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
              f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n")
     retry_min_sleep_secs_default = 0.125
