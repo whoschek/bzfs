@@ -88,8 +88,9 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite():
-    is_adhoc_test = getenv_bool("adhoc", False)  # Consider toggling this when testing isolated code changes
-    is_functional_test = getenv_bool("functional", False)  # Consider toggling this when testing isolated code changes
+    test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
+    is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
+    is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
@@ -319,6 +320,8 @@ class BZFSTestCase(ParametrizedTestCase):
                 elif r % 3 == 1:
                     args = args + ["--ssh-dst-extra-opt=-oProxyCommand=nc %h %p"]
 
+        for arg in args:
+            assert "--retries" not in arg
         args += [f"--retries={retries}"]
 
         if params and "skip_missing_snapshots" in params:
