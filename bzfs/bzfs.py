@@ -250,7 +250,7 @@ of creation time:
              "tree, including children, and children of children, etc.\n\n")
     parser.add_argument(
         "--include-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
-        help="During replication and deletion, include any ZFS dataset (and its descendants) that is contained within "
+        help="During replication and deletion, select any ZFS dataset (and its descendants) that is contained within "
              "SRC_DATASET (DST_DATASET in case of deletion) if its dataset name is one of the given include dataset "
              "names but none of the exclude dataset names. If a dataset is excluded its descendants are automatically "
              "excluded too, and this decision is never reconsidered even for the descendants because exclude takes "
@@ -270,7 +270,7 @@ of creation time:
              "--exclude-dataset-regex (see below).\n\n")
     parser.add_argument(
         "--include-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help="During replication (and deletion), include any ZFS dataset (and its descendants) that is contained "
+        help="During replication (and deletion), select any ZFS dataset (and its descendants) that is contained "
              "within SRC_DATASET (DST_DATASET in case of deletion) if its relative dataset path (e.g. `baz/tmp`) wrt. "
              "SRC_DATASET (DST_DATASET in case of deletion) matches at least one of the given include regular "
              "expressions but none of the exclude regular expressions. "
@@ -288,7 +288,7 @@ of creation time:
     parser.add_argument(
         "--exclude-dataset-property", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="The name of a ZFS dataset user property (optional). If this option is specified, the effective value "
-             "(potentially inherited) of that user property is read via 'zfs list' for each included source dataset "
+             "(potentially inherited) of that user property is read via 'zfs list' for each selected source dataset "
              "to determine whether the dataset will be included or excluded, as follows:\n\n"
              "a) Value is 'true' or '-' or empty string or the property is missing: Include the dataset.\n\n"
              "b) Value is 'false': Exclude the dataset and its descendants.\n\n"
@@ -303,7 +303,7 @@ of creation time:
              "and/or --include/exclude-dataset to achieve the same or better outcome.\n\n")
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help="During replication and deletion, include any source ZFS snapshot that has a name (i.e. the part after "
+        help="During replication and deletion, select any source ZFS snapshot that has a name (i.e. the part after "
              "the '@') that matches at least one of the given include regular expressions but none of the "
              "exclude regular expressions. If a snapshot is excluded this decision is never reconsidered because "
              "exclude takes precedence over include.\n\n"
@@ -318,7 +318,7 @@ of creation time:
              "--include/exclude-snapshot-regex, then --include-snapshot-ranks will be applied before "
              "--include/exclude-snapshot-regex. The pipeline results would not always be the same if the order were "
              "reversed. Order matters.\n\n"
-             "*Note:* During replication, bookmarks are always retained aka included in order to help find common "
+             "*Note:* During replication, bookmarks are always retained aka selected in order to help find common "
              "snapshots between source and destination.\n\n")
     parser.add_argument(
         "--exclude-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
@@ -328,7 +328,7 @@ of creation time:
         "--include-snapshot-times-and-ranks", action=TimeRangeAndRankRangeAction, nargs="+", default=[],
         metavar=("TIMERANGE", "RANKRANGE"),
         help="This option takes as input parameters a time range filter and an optional rank range filter. It "
-             "separately computes the results for each filter and returns aka includes the UNION of both results. "
+             "separately computes the results for each filter and selects the UNION of both results. "
              "To instead use a pure rank range filter (no UNION), or a pure time range filter (no UNION), simply "
              "use '0..0' to indicate an empty time range, or omit the rank range, respectively. "
              "This option can be specified multiple times.\n\n"
@@ -370,7 +370,7 @@ of creation time:
              "part of the snapshot name. You can list the ZFS creation time of snapshots and bookmarks as follows: "
              "`zfs list -t snapshot,bookmark -o name,creation -s creation -d 1 $SRC_DATASET` (optionally add "
              "the -p flag to display UTC Unix time in integer seconds).\n\n"
-             "*Note:* During replication, bookmarks are always retained aka included in order to help find common "
+             "*Note:* During replication, bookmarks are always retained aka selected in order to help find common "
              "snapshots between source and destination.\n\n"
              ""
              "<b>*RANKRANGE:* </b>\n\n"
@@ -399,7 +399,7 @@ of creation time:
              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
              "snapshots, then 'latest 10' will only include these two daily snapshots, and 'latest 50%%' will only "
              "include one of these two daily snapshots.\n\n"
-             "*Note:* During replication, bookmarks are always retained aka included in order to help find common "
+             "*Note:* During replication, bookmarks are always retained aka selected in order to help find common "
              "snapshots between source and destination. Bookmarks do not count towards N or N%% wrt. rank.\n\n"
              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
              "over include.\n\n")
@@ -434,12 +434,12 @@ of creation time:
     parser.add_argument(
         "--force-rollback-to-latest-common-snapshot", action="store_true",
         help="Before replication, delete destination ZFS snapshots that are more recent than the most recent common "
-             "snapshot included on the source ('conflicting snapshots'), via 'zfs rollback'. Abort with an error if "
-             "no common snapshot is included but the destination already contains a snapshot.\n\n")
+             "snapshot selected on the source ('conflicting snapshots'), via 'zfs rollback'. Abort with an error if "
+             "no common snapshot is selected but the destination already contains a snapshot.\n\n")
     parser.add_argument(
         "--force", action="store_true",
         help="Same as --force-rollback-to-latest-common-snapshot (see above), except that additionally, if no common "
-             "snapshot is included, then delete all destination snapshots before starting replication, and proceed "
+             "snapshot is selected, then delete all destination snapshots before starting replication, and proceed "
              "without aborting. Without the --force* flags, the destination dataset is treated as append-only, hence "
              "no destination snapshot that already exists is deleted, and instead the operation is aborted with an "
              "error when encountering a conflicting snapshot.\n\n"
@@ -471,7 +471,7 @@ of creation time:
              f"Unix `rm -r dst/*`\n\n")
     parser.add_argument(
         "--skip-missing-snapshots", choices=["fail", "dataset", "continue"], default="dataset", nargs="?",
-        help="During replication, handle source datasets that include no snapshots (and no relevant bookmarks) "
+        help="During replication, handle source datasets that select no snapshots (and no relevant bookmarks) "
              "as follows:\n\n"
              "a) 'fail': Abort with an error.\n\n"
              "b) 'dataset' (default): Skip the source dataset with a warning. Skip descendant datasets if "
@@ -479,7 +479,7 @@ of creation time:
              "c) 'continue': Skip nothing. If destination snapshots exist, delete them (with --force) or abort "
              "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
              "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
-             "has at least one descendant that includes a snapshot.\n\n")
+             "has at least one descendant that selects at least one snapshot.\n\n")
     retries_default = 2
     parser.add_argument(
         "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
@@ -536,13 +536,13 @@ of creation time:
     parser.add_argument(
         "--delete-dst-datasets", action="store_true",
         help="Do nothing if the --delete-dst-datasets option is missing. Otherwise, after successful replication "
-             "step, if any, delete existing destination datasets that are included via --{include|exclude}-dataset* "
+             "step, if any, delete existing destination datasets that are selected via --{include|exclude}-dataset* "
              "policy yet do not exist within SRC_DATASET (which can be an empty dataset, such as the hardcoded virtual "
              f"dataset named '{dummy_dataset}'!). Does not recurse without --recursive.\n\n"
              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
-             "and the include/exclude policy effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
-             "the destination to make it 'the same'. On the other hand, if the include/exclude policy effectively "
-             "only includes h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"
+             "and the include/exclude policy selects h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
+             "the destination to make it 'the same'. On the other hand, if the include/exclude policy "
+             "only selects h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"
              "Example to delete all tmp datasets within tank2/boo/bar: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication "
              "--delete-dst-datasets --include-dataset-regex 'tmp.*' --recursive`\n\n")
@@ -552,20 +552,20 @@ of creation time:
         help="Do nothing if the --delete-dst-snapshots option is missing. Otherwise, after successful "
              "replication, and successful --delete-dst-datasets step, if any, delete existing destination snapshots "
              "whose GUID does not exist within the source dataset (which can be an empty dummy dataset!) if the "
-             "destination snapshots are included by the --include/exclude-snapshot-* policy, and the destination "
-             "dataset is included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
+             "destination snapshots are selected by the --include/exclude-snapshot-* policy, and the destination "
+             "dataset is selected via --{include|exclude}-dataset* policy. Does not recurse without --recursive.\n\n"
              "For example, if the destination dataset contains snapshots h1,h2,h3,d1 (h=hourly, d=daily) whereas "
-             "the source dataset only contains snapshot h3, and the include/exclude policy effectively includes "
+             "the source dataset only contains snapshot h3, and the include/exclude policy selects "
              "h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination dataset to make it 'the same'. "
-             "On the other hand, if the include/exclude policy effectively only includes snapshots h1,h2,h3 then only "
+             "On the other hand, if the include/exclude policy only selects snapshots h1,h2,h3 then only "
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
              "*Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination with a "
              f"source that is an empty dataset, such as the hardcoded virtual dataset named '{dummy_dataset}', like so:"
              f" `{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
              "--include-dataset-regex '.*_daily' --recursive`\n\n"
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
-             "case no snapshots are included and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
-             "snapshots wrt. filtering."
+             "case no snapshots are selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
+             "snapshots wrt. selecting."
              "\n\n")
     parser.add_argument(
         "--delete-dst-snapshots-no-crosscheck", action="store_true",
@@ -579,13 +579,13 @@ of creation time:
         const="snapshots+bookmarks", nargs="?",
         help="Do nothing if the --delete-empty-dst-datasets option is missing. Otherwise, after successful replication "
              "step and successful --delete-dst-datasets and successful --delete-dst-snapshots steps, if any, "
-             "delete any included destination dataset that has no snapshot and no bookmark if all descendants of "
+             "delete any selected destination dataset that has no snapshot and no bookmark if all descendants of "
              "that destination dataset do not have a snapshot or bookmark either "
-             "(again, only if the existing destination dataset is included via --{include|exclude}-dataset* policy). "
+             "(again, only if the existing destination dataset is selected via --{include|exclude}-dataset* policy). "
              "Does not recurse without --recursive.\n\n"
-             "For example, if the destination contains datasets h1,d1, and the include/exclude policy effectively "
-             "includes h1,d1, then check if h1,d1 can be deleted. "
-             "On the other hand, if the include/exclude policy effectively only includes h1 then only check if h1 "
+             "For example, if the destination contains datasets h1,d1, and the include/exclude policy "
+             "selects h1,d1, then check if h1,d1 can be deleted. "
+             "On the other hand, if the include/exclude policy only selects h1 then only check if h1 "
              "can be deleted.\n\n"
              "*Note:* Use --delete-empty-dst-datasets=snapshots to delete snapshot-less datasets even if they still "
              "contain bookmarks.\n\n")
@@ -635,11 +635,11 @@ of creation time:
              "https://youtu.be/o_jr13Z9f1k?si=7shzmIQJpzNJV6cq\n\n")
     parser.add_argument(
         "--no-stream", action="store_true",
-        help="During replication, only replicate the most recent source snapshot of a dataset (using -i incrementals "
-             "instead of -I incrementals), hence skip all intermediate source snapshots that may exist between that "
-             "and the most recent common snapshot. If there is no common snapshot also skip all other source "
-             "snapshots for the dataset, except for the most recent source snapshot. This option helps the "
-             "destination to 'catch up' with the source ASAP, consuming a minimum of disk space, at the expense "
+        help="During replication, only replicate the most recent selected source snapshot of a dataset (using -i "
+             "incrementals instead of -I incrementals), hence skip all intermediate source snapshots that may exist "
+             "between that and the most recent common snapshot. If there is no common snapshot also skip all other "
+             "source snapshots for the dataset, except for the most recent selected source snapshot. This option helps "
+             "the destination to 'catch up' with the source ASAP, consuming a minimum of disk space, at the expense "
              "of reducing reliable options for rolling back to intermediate snapshots in the future.\n\n")
     parser.add_argument(
         "--no-resume-recv", action="store_true",

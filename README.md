@@ -457,7 +457,7 @@ via tests/update_readme.py
 
 **--include-dataset** *DATASET [DATASET ...]*
 
-*  During replication and deletion, include any ZFS dataset (and its
+*  During replication and deletion, select any ZFS dataset (and its
     descendants) that is contained within SRC_DATASET (DST_DATASET in
     case of deletion) if its dataset name is one of the given include
     dataset names but none of the exclude dataset names. If a dataset is
@@ -496,7 +496,7 @@ via tests/update_readme.py
 
 **--include-dataset-regex** *REGEX [REGEX ...]*
 
-*  During replication (and deletion), include any ZFS dataset (and its
+*  During replication (and deletion), select any ZFS dataset (and its
     descendants) that is contained within SRC_DATASET (DST_DATASET in
     case of deletion) if its relative dataset path (e.g. `baz/tmp`)
     wrt. SRC_DATASET (DST_DATASET in case of deletion) matches at least
@@ -531,7 +531,7 @@ via tests/update_readme.py
 
 *  The name of a ZFS dataset user property (optional). If this option
     is specified, the effective value (potentially inherited) of that
-    user property is read via 'zfs list' for each included source
+    user property is read via 'zfs list' for each selected source
     dataset to determine whether the dataset will be included or
     excluded, as follows:
 
@@ -564,11 +564,11 @@ via tests/update_readme.py
 
 **--include-snapshot-regex** *REGEX [REGEX ...]*
 
-*  During replication and deletion, include any source ZFS snapshot
-    that has a name (i.e. the part after the '@') that matches at
-    least one of the given include regular expressions but none of the
-    exclude regular expressions. If a snapshot is excluded this decision
-    is never reconsidered because exclude takes precedence over include.
+*  During replication and deletion, select any source ZFS snapshot that
+    has a name (i.e. the part after the '@') that matches at least one
+    of the given include regular expressions but none of the exclude
+    regular expressions. If a snapshot is excluded this decision is
+    never reconsidered because exclude takes precedence over include.
 
     This option can be specified multiple times. A leading `!`
     character indicates logical negation, i.e. the regex matches if the
@@ -588,7 +588,7 @@ via tests/update_readme.py
     always be the same if the order were reversed. Order matters.
 
     *Note:* During replication, bookmarks are always retained aka
-    included in order to help find common snapshots between source and
+    selected in order to help find common snapshots between source and
     destination.
 
 <!-- -->
@@ -608,11 +608,11 @@ via tests/update_readme.py
 
 *  This option takes as input parameters a time range filter and an
     optional rank range filter. It separately computes the results for
-    each filter and returns aka includes the UNION of both results. To
-    instead use a pure rank range filter (no UNION), or a pure time
-    range filter (no UNION), simply use '0..0' to indicate an empty
-    time range, or omit the rank range, respectively. This option can be
-    specified multiple times.
+    each filter and selects the UNION of both results. To instead use a
+    pure rank range filter (no UNION), or a pure time range filter (no
+    UNION), simply use '0..0' to indicate an empty time range, or omit
+    the rank range, respectively. This option can be specified multiple
+    times.
 
     <b>*Replication Example (UNION):* </b>
 
@@ -680,7 +680,7 @@ via tests/update_readme.py
     seconds).
 
     *Note:* During replication, bookmarks are always retained aka
-    included in order to help find common snapshots between source and
+    selected in order to help find common snapshots between source and
     destination.
 
     <b>*RANKRANGE:* </b>
@@ -743,7 +743,7 @@ via tests/update_readme.py
     two daily snapshots.
 
     *Note:* During replication, bookmarks are always retained aka
-    included in order to help find common snapshots between source and
+    selected in order to help find common snapshots between source and
     destination. Bookmarks do not count towards N or N% wrt. rank.
 
     *Note:* If a snapshot is excluded this decision is never
@@ -809,9 +809,9 @@ via tests/update_readme.py
 **--force-rollback-to-latest-common-snapshot**
 
 *  Before replication, delete destination ZFS snapshots that are more
-    recent than the most recent common snapshot included on the source
+    recent than the most recent common snapshot selected on the source
     ('conflicting snapshots'), via 'zfs rollback'. Abort with an
-    error if no common snapshot is included but the destination already
+    error if no common snapshot is selected but the destination already
     contains a snapshot.
 
 <!-- -->
@@ -821,7 +821,7 @@ via tests/update_readme.py
 **--force**
 
 *  Same as --force-rollback-to-latest-common-snapshot (see above),
-    except that additionally, if no common snapshot is included, then
+    except that additionally, if no common snapshot is selected, then
     delete all destination snapshots before starting replication, and
     proceed without aborting. Without the --force* flags, the
     destination dataset is treated as append-only, hence no destination
@@ -877,7 +877,7 @@ via tests/update_readme.py
 
 **--skip-missing-snapshots** *[{fail,dataset,continue}]*
 
-*  During replication, handle source datasets that include no snapshots
+*  During replication, handle source datasets that select no snapshots
     (and no relevant bookmarks) as follows:
 
     a) 'fail': Abort with an error.
@@ -891,7 +891,7 @@ via tests/update_readme.py
     --force). If there is no such abort, continue processing with the
     next dataset. Eventually create empty destination dataset and
     ancestors if they do not yet exist and source dataset has at least
-    one descendant that includes a snapshot.
+    one descendant that selects at least one snapshot.
 
 <!-- -->
 
@@ -993,7 +993,7 @@ via tests/update_readme.py
 
 *  Do nothing if the --delete-dst-datasets option is missing.
     Otherwise, after successful replication step, if any, delete
-    existing destination datasets that are included via
+    existing destination datasets that are selected via
     --{include|exclude}-dataset* policy yet do not exist within
     SRC_DATASET (which can be an empty dataset, such as the hardcoded
     virtual dataset named 'dummy'!). Does not recurse without
@@ -1001,10 +1001,10 @@ via tests/update_readme.py
 
     For example, if the destination contains datasets h1,h2,h3,d1
     whereas source only contains h3, and the include/exclude policy
-    effectively includes h1,h2,h3,d1, then delete datasets h1,h2,d1 on
-    the destination to make it 'the same'. On the other hand, if the
-    include/exclude policy effectively only includes h1,h2,h3 then only
-    delete datasets h1,h2 on the destination to make it 'the same'.
+    selects h1,h2,h3,d1, then delete datasets h1,h2,d1 on the
+    destination to make it 'the same'. On the other hand, if the
+    include/exclude policy only selects h1,h2,h3 then only delete
+    datasets h1,h2 on the destination to make it 'the same'.
 
     Example to delete all tmp datasets within tank2/boo/bar: `bzfs
     dummy tank2/boo/bar --dryrun --skip-replication
@@ -1022,18 +1022,18 @@ via tests/update_readme.py
     --delete-dst-datasets step, if any, delete existing destination
     snapshots whose GUID does not exist within the source dataset (which
     can be an empty dummy dataset!) if the destination snapshots are
-    included by the --include/exclude-snapshot-* policy, and the
-    destination dataset is included via --{include|exclude}-dataset*
+    selected by the --include/exclude-snapshot-* policy, and the
+    destination dataset is selected via --{include|exclude}-dataset*
     policy. Does not recurse without --recursive.
 
     For example, if the destination dataset contains snapshots
     h1,h2,h3,d1 (h=hourly, d=daily) whereas the source dataset only
-    contains snapshot h3, and the include/exclude policy effectively
-    includes h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the
-    destination dataset to make it 'the same'. On the other hand, if
-    the include/exclude policy effectively only includes snapshots
-    h1,h2,h3 then only delete snapshots h1,h2 on the destination dataset
-    to make it 'the same'.
+    contains snapshot h3, and the include/exclude policy selects
+    h1,h2,h3,d1, then delete snapshots h1,h2,d1 on the destination
+    dataset to make it 'the same'. On the other hand, if the
+    include/exclude policy only selects snapshots h1,h2,h3 then only
+    delete snapshots h1,h2 on the destination dataset to make it 'the
+    same'.
 
     *Note:* To delete snapshots regardless, consider using
     --delete-dst-snapshots in combination with a source that is an
@@ -1043,9 +1043,9 @@ via tests/update_readme.py
     '.*_daily' --recursive`
 
     *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks
-    instead of snapshots, in which case no snapshots are included and
+    instead of snapshots, in which case no snapshots are selected and
     the --{include|exclude}-snapshot-* filter options treat bookmarks
-    as snapshots wrt. filtering.
+    as snapshots wrt. selecting.
 
 <!-- -->
 
@@ -1070,17 +1070,16 @@ via tests/update_readme.py
 *  Do nothing if the --delete-empty-dst-datasets option is missing.
     Otherwise, after successful replication step and successful
     --delete-dst-datasets and successful --delete-dst-snapshots steps,
-    if any, delete any included destination dataset that has no snapshot
+    if any, delete any selected destination dataset that has no snapshot
     and no bookmark if all descendants of that destination dataset do
     not have a snapshot or bookmark either (again, only if the existing
-    destination dataset is included via --{include|exclude}-dataset*
+    destination dataset is selected via --{include|exclude}-dataset*
     policy). Does not recurse without --recursive.
 
     For example, if the destination contains datasets h1,d1, and the
-    include/exclude policy effectively includes h1,d1, then check if
-    h1,d1 can be deleted. On the other hand, if the include/exclude
-    policy effectively only includes h1 then only check if h1 can be
-    deleted.
+    include/exclude policy selects h1,d1, then check if h1,d1 can be
+    deleted. On the other hand, if the include/exclude policy only
+    selects h1 then only check if h1 can be deleted.
 
     *Note:* Use --delete-empty-dst-datasets=snapshots to delete
     snapshot-less datasets even if they still contain bookmarks.
@@ -1175,15 +1174,16 @@ via tests/update_readme.py
 
 **--no-stream**
 
-*  During replication, only replicate the most recent source snapshot
-    of a dataset (using -i incrementals instead of -I incrementals),
-    hence skip all intermediate source snapshots that may exist between
-    that and the most recent common snapshot. If there is no common
-    snapshot also skip all other source snapshots for the dataset,
-    except for the most recent source snapshot. This option helps the
-    destination to 'catch up' with the source ASAP, consuming a
-    minimum of disk space, at the expense of reducing reliable options
-    for rolling back to intermediate snapshots in the future.
+*  During replication, only replicate the most recent selected source
+    snapshot of a dataset (using -i incrementals instead of -I
+    incrementals), hence skip all intermediate source snapshots that may
+    exist between that and the most recent common snapshot. If there is
+    no common snapshot also skip all other source snapshots for the
+    dataset, except for the most recent selected source snapshot. This
+    option helps the destination to 'catch up' with the source ASAP,
+    consuming a minimum of disk space, at the expense of reducing
+    reliable options for rolling back to intermediate snapshots in the
+    future.
 
 <!-- -->
 
