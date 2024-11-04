@@ -1549,7 +1549,8 @@ class Job:
     def run_task(self) -> None:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
+        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
+        task_description_with_dots = task_description + " ..."
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
@@ -1571,7 +1572,7 @@ class Job:
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
-            log.info("Starting replication task: %s", task_description)
+            log.info("Starting replication task: %s", task_description_with_dots)
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             filtered_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
@@ -1587,7 +1588,7 @@ class Job:
 
         if failed or not (p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets):
             return
-        log.info(p.dry("Preparing --delete-dst-*: %s"), task_description)
+        log.info(p.dry("Preparing --delete-dst-*: %s"), task_description_with_dots)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
         basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
         if basis_dst_datasets is None:
@@ -1599,7 +1600,7 @@ class Job:
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.
         if p.delete_dst_datasets:
-            log.info(p.dry("--delete-dst-datasets: %s"), task_description)
+            log.info(p.dry("--delete-dst-datasets: %s"), task_description_with_dots)
             dst_datasets = set(dst_datasets)
             to_delete = dst_datasets.difference(
                 {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in src_datasets}
@@ -1612,7 +1613,7 @@ class Job:
         # via --{include|exclude}-dataset* policy.
         src_datasets = set(src_datasets)
         if p.delete_dst_snapshots:
-            log.info(p.dry("--delete-dst-snapshots: %s"), task_description)
+            log.info(p.dry("--delete-dst-snapshots: %s"), task_description_with_dots)
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
             src_has_bookmark_feature = self.is_zpool_bookmarks_feature_enabled_or_active(src)
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
@@ -1670,7 +1671,7 @@ class Job:
         # a reverse sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct
         # children but the entire tree. Finally, delete all orphan datasets in an efficient batched way.
         if p.delete_empty_dst_datasets and not failed:
-            log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
+            log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description_with_dots)
             delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
                 p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots
                 and self.is_zpool_bookmarks_feature_enabled_or_active(dst)
@@ -3501,7 +3502,7 @@ def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> 
         log.log(level, "%s", value)
 
 
-def unlink_missing_ok(file: str):  # workaround for compat with python < 3.8
+def unlink_missing_ok(file: str) -> None:  # workaround for compat with python < 3.8
     try:
         Path(file).unlink()
     except FileNotFoundError:
@@ -3612,7 +3613,7 @@ def pretty_print_formatter(obj_to_format):  # For lazy/noop evaluation in disabl
     return PrettyPrintFormatter()
 
 
-def reset_logger():
+def reset_logger() -> None:
     """Remove and close logging handlers (and close their files) and reset loggers to default state."""
     for log in [logging.getLogger(__name__), logging.getLogger(get_logger_subname())]:
         for handler in log.handlers.copy():
@@ -3979,7 +3980,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         return (lo, hi) if lo <= hi else (hi, lo)
 
     @staticmethod
-    def parse_rankranges(parser, values, option_string=None):
+    def parse_rankranges(parser, values, option_string=None) -> List[RankRange]:
         def parse_rank(spec):
             spec = spec.strip()
             match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
