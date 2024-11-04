@@ -118,11 +118,14 @@ identical to the source if the two have somehow diverged in unforeseen ways. Thi
 (re)synchronizing the backup from the production state, as well as restoring the production state from
 backup.
 
+In the spirit of rsync, {prog_name} supports a variety of powerful include/exclude filters that can be combined to 
+select what datasets and snapshots and properties to replicate or delete.
+
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
 or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required),
 or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' CLI) into
-both the source and destination host (pull-push mode). In Pull-push mode the source 'zfs send's the data stream
+both the source and destination host (pull-push mode). In pull-push mode the source 'zfs send's the data stream
 to the initiator which immediately pipes the stream (without storing anything locally) to the destination
 host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed or executed on either
 source or destination host. Only the underlying 'zfs' CLI must be installed on both source and destination host.

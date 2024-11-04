@@ -60,6 +60,10 @@ somehow diverged in unforeseen ways. This easily enables
 (re)synchronizing the backup from the production state, as well as
 restoring the production state from backup.
 
+In the spirit of rsync, bzfs supports a variety of powerful
+include/exclude filters that can be combined to select what datasets and
+snapshots and properties to replicate or delete.
+
 The source 'pushes to' the destination whereas the destination 'pulls
 from' the source. bzfs is installed and executed on the 'initiator'
 host which can be either the host that contains the source dataset (push
@@ -67,7 +71,7 @@ mode), or the destination dataset (pull mode), or both datasets (local
 mode, no network required, no ssh required), or any third-party (even
 non-ZFS OSX) host as long as that host is able to SSH (via standard
 'ssh' CLI) into both the source and destination host (pull-push mode).
-In Pull-push mode the source 'zfs send's the data stream to the
+In pull-push mode the source 'zfs send's the data stream to the
 initiator which immediately pipes the stream (without storing anything
 locally) to the destination host that 'zfs receive's it. Pull-push
 mode means that bzfs need not be installed or executed on either source
@@ -256,6 +260,8 @@ destination have in common.
 * Can be strict or told to be tolerant of runtime errors.
 * Automatically resumes ZFS send/receive operations that have been interrupted by network hiccups or other
 intermittent failures, via efficient 'zfs receive -s' and 'zfs send -t'.
+* Similarly, can be told to automatically retry snapshot delete operations.
+* Parametrizable retry logic.
 * Multiple bzfs processes can run in parallel. If multiple processes attempt to write to the same destination dataset
 simultaneously this is detected and the operation can be auto-retried safely.
 * A job that runs periodically declines to start if the same previous periodic job is still running without
