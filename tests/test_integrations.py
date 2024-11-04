@@ -3473,8 +3473,7 @@ def detect_zpool_features(location, pool):
 
 
 def is_zpool_feature_enabled_or_active(location, feature):
-    value = zpool_features[location].get(feature, None)
-    return value == "active" or value == "enabled"
+    return zpool_features[location].get(feature) in ("active", "enabled")
 
 
 def is_zpool_bookmarks_feature_enabled_or_active(location):
@@ -3484,9 +3483,7 @@ def is_zpool_bookmarks_feature_enabled_or_active(location):
 
 
 def is_zpool_recv_resume_feature_enabled_or_active():
-    return is_zpool_feature_enabled_or_active("src", "feature@extensible_dataset") and (
-        is_zfs_at_least_2_1_0() or is_solaris_zfs()
-    )
+    return is_zpool_feature_enabled_or_active("src", "feature@extensible_dataset") and is_zfs_at_least_2_1_0()
 
 
 def fix(s):

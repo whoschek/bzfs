@@ -2191,11 +2191,11 @@ class Job:
         ):
             return clear_resumable_recv_state()
 
-        elif (
+        elif (  # this signals normal behavior on interrupt of 'zfs receive -s' if running without --no-resume-recv
             "cannot receive new filesystem stream: checksum mismatch or incomplete stream" in stderr
             and "Partially received snapshot is saved" in stderr
         ):
-            return True  # this signals normal behavior on interrupt of 'zfs receive -s' if running without --no-resume-recv
+            return True
 
         return False
 
@@ -2207,7 +2207,7 @@ class Job:
         warning = None
         if not self.is_zpool_feature_enabled_or_active(p.dst, "feature@extensible_dataset"):
             warning = "not available on destination dataset"
-        elif not (self.is_program_available(zfs_version_is_at_least_2_1_0, "dst") or self.is_solaris_zfs(p.dst)):
+        elif not self.is_program_available(zfs_version_is_at_least_2_1_0, "dst"):
             warning = "unreliable as zfs version is too old"  # e.g. zfs-0.8.3 "internal error: Unknown error 1040"
         if warning:
             log.warning(f"zfs receive resume feature is {warning}. Falling back to --no-resume-recv: %s", dst_dataset)
@@ -2619,14 +2619,10 @@ class Job:
 
     @staticmethod
     def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
-        """For each line in input_list, prints the line if input_set contains the first column field of that line."""
-        results: List[str] = []
+        """For each line in input_list, includes the line if input_set contains the first column field of that line."""
         if len(input_set) == 0:
-            return results
-        for line in input_list:
-            if line[0 : line.index("\t")] in input_set:
-                results.append(line)
-        return results
+            return []
+        return [line for line in input_list if line[0 : line.index("\t")] in input_set]
 
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
         if len(snapshot_tags) == 0:
@@ -3188,8 +3184,7 @@ class Job:
         params.zpool_features[loc] = features
 
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
-        value = self.params.zpool_features[remote.location].get(feature)
-        return value == "active" or value == "enabled"
+        return self.params.zpool_features[remote.location].get(feature) in ("active", "enabled")
 
     def is_zpool_bookmarks_feature_enabled_or_active(self, remote: Remote) -> bool:
         return self.is_zpool_feature_enabled_or_active(
