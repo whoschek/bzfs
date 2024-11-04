@@ -1071,6 +1071,7 @@ class LocalTestCase(BZFSTestCase):
                     dry_run=(i == 0),
                     skip_on_error="dataset",
                     expected_status=die_status,
+                    max_exceptions_to_summarize=1000 if i == 0 else 0,
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 if i == 0:
@@ -2910,7 +2911,6 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-no-crosscheck",
             retries=2,
             error_injection_triggers={"before": counter},
-            max_exceptions_to_summarize=0,
         )
         self.assertEqual(0, counter["zfs_delete_snapshot"])
         self.assertEqual(0, len(snapshots(dst_root_dataset, max_depth=None)))

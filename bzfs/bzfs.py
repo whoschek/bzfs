@@ -2163,7 +2163,6 @@ class Job:
 
     def clear_resumable_recv_state_if_necessary(self, dst_dataset: str, stderr: str) -> bool:
         def clear_resumable_recv_state() -> bool:
-            """Abort an interrupted zfs receive -s, deleting its saved partially received state."""
             log.warning(
                 p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset
             )
