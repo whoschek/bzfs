@@ -1305,6 +1305,8 @@ class Job:
         self.src_properties: Dict[str, Dict[str, str | int]] = {}
         self.mbuffer_current_opts: List[str] = []
         self.all_exceptions: List[str] = []
+        self.all_exceptions_count = 0
+        self.max_exceptions_to_summarize = 10000
         self.first_exception: Optional[BaseException] = None
         self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
         self.zfs_dataset_busy_if_mods, self.zfs_dataset_busy_if_send = self.get_is_zfs_dataset_busy_regexes()  # Pattern
@@ -1356,6 +1358,7 @@ class Job:
         try:
             self.validate_once()
             self.all_exceptions = []
+            self.all_exceptions_count = 0
             self.first_exception = None
             self.remote_conf_cache = {}
             src, dst = p.src, p.dst
@@ -1363,10 +1366,8 @@ class Job:
                 src.root_dataset = src.basis_root_dataset = src_root_dataset
                 dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                 p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
-                log.info(
-                    "Starting task: %s",
-                    f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ...",
-                )
+                task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
+                log.info("Starting task: %s", task_description + " ...")
                 try:
                     try:
                         self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
@@ -1378,13 +1379,8 @@ class Job:
                     log.error("%s", str(e))
                     if p.skip_on_error == "fail":
                         raise
-                    self.first_exception = self.first_exception or e
-                    self.all_exceptions.append(str(e))
-                    log.error(
-                        f"#{len(self.all_exceptions)}: Done with task: %s",
-                        f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}",
-                    )
-            error_count = len(self.all_exceptions)
+                    self.append_exception(e, "task", task_description)
+            error_count = self.all_exceptions_count
             if error_count > 0:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
@@ -1409,6 +1405,13 @@ class Job:
         log.info("Success. Goodbye!")
         print("", end="", file=sys.stderr)
         sys.stderr.flush()
+
+    def append_exception(self, e: Exception, task_name: str, task_description: str) -> None:
+        self.first_exception = self.first_exception or e
+        if len(self.all_exceptions) < self.max_exceptions_to_summarize:
+            self.all_exceptions.append(str(e))
+        self.all_exceptions_count += 1
+        self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
 
     def validate_once(self) -> None:
         p = self.params
@@ -1539,10 +1542,8 @@ class Job:
                     raise
                 elif p.skip_on_error == "tree" or skip_tree_on_error(dataset):
                     skip_dataset = dataset
-                self.first_exception = self.first_exception or e
-                self.all_exceptions.append(str(e))
                 log.error("%s", str(e))
-                log.error(f"#{len(self.all_exceptions)}: Done {task_name}: %s", task_description)
+                self.append_exception(e, task_name, task_description)
         return failed
 
     def run_task(self) -> None:
