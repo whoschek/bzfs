@@ -398,7 +398,7 @@ jobs:
           coverage xml
       - name: Generate coverage badge
         run: |
-          pip install --upgrade "genbadge[coverage]==1.1.*"  # see https://smarie.github.io/python-genbadge/
+          pip install --upgrade "genbadge[coverage]==1.1.1"  # see https://smarie.github.io/python-genbadge/
           mkdir -p badges
           genbadge coverage -v -i coverage.xml -o badges/coverage-badge.svg
       - name: Merge badges
