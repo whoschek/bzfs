@@ -278,6 +278,7 @@ class BZFSTestCase(ParametrizedTestCase):
         inject_params=None,
         max_command_line_bytes=None,
         creation_prefix=None,
+        max_exceptions_to_summarize=None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -399,6 +400,9 @@ class BZFSTestCase(ParametrizedTestCase):
 
         if creation_prefix is not None:
             job.creation_prefix = creation_prefix
+
+        if max_exceptions_to_summarize is not None:
+            job.max_exceptions_to_summarize = max_exceptions_to_summarize
 
         returncode = 0
         try:
@@ -2906,6 +2910,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-no-crosscheck",
             retries=2,
             error_injection_triggers={"before": counter},
+            max_exceptions_to_summarize=0,
         )
         self.assertEqual(0, counter["zfs_delete_snapshot"])
         self.assertEqual(0, len(snapshots(dst_root_dataset, max_depth=None)))
