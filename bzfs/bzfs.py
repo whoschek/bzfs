@@ -1779,6 +1779,7 @@ class Job:
                     int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
                     int(dst_snapshots_with_guids[-1].split("\t", 1)[0]) + 1,
                 ),
+                quiet=True,
             )
             dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
         src_snapshots_with_guids = src_snapshots_and_bookmarks
@@ -2545,14 +2546,14 @@ class Job:
         return results
 
     def filter_snapshots_by_creation_time(
-        self, snapshots: List[str], include_snapshot_times: UnixTimeRange, bookmark_time_range: UnixTimeRange
+        self, snaps: List[str], include_snapshot_times: UnixTimeRange, bookmark_time_range: UnixTimeRange, quiet=False
     ) -> List[str]:
         p, log = self.params, self.params.log
-        is_debug = log.isEnabledFor(log_debug)
+        is_debug = log.isEnabledFor(log_debug) and not quiet
         lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
         lo_booktime, hi_booktime = bookmark_time_range or (0, unixtime_infinity_secs)
         results = []
-        for snapshot in snapshots:
+        for snapshot in snaps:
             creation_time = int(snapshot[0 : snapshot.index("\t")])
             if "@" not in snapshot:
                 include = lo_booktime <= creation_time < hi_booktime
