@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -32,7 +33,6 @@ from typing import Sequence, Callable, Optional, TypeVar, Union
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
-from bzfs.bzfs import getenv_bool
 from tests.zfs_util import is_solaris_zfs
 
 
@@ -51,6 +51,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
 
@@ -1581,6 +1582,27 @@ class TestIncrementalSendSteps(unittest.TestCase):
         )
 
 
+#############################################################################
+class TestPerformance(unittest.TestCase):
+
+    def test_close_fds(self):
+        """see https://bugs.python.org/issue42738
+        and https://github.com/python/cpython/pull/113118/commits/654f63053aee162a6e59fa894b2cd8ee82a33a77"""
+        iters = 2000
+        runs = 3
+        for close_fds in [False, True]:
+            for _ in range(runs):
+                start_time_nanos = time.time_ns()
+                for _ in range(iters):
+                    cmd = ["echo", "hello"]
+                    stdout = subprocess.run(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, close_fds=close_fds
+                    ).stdout
+                secs = (time.time_ns() - start_time_nanos) / 1000_000_000
+                print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
+
+
+#############################################################################
 T = TypeVar("T")
 
 
