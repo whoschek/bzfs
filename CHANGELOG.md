@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.1] - November 5, 2024
 
 ### Changed
-- See https://github.com/whoschek/bzfs/compare/v1.2.3...v1.3.1
+- See https://github.com/whoschek/bzfs/compare/v1.3.0...v1.3.1
 
 ## [1.3.0] - November 3, 2024
 
