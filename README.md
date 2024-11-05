@@ -61,7 +61,7 @@ somehow diverged in unforeseen ways. This easily enables
 restoring the production state from backup.
 
 In the spirit of rsync, bzfs supports a variety of powerful
-include/exclude filters that can be combined to select what datasets and
+include/exclude filters that can be combined to select which datasets,
 snapshots and properties to replicate or delete.
 
 The source 'pushes to' the destination whereas the destination 'pulls

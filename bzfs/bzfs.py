@@ -119,7 +119,7 @@ identical to the source if the two have somehow diverged in unforeseen ways. Thi
 backup.
 
 In the spirit of rsync, {prog_name} supports a variety of powerful include/exclude filters that can be combined to 
-select what datasets and snapshots and properties to replicate or delete.
+select which datasets, snapshots and properties to replicate or delete.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
