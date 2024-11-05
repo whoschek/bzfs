@@ -292,8 +292,9 @@ only needed on the initiator host.
 * Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
 * Then select 'All workflows' -> 'Tests' on the left side.
 * Then click the 'Run workflow' dropdown menu on the right side.
-* Select the name of the job to run (e.g. 'test_ubuntu_24_04') or select 'Run all jobs', plus select the git branch to
-run with (typically the branch containing your changes).
+* Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1' or 'test_solaris_11_4', etc) or
+select 'Run all jobs' to test all supported platforms, plus select the git branch to run with (typically the branch
+containing your changes).
 * Then click the 'Run workflow' button which kicks off the job.
 * Click on the job to watch job progress.
 * Once the run completes, you can click on the wheel on the top right to select 'Download log archive', which is
