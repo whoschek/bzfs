@@ -828,6 +828,16 @@ of creation time:
              "that is used by default writes log files there, in addition to the console. The current.log symlink "
              "always points to the most recent log file. The current.pv symlink always points to the most recent "
              "data transfer monitoring log. Run 'tail -f' on both symlinks to follow what's currently going on.\n\n")
+    h_fix = ("The path name of the log file on local host is "
+             "`${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-suffix}-<random>.log`. "
+             "Example: `--log-file-prefix=zrun_ --log-file-suffix=_daily` will generate log file names such as "
+             "`zrun_2024-09-03_12:26:15_daily-bl4i1fth.log`\n\n")
+    parser.add_argument(
+        "--log-file-prefix", default="zrun_", action=SafeFileNameAction, metavar="STRING",
+        help="Default is zrun_. " + h_fix)
+    parser.add_argument(
+        "--log-file-suffix", default="", action=SafeFileNameAction, metavar="STRING",
+        help="Default is the empty string. " + h_fix)
     parser.add_argument(
         "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
@@ -984,7 +994,11 @@ class LogParams:
         self.home_dir: str = get_home_directory()
         self.log_dir: str = args.log_dir if args.log_dir else f"{self.home_dir}/{prog_name}-logs"
         os.makedirs(self.log_dir, exist_ok=True)
-        fd, self.log_file = tempfile.mkstemp(suffix=".log", prefix=f"{self.timestamp}_", dir=self.log_dir)
+        self.log_file_prefix = args.log_file_prefix
+        self.log_file_suffix = args.log_file_suffix
+        fd, self.log_file = tempfile.mkstemp(
+            suffix=".log", prefix=f"{self.log_file_prefix}{self.timestamp}{self.log_file_suffix}-", dir=self.log_dir
+        )
         os.close(fd)
         self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
         Path(self.pv_log_file).touch()
@@ -3892,6 +3906,14 @@ class DatasetPairsAction(argparse.Action):
             parser.error("Each SRC_DATASET must have a corresponding DST_DATASET.")
         root_dataset_pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
         setattr(namespace, self.dest, root_dataset_pairs)
+
+
+#############################################################################
+class SafeFileNameAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if ".." in values or "/" in values or "\\" in values:
+            parser.error(f"Invalid file name '{values}': must not contain '..' or '/' or '\\'.")
+        setattr(namespace, self.dest, values)
 
 
 #############################################################################

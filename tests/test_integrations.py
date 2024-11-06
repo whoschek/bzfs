@@ -324,6 +324,7 @@ class BZFSTestCase(ParametrizedTestCase):
         for arg in args:
             assert "--retries" not in arg
         args += [f"--retries={retries}"]
+        args += ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
 
         if params and "skip_missing_snapshots" in params:
             i = find_match(args, lambda arg: arg.startswith("-"))
@@ -846,6 +847,8 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-parent",
                     "--delete-dst-datasets",
                     "--recursive",
+                    "--log-file-prefix=test_",
+                    "--log-file-suffix=-daily",
                     dry_run=(i == 0),
                 )
                 self.assertSnapshots(src_root_dataset, 3, "s")

@@ -47,12 +47,19 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
+
+
+def argparser_parse_args(args):
+    return bzfs.argument_parser().parse_args(
+        args + ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
+    )
 
 
 #############################################################################
@@ -102,7 +109,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.validate_port("xxx47", "msg")
 
     def test_validate_quoting(self):
-        params = bzfs.Params(bzfs.argument_parser().parse_args(args=["src", "dst"]))
+        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         params.validate_quoting([""])
         params.validate_quoting(["foo"])
         with self.assertRaises(SystemExit):
@@ -113,7 +120,7 @@ class TestHelperFunctions(unittest.TestCase):
             params.validate_quoting(["foo`"])
 
     def test_validate_arg(self):
-        params = bzfs.Params(bzfs.argument_parser().parse_args(args=["src", "dst"]))
+        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         params.validate_arg("")
         params.validate_arg("foo")
         with self.assertRaises(SystemExit):
@@ -147,13 +154,13 @@ class TestHelperFunctions(unittest.TestCase):
         params.validate_arg(" foo  bar ", allow_all=True)
 
     def test_validate_program_name_must_not_be_empty(self):
-        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        args = argparser_parse_args(args=["src", "dst"])
         setattr(args, "zfs_program", "")
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
 
     def test_split_args(self):
-        params = bzfs.Params(bzfs.argument_parser().parse_args(args=["src", "dst"]))
+        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.split_args(""))
         self.assertEqual([], params.split_args("  "))
         self.assertEqual(["foo", "bar", "baz"], params.split_args("foo  bar baz"))
@@ -174,7 +181,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
     def test_fix_send_recv_opts(self):
-        params = bzfs.Params(bzfs.argument_parser().parse_args(args=["src", "dst"]))
+        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.fix_recv_opts(["-n"]))
         self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"]))
         self.assertEqual([""], params.fix_recv_opts([""]))
@@ -283,14 +290,14 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertEqual(0, len(files_todo))
 
         prefix = "test_get_logger:"
-        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        args = argparser_parse_args(args=["src", "dst"])
         root_logger = logging.getLogger()
         log_params = None
         log = bzfs.get_logger(log_params, args, root_logger)
         self.assertTrue(log is root_logger)
         log.info(prefix + "aaa1")
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        args = argparser_parse_args(args=["src", "dst"])
         log_params = bzfs.LogParams(args)
         log = bzfs.get_logger(log_params, args)
         log.log(bzfs.log_stderr, "%s", prefix + "bbbe1")
@@ -306,7 +313,7 @@ class TestHelperFunctions(unittest.TestCase):
         files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v"])
+        args = argparser_parse_args(args=["src", "dst", "-v"])
         log_params = bzfs.LogParams(args)
         log = bzfs.get_logger(log_params, args)
         self.assertIsNotNone(log)
@@ -318,14 +325,14 @@ class TestHelperFunctions(unittest.TestCase):
         files.clear()
         check(log, files)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "-v", "-v"])
+        args = argparser_parse_args(args=["src", "dst", "-v", "-v"])
         log_params = bzfs.LogParams(args)
         log = bzfs.get_logger(log_params, args)
         self.assertIsNotNone(log)
         files.add(os.path.abspath(log_params.log_file))
         check(log, files)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--quiet"])
+        args = argparser_parse_args(args=["src", "dst", "--quiet"])
         log_params = bzfs.LogParams(args)
         log = bzfs.get_logger(log_params, args)
         self.assertIsNotNone(log)
@@ -977,33 +984,33 @@ class TestTimeRangeAction(unittest.TestCase):
     def test_get_include_snapshot_times(self):
         times_and_ranks_opt = "--include-snapshot-times-and-ranks="
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         self.assertListEqual([], p.snapshot_filters)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
         p = bzfs.Params(args)
         self.assertListEqual([], p.snapshot_filters)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
         p = bzfs.Params(args)
         self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
         p = bzfs.Params(args)
         self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
         self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0].timerange[0], delta=2)
         self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0].timerange[1], delta=2)
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01..*"])
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01..*"])
         p = bzfs.Params(args)
         self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[0])
         self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0].timerange[1])
 
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", times_and_ranks_opt + "*..2024-01-01"])
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "*..2024-01-01"])
         p = bzfs.Params(args)
         self.assertEqual(0, p.snapshot_filters[0].timerange[0])
         self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[1])
@@ -1024,7 +1031,7 @@ class TestTimeRangeAction(unittest.TestCase):
 
 
 def filter_snapshots_by_times_and_rank(snapshots, timerange, ranks=[]):
-    args = bzfs.argument_parser().parse_args(
+    args = argparser_parse_args(
         args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"]
     )
     log_params = bzfs.LogParams(args)
@@ -1189,7 +1196,7 @@ class TestRankRangeAction(unittest.TestCase):
 
     @staticmethod
     def get_snapshot_filters(cli):
-        args = bzfs.argument_parser().parse_args(args=["src", "dst", *cli])
+        args = argparser_parse_args(args=["src", "dst", *cli])
         return bzfs.Params(args).snapshot_filters
 
     def test_merge_adjacent_snapshot_regexes_and_filters0(self):
@@ -1293,6 +1300,42 @@ class TestLogConfigVariablesAction(unittest.TestCase):
         for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--log-config-var", var])
+
+
+#############################################################################
+class TestSafeFileNameAction(unittest.TestCase):
+
+    def setUp(self):
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("filename", action=bzfs.SafeFileNameAction)
+
+    def test_safe_filename(self):
+        args = self.parser.parse_args(["file1.txt"])
+        self.assertEqual(args.filename, "file1.txt")
+
+    def test_empty_filename(self):
+        args = self.parser.parse_args([""])
+        self.assertEqual(args.filename, "")
+
+    def test_filename_in_subdirectory(self):
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["subdir/safe_file.txt"])
+
+    def test_unsafe_filename_with_parent_directory_reference(self):
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["../escape.txt"])
+
+    def test_unsafe_filename_with_absolute_path(self):
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["/unsafe_file.txt"])
+
+    def test_unsafe_nested_parent_directory(self):
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["../../another_escape.txt"])
+
+    def test_filename_with_single_dot_slash(self):
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["./file.txt"])
 
 
 #############################################################################

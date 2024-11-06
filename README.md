@@ -393,6 +393,7 @@ usage: bzfs [-h] [--recursive]
             [--shell-program STRING] [--ssh-program STRING]
             [--sudo-program STRING] [--zfs-program STRING]
             [--zpool-program STRING] [--log-dir DIR]
+            [--log-file-prefix STRING] [--log-file-suffix STRING]
             [--log-syslog-address STRING] [--log-syslog-socktype {UDP,TCP}]
             [--log-syslog-facility INT] [--log-syslog-prefix STRING]
             [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
@@ -1604,6 +1605,31 @@ via tests/update_readme.py
     always points to the most recent log file. The current.pv symlink
     always points to the most recent data transfer monitoring log. Run
     'tail -f' on both symlinks to follow what's currently going on.
+
+<!-- -->
+
+<div id="--log-file-prefix"></div>
+
+**--log-file-prefix** *STRING*
+
+*  Default is zrun_. The path name of the log file on local host is
+    `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-suffix}-<random>.log`.
+    Example: `--log-file-prefix=zrun_ --log-file-suffix=_daily`
+    will generate log file names such as
+    `zrun_2024-09-03_12:26:15_daily-bl4i1fth.log`
+
+<!-- -->
+
+<div id="--log-file-suffix"></div>
+
+**--log-file-suffix** *STRING*
+
+*  Default is the empty string. The path name of the log file on local
+    host is
+    `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-suffix}-<random>.log`.
+    Example: `--log-file-prefix=zrun_ --log-file-suffix=_daily`
+    will generate log file names such as
+    `zrun_2024-09-03_12:26:15_daily-bl4i1fth.log`
 
 <!-- -->
 
