@@ -1845,7 +1845,7 @@ class Job:
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-                    self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                    self.try_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
             elif latest_src_snapshot == "":
                 log.info("Already-up-to-date: %s", dst_dataset)
                 return True
@@ -2402,7 +2402,7 @@ class Job:
     def try_ssh_command(
         self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, exists=True, error_trigger=None
     ):
-        """Convenience method that helps react to a dataset or pool that potentially doesn't exist anymore."""
+        """Convenience method that helps retry/react to a dataset or pool that potentially doesn't exist anymore."""
         log = self.params.log
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
