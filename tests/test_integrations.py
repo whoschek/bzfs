@@ -284,8 +284,6 @@ class BZFSTestCase(ParametrizedTestCase):
         args = list(args)
         src_host = ["--ssh-src-host", "127.0.0.1"]
         dst_host = ["--ssh-dst-host", "127.0.0.1"]
-        if getenv_bool("enable_IPv6", True):
-            dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
         ssh_dflt_port = "2222" if ssh_program == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
         src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
@@ -300,6 +298,9 @@ class BZFSTestCase(ParametrizedTestCase):
         elif params and params.get("ssh_mode") == "pull":
             args = args + src_host + src_port
         elif params and params.get("ssh_mode") == "pull-push":
+            if getenv_bool("enable_IPv6", True) and rng.randint(0, 2) % 3 == 0:
+                src_host = ["--ssh-src-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
+                dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
             args = args + src_host + dst_host + src_port + dst_port
             if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
                 args = args + src_user + src_private_key + src_ssh_config_file + dst_ssh_config_file + ["--ssh-cipher="]
@@ -1047,16 +1048,31 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_flat_simple_with_multiple_root_datasets(self):
         self.setup_basic()
-        for i in range(0, 2):
-            with stop_on_failure_subtest(i=i):
-                self.run_bzfs(
-                    src_root_dataset, dst_root_dataset, src_root_dataset, dst_root_dataset, "-v", "-v", dry_run=(i == 0)
-                )
-                self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
-                if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
-                else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+        param_name = bzfs.env_var_prefix + "reuse_ssh_connection"
+        old_value = os.environ.get(param_name)
+        try:
+            os.environ[param_name] = "False"
+            for i in range(0, 2):
+                with stop_on_failure_subtest(i=i):
+                    self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "-v",
+                        "-v",
+                        dry_run=(i == 0),
+                    )
+                    self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+                    if i == 0:
+                        self.assertSnapshots(dst_root_dataset, 0)
+                    else:
+                        self.assertSnapshots(dst_root_dataset, 3, "s")
+        finally:
+            if old_value is None:
+                os.environ.pop(param_name, None)
+            else:
+                os.environ[param_name] = old_value
 
     def test_basic_replication_flat_simple_with_multiple_root_datasets_with_skip_on_error(self):
         self.setup_basic()

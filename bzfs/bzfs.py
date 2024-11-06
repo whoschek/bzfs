@@ -1973,11 +1973,13 @@ class Job:
         if latest_common_src_snapshot:
 
             def replication_candidates() -> Tuple[List[str], List[str]]:
+                assert len(basis_src_snapshots_with_guids) > 0
                 result_snapshots = []
                 result_guids = []
                 last_appended_guid = ""
-                for snapshot_with_guid in reversed(basis_src_snapshots_with_guids):
-                    guid, snapshot = snapshot_with_guid.split("\t", 1)
+                snapshot_itr = reversed(basis_src_snapshots_with_guids)
+                while True:
+                    guid, snapshot = snapshot_itr.__next__().split("\t", 1)
                     if "@" in snapshot:
                         result_snapshots.append(snapshot)
                         result_guids.append(guid)
@@ -2730,17 +2732,17 @@ class Job:
 
     def create_zfs_bookmark(self, remote: Remote, src_snapshot: str, src_dataset: str) -> None:
         p, log = self.params, self.params.log
-        if "@" in src_snapshot:
-            bookmark = replace_prefix(src_snapshot, old_prefix=f"{src_dataset}@", new_prefix=f"{src_dataset}#")
-            if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(remote):
-                cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
-                try:
-                    self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
-                except subprocess.CalledProcessError as e:
-                    # ignore harmless zfs error caused by bookmark with the same name already existing
-                    if ": bookmark exists" not in e.stderr:
-                        print(e.stderr, file=sys.stderr, end="")
-                        raise
+        assert "@" in src_snapshot
+        bookmark = replace_prefix(src_snapshot, old_prefix=f"{src_dataset}@", new_prefix=f"{src_dataset}#")
+        if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(remote):
+            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
+            try:
+                self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
+            except subprocess.CalledProcessError as e:
+                # ignore harmless zfs error caused by bookmark with the same name already existing
+                if ": bookmark exists" not in e.stderr:
+                    print(e.stderr, file=sys.stderr, end="")
+                    raise
 
     def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: str, *items) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
@@ -3142,10 +3144,8 @@ class Job:
             # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5
             version = line.split("-")[1].strip()
             match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
-            if match:
-                version = match.group(1)
-            else:
-                raise ValueError("Unparsable zfs version string: " + version)
+            assert match, "Unparsable zfs version string: " + version
+            version = match.group(1)
             available_programs[location]["zfs"] = version
             if is_version_at_least(version, "2.1.0"):
                 available_programs[location][zfs_version_is_at_least_2_1_0] = True
