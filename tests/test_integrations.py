@@ -1360,6 +1360,8 @@ class LocalTestCase(BZFSTestCase):
             self.assertEqual(e.exception.code, die_status)
 
     def test_basic_replication_with_overlapping_datasets(self):
+        if self.param and self.param.get("ssh_mode", "local") not in ["local", "pull-push"]:
+            self.skipTest("Test is only meaningful in local or pull-push mode")
         self.assertTrue(dataset_exists(src_root_dataset))
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.setup_basic()
@@ -1538,6 +1540,11 @@ class LocalTestCase(BZFSTestCase):
             self.skipTest(
                 "On Solaris fcntl.flock() does not work quite as expected. Solaris grants the lock on both file "
                 "descriptors simultaneously; probably because they are both in the same process; seems harmless."
+            )
+        if self.param and self.param.get("ssh_mode", "local") != "local":
+            self.skipTest(
+                "run_bzfs changes params so this test only passes in local mode (the feature works "
+                "correctly in any mode though)"
             )
         self.setup_basic()
         params = bzfs.Params(bzfs.argument_parser().parse_args(args=[src_root_dataset, dst_root_dataset]))
