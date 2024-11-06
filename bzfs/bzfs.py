@@ -2337,8 +2337,6 @@ class Job:
                 return name
 
             unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
-            if self.is_test_mode:
-                unique = "x$#^&*(x"  # faster for running large numbers of short unit tests, also tests quoting
             socket_name = f"{prefix}{os.getpid()}@{unique}@{sanitize(remote.ssh_host)[:45]}@{sanitize(remote.ssh_user)}"
             socket_file = os.path.join(socket_dir, socket_name)[: max(100, len(socket_dir) + 10)]
             ssh_cmd += ["-S", socket_file]
@@ -3344,8 +3342,11 @@ def delete_stale_ssh_socket_files(socket_dir: str, prefix: str) -> None:
     now = time.time()
     for filename in os.listdir(socket_dir):
         file = os.path.join(socket_dir, filename)
-        if filename.startswith(prefix) and not os.path.isdir(file) and now - os.path.getmtime(file) >= secs:
-            os.remove(file)
+        try:
+            if filename.startswith(prefix) and not os.path.isdir(file) and now - os.path.getmtime(file) >= secs:
+                os.remove(file)
+        except FileNotFoundError:
+            pass  # harmless
 
 
 def die(msg: str) -> None:
