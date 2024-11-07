@@ -1894,6 +1894,7 @@ class Job:
                 log.info("Already up-to-date: %s", dst_dataset)
                 return True
 
+        # endif self.dst_dataset_exists[dst_dataset]
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
         log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
         self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"])))]
@@ -1969,6 +1970,7 @@ class Job:
                 self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
 
+        # endif not latest_common_src_snapshot
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
         if latest_common_src_snapshot:
 
