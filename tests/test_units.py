@@ -387,6 +387,23 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(is_busy("zfs send " + ds + "@snap", ds, busy_if_send=False))
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
+    def test_human_readable_duration(self):
+        ms = 1000_000
+        self.assertEqual("0 ns", bzfs.human_readable_duration(0))
+        self.assertEqual("3 ns", bzfs.human_readable_duration(3))
+        self.assertEqual("3 μs", bzfs.human_readable_duration(3 * 1000))
+        self.assertEqual("3 ms", bzfs.human_readable_duration(3 * ms))
+        self.assertEqual("1 s", bzfs.human_readable_duration(1000 * ms))
+        self.assertEqual("3 s", bzfs.human_readable_duration(3000 * ms))
+        self.assertEqual("3 m", bzfs.human_readable_duration(3000 * 60 * ms))
+        self.assertEqual("3 h", bzfs.human_readable_duration(3000 * 60 * 60 * ms))
+        self.assertEqual("30 h", bzfs.human_readable_duration(3000 * 60 * 60 * 10 * ms))
+        self.assertEqual("300 h", bzfs.human_readable_duration(3000 * 60 * 60 * 100 * ms))
+        self.assertEqual("125 ns", bzfs.human_readable_duration(125))
+        self.assertEqual("125 μs", bzfs.human_readable_duration(125 * 1000))
+        self.assertEqual("125 ms", bzfs.human_readable_duration(125 * 1000 * 1000))
+        self.assertEqual("2 m", bzfs.human_readable_duration(125 * 1000 * 1000 * 1000))
+
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):

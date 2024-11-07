@@ -2808,12 +2808,13 @@ class Job:
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
                 if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
-                    log.info(f"Retrying [{retry_count + 1}/{policy.retries}] soon ...")
                     retry_count = retry_count + 1
                     if retryable_error.no_sleep and retry_count <= 1:
+                        log.info(f"Retrying [{retry_count}/{policy.retries}] now ...")
                         continue
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(policy.min_sleep_nanos, max_sleep_mark)
+                    log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
@@ -3473,6 +3474,20 @@ def human_readable_bytes(size: int) -> str:
         size //= 1024
         i += 1
     return f"{size} {units[i]}"
+
+
+def human_readable_duration(nanos: int) -> str:
+    t = nanos
+    units = ["ns", "μs", "ms", "s", "m", "h"]
+    i = 0
+    while t >= 1000 and i < 3:
+        t //= 1000
+        i += 1
+    if i >= 3:
+        while t >= 60 and i < len(units) - 1:
+            t //= 60
+            i += 1
+    return f"{t} {units[i]}"
 
 
 def get_home_directory() -> str:
