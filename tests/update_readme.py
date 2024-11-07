@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import re
 import sys
 import subprocess
 
+from bzfs import bzfs
 from tests.test_units import find_match
 
 
@@ -62,7 +64,8 @@ def main():
     content = re.sub(r": {3}", r"*  ", content)  # s/:   /*  /g
     manpage = content.splitlines(keepends=True)
 
-    # Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
+    # Step 4: Replace Description Section
+    # Step 4a: Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
     begin_desc_markdown_tag = "# DESCRIPTION"
     begin_help_markdown_tag = "**SRC_DATASET"
     begin_desc_markdown_idx = find_match(
@@ -78,7 +81,7 @@ def main():
     )
     replacement = "".join(manpage[begin_desc_markdown_idx + 1 : begin_help_markdown_idx]).strip()
 
-    # replace text between '<!-- DESCRIPTION BEGIN -->' and '<!-- END DESCRIPTION SECTION -->' in README.md
+    # Step 4b: replace text between '<!-- DESCRIPTION BEGIN -->' and '<!-- END DESCRIPTION SECTION -->' in README.md
     begin_desc_readme_tag = "<!-- BEGIN DESCRIPTION SECTION -->"
     end_desc_readme_tag = "<!-- END DESCRIPTION SECTION -->"
     with open(readme_file, "r", encoding="utf-8") as f:
@@ -96,6 +99,26 @@ def main():
     )
     readme = readme[: begin_desc_readme_idx + 1] + [replacement + "\n\n"] + readme[end_desc_readme_idx:]
 
+    # Step 5: Replace Usage Overview Section
+    begin_help_overview_tag = "<!-- BEGIN HELP OVERVIEW SECTION -->"
+    begin_help_overview_idx = find_match(
+        readme,
+        lambda line: begin_help_overview_tag in line,
+        raises=f"{begin_help_overview_tag} not found in {readme_file}",
+    )
+    end_help_overview_tag = "<!-- END HELP OVERVIEW SECTION -->"
+    end_help_overview_idx = find_match(
+        readme,
+        lambda line: end_help_overview_tag in line,
+        start=begin_help_overview_idx,
+        raises=f"{end_help_overview_tag} not found in {readme_file}",
+    )
+    os.environ["COLUMNS"] = "72"
+    help_msg = bzfs.argument_parser().format_usage()
+    help_msg = ["```\n"] + help_msg.splitlines(keepends=True) + ["```\n"]
+    readme = readme[: begin_help_overview_idx + 1] + help_msg + readme[end_help_overview_idx:]
+
+    # Step 6: Replace Usage Details Section
     begin_help_markdown_idx = find_match(
         manpage,
         lambda line: begin_help_markdown_tag in line,

@@ -28,6 +28,7 @@
 [![](https://whoschek.github.io/bzfs/badges/pypi-badge.svg)](https://pypi.org/project/bzfs)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+<!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN DESCRIPTION SECTION -->
 *bzfs is a backup command line tool that reliably replicates ZFS
 snapshots from a (local or remote) source ZFS dataset (ZFS filesystem or
@@ -201,6 +202,9 @@ snapshot exists in the source dataset (same as above except append
 --ssh-dst-private-key /root/.ssh/id_rsa`
 
 <!-- END DESCRIPTION SECTION -->
+
+
+<!-- FINE TO EDIT -->
 # How To Install and Run
 
 ```
@@ -219,6 +223,7 @@ bzfs --help # Run the CLI
 ```
 
 
+<!-- FINE TO EDIT -->
 # Design Aspects
 
 * Rsync'ish look and feel.
@@ -353,7 +358,8 @@ bzfs-test
 
 # Usage
 
-<!-- Docs: The blurb below is copied from the output of bzfs/bzfs.py --help -->
+<!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
+<!-- BEGIN HELP OVERVIEW SECTION -->
 ```
 usage: bzfs [-h] [--recursive]
             [--include-dataset DATASET [DATASET ...]]
@@ -364,22 +370,25 @@ usage: bzfs [-h] [--recursive]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
             [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
-            [--zfs-send-program-opts STRING] [--zfs-recv-program-opts STRING]
+            [--zfs-send-program-opts STRING]
+            [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
             [--force-rollback-to-latest-snapshot]
             [--force-rollback-to-latest-common-snapshot] [--force]
             [--force-unmount] [--force-once] [--skip-parent]
             [--skip-missing-snapshots [{fail,dataset,continue}]]
             [--retries INT] [--retry-min-sleep-secs FLOAT]
-            [--retry-max-sleep-secs FLOAT] [--retry-max-elapsed-secs FLOAT]
+            [--retry-max-sleep-secs FLOAT]
+            [--retry-max-elapsed-secs FLOAT]
             [--skip-on-error {fail,tree,dataset}] [--skip-replication]
             [--delete-dst-datasets]
             [--delete-dst-snapshots [{snapshots,bookmarks}]]
             [--delete-dst-snapshots-no-crosscheck]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
-            [--no-privilege-elevation] [--no-stream] [--no-resume-recv]
-            [--no-create-bookmark] [--no-use-bookmark] [--ssh-cipher STRING]
+            [--no-privilege-elevation] [--no-stream]
+            [--no-resume-recv] [--no-create-bookmark]
+            [--no-use-bookmark] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
             [--ssh-src-host STRING] [--ssh-dst-host STRING]
@@ -388,14 +397,15 @@ usage: bzfs [-h] [--recursive]
             [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
             [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
             [--bwlimit STRING] [--compression-program STRING]
-            [--compression-program-opts STRING] [--mbuffer-program STRING]
-            [--mbuffer-program-opts STRING] [--ps-program STRING]
-            [--pv-program STRING] [--pv-program-opts STRING]
-            [--shell-program STRING] [--ssh-program STRING]
-            [--sudo-program STRING] [--zfs-program STRING]
-            [--zpool-program STRING] [--log-dir DIR]
-            [--log-file-prefix STRING] [--log-file-suffix STRING]
-            [--log-syslog-address STRING] [--log-syslog-socktype {UDP,TCP}]
+            [--compression-program-opts STRING]
+            [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
+            [--ps-program STRING] [--pv-program STRING]
+            [--pv-program-opts STRING] [--shell-program STRING]
+            [--ssh-program STRING] [--sudo-program STRING]
+            [--zfs-program STRING] [--zpool-program STRING]
+            [--log-dir DIR] [--log-file-prefix STRING]
+            [--log-file-suffix STRING] [--log-syslog-address STRING]
+            [--log-syslog-socktype {UDP,TCP}]
             [--log-syslog-facility INT] [--log-syslog-prefix STRING]
             [--log-syslog-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
             [--log-config-file STRING]
@@ -413,11 +423,8 @@ usage: bzfs [-h] [--recursive]
             [--help, -h]
             SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
+<!-- END HELP OVERVIEW SECTION -->
 
-<!--
-Docs: Generate pretty GitHub Markdown for ArgumentParser options and auto-update README.md below
-via tests/update_readme.py
--->
 <!-- BEGIN HELP DETAIL SECTION -->
 <div id="SRC_DATASET_DST_DATASET"></div>
 
