@@ -1740,15 +1740,13 @@ class Job:
     def replicate_dataset(self, src_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
 
-        p = params = self.params
-        log = p.log
+        p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        done_checking = False
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
         log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
         # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
-        use_bookmark = params.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
+        use_bookmark = p.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
         props = self.creation_prefix + "creation,guid,name" if use_bookmark else "guid,name"
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
         dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
@@ -1816,17 +1814,17 @@ class Job:
             included_src_guids.add(guid)
             if "@" in snapshot:
                 latest_src_snapshot = snapshot
-                if oldest_src_snapshot == "":
+                if not oldest_src_snapshot:
                     oldest_src_snapshot = snapshot
         if len(src_snapshots_with_guids) == 0:
-            if params.skip_missing_snapshots == "fail":
+            if p.skip_missing_snapshots == "fail":
                 die(
                     f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
                     "using --skip-missing-snapshots=dataset"
                 )
-            elif params.skip_missing_snapshots == "dataset":
+            elif p.skip_missing_snapshots == "dataset":
                 log.warning("Skipping source dataset because it includes no snapshot: %s", src_dataset)
-                if not self.dst_dataset_exists[dst_dataset] and params.recursive:
+                if not self.dst_dataset_exists[dst_dataset] and p.recursive:
                     log.warning("Also skipping descendant datasets as dst dataset does not exist:%s", src_dataset)
                 return self.dst_dataset_exists[dst_dataset]
 
@@ -1834,13 +1832,13 @@ class Job:
         latest_dst_snapshot = ""
         latest_dst_guid = ""
         latest_common_src_snapshot = ""
-        latest_common_dst_snapshot = ""
         props_cache = {}
+        done_checking = False
 
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
-                if params.force_rollback_to_latest_snapshot or params.force:
+                if p.force_rollback_to_latest_snapshot or p.force:
                     log.info(p.dry("Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
@@ -1871,15 +1869,15 @@ class Job:
             if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
                 # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
                 _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
-                if not (params.force_rollback_to_latest_common_snapshot or params.force):
+                if not (p.force_rollback_to_latest_common_snapshot or p.force):
                     die(
                         f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
                         f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
                         "for example via --force-rollback-to-latest-common-snapshot (or --force) option."
                     )
-                if params.force_once:
-                    params.force = False
-                    params.force_rollback_to_latest_common_snapshot = False
+                if p.force_once:
+                    p.force = False
+                    p.force_rollback_to_latest_common_snapshot = False
                 log.info(
                     p.dry("Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot
                 )
@@ -1888,7 +1886,7 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
                     latest_common_dst_snapshot,
                 )
-                self.run_ssh_command(dst, log_debug, is_dry=params.dry_run, print_stdout=True, cmd=cmd)
+                self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
                 log.info("Already up-to-date: %s", dst_dataset)
@@ -1903,14 +1901,14 @@ class Job:
         if not latest_common_src_snapshot:
             # no common snapshot was found. delete all dst snapshots, if any
             if latest_dst_snapshot:
-                if not params.force:
+                if not p.force:
                     die(
                         f"Conflict: No common snapshot found between {src_dataset} and {dst_dataset} even though "
                         "destination has at least one snapshot. Aborting. Consider using --force option to first "
                         "delete all existing destination snapshots in order to be able to proceed with replication."
                     )
-                if params.force_once:
-                    params.force = False
+                if p.force_once:
+                    p.force = False
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 if self.is_solaris_zfs(dst):
                     # solaris-11.4 has no wildcard syntax to delete all snapshots in a single CLI invocation
@@ -1923,7 +1921,7 @@ class Job:
                         f"{dst_dataset}@%",
                     )  # delete all dst snapshots in a batch
                     self.run_ssh_command(dst, log_debug, cmd=cmd, print_stdout=True)
-                if params.dry_run:
+                if p.dry_run:
                     # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really
                     # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
                     # subsequent 'zfs receive -n' to fail with "cannot receive new filesystem stream: destination has
@@ -1932,14 +1930,14 @@ class Job:
                     dry_run_no_send = True
 
             # to start with, fully replicate oldest snapshot, which in turn creates a common snapshot
-            if params.no_stream:
+            if p.no_stream:
                 oldest_src_snapshot = latest_src_snapshot
             if oldest_src_snapshot:
                 if not self.dst_dataset_exists[dst_dataset]:
                     # on destination, create parent filesystem and ancestors if they do not yet exist
                     dst_dataset_parent = os.path.dirname(dst_dataset)
                     if not self.dst_dataset_exists[dst_dataset_parent]:
-                        if params.dry_run:
+                        if p.dry_run:
                             dry_run_no_send = True
                         if dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
@@ -1959,13 +1957,13 @@ class Job:
                 )
                 log.info(p.dry("Full zfs send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
-                dry_run_no_send = dry_run_no_send or params.dry_run_no_send
+                dry_run_no_send = dry_run_no_send or p.dry_run_no_send
                 self.maybe_inject_params(error_trigger="full_zfs_send_params")
                 self.run_zfs_send_receive(
                     dst_dataset, send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, "full_zfs_send"
                 )
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
-                if not dry_run_no_send and not params.dry_run:
+                if not dry_run_no_send and not p.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
                 self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
@@ -1987,7 +1985,7 @@ class Job:
                         result_guids.append(guid)
                         last_appended_guid = guid
                     if snapshot == latest_common_src_snapshot:  # latest_common_src_snapshot is a snapshot or bookmark
-                        if "@" not in snapshot and guid != last_appended_guid:
+                        if guid != last_appended_guid and "@" not in snapshot:
                             # only appends the src bookmark if it has no snapshot. If the bookmark has a snap then that
                             # snap has already been appended, per the sort order previously used for 'zfs list -s ...'
                             result_snapshots.append(snapshot)
@@ -2020,7 +2018,7 @@ class Job:
                 steps_todo = self.incremental_send_steps_wrapper(
                     cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
                 )
-                log.trace("steps_todo: %s", "; ".join([self.send_step_to_str(step) for step in steps_todo]))
+                log.trace("steps_todo: %s", list_formatter(steps_todo, "; "))
             for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo):
                 size_bytes = self.estimate_send_size(src, dst_dataset, recv_resume_token, incr_flag, from_snap, to_snap)
                 size_human = human_readable_bytes(size_bytes)
@@ -2039,7 +2037,7 @@ class Job:
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
                     dry_run_no_send = True
-                dry_run_no_send = dry_run_no_send or params.dry_run_no_send
+                dry_run_no_send = dry_run_no_send or p.dry_run_no_send
                 self.maybe_inject_params(error_trigger="incr_zfs_send_params")
                 self.run_zfs_send_receive(
                     dst_dataset, send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, "incr_zfs_send"

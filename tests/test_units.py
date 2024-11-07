@@ -1542,6 +1542,9 @@ class TestIncrementalSendSteps(unittest.TestCase):
             with stop_on_failure_subtest(i=i):
                 self.validate_incremental_send_steps(testcase[None], testcase["d"])
 
+    def test_send_step_to_str(self):
+        bzfs.Job().send_step_to_str(("-I", "d@s1", "d@s3"))
+
     def permute_snapshot_series(self, max_length=9):
         """
         Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly
