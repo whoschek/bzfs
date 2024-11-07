@@ -263,6 +263,10 @@ class BZFSTestCase(ParametrizedTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
+    @staticmethod
+    def log_dir_opt():
+        return ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
+
     def run_bzfs(
         self,
         *args,
@@ -325,7 +329,7 @@ class BZFSTestCase(ParametrizedTestCase):
         for arg in args:
             assert "--retries" not in arg
         args += [f"--retries={retries}"]
-        args += ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
+        args += self.log_dir_opt()
 
         if params and "skip_missing_snapshots" in params:
             i = find_match(args, lambda arg: arg.startswith("-"))
@@ -1350,12 +1354,12 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_flat_simple_using_main(self):
         self.setup_basic()
-        with patch("sys.argv", ["bzfs.py", src_root_dataset, dst_root_dataset]):
+        with patch("sys.argv", ["bzfs.py", src_root_dataset, dst_root_dataset] + self.log_dir_opt()):
             bzfs.main()
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
         with self.assertRaises(SystemExit) as e:
-            with patch("sys.argv", ["bzfs.py", "nonexisting_dataset", dst_root_dataset]):
+            with patch("sys.argv", ["bzfs.py", "nonexisting_dataset", dst_root_dataset] + self.log_dir_opt()):
                 bzfs.main()
             self.assertEqual(e.exception.code, die_status)
 
