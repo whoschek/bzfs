@@ -1056,7 +1056,7 @@ def filter_snapshots_by_times_and_rank(snapshots, timerange, ranks=[]):
         job = bzfs.Job()
         job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
         snapshots = [f"{i}\t" + snapshot for i, snapshot in enumerate(snapshots)]  # simulate creation time
-        results = job.filter_snapshots(snapshots)
+        results = job.filter_snapshots(snapshots, "")
         results = [result.split("\t", 1)[1] for result in results]  # drop creation time
         return results
     finally:

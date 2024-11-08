@@ -189,6 +189,30 @@ snapshot exists in the source dataset (same as above except append
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 --delete-dst-datasets --include-dataset-regex 'tmp.*'`
 
+* Compare source and destination dataset trees recursively, for example
+to check if all recently taken snapshots have been successfully
+replicated by a periodic job. List snapshots only contained in src
+(output column 1), only contained in dst (output column 2), and
+contained in both src and dst (output column 3), restricted to hourly
+and daily snapshots taken within the last 7 days, excluding the last 4
+hours (to allow for some slack), excluding temporary datasets:
+
+` bzfs dummy tank1/src --dryrun --skip-replication
+--delete-dst-snapshots --recursive --include-snapshot-regex
+'.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days
+ago..4 hours ago' --exclude-dataset-regex 'tmp.*' --verbose |
+grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort >
+/tmp/src.txt`
+
+` bzfs dummy tank2/dst --dryrun --skip-replication
+--delete-dst-snapshots --recursive --include-snapshot-regex
+'.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days
+ago..4 hours ago' --exclude-dataset-regex 'tmp.*' --verbose |
+grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort >
+/tmp/dst.txt`
+
+` comm /tmp/src.txt /tmp/dst.txt`
+
 * Example with further options:
 
 ` bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
@@ -258,6 +282,7 @@ or where more than 7 daily snapshots were created or received within the last 7 
 snapshots regardless of creation time. It can help to avoid accidental pruning of the last snapshot that source and
 destination have in common.
     * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
+* Compare source and destination dataset trees recursively, in combination with snapshot filters and dataset filters.
 * Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
 * Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.
 * Can be told what ZFS dataset properties to copy, also via include/exclude regexes.

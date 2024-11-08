@@ -57,7 +57,8 @@ def main():
     # Step 3: Clean up generated markdown file
     with open(tmp_manpage_md_path, "r", encoding="utf-8") as file:
         content = file.read()
-    content = re.sub(r"\\([`#-_|>\[*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
+    content = content.replace(r"\`\`\`", "\n```\n")
+    content = re.sub(r"\\([`#-_|~>\[*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
     content = re.sub(r"\\'", r"'", content)  # s/\\\'/'/g
     content = re.sub(r"\\]", r"\]", content)  # s/\\\]/\]/g
     content = re.sub(r"# OPTIONS", "", content)  # s/# OPTIONS//g

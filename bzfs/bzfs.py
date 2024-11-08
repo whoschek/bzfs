@@ -118,7 +118,7 @@ identical to the source if the two have somehow diverged in unforeseen ways. Thi
 (re)synchronizing the backup from the production state, as well as restoring the production state from
 backup.
 
-In the spirit of rsync, {prog_name} supports a variety of powerful include/exclude filters that can be combined to 
+In the spirit of rsync, {prog_name} supports a variety of powerful include/exclude filters that can be combined to
 select which datasets, snapshots and properties to replicate or delete.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
@@ -217,6 +217,22 @@ of creation time:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
 --include-dataset-regex 'tmp.*'`
+
+* Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
+been successfully replicated by a periodic job. List snapshots only contained in src (output column 1), 
+only contained in dst (output column 2), and contained in both src and dst (output column 3), restricted to hourly 
+and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack), excluding temporary 
+datasets:
+
+`   {prog_name} {dummy_dataset} tank1/src --dryrun --skip-replication --delete-dst-snapshots --recursive
+--include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' 
+--exclude-dataset-regex 'tmp.*' --verbose | grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort > /tmp/src.txt`
+
+`   {prog_name} {dummy_dataset} tank2/dst --dryrun --skip-replication --delete-dst-snapshots --recursive
+--include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' 
+--exclude-dataset-regex 'tmp.*' --verbose | grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort > /tmp/dst.txt`
+
+`   comm /tmp/src.txt /tmp/dst.txt`
 
 * Example with further options:
 
@@ -1639,18 +1655,18 @@ class Job:
             def delete_destination_snapshots(dst_dataset: str) -> bool:
                 cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
-                dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd)
-                if dst_snapshots_with_guids is None:
+                dst_snaps_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd)
+                if dst_snaps_with_guids is None:
                     log.warning("Third party deleted destination: %s", dst_dataset)
                     return False
-                dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines()
+                dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
                 if p.delete_dst_bookmarks:
-                    replace_in_lines(dst_snapshots_with_guids, old="#", new="@")  # treat bookmarks as snapshots
-                dst_snapshots_with_guids = self.filter_snapshots(dst_snapshots_with_guids)  # apply include/exclude
+                    replace_in_lines(dst_snaps_with_guids, old="#", new="@")  # treat bookmarks as snapshots
+                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, dst.root_dataset)  # include/exclude
                 if p.delete_dst_bookmarks:
-                    replace_in_lines(dst_snapshots_with_guids, old="@", new="#")  # restore pre-filtering bookmark state
+                    replace_in_lines(dst_snaps_with_guids, old="@", new="#")  # restore pre-filtering bookmark state
                 if filter_needs_creation_time:
-                    dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
+                    dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in src_datasets and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
                     src_kind = kind
@@ -1658,12 +1674,12 @@ class Job:
                         src_kind = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
                     cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
-                    missing_snapshot_guids = set(cut(field=1, lines=dst_snapshots_with_guids)).difference(
+                    missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(
                         set(src_snapshots_with_guids)
                     )
-                    missing_snapshot_tags = self.filter_lines(dst_snapshots_with_guids, missing_snapshot_guids)
+                    missing_snapshot_tags = self.filter_lines(dst_snaps_with_guids, missing_snapshot_guids)
                 else:
-                    missing_snapshot_tags = dst_snapshots_with_guids
+                    missing_snapshot_tags = dst_snaps_with_guids
                 separator = "#" if p.delete_dst_bookmarks else "@"
                 missing_snapshot_tags = cut(field=2, separator=separator, lines=missing_snapshot_tags)
                 if p.delete_dst_bookmarks:
@@ -1799,7 +1815,7 @@ class Job:
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
         basis_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
+        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids, src.root_dataset)
         if use_bookmark or filter_needs_creation_time:
             src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
             basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
@@ -2521,7 +2537,7 @@ class Job:
                     log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
-    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
+    def filter_snapshots(self, snapshots: List[str], root_dataset: str) -> List[str]:
         """Returns all snapshots that pass all include/exclude policies."""
         p, log = self.params, self.params.log
         for _filter in p.snapshot_filters:
@@ -2537,9 +2553,11 @@ class Job:
                 snapshots = self.filter_snapshots_by_creation_time_and_rank(
                     snapshots, include_snapshot_times=_filter.timerange, include_snapshot_ranks=_filter.options
                 )
+        off = len(root_dataset) + 1
+        root_ds = root_dataset + "~"  # uniquely separate root dataset vs relative dataset for easy log scraping
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
-            is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
+            is_debug and log.debug("Finally included snapshot: %s", root_ds + snapshot[snapshot.rindex("\t") + off :])
         return snapshots
 
     def filter_snapshots_by_regex(self, snapshots: List[str], regexes: Tuple[RegexList, RegexList]) -> List[str]:
