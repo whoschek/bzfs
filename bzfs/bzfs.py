@@ -1129,6 +1129,7 @@ class Params:
 
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
+        self.max_batch_len = 1000
 
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
@@ -1713,7 +1714,8 @@ class Job:
 
             # Compute the direct children of each NON-FILTERED dataset. Thus, no excluded dataset and no ancestor of
             # an excluded dataset will ever be added to the "orphan" set. In other words, this treats excluded dataset
-            # subtrees as if they all had snapshots, so excluded dataset subtrees are guaranteed to not get deleted.
+            # subtrees as if they all had snapshots, so excluded dataset subtrees and their ancestors are guaranteed
+            # to not get deleted.
             children = defaultdict(list)
             for dst_dataset in basis_dst_datasets:
                 parent = os.path.dirname(dst_dataset)
@@ -1722,7 +1724,7 @@ class Job:
             # find datasets that have at least one snapshot
             dst_datasets_having_snapshots = set()
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
-            cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -s name -Hp -o name")
+            cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
 
             def flush_batch(batch: List[str]) -> None:
                 datasets_having_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
@@ -1731,17 +1733,25 @@ class Job:
                 datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
                 dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
 
-            # run flush_batch(dst_datasets) without creating a command line that's too big for the OS to handle
-            self.run_ssh_cmd_batched(dst, cmd, dst_datasets, flush_batch)
-
-            # find and mark orphan datasets, finally delete them in an efficient way
-            orphans = set()
-            for dst_dataset in reversed(dst_datasets):
-                if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
-                    # all children turned out to be orphans so the dataset itself could be an orphan
-                    if dst_dataset not in dst_datasets_having_snapshots:
-                        orphans.add(dst_dataset)
-            self.delete_datasets(dst, orphans)
+            # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of
+            # one filter run is an optimization. The first run only computes candidate orphans, without incurring I/O,
+            # to reduce the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from
+            # dst_datasets to a subset of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this
+            # eliminates the I/O to list snapshots for ancestors of excluded datasets. The second run computes the
+            # real orphans.
+            for run in range(0, 2):
+                orphans = set()
+                for dst_dataset in reversed(dst_datasets):
+                    if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
+                        # all children turned out to be orphans so the dataset itself could be an orphan
+                        if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
+                            orphans.add(dst_dataset)
+                if run == 0:
+                    # Run flush_batch(orphans) without creating a command line that's too big for the OS to handle.
+                    # This updates dst_datasets_having_snapshots for real use in the second run.
+                    self.run_ssh_cmd_batched(dst, cmd, isorted(orphans), flush_batch, p.max_batch_len)
+                else:
+                    self.delete_datasets(dst, orphans)
 
     def replicate_dataset(self, src_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
@@ -3253,12 +3263,12 @@ class Job:
         return re.compile(zfs_dataset_busy_if_mods), re.compile(zfs_dataset_busy_if_send)
 
     def run_ssh_cmd_batched(
-        self, remote: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], None]
+        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], None], max_batch_len=2**32
     ):
         """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
-        max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(remote.location))
+        max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
         fsenc = sys.getfilesystemencoding()
-        header_bytes = len(" ".join(remote.ssh_cmd + cmd).encode(fsenc))
+        header_bytes = len(" ".join(r.ssh_cmd + cmd).encode(fsenc))
         batch: List[str] = []
         total_bytes: int = header_bytes
 
@@ -3268,7 +3278,7 @@ class Job:
 
         for cmd_arg in cmd_args:
             curr_bytes = len(f" {cmd_arg}".encode(fsenc))
-            if total_bytes + curr_bytes > max_bytes:  # or len(batch) >= 1000:
+            if total_bytes + curr_bytes > max_bytes or len(batch) >= max_batch_len:
                 flush()
                 batch, total_bytes = [], header_bytes
             batch.append(cmd_arg)
