@@ -596,12 +596,13 @@ datasets:
     parser.add_argument(
         "--delete-empty-dst-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
         const="snapshots+bookmarks", nargs="?",
-        help="Do nothing if the --delete-empty-dst-datasets option is missing. Otherwise, after successful replication "
+        help="Do nothing if the --delete-empty-dst-datasets option is missing or --recursive is missing. Otherwise, "
+             "after successful replication "
              "step and successful --delete-dst-datasets and successful --delete-dst-snapshots steps, if any, "
              "delete any selected destination dataset that has no snapshot and no bookmark if all descendants of "
-             "that destination dataset do not have a snapshot or bookmark either "
+             "that destination dataset are also selected and do not have a snapshot or bookmark either "
              "(again, only if the existing destination dataset is selected via --{include|exclude}-dataset* policy). "
-             "Does not recurse without --recursive.\n\n"
+             "Never delete excluded dataset subtrees or their ancestors.\n\n"
              "For example, if the destination contains datasets h1,d1, and the include/exclude policy "
              "selects h1,d1, then check if h1,d1 can be deleted. "
              "On the other hand, if the include/exclude policy only selects h1 then only check if h1 "
@@ -1703,35 +1704,25 @@ class Job:
         # its children are already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in
         # a reverse sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct
         # children but the entire tree. Finally, delete all orphan datasets in an efficient batched way.
-        if p.delete_empty_dst_datasets and not failed:
+        if p.delete_empty_dst_datasets and p.recursive and not failed:
             log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description_with_dots)
             delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
                 p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots
                 and self.is_zpool_bookmarks_feature_enabled_or_active(dst)
             )
 
-            # compute the direct children of each (non-filtered) dataset
+            # Compute the direct children of each NON-FILTERED dataset. Thus, no excluded dataset and no ancestor of
+            # an excluded dataset will ever be added to the "orphan" set. In other words, this treats excluded dataset
+            # subtrees as if they all had snapshots, so excluded dataset subtrees are guaranteed to not get deleted.
             children = defaultdict(list)
             for dst_dataset in basis_dst_datasets:
                 parent = os.path.dirname(dst_dataset)
                 children[parent].append(dst_dataset)
 
-            # find the roots of all subtrees, and the descendants of each root
-            descendants = defaultdict(list)
-            dst_dataset_roots = []
-            skip_dataset = DONT_SKIP_DATASET
-            for dst_dataset in dst_datasets:
-                if is_descendant(dst_dataset, of_root_dataset=skip_dataset):
-                    descendants[skip_dataset].append(dst_dataset)
-                    continue
-                dst_dataset_roots.append(dst_dataset)
-                skip_dataset = dst_dataset
-                descendants[skip_dataset].append(dst_dataset)
-
-            # Within all subtrees, find all datasets that have at least one snapshot
+            # find datasets that have at least one snapshot
             dst_datasets_having_snapshots = set()
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
-            cmd = p.split_args(f"{p.zfs_program} list -t {btype} -r -s name -Hp -o name")
+            cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -s name -Hp -o name")
 
             def flush_batch(batch: List[str]) -> None:
                 datasets_having_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
@@ -1740,17 +1731,16 @@ class Job:
                 datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
                 dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
 
-            # run flush_batch(dst_dataset_roots) without creating a command line that's too big for the OS to handle
-            self.run_ssh_cmd_batched(dst, cmd, dst_dataset_roots, flush_batch)
+            # run flush_batch(dst_datasets) without creating a command line that's too big for the OS to handle
+            self.run_ssh_cmd_batched(dst, cmd, dst_datasets, flush_batch)
 
             # find and mark orphan datasets, finally delete them in an efficient way
             orphans = set()
-            for root_dataset in dst_dataset_roots:
-                for dst_dataset in reversed(descendants[root_dataset]):
-                    if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
-                        # all children turned out to be orphans so the dataset itself could be an orphan
-                        if dst_dataset not in dst_datasets_having_snapshots:
-                            orphans.add(dst_dataset)
+            for dst_dataset in reversed(dst_datasets):
+                if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
+                    # all children turned out to be orphans so the dataset itself could be an orphan
+                    if dst_dataset not in dst_datasets_having_snapshots:
+                        orphans.add(dst_dataset)
             self.delete_datasets(dst, orphans)
 
     def replicate_dataset(self, src_dataset: str) -> bool:

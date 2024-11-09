@@ -2690,19 +2690,13 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, len(snapshots(build(src_root_dataset + "/foo/b"))))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
         self.run_bzfs(
-            src_root_dataset + "/foo/b",
-            dst_root_dataset + "/foo/b",
-            "--skip-replication",
-            "--delete-dst-snapshots",
-            "--delete-empty-dst-datasets",
+            src_root_dataset + "/foo/b", dst_root_dataset + "/foo/b", "--skip-replication", "--delete-dst-snapshots"
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
 
     def test_delete_dst_bookmarks_flat_with_replication(self):
         self.setup_basic()
-        self.run_bzfs(
-            src_root_dataset, dst_root_dataset, "--delete-dst-snapshots=bookmarks", "--delete-empty-dst-datasets"
-        )
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--delete-dst-snapshots=bookmarks")
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
     def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self):
@@ -2760,7 +2754,6 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-replication",
                     "--delete-dst-snapshots",
                     "--delete-dst-snapshots-no-crosscheck",
-                    "--delete-empty-dst-datasets=snapshots",
                     **kwargs,
                 )
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2773,10 +2766,7 @@ class LocalTestCase(BZFSTestCase):
             for snap in snapshots(src_root_dataset, max_depth=None) + snapshots(dst_root_dataset, max_depth=None):
                 destroy(snap)
             self.run_bzfs(
-                src_root_dataset,
-                dst_root_dataset,
-                "--skip-replication",
-                "--delete-empty-dst-datasets",
+                src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-empty-dst-datasets", "--recursive"
             )
             self.assertTrue(dataset_exists(dst_root_dataset))
         else:
@@ -2788,6 +2778,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--delete-empty-dst-datasets=snapshots",
+            "--recursive",
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
@@ -2811,20 +2802,12 @@ class LocalTestCase(BZFSTestCase):
                 for snapshot in snapshots(src_root_dataset) + snapshots(dst_root_dataset):
                     destroy(snapshot)
                 self.run_bzfs(
-                    src_root_dataset,
-                    dst_root_dataset,
-                    "--skip-replication",
-                    "--delete-dst-snapshots=bookmarks",
-                    "--delete-empty-dst-datasets",
+                    src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks"
                 )
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
 
                 self.run_bzfs(
-                    src_root_dataset,
-                    dst_root_dataset,
-                    "--skip-replication",
-                    "--delete-dst-snapshots=bookmarks",
-                    "--delete-empty-dst-datasets",
+                    src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks"
                 )
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
 
@@ -2836,6 +2819,16 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-replication",
                     "--delete-dst-snapshots=bookmarks",
                     "--delete-empty-dst-datasets",
+                )
+                self.assertBookmarkNames(dst_root_dataset, [])
+                self.assertTrue(dataset_exists(dst_root_dataset))
+
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--delete-empty-dst-datasets",
+                    "--recursive",
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
@@ -2977,7 +2970,6 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
-            "--delete-empty-dst-datasets",
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
@@ -2999,7 +2991,6 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
-            "--delete-empty-dst-datasets",
             "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
             **kwargs,
         )
@@ -3015,7 +3006,6 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
-            "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             "xxxx*",
         )
@@ -3035,7 +3025,6 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
-            "--delete-empty-dst-datasets",
             "--exclude-snapshot-regex",
             r"!.*s[1-2]+.*",
         )

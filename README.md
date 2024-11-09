@@ -1107,14 +1107,15 @@ usage: bzfs [-h] [--recursive]
 
 **--delete-empty-dst-datasets** *[{snapshots,snapshots+bookmarks}]*
 
-*  Do nothing if the --delete-empty-dst-datasets option is missing.
-    Otherwise, after successful replication step and successful
-    --delete-dst-datasets and successful --delete-dst-snapshots steps,
-    if any, delete any selected destination dataset that has no snapshot
-    and no bookmark if all descendants of that destination dataset do
-    not have a snapshot or bookmark either (again, only if the existing
+*  Do nothing if the --delete-empty-dst-datasets option is missing or
+    --recursive is missing. Otherwise, after successful replication
+    step and successful --delete-dst-datasets and successful
+    --delete-dst-snapshots steps, if any, delete any selected
+    destination dataset that has no snapshot and no bookmark if all
+    descendants of that destination dataset are also selected and do not
+    have a snapshot or bookmark either (again, only if the existing
     destination dataset is selected via --{include|exclude}-dataset*
-    policy). Does not recurse without --recursive.
+    policy). Never delete excluded dataset subtrees or their ancestors.
 
     For example, if the destination contains datasets h1,d1, and the
     include/exclude policy selects h1,d1, then check if h1,d1 can be
