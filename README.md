@@ -199,7 +199,7 @@ last 4 hours (to allow for some slack/stragglers), excluding temporary
 datasets:
 
 ` bzfs tank1/foo/bar tank2/boo/bar --skip-replication
---compare-snapshots-lists=src+dst+all --recursive
+--compare-snapshot-lists=src+dst+all --recursive
 --include-snapshot-regex '.*_(hourly|daily)'
 --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
 --exclude-dataset-regex 'tmp.*'`
@@ -1147,7 +1147,7 @@ usage: bzfs [-h] [--recursive]
     days, excluding the last 4 hours (to allow for some
     slack/stragglers), excluding temporary datasets: `bzfs
     tank1/foo/bar tank2/boo/bar --skip-replication
-    --compare-snapshots-lists=src+dst+all --recursive
+    --compare-snapshot-lists=src+dst+all --recursive
     --include-snapshot-regex '.*_(hourly|daily)'
     --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
     --exclude-dataset-regex 'tmp.*'` This outputs a tab-separated
@@ -1165,7 +1165,7 @@ usage: bzfs [-h] [--recursive]
 
     *Note*: Consider omitting the 'all' flag to reduce noise and
     instead focus on missing snapshots only, like so:
-    --compare-snapshots-lists=src+dst
+    --compare-snapshot-lists=src+dst
 
 <!-- -->
 

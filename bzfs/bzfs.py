@@ -228,7 +228,7 @@ only contained in dst (tagged with 'dst'), and contained in both src and dst (ta
 and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack/stragglers), 
 excluding temporary datasets:
 
-`   {prog_name} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshots-lists=src+dst+all --recursive
+`   {prog_name} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists=src+dst+all --recursive
 --include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' 
 --exclude-dataset-regex 'tmp.*'`
 
@@ -628,7 +628,7 @@ on the source, indicating that the periodic replication and pruning jobs perform
              "hourly and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some "
              "slack/stragglers), excluding temporary datasets: "
              f"`{prog_name} tank1/foo/bar tank2/boo/bar --skip-replication "
-             "--compare-snapshots-lists=src+dst+all --recursive --include-snapshot-regex '.*_(hourly|daily)' "
+             "--compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex '.*_(hourly|daily)' "
              "--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex 'tmp.*'` "
              "This outputs a tab-separated file with the following columns: "
              "`location creation_iso createtxg rel_name guid root_dataset name creation`. For example: "
@@ -638,7 +638,7 @@ on the source, indicating that the periodic replication and pruning jobs perform
              "snapshots are missing on the source, indicating that the periodic replication and pruning jobs perform "
              "as expected.\n\n"
              "*Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing snapshots only, "
-             "like so: --compare-snapshots-lists=src+dst \n\n")
+             "like so: --compare-snapshot-lists=src+dst \n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -3092,7 +3092,9 @@ class Job:
         """Compares source and destination dataset trees recursively wrt. snapshots, for example to check if all
         recently taken snapshots have been successfully replicated by a periodic job. Lists snapshots only contained in
         source (tagged with 'src'), only contained in destination (tagged with 'dst'), and contained in both source
-        and destination (tagged with 'all'), in the form of a tab-separated file, along with other snapshot metadata."""
+        and destination (tagged with 'all'), in the form of a tab-separated file, along with other snapshot metadata.
+        Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and
+        any number of snapshots."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
 
