@@ -63,7 +63,7 @@ restoring the production state from backup.
 
 In the spirit of rsync, bzfs supports a variety of powerful
 include/exclude filters that can be combined to select which datasets,
-snapshots and properties to replicate or delete.
+snapshots and properties to replicate or delete or compare.
 
 The source 'pushes to' the destination whereas the destination 'pulls
 from' the source. bzfs is installed and executed on the 'initiator'
@@ -248,6 +248,8 @@ bzfs --help # Run the CLI
 # Design Aspects
 
 * Rsync'ish look and feel.
+* Supports a variety of powerful include/exclude filters that can be combined to select which datasets, snapshots and
+properties to replicate or delete or compare.
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.
@@ -1151,10 +1153,13 @@ usage: bzfs [-h] [--recursive]
     --include-snapshot-regex '.*_(hourly|daily)'
     --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
     --exclude-dataset-regex 'tmp.*'` This outputs a tab-separated
-    file with the following columns: `location creation_iso createtxg
-    rel_name guid root_dataset name creation`. For example: `cmp: src
-    2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily
-    2406491805272097867 tank1/src
+    file with the following columns:
+
+    `location creation_iso createtxg rel_name guid root_dataset name
+    creation`. For example:
+
+    `cmp: src 2024-11-06_08:30:05 17435050
+    /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src
     tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`
 
     If the TSV output contains zero lines starting with the prefix

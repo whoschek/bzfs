@@ -82,6 +82,7 @@ zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
 snapshot_regex_filter_name = "snapshot_regex"
 snapshot_filters_var = "snapshot_filters_var"
+cmp_choices_items = ["src", "dst", "all"]
 inject_dst_pipe_fail_kbytes = 400
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
@@ -89,7 +90,6 @@ log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in 
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 DONT_SKIP_DATASET = ""
-cmp_choices_items = ["src", "dst", "all"]
 PIPE = subprocess.PIPE
 
 
@@ -123,7 +123,7 @@ identical to the source if the two have somehow diverged in unforeseen ways. Thi
 backup.
 
 In the spirit of rsync, {prog_name} supports a variety of powerful include/exclude filters that can be combined to
-select which datasets, snapshots and properties to replicate or delete.
+select which datasets, snapshots and properties to replicate or delete or compare.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
@@ -630,8 +630,8 @@ on the source, indicating that the periodic replication and pruning jobs perform
              f"`{prog_name} tank1/foo/bar tank2/boo/bar --skip-replication "
              "--compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex '.*_(hourly|daily)' "
              "--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex 'tmp.*'` "
-             "This outputs a tab-separated file with the following columns: "
-             "`location creation_iso createtxg rel_name guid root_dataset name creation`. For example: "
+             "This outputs a tab-separated file with the following columns:\n\n"
+             "`location creation_iso createtxg rel_name guid root_dataset name creation`. For example:\n\n"
              "`cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`\n\n"
              "If the TSV output contains zero lines starting with the prefix 'cmp: src' and zero lines starting with "
              "the prefix 'cmp: dst' then no source snapshots are missing on the destination, and no destination "
@@ -1351,7 +1351,7 @@ class RetryPolicy:
 #############################################################################
 @dataclass(order=True)
 class ComparableSnapshot:
-    key: Tuple
+    key: Tuple[str, str]
     cols: List[str] = field(compare=False)
 
 
@@ -3101,7 +3101,7 @@ class Job:
         def zfs_list_snapshot_iterator(r: Remote, datasets: List[str]) -> Generator[str, None, None]:
             """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
             props = self.creation_prefix + "creation,guid,createtxg,name"
-            cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")
+            cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # list snaps sorted by dataset
 
             def flush_batch(batch: List[str]) -> Any:
                 return (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines()
@@ -3118,15 +3118,14 @@ class Job:
             snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges
             src snapshots and dst snapshots."""
             # streaming group by dataset name (consumes constant memory only)
-            for _, group in groupby(sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.rindex("@")]):
-                snapshots = list(group)  # fetch all snapshots of current dataset
+            for dataset, group in groupby(sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.rindex("@")]):
+                snapshots = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
                 snapshots = self.filter_snapshots(snapshots)  # apply include/exclude policy
                 snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # sort by GUID
+                rel_dataset = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
                 for line in snapshots:
                     cols = line.split("\t")
-                    creation, guid, createtxg, snapshot_name = cols  # root_dataset=tank1/src
-                    dataset = snapshot_name[0 : snapshot_name.index("@")]  # tank1/src/foo
-                    rel_dataset = relativize_dataset(dataset, root_dataset)  # /foo
+                    creation, guid, createtxg, snapshot_name = cols
                     key = (rel_dataset, guid)  # ensures src snaps and dst snaps with the same GUID will be adjacent
                     yield ComparableSnapshot(key, cols)
 
@@ -3137,7 +3136,7 @@ class Job:
         is_first_row = True
 
         # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
-        for _, entries in groupby(merge_itr, key=lambda entry: entry[1].key[0]):
+        for rel_dataset, entries in groupby(merge_itr, key=lambda entry: entry[1].key[0]):
             entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
                 entries,
                 key=lambda entry: (
