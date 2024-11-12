@@ -3169,7 +3169,7 @@ class Job:
         dst_itr: Generator[ComparableSnapshot, None, None],
     ) -> Generator[Tuple[str, ComparableSnapshot], None, None]:
         """This is the typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
-        assert len(choices) >= 3
+        assert len(choices) == 3
         assert choice
         flags = 0
         for i, item in enumerate(choices):
@@ -3184,16 +3184,16 @@ class Job:
                     yield choices[n], src_next, dst_next
                 src_next = next(src_itr, None)
                 dst_next = next(dst_itr, None)
-            elif dst_next is None or (src_next is not None and src_next < dst_next):
-                n = 0
-                if (flags & (1 << n)) != 0:
-                    yield choices[n], src_next
-                src_next = next(src_itr, None)
-            else:
+            elif src_next is None or (dst_next is not None and dst_next < src_next):
                 n = 1
                 if (flags & (1 << n)) != 0:
                     yield choices[n], dst_next
                 dst_next = next(dst_itr, None)
+            else:
+                n = 0
+                if (flags & (1 << n)) != 0:
+                    yield choices[n], src_next
+                src_next = next(src_itr, None)
 
     def is_program_available(self, program: str, location: str) -> bool:
         return program in self.params.available_programs[location]
