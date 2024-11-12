@@ -192,26 +192,23 @@ snapshot exists in the source dataset (same as above except append
 * Compare source and destination dataset trees recursively, for example
 to check if all recently taken snapshots have been successfully
 replicated by a periodic job. List snapshots only contained in src
-(output column 1), only contained in dst (output column 2), and
-contained in both src and dst (output column 3), restricted to hourly
-and daily snapshots taken within the last 7 days, excluding the last 4
-hours (to allow for some slack), excluding temporary datasets:
+(tagged with 'src'), only contained in dst (tagged with 'dst'), and
+contained in both src and dst (tagged with 'all'), restricted to
+hourly and daily snapshots taken within the last 7 days, excluding the
+last 4 hours (to allow for some slack/stragglers), excluding temporary
+datasets:
 
-` bzfs dummy tank1/src --dryrun --skip-replication
---delete-dst-snapshots --recursive --include-snapshot-regex
-'.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days
-ago..4 hours ago' --exclude-dataset-regex 'tmp.*' --verbose |
-grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort >
-/tmp/src.txt`
+` bzfs tank1/foo/bar tank2/boo/bar --skip-replication
+--compare-snapshots-lists=src+dst+all --recursive
+--include-snapshot-regex '.*_(hourly|daily)'
+--include-snapshot-times-and-ranks '7 days ago..4 hours ago'
+--exclude-dataset-regex 'tmp.*'`
 
-` bzfs dummy tank2/dst --dryrun --skip-replication
---delete-dst-snapshots --recursive --include-snapshot-regex
-'.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days
-ago..4 hours ago' --exclude-dataset-regex 'tmp.*' --verbose |
-grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort >
-/tmp/dst.txt`
-
-` comm /tmp/src.txt /tmp/dst.txt`
+If the resulting TSV output contains zero lines starting with the prefix
+'cmp: src' and zero lines starting with the prefix 'cmp: dst' then
+no source snapshots are missing on the destination, and no destination
+snapshots are missing on the source, indicating that the periodic
+replication and pruning jobs perform as expected.
 
 * Example with further options:
 
@@ -410,6 +407,7 @@ usage: bzfs [-h] [--recursive]
             [--delete-dst-snapshots [{snapshots,bookmarks}]]
             [--delete-dst-snapshots-no-crosscheck]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
+            [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream]
             [--no-resume-recv] [--no-create-bookmark]
@@ -699,8 +697,10 @@ usage: bzfs [-h] [--recursive]
 
     * c) an ISO 8601 datetime string with or without timezone.
     Examples: '2024-10-05', '2024-10-05T14:48:55',
-    '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. Timezone
-    string support requires Python >= 3.11.
+    '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. If the
+    datetime string does not contain time zone info then it is assumed
+    to be in the local time zone. Timezone string support requires
+    Python >= 3.11.
 
     * d) a duration that indicates how long ago from the current time,
     using the following syntax: a non-negative integer, followed by an
@@ -1124,6 +1124,48 @@ usage: bzfs [-h] [--recursive]
 
     *Note:* Use --delete-empty-dst-datasets=snapshots to delete
     snapshot-less datasets even if they still contain bookmarks.
+
+<!-- -->
+
+<div id="--compare-snapshot-lists"></div>
+
+**--compare-snapshot-lists** *[{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]*
+
+*  Do nothing if the --compare-snapshot-lists option is missing.
+    Otherwise, after successful replication step and successful
+    --delete-dst-datasets, --delete-dst-snapshots steps and
+    --delete-empty-dst-datasets steps, if any, proceed as follows:
+
+    Compare source and destination dataset trees recursively wrt.
+    snapshots, for example to check if all recently taken snapshots have
+    been successfully replicated by a periodic job.
+
+    Example: List snapshots only contained in source (tagged with
+    'src'), only contained in destination (tagged with 'dst'), and
+    contained in both source and destination (tagged with 'all'),
+    restricted to hourly and daily snapshots taken within the last 7
+    days, excluding the last 4 hours (to allow for some
+    slack/stragglers), excluding temporary datasets: `bzfs
+    tank1/foo/bar tank2/boo/bar --skip-replication
+    --compare-snapshots-lists=src+dst+all --recursive
+    --include-snapshot-regex '.*_(hourly|daily)'
+    --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
+    --exclude-dataset-regex 'tmp.*'` This outputs a tab-separated
+    file with the following columns: `location creation_iso createtxg
+    rel_name guid root_dataset name creation`. For example: `cmp: src
+    2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily
+    2406491805272097867 tank1/src
+    tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`
+
+    If the TSV output contains zero lines starting with the prefix
+    'cmp: src' and zero lines starting with the prefix 'cmp: dst'
+    then no source snapshots are missing on the destination, and no
+    destination snapshots are missing on the source, indicating that the
+    periodic replication and pruning jobs perform as expected.
+
+    *Note*: Consider omitting the 'all' flag to reduce noise and
+    instead focus on missing snapshots only, like so:
+    --compare-snapshots-lists=src+dst
 
 <!-- -->
 

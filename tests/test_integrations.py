@@ -2485,6 +2485,163 @@ class LocalTestCase(BZFSTestCase):
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
                 self.assertSnapshots(dst_root_dataset, 1, "s")
 
+    def test_compare_snapshot_lists(self):
+        def snapshot_list(_job, location=""):
+            with open(_job.params.log_params.log_file, "r", encoding="utf-8") as fd:
+                return [line.strip() for line in fd if line.startswith("cmp: " + location)]
+
+        def stats(_job):
+            _lines = snapshot_list(_job)
+            _n_src = sum(1 for line in _lines if line.startswith("cmp: src"))
+            _n_dst = sum(1 for line in _lines if line.startswith("cmp: dst"))
+            _n_all = sum(1 for line in _lines if line.startswith("cmp: all"))
+            return _n_src, _n_dst, _n_all
+
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                param_name = bzfs.env_var_prefix + "max_datasets_per_batch_on_list_snaps"
+                old_value = os.environ.get(param_name)
+                try:
+                    if i > 0:
+                        self.tearDownAndSetup()
+                        os.environ[param_name] = "0"
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(0, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(0, n_all)
+
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(0, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(0, n_all)
+
+                    self.setup_basic()
+                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--compare-snapshot-lists")
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(0, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(3, n_all)
+                    self.assertEqual(3, len(snapshot_list(job, "all")))
+                    lines = snapshot_list(job)
+                    self.assertEqual(3, len(lines))
+                    creation = 7
+                    rel_name = 3
+                    root_dataset = 5
+                    name = 6
+                    self.assertEqual("@s1", lines[0].split("\t")[rel_name])
+                    self.assertEqual("@s2", lines[1].split("\t")[rel_name])
+                    self.assertEqual("@s3", lines[2].split("\t")[rel_name])
+                    self.assertEqual(src_root_dataset, lines[0].split("\t")[root_dataset])
+                    self.assertEqual(src_root_dataset, lines[1].split("\t")[root_dataset])
+                    self.assertEqual(src_root_dataset, lines[2].split("\t")[root_dataset])
+                    self.assertEqual(src_root_dataset + "@s1", lines[0].split("\t")[name])
+                    self.assertEqual(src_root_dataset + "@s2", lines[1].split("\t")[name])
+                    self.assertEqual(src_root_dataset + "@s3", lines[2].split("\t")[name])
+
+                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--compare-snapshot-lists", "-r")
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(0, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(3 + 3 + 3, n_all)
+
+                    job = self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "--skip-replication",
+                        "--compare-snapshot-lists",
+                        "-r",
+                        "--include-snapshot-regex=[su]1.*",
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(0, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(1 + 1, n_all)
+
+                    job = self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "--skip-replication",
+                        "--compare-snapshot-lists",
+                        "-r",
+                        "--include-snapshot-times-and-ranks",
+                        "0..0",
+                        "latest 1",
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(0, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(1 + 1 + 1, n_all)
+                    lines = snapshot_list(job)
+                    self.assertEqual("@s3", lines[0].split("\t")[rel_name])
+                    self.assertEqual("/foo@t3", lines[1].split("\t")[rel_name])
+                    self.assertEqual("/foo/a@u3", lines[2].split("\t")[rel_name])
+
+                    job = self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "--skip-replication",
+                        "--compare-snapshot-lists",
+                        "-r",
+                        "--include-snapshot-times-and-ranks=0..2999-01-01",
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(0, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(3 + 3 + 3, n_all)
+
+                    destroy(snapshots(dst_root_dataset)[0])
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(1, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(3 + 3 + 3 - 1, n_all)
+
+                    destroy_snapshots(dst_root_dataset, snapshots(dst_root_dataset))
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(3, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(3 + 3, n_all)
+
+                    src_foo = src_root_dataset + "/foo"
+                    destroy(snapshots(src_foo)[0])
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(3, n_src)
+                    self.assertEqual(1, n_dst)
+                    self.assertEqual(3 + 3 - 1, n_all)
+                    lines = snapshot_list(job, "dst")
+                    self.assertEqual(1, len(lines))
+                    self.assertEqual("/foo@t1", lines[0].split("\t")[rel_name])
+                    self.assertEqual(dst_root_dataset, lines[0].split("\t")[root_dataset])
+                    self.assertEqual(dst_root_dataset + "/foo@t1", lines[0].split("\t")[name])
+
+                    destroy_snapshots(src_foo, snapshots(src_foo))
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(3, n_src)
+                    self.assertEqual(3, n_dst)
+                    self.assertEqual(3, n_all)
+                finally:
+                    if old_value is None:
+                        os.environ.pop(param_name, None)
+                    else:
+                        os.environ[param_name] = old_value
+
     def test_delete_dst_datasets_with_missing_src_root(self):
         destroy(src_root_dataset, recursive=True)
         recreate_filesystem(dst_root_dataset)

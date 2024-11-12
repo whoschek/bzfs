@@ -34,6 +34,7 @@ import argparse
 import collections
 import fcntl
 import hashlib
+import itertools
 import json
 import logging
 import logging.config
@@ -57,11 +58,13 @@ from argparse import Namespace
 from collections import defaultdict, Counter
 from contextlib import redirect_stderr
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from itertools import groupby
 from logging import Logger
+from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import List, Dict, Set, Iterable, Tuple, Any, Optional, Union, Callable
+from typing import List, Dict, Set, Iterable, Tuple, Any, Optional, Union, Callable, Generator
 
 __version__ = "1.4.0-dev"
 prog_name = "bzfs"
@@ -86,6 +89,7 @@ log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in 
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 DONT_SKIP_DATASET = ""
+cmp_choices_items = ["src", "dst", "all"]
 PIPE = subprocess.PIPE
 
 
@@ -219,20 +223,18 @@ of creation time:
 --include-dataset-regex 'tmp.*'`
 
 * Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
-been successfully replicated by a periodic job. List snapshots only contained in src (output column 1), 
-only contained in dst (output column 2), and contained in both src and dst (output column 3), restricted to hourly 
-and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack), excluding temporary 
-datasets:
+been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'), 
+only contained in dst (tagged with 'dst'), and contained in both src and dst (tagged with 'all'), restricted to hourly 
+and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack/stragglers), 
+excluding temporary datasets:
 
-`   {prog_name} {dummy_dataset} tank1/src --dryrun --skip-replication --delete-dst-snapshots --recursive
+`   {prog_name} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshots-lists=src+dst+all --recursive
 --include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' 
---exclude-dataset-regex 'tmp.*' --verbose | grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort > /tmp/src.txt`
+--exclude-dataset-regex 'tmp.*'`
 
-`   {prog_name} {dummy_dataset} tank2/dst --dryrun --skip-replication --delete-dst-snapshots --recursive
---include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' 
---exclude-dataset-regex 'tmp.*' --verbose | grep 'Finally included snapshot:' | cut -d '~' -f 2- | sort > /tmp/dst.txt`
-
-`   comm /tmp/src.txt /tmp/dst.txt`
+If the resulting TSV output contains zero lines starting with the prefix 'cmp: src' and zero lines starting with the 
+prefix 'cmp: dst' then no source snapshots are missing on the destination, and no destination snapshots are missing 
+on the source, indicating that the periodic replication and pruning jobs perform as expected.
 
 * Example with further options:
 
@@ -377,7 +379,8 @@ datasets:
              "* a) a `*` wildcard character representing negative or positive infinity.\n\n"
              "* b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
              "* c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
-             "'2024-10-05T14:48:55', '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. Timezone string support "
+             "'2024-10-05T14:48:55', '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. If the datetime string "
+             "does not contain time zone info then it is assumed to be in the local time zone. Timezone string support "
              "requires Python >= 3.11.\n\n"
              "* d) a duration that indicates how long ago from the current time, using the following syntax: "
              "a non-negative integer, followed by an optional space, followed by a duration unit that is "
@@ -609,6 +612,33 @@ datasets:
              "can be deleted.\n\n"
              "*Note:* Use --delete-empty-dst-datasets=snapshots to delete snapshot-less datasets even if they still "
              "contain bookmarks.\n\n")
+    cmp_choices_dflt = "+".join(cmp_choices_items)
+    cmp_choices = []
+    for i in range(0, len(cmp_choices_items)):
+        cmp_choices += map(lambda item: "+".join(item), itertools.combinations(cmp_choices_items, i + 1))
+    parser.add_argument(
+        "--compare-snapshot-lists", choices=cmp_choices, default=None, const=cmp_choices_dflt, nargs="?",
+        help="Do nothing if the --compare-snapshot-lists option is missing. Otherwise, after successful replication "
+             "step and successful --delete-dst-datasets, --delete-dst-snapshots steps and --delete-empty-dst-datasets "
+             "steps, if any, proceed as follows:\n\n"
+             "Compare source and destination dataset trees recursively wrt. snapshots, for example to check if all "
+             "recently taken snapshots have been successfully replicated by a periodic job.\n\n"
+             "Example: List snapshots only contained in source (tagged with 'src'), only contained in destination "
+             "(tagged with 'dst'), and contained in both source and destination (tagged with 'all'), restricted to "
+             "hourly and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some "
+             "slack/stragglers), excluding temporary datasets: "
+             f"`{prog_name} tank1/foo/bar tank2/boo/bar --skip-replication "
+             "--compare-snapshots-lists=src+dst+all --recursive --include-snapshot-regex '.*_(hourly|daily)' "
+             "--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex 'tmp.*'` "
+             "This outputs a tab-separated file with the following columns: "
+             "`location creation_iso createtxg rel_name guid root_dataset name creation`. For example: "
+             "`cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`\n\n"
+             "If the TSV output contains zero lines starting with the prefix 'cmp: src' and zero lines starting with "
+             "the prefix 'cmp: dst' then no source snapshots are missing on the destination, and no destination "
+             "snapshots are missing on the source, indicating that the periodic replication and pruning jobs perform "
+             "as expected.\n\n"
+             "*Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing snapshots only, "
+             "like so: --compare-snapshots-lists=src+dst \n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -1100,6 +1130,7 @@ class Params:
         self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
+        self.compare_snapshot_lists = args.compare_snapshot_lists
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.resume_recv: bool = not args.no_resume_recv
@@ -1129,7 +1160,7 @@ class Params:
 
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
-        self.max_batch_len = 1000
+        self.max_datasets_per_batch_on_list_snaps = int(getenv_any("max_datasets_per_batch_on_list_snaps", 1000))
 
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
@@ -1315,6 +1346,13 @@ class RetryPolicy:
             f"retries: {self.retries}, min_sleep_secs: {self.min_sleep_secs}, "
             f"max_sleep_secs: {self.max_sleep_secs}, max_elapsed_secs: {self.max_elapsed_secs}"
         )
+
+
+#############################################################################
+@dataclass(order=True)
+class ComparableSnapshot:
+    key: Tuple
+    cols: List[str] = field(compare=False)
 
 
 #############################################################################
@@ -1603,6 +1641,7 @@ class Job:
             src_datasets.append(src_dataset)
         self.src_properties = src_properties
         src_datasets_with_sizes = None  # help gc
+        selected_src_datasets = None
         failed = False
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
@@ -1610,9 +1649,9 @@ class Job:
             log.info("Starting replication task: %s", task_description_with_dots)
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            filtered_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
+            selected_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
             failed = self.process_datasets_fault_tolerant(
-                filtered_src_datasets,
+                selected_src_datasets,
                 process_dataset=lambda dataset: self.replicate_dataset(dataset),
                 skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
                     replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
@@ -1621,20 +1660,22 @@ class Job:
                 task_description=task_description,
             )
 
-        if failed or not (p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets):
+        if failed or not (
+            p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets or p.compare_snapshot_lists
+        ):
             return
-        log.info(p.dry("Preparing --delete-dst-*: %s"), task_description_with_dots)
+        log.info("Listing dst datasets: %s", task_description_with_dots)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
         basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
         if basis_dst_datasets is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
-            return
+            basis_dst_datasets = ""
         basis_dst_datasets = basis_dst_datasets.splitlines()
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.
-        if p.delete_dst_datasets:
+        if p.delete_dst_datasets and not failed:
             log.info(p.dry("--delete-dst-datasets: %s"), task_description_with_dots)
             dst_datasets = set(dst_datasets)
             to_delete = dst_datasets.difference(
@@ -1646,13 +1687,13 @@ class Job:
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
         # via --{include|exclude}-dataset* policy.
-        src_datasets = set(src_datasets)
-        if p.delete_dst_snapshots:
+        if p.delete_dst_snapshots and not failed:
             log.info(p.dry("--delete-dst-snapshots: %s"), task_description_with_dots)
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
             src_has_bookmark_feature = self.is_zpool_bookmarks_feature_enabled_or_active(src)
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+            src_datasets_set = set(src_datasets)
 
             def delete_destination_snapshots(dst_dataset: str) -> bool:
                 cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
@@ -1664,13 +1705,13 @@ class Job:
                 dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="#", new="@")  # treat bookmarks as snapshots
-                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, dst.root_dataset)  # include/exclude
+                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids)  # apply include/exclude
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="@", new="#")  # restore pre-filtering bookmark state
                 if filter_needs_creation_time:
                     dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in src_datasets and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
+                if src_dataset in src_datasets_set and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
                     src_kind = kind
                     if not p.delete_dst_snapshots_no_crosscheck:
                         src_kind = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
@@ -1749,9 +1790,17 @@ class Job:
                 if run == 0:
                     # Run flush_batch(orphans) without creating a command line that's too big for the OS to handle.
                     # This updates dst_datasets_having_snapshots for real use in the second run.
-                    self.run_ssh_cmd_batched(dst, cmd, isorted(orphans), flush_batch, p.max_batch_len)
+                    orphans = isorted(orphans)
+                    self.run_ssh_cmd_batched(dst, cmd, orphans, flush_batch, p.max_datasets_per_batch_on_list_snaps)
                 else:
                     self.delete_datasets(dst, orphans)
+                    dst_datasets = isorted(set(dst_datasets).difference(orphans))
+
+        if p.compare_snapshot_lists and not failed:
+            log.info("--compare-snapshot-lists: %s", task_description_with_dots)
+            if selected_src_datasets is None:
+                selected_src_datasets = self.filter_datasets(src, src_datasets)  # apply include/exclude policy
+            self.run_compare_snapshot_lists(selected_src_datasets, dst_datasets)
 
     def replicate_dataset(self, src_dataset: str) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
@@ -1815,7 +1864,7 @@ class Job:
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
         basis_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids, src.root_dataset)
+        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
         if use_bookmark or filter_needs_creation_time:
             src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
             basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
@@ -2537,7 +2586,7 @@ class Job:
                     log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
-    def filter_snapshots(self, snapshots: List[str], root_dataset: str) -> List[str]:
+    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
         """Returns all snapshots that pass all include/exclude policies."""
         p, log = self.params, self.params.log
         for _filter in p.snapshot_filters:
@@ -2553,11 +2602,9 @@ class Job:
                 snapshots = self.filter_snapshots_by_creation_time_and_rank(
                     snapshots, include_snapshot_times=_filter.timerange, include_snapshot_ranks=_filter.options
                 )
-        off = len(root_dataset) + 1
-        root_ds = root_dataset + "~"  # uniquely separate root dataset vs relative dataset for easy log scraping
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
-            is_debug and log.debug("Finally included snapshot: %s", root_ds + snapshot[snapshot.rindex("\t") + off :])
+            is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return snapshots
 
     def filter_snapshots_by_regex(self, snapshots: List[str], regexes: Tuple[RegexList, RegexList]) -> List[str]:
@@ -3041,6 +3088,111 @@ class Job:
             i += 1
         return propnames
 
+    def run_compare_snapshot_lists(self, src_datasets: List[str], dst_datasets: List[str]) -> None:
+        """Compares source and destination dataset trees recursively wrt. snapshots, for example to check if all
+        recently taken snapshots have been successfully replicated by a periodic job. Lists snapshots only contained in
+        source (tagged with 'src'), only contained in destination (tagged with 'dst'), and contained in both source
+        and destination (tagged with 'all'), in the form of a tab-separated file, along with other snapshot metadata."""
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+
+        def zfs_list_snapshot_iterator(r: Remote, datasets: List[str]) -> Generator[str, None, None]:
+            """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
+            props = self.creation_prefix + "creation,guid,createtxg,name"
+            cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")
+
+            def flush_batch(batch: List[str]) -> Any:
+                return (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines()
+
+            datasets = sorted(datasets)
+            for itr in self.itr_ssh_cmd_batched(r, cmd, datasets, flush_batch, p.max_datasets_per_batch_on_list_snaps):
+                for line in itr:
+                    yield line
+
+        def snapshot_iterator(
+            root_dataset: str, sorted_itr: Generator[str, None, None]
+        ) -> Generator[ComparableSnapshot, None, None]:
+            """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that two
+            snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges
+            src snapshots and dst snapshots."""
+            # streaming group by dataset name (consumes constant memory only)
+            for _, group in groupby(sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.rindex("@")]):
+                snapshots = list(group)  # fetch all snapshots of current dataset
+                snapshots = self.filter_snapshots(snapshots)  # apply include/exclude policy
+                snapshots = sorted(snapshots, key=lambda line: line.split("\t", 2)[1])  # sort by GUID
+                for line in snapshots:
+                    cols = line.split("\t")
+                    creation, guid, createtxg, snapshot_name = cols  # root_dataset=tank1/src
+                    dataset = snapshot_name[0 : snapshot_name.index("@")]  # tank1/src/foo
+                    rel_dataset = relativize_dataset(dataset, root_dataset)  # /foo
+                    key = (rel_dataset, guid)  # ensures src snaps and dst snaps with the same GUID will be adjacent
+                    yield ComparableSnapshot(key, cols)
+
+        # setup streaming pipeline
+        src_snap_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
+        dst_snap_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
+        merge_itr = self.merge_sorted_iterators(cmp_choices_items, p.compare_snapshot_lists, src_snap_itr, dst_snap_itr)
+        is_first_row = True
+
+        # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
+        for _, entries in groupby(merge_itr, key=lambda entry: entry[1].key[0]):
+            entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
+                entries,
+                key=lambda entry: (
+                    int(entry[1].cols[0]),
+                    int(entry[1].cols[-2]),
+                    entry[1].cols[-1][entry[1].cols[-1].index("@") + 1 :],
+                ),
+            )
+            # print snapshots of current dataset
+            for entry in entries:
+                if is_first_row:
+                    tsv_header = "#location creation_iso createtxg rel_name guid root_dataset name creation".split()
+                    log.log(log_stdout, "%s", "\t".join(tsv_header))
+                    is_first_row = False
+                location = entry[0]
+                creation, guid, createtxg, name = entry[1].cols[0:4]
+                root_dataset = dst.root_dataset if location == cmp_choices_items[1] else src.root_dataset
+                rel_name = relativize_dataset(name, root_dataset)
+                creation_iso = isotime_from_unixtime(int(creation))
+                tsv_row = [location, creation_iso, createtxg, rel_name, guid, root_dataset, name, str(creation)]
+                # Example: cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205
+                log.log(log_stdout, "cmp: %s", "\t".join(tsv_row))
+
+    @staticmethod
+    def merge_sorted_iterators(
+        choices: List[str],  # ["src", "dst", "all"]
+        choice: str,  # Example: "src+dst+all"
+        src_itr: Generator[ComparableSnapshot, None, None],
+        dst_itr: Generator[ComparableSnapshot, None, None],
+    ) -> Generator[Tuple[str, ComparableSnapshot], None, None]:
+        """This is the typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
+        assert len(choices) >= 3
+        assert choice
+        flags = 0
+        for i, item in enumerate(choices):
+            if item in choice:
+                flags |= 1 << i
+        src_next = next(src_itr, None)
+        dst_next = next(dst_itr, None)
+        while not (src_next is None and dst_next is None):
+            if src_next == dst_next:
+                n = 2
+                if (flags & (1 << n)) != 0:
+                    yield choices[n], src_next, dst_next
+                src_next = next(src_itr, None)
+                dst_next = next(dst_itr, None)
+            elif dst_next is None or (src_next is not None and src_next < dst_next):
+                n = 0
+                if (flags & (1 << n)) != 0:
+                    yield choices[n], src_next
+                src_next = next(src_itr, None)
+            else:
+                n = 1
+                if (flags & (1 << n)) != 0:
+                    yield choices[n], dst_next
+                dst_next = next(dst_itr, None)
+
     def is_program_available(self, program: str, location: str) -> bool:
         return program in self.params.available_programs[location]
 
@@ -3263,8 +3415,13 @@ class Job:
         return re.compile(zfs_dataset_busy_if_mods), re.compile(zfs_dataset_busy_if_send)
 
     def run_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], None], max_batch_len=2**32
-    ):
+        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**32
+    ) -> None:
+        collections.deque(self.itr_ssh_cmd_batched(r, cmd, cmd_args, func, max_batch_items=max_batch_items), maxlen=0)
+
+    def itr_ssh_cmd_batched(
+        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**32
+    ) -> Any:
         """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
         fsenc = sys.getfilesystemencoding()
@@ -3272,18 +3429,22 @@ class Job:
         batch: List[str] = []
         total_bytes: int = header_bytes
 
-        def flush() -> None:
+        def flush() -> Any:
             if len(batch) > 0:
-                func(batch)
+                return func(batch)
 
         for cmd_arg in cmd_args:
             curr_bytes = len(f" {cmd_arg}".encode(fsenc))
-            if total_bytes + curr_bytes > max_bytes or len(batch) >= max_batch_len:
-                flush()
+            if total_bytes + curr_bytes > max_bytes or len(batch) >= max_batch_items:
+                results = flush()
+                if results is not None:
+                    yield results
                 batch, total_bytes = [], header_bytes
             batch.append(cmd_arg)
             total_bytes += curr_bytes
-        flush()
+        results = flush()
+        if results is not None:
+            yield results
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
@@ -3872,8 +4033,18 @@ def validate_log_config_variable_name(name: str):
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
-    """Converts an ISO 8601 datetime into a UTC Unix time in integer seconds."""
+    """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds. If the datetime string does not
+    contain time zone info then it is assumed to be in the local time zone."""
     return int(datetime.fromisoformat(datetime_str).timestamp())
+
+
+def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
+    """Converts a UTC Unix time in integer seconds into an ISO 8601 datetime string in the local time zone.
+    Example: 2024-09-03_12:26:15"""
+    tz = timezone.utc  # outputs time in UTC
+    tz = None  # outputs time in local time zone
+    dt = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
+    return dt.isoformat(sep="_", timespec="seconds")
 
 
 #############################################################################
@@ -4025,7 +4196,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
     def get_include_snapshot_times(times) -> UnixTimeRange:
         def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
             if isinstance(time_spec, timedelta):
-                return int(current_time - time_spec.total_seconds())
+                return ceil(current_time - time_spec.total_seconds())
             if isinstance(time_spec, int):
                 return int(time_spec)
             return default
