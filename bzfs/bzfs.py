@@ -3121,7 +3121,7 @@ class Job:
             for _, group in groupby(sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.rindex("@")]):
                 snapshots = list(group)  # fetch all snapshots of current dataset
                 snapshots = self.filter_snapshots(snapshots)  # apply include/exclude policy
-                snapshots = sorted(snapshots, key=lambda line: line.split("\t", 2)[1])  # sort by GUID
+                snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # sort by GUID
                 for line in snapshots:
                     cols = line.split("\t")
                     creation, guid, createtxg, snapshot_name = cols  # root_dataset=tank1/src
@@ -3153,11 +3153,11 @@ class Job:
                     log.log(log_stdout, "%s", "\t".join(tsv_header))
                     is_first_row = False
                 location = entry[0]
-                creation, guid, createtxg, name = entry[1].cols[0:4]
+                creation, guid, createtxg, name = entry[1].cols
                 root_dataset = dst.root_dataset if location == cmp_choices_items[1] else src.root_dataset
                 rel_name = relativize_dataset(name, root_dataset)
                 creation_iso = isotime_from_unixtime(int(creation))
-                tsv_row = [location, creation_iso, createtxg, rel_name, guid, root_dataset, name, str(creation)]
+                tsv_row = [location, creation_iso, createtxg, rel_name, guid, root_dataset, name, creation]
                 # Example: cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205
                 log.log(log_stdout, "cmp: %s", "\t".join(tsv_row))
 
