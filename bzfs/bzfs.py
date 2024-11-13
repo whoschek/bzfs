@@ -586,7 +586,7 @@ the oldest and latest common snapshot, respectively.
              "*Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination with a "
              f"source that is an empty dataset, such as the hardcoded virtual dataset named '{dummy_dataset}', like so:"
              f" `{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
-             "--include-dataset-regex '.*_daily' --recursive`\n\n"
+             "--include-snapshot-regex '.*_daily' --recursive`\n\n"
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
              "snapshots wrt. selecting."
@@ -754,7 +754,7 @@ the oldest and latest common snapshot, respectively.
              "As an example starting point, here is a command that deletes all bookmarks older than "
              "90 days, but retains the latest 200 bookmarks (per dataset) regardless of creation time: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
-             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks 'latest 200..latest 100%%' "
+             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks '0..0' 'latest 200..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",

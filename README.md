@@ -300,7 +300,7 @@ simultaneously this is detected and the operation can be auto-retried safely.
 completion yet.
 * Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
 integration.
-* Code base is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
+* Codebase is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
 
@@ -1084,8 +1084,8 @@ usage: bzfs [-h] [--recursive]
     --delete-dst-snapshots in combination with a source that is an
     empty dataset, such as the hardcoded virtual dataset named
     'dummy', like so: `bzfs dummy tank2/boo/bar --dryrun
-    --skip-replication --delete-dst-snapshots --include-dataset-regex
-    '.*_daily' --recursive`
+    --skip-replication --delete-dst-snapshots
+    --include-snapshot-regex '.*_daily' --recursive`
 
     *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks
     instead of snapshots, in which case no snapshots are selected and
@@ -1379,8 +1379,8 @@ usage: bzfs [-h] [--recursive]
     bookmarks (per dataset) regardless of creation time: `bzfs dummy
     tank2/boo/bar --dryrun --recursive --skip-replication
     --delete-dst-snapshots=bookmarks
-    --include-snapshot-times-and-ranks 'latest 200..latest 100%'
-    --include-snapshot-times-and-ranks '*..90 days ago'`
+    --include-snapshot-times-and-ranks '0..0' 'latest 200..latest
+    100%' --include-snapshot-times-and-ranks '*..90 days ago'`
 
 <!-- -->
 
