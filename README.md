@@ -208,7 +208,10 @@ If the resulting TSV output contains zero lines starting with the prefix
 'cmp: src' and zero lines starting with the prefix 'cmp: dst' then
 no source snapshots are missing on the destination, and no destination
 snapshots are missing on the source, indicating that the periodic
-replication and pruning jobs perform as expected.
+replication and pruning jobs perform as expected. The TSV output is
+sorted by ZFS creation time within each dataset - the first and last
+line prefixed with 'cmp: all' contains the metadata of the oldest and
+latest common snapshot, respectively.
 
 * Example with further options:
 
@@ -1152,11 +1155,15 @@ usage: bzfs [-h] [--recursive]
     --compare-snapshot-lists=src+dst+all --recursive
     --include-snapshot-regex '.*_(hourly|daily)'
     --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
-    --exclude-dataset-regex 'tmp.*'` This outputs a tab-separated
-    file with the following columns:
+    --exclude-dataset-regex 'tmp.*'`
+
+    This outputs rows prefixed by a 'cmp: ' marker, containing the
+    following tab-separated columns:
 
     `location creation_iso createtxg rel_name guid root_dataset name
-    creation`. For example:
+    creation`
+
+    Example output row:
 
     `cmp: src 2024-11-06_08:30:05 17435050
     /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src
@@ -1166,7 +1173,11 @@ usage: bzfs [-h] [--recursive]
     'cmp: src' and zero lines starting with the prefix 'cmp: dst'
     then no source snapshots are missing on the destination, and no
     destination snapshots are missing on the source, indicating that the
-    periodic replication and pruning jobs perform as expected.
+    periodic replication and pruning jobs perform as expected. The TSV
+    output is sorted by ZFS creation time within each dataset - the
+    first and last line prefixed with 'cmp: all' contains the metadata
+    of the oldest and latest common snapshot, respectively. Third party
+    scripts can use this info for post-processing.
 
     *Note*: Consider omitting the 'all' flag to reduce noise and
     instead focus on missing snapshots only, like so:

@@ -137,7 +137,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.0rc2
+  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.0rc3
     if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
     strategy:
