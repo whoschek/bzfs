@@ -633,10 +633,10 @@ the oldest and latest common snapshot, respectively.
              "--compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex '.*_(hourly|daily)' "
              "--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex 'tmp.*'`\n\n"
              "This outputs rows prefixed by a 'cmp: ' marker, containing the following tab-separated columns:\n\n"
-             "`location creation_iso createtxg rel_name guid root_dataset name creation`\n\n"
+             "`location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation`\n\n"
              "Example output row:\n\n"
              "`cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src "
-             "tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`\n\n"
+             "/foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`\n\n"
              "If the TSV output contains zero lines starting with the prefix 'cmp: src' and zero lines starting with "
              "the prefix 'cmp: dst' then no source snapshots are missing on the destination, and no destination "
              "snapshots are missing on the source, indicating that the periodic replication and pruning jobs perform "
@@ -3154,16 +3154,16 @@ class Job:
             # print snapshots of current dataset
             for entry in entries:
                 if is_first_row:
-                    tsv_header = "#location creation_iso createtxg rel_name guid root_dataset name creation".split()
-                    log.log(log_stdout, "%s", "\t".join(tsv_header))
+                    tsv_header = "#location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation"
+                    log.log(log_stdout, "%s", tsv_header.replace(" ", "\t"))
                     is_first_row = False
                 location = entry[0]
                 creation, guid, createtxg, name = entry[1].cols
                 root_dataset = dst.root_dataset if location == cmp_choices_items[1] else src.root_dataset
                 rel_name = relativize_dataset(name, root_dataset)
                 creation_iso = isotime_from_unixtime(int(creation))
-                tsv_row = [location, creation_iso, createtxg, rel_name, guid, root_dataset, name, creation]
-                # Example: cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205
+                tsv_row = [location, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name, creation]
+                # Example: cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205
                 log.log(log_stdout, "cmp: %s", "\t".join(tsv_row))
 
     @staticmethod

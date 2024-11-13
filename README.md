@@ -1160,14 +1160,14 @@ usage: bzfs [-h] [--recursive]
     This outputs rows prefixed by a 'cmp: ' marker, containing the
     following tab-separated columns:
 
-    `location creation_iso createtxg rel_name guid root_dataset name
-    creation`
+    `location creation_iso createtxg rel_name guid root_dataset
+    rel_dataset name creation`
 
     Example output row:
 
     `cmp: src 2024-11-06_08:30:05 17435050
     /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src
-    tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`
+    /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`
 
     If the TSV output contains zero lines starting with the prefix
     'cmp: src' and zero lines starting with the prefix 'cmp: dst'

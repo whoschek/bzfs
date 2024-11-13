@@ -2530,16 +2530,19 @@ class LocalTestCase(BZFSTestCase):
                     self.assertEqual(3, len(snapshot_list(job, "all")))
                     lines = snapshot_list(job)
                     self.assertEqual(3, len(lines))
-                    creation = 7
                     rel_name = 3
                     root_dataset = 5
-                    name = 6
+                    rel_dataset = 6
+                    name = 7
                     self.assertEqual("@s1", lines[0].split("\t")[rel_name])
                     self.assertEqual("@s2", lines[1].split("\t")[rel_name])
                     self.assertEqual("@s3", lines[2].split("\t")[rel_name])
                     self.assertEqual(src_root_dataset, lines[0].split("\t")[root_dataset])
                     self.assertEqual(src_root_dataset, lines[1].split("\t")[root_dataset])
                     self.assertEqual(src_root_dataset, lines[2].split("\t")[root_dataset])
+                    self.assertEqual("", lines[0].split("\t")[rel_dataset])
+                    self.assertEqual("", lines[1].split("\t")[rel_dataset])
+                    self.assertEqual("", lines[2].split("\t")[rel_dataset])
                     self.assertEqual(src_root_dataset + "@s1", lines[0].split("\t")[name])
                     self.assertEqual(src_root_dataset + "@s2", lines[1].split("\t")[name])
                     self.assertEqual(src_root_dataset + "@s3", lines[2].split("\t")[name])
