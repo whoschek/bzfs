@@ -3107,7 +3107,7 @@ class Job:
         def zfs_list_snapshot_iterator(r: Remote, datasets: List[str]) -> Generator[str, None, None]:
             """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
             props = self.creation_prefix + "creation,guid,createtxg,name"
-            cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # list snaps sorted by dataset
+            cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
 
             def flush_batch(batch: List[str]) -> Any:
                 return (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines()
