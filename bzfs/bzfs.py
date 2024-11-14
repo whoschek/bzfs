@@ -633,10 +633,10 @@ the oldest and latest common snapshot, respectively.
              "--compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex '.*_(hourly|daily)' "
              "--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex 'tmp.*'`\n\n"
              "This outputs rows prefixed by a 'cmp: ' marker, containing the following tab-separated columns:\n\n"
-             "`location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation`\n\n"
+             "`location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written`\n\n"
              "Example output row:\n\n"
              "`cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src "
-             "/foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205`\n\n"
+             "/foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576`\n\n"
              "If the TSV output contains zero lines starting with the prefix 'cmp: src' and zero lines starting with "
              "the prefix 'cmp: dst' then no source snapshots are missing on the destination, and no destination "
              "snapshots are missing on the source, indicating that the periodic replication and pruning jobs perform "
@@ -3098,7 +3098,7 @@ class Job:
         """Compares source and destination dataset trees recursively wrt. snapshots, for example to check if all
         recently taken snapshots have been successfully replicated by a periodic job. Lists snapshots only contained in
         source (tagged with 'src'), only contained in destination (tagged with 'dst'), and contained in both source
-        and destination (tagged with 'all'), in the form of a tab-separated file, along with other snapshot metadata.
+        and destination (tagged with 'all'), in the form of a TSV file, along with other snapshot metadata.
         Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and
         any number of snapshots."""
         p, log = self.params, self.params.log
@@ -3106,7 +3106,10 @@ class Job:
 
         def zfs_list_snapshot_iterator(r: Remote, datasets: List[str]) -> Generator[str, None, None]:
             """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
-            props = self.creation_prefix + "creation,guid,createtxg,name"
+            written_zfs_property = "written"
+            if self.is_solaris_zfs(r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
+                written_zfs_property = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
+            props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_property},name"
             cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
 
             def flush_batch(batch: List[str]) -> Any:
@@ -3131,7 +3134,7 @@ class Job:
                 rel_dataset = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
                 for line in snapshots:
                     cols = line.split("\t")
-                    creation, guid, createtxg, snapshot_name = cols
+                    creation, guid, createtxg, written, snapshot_name = cols
                     key = (rel_dataset, guid)  # ensures src snaps and dst snaps with the same GUID will be adjacent
                     yield ComparableSnapshot(key, cols)
 
@@ -3147,23 +3150,29 @@ class Job:
                 entries,
                 key=lambda entry: (
                     int(entry[1].cols[0]),
-                    int(entry[1].cols[-2]),
+                    int(entry[1].cols[2]),
                     entry[1].cols[-1][entry[1].cols[-1].index("@") + 1 :],
                 ),
             )
             # print snapshots of current dataset
             for entry in entries:
                 if is_first_row:
-                    tsv_header = "#location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation"
+                    tsv_header = "#location creation_iso createtxg rel_name guid root_dataset rel_dataset name "
+                    tsv_header += "creation written"
+                    # also see https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
                     log.log(log_stdout, "%s", tsv_header.replace(" ", "\t"))
                     is_first_row = False
                 location = entry[0]
-                creation, guid, createtxg, name = entry[1].cols
+                creation, guid, createtxg, written, name = entry[1].cols
                 root_dataset = dst.root_dataset if location == cmp_choices_items[1] else src.root_dataset
                 rel_name = relativize_dataset(name, root_dataset)
                 creation_iso = isotime_from_unixtime(int(creation))
-                tsv_row = [location, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name, creation]
-                # Example: cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205
+                written = "-" if written == "snapshot" else written  # sanitize solaris-11.4 work-around
+                # fmt: off
+                tsv_row = (location, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name,
+                           creation, written)
+                # fmt: on
+                # Example: cmp: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576
                 log.log(log_stdout, "cmp: %s", "\t".join(tsv_row))
 
     @staticmethod

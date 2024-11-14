@@ -2534,6 +2534,8 @@ class LocalTestCase(BZFSTestCase):
                     root_dataset = 5
                     rel_dataset = 6
                     name = 7
+                    creation = 8
+                    written = 9
                     self.assertEqual("@s1", lines[0].split("\t")[rel_name])
                     self.assertEqual("@s2", lines[1].split("\t")[rel_name])
                     self.assertEqual("@s3", lines[2].split("\t")[rel_name])
@@ -2546,6 +2548,17 @@ class LocalTestCase(BZFSTestCase):
                     self.assertEqual(src_root_dataset + "@s1", lines[0].split("\t")[name])
                     self.assertEqual(src_root_dataset + "@s2", lines[1].split("\t")[name])
                     self.assertEqual(src_root_dataset + "@s3", lines[2].split("\t")[name])
+                    self.assertLessEqual(0, int(lines[0].split("\t")[creation]))
+                    self.assertLessEqual(0, int(lines[1].split("\t")[creation]))
+                    self.assertLessEqual(0, int(lines[2].split("\t")[creation]))
+                    if not is_solaris_zfs():
+                        self.assertLessEqual(0, int(lines[0].split("\t")[written]))
+                        self.assertLessEqual(0, int(lines[1].split("\t")[written]))
+                        self.assertLessEqual(0, int(lines[2].split("\t")[written]))
+                    else:
+                        self.assertLessEqual("-", lines[0].split("\t")[written])
+                        self.assertLessEqual("-", lines[1].split("\t")[written])
+                        self.assertLessEqual("-", lines[2].split("\t")[written])
 
                     job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--compare-snapshot-lists", "-r")
                     n_src, n_dst, n_all = stats(job)
