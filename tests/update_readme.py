@@ -35,7 +35,7 @@ def main():
     Before doing so install prerequisites:
     brew install pandoc  # OSX
     sudo apt-get -y install pandoc  # Linux
-    pip install argparse-manpage
+    pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
     """
     if len(sys.argv) != 3:
         print("Usage: cd ~/repos/bzfs; python3 -m tests.update_readme /path/to/bzfs.py path/to/README.md")
