@@ -642,7 +642,8 @@ the oldest and latest common snapshot, respectively.
              "snapshots are missing on the source, indicating that the periodic replication and pruning jobs perform "
              "as expected. The TSV output is sorted by ZFS creation time within each dataset - the first and last line "
              "prefixed with 'cmp: all' contains the metadata of the oldest and latest common snapshot, respectively. "
-             "Third party tools can use this info for post-processing, for example using custom scripts or duckdb.\n\n"
+             "Third party tools can use this info for post-processing, for example using custom scripts or duckdb "
+             "queries.\n\n"
              "*Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing snapshots only, "
              "like so: --compare-snapshot-lists=src+dst \n\n")
     parser.add_argument(

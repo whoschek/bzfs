@@ -1178,7 +1178,7 @@ usage: bzfs [-h] [--recursive]
     first and last line prefixed with 'cmp: all' contains the metadata
     of the oldest and latest common snapshot, respectively. Third party
     tools can use this info for post-processing, for example using
-    custom scripts or duckdb.
+    custom scripts or duckdb queries.
 
     *Note*: Consider omitting the 'all' flag to reduce noise and
     instead focus on missing snapshots only, like so:
