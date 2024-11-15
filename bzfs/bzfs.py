@@ -3138,7 +3138,7 @@ class Job:
                     key = (rel_dataset, guid)  # ensures src snaps and dst snaps with the same GUID will be adjacent
                     yield ComparableSnapshot(key, cols)
 
-        # setup streaming pipeline
+        # setup streaming pipeline. merge_itr returns lines sorted by rel_dataset, GUID
         src_snap_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
         dst_snap_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
         merge_itr = self.merge_sorted_iterators(cmp_choices_items, p.compare_snapshot_lists, src_snap_itr, dst_snap_itr)
