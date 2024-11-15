@@ -1626,7 +1626,7 @@ class Job:
                 self.append_exception(e, task_name, dataset)
             finally:
                 elapsed_nanos = int(time.time_ns() - start_time_nanos)
-                log.debug(f"%s %s took %s", task_name, dataset, human_readable_duration(elapsed_nanos))
+                log.debug(task_name + " done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
         return failed
 
     def run_task(self) -> None:
