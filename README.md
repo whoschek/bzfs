@@ -1177,7 +1177,8 @@ usage: bzfs [-h] [--recursive]
     output is sorted by ZFS creation time within each dataset - the
     first and last line prefixed with 'cmp: all' contains the metadata
     of the oldest and latest common snapshot, respectively. Third party
-    scripts can use this info for post-processing.
+    tools can use this info for post-processing, for example using
+    custom scripts or duckdb.
 
     *Note*: Consider omitting the 'all' flag to reduce noise and
     instead focus on missing snapshots only, like so:
