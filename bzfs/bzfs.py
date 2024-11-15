@@ -1599,7 +1599,6 @@ class Job:
         process_dataset: Callable[[str], bool],  # lambda
         skip_tree_on_error: Callable[[str], bool],  # lambda
         task_name: str,
-        task_description: str,
     ) -> bool:
         """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling + retries.
         Assumes that the input dataset list is sorted."""
@@ -1612,6 +1611,7 @@ class Job:
                 # skip_dataset has been deleted by some third party while we're running
                 continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
             skip_dataset = DONT_SKIP_DATASET
+            start_time_nanos = time.time_ns()
             try:
                 if not self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset)):
                     skip_dataset = dataset
@@ -1622,7 +1622,10 @@ class Job:
                 elif p.skip_on_error == "tree" or skip_tree_on_error(dataset):
                     skip_dataset = dataset
                 log.error("%s", str(e))
-                self.append_exception(e, task_name, task_description)
+                self.append_exception(e, task_name, dataset)
+            finally:
+                elapsed_nanos = int(time.time_ns() - start_time_nanos)
+                log.debug(f"%s %s took %s", task_name, dataset, human_readable_duration(elapsed_nanos))
         return failed
 
     def run_task(self) -> None:
@@ -1662,8 +1665,7 @@ class Job:
                 skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
                     replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
                 ],
-                task_name="replicating",
-                task_description=task_description,
+                task_name="Replicating",
             )
 
         if failed or not (
@@ -1743,7 +1745,6 @@ class Job:
                     process_dataset=lambda dataset: delete_destination_snapshots(dataset),
                     skip_tree_on_error=lambda dataset: False,
                     task_name="--delete-dst-snapshots",
-                    task_description=task_description,
                 )
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
