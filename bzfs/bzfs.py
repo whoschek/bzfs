@@ -64,14 +64,15 @@ from logging import Logger
 from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import List, Dict, Set, Iterable, Tuple, Any, Optional, Union, Callable, Generator
+from typing import Iterable, Dict, List, Set, Tuple, Any, Callable, Generator, Optional, Union
 
 __version__ = "1.5.0-dev"
 prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
-if sys.version_info < (3, 7):
-    print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
+min_python_version = (3, 7)
+if sys.version_info < min_python_version:
+    print(f"ERROR: {prog_name} requires Python version >= {'.'.join(map(str, min_python_version))}!")
     sys.exit(die_status)
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 disable_prg = "-"
