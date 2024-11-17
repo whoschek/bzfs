@@ -249,7 +249,7 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.xprint(log, "", run=False)
         bzfs.xprint(log, None)
 
-    def test_delete_stale_ssh_socket_files(self):
+    def test_delete_stale_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             new_socket_file = os.path.join(tmpdir, "s_new_socket_file")
             Path(new_socket_file).touch()
@@ -262,7 +262,7 @@ class TestHelperFunctions(unittest.TestCase):
             non_socket_file = os.path.join(tmpdir, "f")
             Path(non_socket_file).touch()
 
-            bzfs.delete_stale_ssh_socket_files(tmpdir, "s")
+            bzfs.delete_stale_files(tmpdir, "s")
 
             self.assertTrue(os.path.exists(new_socket_file))
             self.assertFalse(os.path.exists(stale_socket_file))

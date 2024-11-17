@@ -47,6 +47,7 @@ import pwd
 import re
 import random
 import shlex
+import shutil
 import socket
 import stat
 import subprocess
@@ -882,7 +883,9 @@ the oldest and latest common snapshot, respectively.
         help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "
              "that is used by default writes log files there, in addition to the console. The current.log symlink "
              "always points to the most recent log file. The current.pv symlink always points to the most recent "
-             "data transfer monitoring log. Run 'tail -f' on both symlinks to follow what's currently going on.\n\n")
+             "data transfer monitoring log. Run 'tail --follow=name --max-unchanged-stats=1' on both symlinks to "
+             "follow what's currently going on. The current.dir symlink always points to the sub directory containing "
+             "the most recent log file.\n\n")
     h_fix = ("The path name of the log file on local host is "
              "`${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-suffix}-<random>.log`. "
              "Example: `--log-file-prefix=zrun_ --log-file-suffix=_daily` will generate log file names such as "
@@ -1045,9 +1048,12 @@ class LogParams:
             self.log_level = "DEBUG"
         else:
             self.log_level = "INFO"
+        self.log_config_file = args.log_config_file
+        self.log_config_vars = dict(var.split(":", 1) for var in args.log_config_var)
         self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.home_dir: str = get_home_directory()
-        self.log_dir: str = args.log_dir if args.log_dir else f"{self.home_dir}/{prog_name}-logs"
+        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, prog_name + "-logs")
+        self.log_dir: str = os.path.join(log_parent_dir, self.timestamp[0 : self.timestamp.index("_")])  # 2024-09-03
         os.makedirs(self.log_dir, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
         self.log_file_suffix = args.log_file_suffix
@@ -1057,10 +1063,20 @@ class LogParams:
         os.close(fd)
         self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
         Path(self.pv_log_file).touch()
-        create_symlink(self.log_file, self.log_dir, "current.log")
-        create_symlink(self.pv_log_file, self.log_dir, "current.pv")
-        self.log_config_file = args.log_config_file
-        self.log_config_vars = dict(var.split(":", 1) for var in args.log_config_var)
+
+        # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
+        # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
+        dot_current_dir = os.path.join(log_parent_dir, ".current")
+        current_dir = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
+        os.makedirs(current_dir, exist_ok=True)
+        create_symlink(self.log_file, current_dir, "current.log")
+        create_symlink(self.pv_log_file, current_dir, "current.pv")
+        create_symlink(self.log_dir, current_dir, "current.dir")
+        dst = "current"
+        dst_file = os.path.join(current_dir, dst)
+        os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
+        os.replace(dst_file, os.path.join(log_parent_dir, dst))  # atomic rename
+        delete_stale_files(dot_current_dir, prefix="", secs=60, dirs=True, exclude=os.path.basename(current_dir))
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -2403,7 +2419,7 @@ class Job:
             os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
             os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             prefix = "s"
-            delete_stale_ssh_socket_files(socket_dir, prefix)
+            delete_stale_files(socket_dir, prefix)
 
             def sanitize(name: str) -> str:
                 # replace any whitespace, /, $, \, @ with a ~ tilde char
@@ -3535,15 +3551,18 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     return lst
 
 
-def delete_stale_ssh_socket_files(socket_dir: str, prefix: str) -> None:
-    """Cleans up obsolete ssh socket files that have been caused by abnormal termination, e.g. OS crash."""
-    secs = 30 * 24 * 60 * 60
+def delete_stale_files(root_dir: str, prefix: str, secs: int = 30 * 24 * 60 * 60, dirs=False, exclude=None) -> None:
+    """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
     now = time.time()
-    for filename in os.listdir(socket_dir):
-        file = os.path.join(socket_dir, filename)
+    for entry in os.scandir(root_dir):
+        if entry.name == exclude or not entry.name.startswith(prefix):
+            continue
         try:
-            if filename.startswith(prefix) and not os.path.isdir(file) and now - os.path.getmtime(file) >= secs:
-                os.remove(file)
+            if ((dirs and entry.is_dir()) or (not dirs and not entry.is_dir())) and now - entry.stat().st_mtime >= secs:
+                if dirs:
+                    shutil.rmtree(entry.path, ignore_errors=True)
+                else:
+                    os.remove(entry.path)
         except FileNotFoundError:
             pass  # harmless
 
@@ -3693,13 +3712,8 @@ def get_home_directory() -> str:
 
 
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
-    """For parallel usage, ensures there is no time window when the symlink does not exist; uses atomic os.rename()."""
-    uniq = f".tmp_{os.getpid()}_{time.time_ns()}_{uuid.uuid4().hex}"
-    fd, temp_link = tempfile.mkstemp(suffix=".tmp", prefix=uniq, dir=dst_dir)
-    os.close(fd)
-    os.remove(temp_link)
-    os.symlink(os.path.basename(src), temp_link)
-    os.rename(temp_link, os.path.join(dst_dir, dst))
+    rel_path = os.path.relpath(src, start=dst_dir)
+    os.symlink(rel_path, os.path.join(dst_dir, dst))
 
 
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:

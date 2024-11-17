@@ -1697,7 +1697,9 @@ usage: bzfs [-h] [--recursive]
     files there, in addition to the console. The current.log symlink
     always points to the most recent log file. The current.pv symlink
     always points to the most recent data transfer monitoring log. Run
-    'tail -f' on both symlinks to follow what's currently going on.
+    'tail --follow=name --max-unchanged-stats=1' on both symlinks to
+    follow what's currently going on. The current.dir symlink always
+    points to the sub directory containing the most recent log file.
 
 <!-- -->
 
