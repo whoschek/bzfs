@@ -240,14 +240,19 @@ datasets:
 --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
 --exclude-dataset-regex 'tmp.*'`
 
-If the resulting TSV output contains zero lines starting with the prefix
-'cmp: src' and zero lines starting with the prefix 'cmp: dst' then
-no source snapshots are missing on the destination, and no destination
+If the resulting TSV output file contains zero lines starting with the
+prefix 'src' and zero lines starting with the prefix 'dst' then no
+source snapshots are missing on the destination, and no destination
 snapshots are missing on the source, indicating that the periodic
-replication and pruning jobs perform as expected. The TSV output is
+replication and pruning jobs perform as expected. The TSV output file is
 sorted by ZFS creation time within each dataset - the first and last
-line prefixed with 'cmp: all' contains the metadata of the oldest and
-latest common snapshot, respectively.
+line prefixed with 'all' contains the metadata of the oldest and
+latest common snapshot, respectively. The --compare-snapshot-lists
+option also directly logs various summary stats, such as the metadata of
+the latest common snapshot, latest snapshots and oldest snapshots, as
+well as the time diff between the latest common snapshot and latest
+snapshot only in src (and dst), as well as how many src snapshots and
+how many GB of data are missing on dst, etc.
 
 * Example with further options:
 
@@ -1193,28 +1198,34 @@ usage: bzfs [-h] [--recursive]
     --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
     --exclude-dataset-regex 'tmp.*'`
 
-    This outputs rows prefixed by a 'cmp: ' marker, containing the
-    following tab-separated columns:
+    This outputs a TSV file containing the following columns:
 
     `location creation_iso createtxg rel_name guid root_dataset
     rel_dataset name creation written`
 
     Example output row:
 
-    `cmp: src 2024-11-06_08:30:05 17435050
+    `src 2024-11-06_08:30:05 17435050
     /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src
     /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576`
 
-    If the TSV output contains zero lines starting with the prefix
-    'cmp: src' and zero lines starting with the prefix 'cmp: dst'
-    then no source snapshots are missing on the destination, and no
-    destination snapshots are missing on the source, indicating that the
-    periodic replication and pruning jobs perform as expected. The TSV
-    output is sorted by ZFS creation time within each dataset - the
-    first and last line prefixed with 'cmp: all' contains the metadata
-    of the oldest and latest common snapshot, respectively. Third party
-    tools can use this info for post-processing, for example using
-    custom scripts or duckdb queries.
+    If the TSV output file contains zero lines starting with the prefix
+    'src' and zero lines starting with the prefix 'dst' then no
+    source snapshots are missing on the destination, and no destination
+    snapshots are missing on the source, indicating that the periodic
+    replication and pruning jobs perform as expected. The TSV output is
+    sorted by ZFS creation time within each dataset - the first and last
+    line prefixed with 'cmp: all' contains the metadata of the oldest
+    and latest common snapshot, respectively. Third party tools can use
+    this info for post-processing, for example using custom scripts or
+    duckdb queries.
+
+    The --compare-snapshot-lists option also directly logs various
+    summary stats, such as the metadata of the latest common snapshot,
+    latest snapshots and oldest snapshots, as well as the time diff
+    between the latest common snapshot and latest snapshot only in src
+    (and dst), as well as how many src snapshots and how many GB of data
+    are missing on dst, etc.
 
     *Note*: Consider omitting the 'all' flag to reduce noise and
     instead focus on missing snapshots only, like so:

@@ -15,6 +15,8 @@
 # limitations under the License.
 
 import fcntl
+import glob
+import itertools
 import json
 import os
 import platform
@@ -2485,16 +2487,28 @@ class LocalTestCase(BZFSTestCase):
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
                 self.assertSnapshots(dst_root_dataset, 1, "s")
 
+    def test_compare_snapshot_lists_with_nonexisting_source(self):
+        destroy(src_root_dataset, recursive=True)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--compare-snapshot-lists",
+            expected_status=die_status,
+        )
+
     def test_compare_snapshot_lists(self):
         def snapshot_list(_job, location=""):
-            with open(_job.params.log_params.log_file, "r", encoding="utf-8") as fd:
-                return [line.strip() for line in fd if line.startswith("cmp: " + location)]
+            log_file = _job.params.log_params.log_file
+            tsv_file = glob.glob(log_file[0 : log_file.rindex(".log")] + ".cmp/*.tsv")[0]
+            with open(tsv_file, "r", encoding="utf-8") as fd:
+                return [line.strip() for line in fd if line.startswith(location) and not line.startswith("#")]
 
         def stats(_job):
             _lines = snapshot_list(_job)
-            _n_src = sum(1 for line in _lines if line.startswith("cmp: src"))
-            _n_dst = sum(1 for line in _lines if line.startswith("cmp: dst"))
-            _n_all = sum(1 for line in _lines if line.startswith("cmp: all"))
+            _n_src = sum(1 for line in _lines if line.startswith("src"))
+            _n_dst = sum(1 for line in _lines if line.startswith("dst"))
+            _n_all = sum(1 for line in _lines if line.startswith("all"))
             return _n_src, _n_dst, _n_all
 
         for i in range(0, 2):
@@ -2522,6 +2536,18 @@ class LocalTestCase(BZFSTestCase):
                     self.assertEqual(0, n_all)
 
                     self.setup_basic()
+                    cmp_choices = []
+                    for w in range(0, len(bzfs.cmp_choices_items)):
+                        cmp_choices += map(lambda c: "+".join(c), itertools.combinations(bzfs.cmp_choices_items, w + 1))
+                    for cmp in cmp_choices:
+                        job = self.run_bzfs(
+                            src_root_dataset, dst_root_dataset, "--skip-replication", f"--compare-snapshot-lists={cmp}"
+                        )
+                        n_src, n_dst, n_all = stats(job)
+                        self.assertEqual(3 if "src" in cmp else 0, n_src)
+                        self.assertEqual(0, n_dst)
+                        self.assertEqual(0, n_all)
+
                     job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--compare-snapshot-lists")
                     n_src, n_dst, n_all = stats(job)
                     self.assertEqual(0, n_src)
@@ -2560,11 +2586,14 @@ class LocalTestCase(BZFSTestCase):
                         self.assertLessEqual("-", lines[1].split("\t")[written])
                         self.assertLessEqual("-", lines[2].split("\t")[written])
 
-                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--compare-snapshot-lists", "-r")
-                    n_src, n_dst, n_all = stats(job)
-                    self.assertEqual(0, n_src)
-                    self.assertEqual(0, n_dst)
-                    self.assertEqual(3 + 3 + 3, n_all)
+                    for cmp in cmp_choices:
+                        job = self.run_bzfs(src_root_dataset, dst_root_dataset, f"--compare-snapshot-lists={cmp}", "-r")
+                        n_src, n_dst, n_all = stats(job)
+                        self.assertEqual(0, n_src)
+                        self.assertEqual(0, n_dst)
+                        self.assertEqual(3 + 3 + 3 if "all" in cmp else 0, n_all)
+
+                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--compare-snapshot-lists", dry_run=True)
 
                     job = self.run_bzfs(
                         src_root_dataset,

@@ -420,20 +420,41 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_human_readable_duration(self):
         ms = 1000_000
-        self.assertEqual("0 ns", bzfs.human_readable_duration(0))
-        self.assertEqual("3 ns", bzfs.human_readable_duration(3))
-        self.assertEqual("3 μs", bzfs.human_readable_duration(3 * 1000))
-        self.assertEqual("3 ms", bzfs.human_readable_duration(3 * ms))
-        self.assertEqual("1 s", bzfs.human_readable_duration(1000 * ms))
-        self.assertEqual("3 s", bzfs.human_readable_duration(3000 * ms))
-        self.assertEqual("3 m", bzfs.human_readable_duration(3000 * 60 * ms))
-        self.assertEqual("3 h", bzfs.human_readable_duration(3000 * 60 * 60 * ms))
-        self.assertEqual("30 h", bzfs.human_readable_duration(3000 * 60 * 60 * 10 * ms))
-        self.assertEqual("300 h", bzfs.human_readable_duration(3000 * 60 * 60 * 100 * ms))
-        self.assertEqual("125 ns", bzfs.human_readable_duration(125))
-        self.assertEqual("125 μs", bzfs.human_readable_duration(125 * 1000))
-        self.assertEqual("125 ms", bzfs.human_readable_duration(125 * 1000 * 1000))
-        self.assertEqual("2 m", bzfs.human_readable_duration(125 * 1000 * 1000 * 1000))
+        self.assertEqual("0 ns", bzfs.human_readable_duration(0, long=False))
+        self.assertEqual("3 ns", bzfs.human_readable_duration(3, long=False))
+        self.assertEqual("3 μs", bzfs.human_readable_duration(3 * 1000, long=False))
+        self.assertEqual("3 ms", bzfs.human_readable_duration(3 * ms, long=False))
+        self.assertEqual("1 s", bzfs.human_readable_duration(1000 * ms, long=False))
+        self.assertEqual("3 s", bzfs.human_readable_duration(3000 * ms, long=False))
+        self.assertEqual("3 m", bzfs.human_readable_duration(3000 * 60 * ms, long=False))
+        self.assertEqual("3 h", bzfs.human_readable_duration(3000 * 60 * 60 * ms, long=False))
+        self.assertEqual("1 d", bzfs.human_readable_duration(3000 * 60 * 60 * 10 * ms, long=False))
+        self.assertEqual("12 d", bzfs.human_readable_duration(3000 * 60 * 60 * 100 * ms, long=False))
+        self.assertEqual("125 ns", bzfs.human_readable_duration(125, long=False))
+        self.assertEqual("125 μs", bzfs.human_readable_duration(125 * 1000, long=False))
+        self.assertEqual("125 ms", bzfs.human_readable_duration(125 * 1000 * 1000, long=False))
+        self.assertEqual("2 m", bzfs.human_readable_duration(125 * 1000 * 1000 * 1000, long=False))
+
+        self.assertEqual("0 s", bzfs.human_readable_duration(0, unit="s", long=False))
+        self.assertEqual("3 s", bzfs.human_readable_duration(3, unit="s", long=False))
+        self.assertEqual("3 m", bzfs.human_readable_duration(3 * 60, unit="s", long=False))
+        self.assertEqual("0 h", bzfs.human_readable_duration(0, unit="h", long=False))
+        self.assertEqual("3 h", bzfs.human_readable_duration(3, unit="h", long=False))
+        self.assertEqual("7 d", bzfs.human_readable_duration(3 * 60, unit="h", long=False))
+        with self.assertRaises(ValueError):
+            bzfs.human_readable_duration(3, unit="hhh", long=False)  # invalid unit
+
+        self.assertEqual("0 s (0 seconds)", bzfs.human_readable_duration(0, unit="s", long=True))
+        self.assertEqual("3 m (180 seconds)", bzfs.human_readable_duration(3 * 60, unit="s", long=True))
+        self.assertEqual("3 h (10800 seconds)", bzfs.human_readable_duration(3 * 60, unit="m", long=True))
+        self.assertEqual("3 ms (0 seconds)", bzfs.human_readable_duration(3, unit="ms", long=True))
+        self.assertEqual("3 ms (0 seconds)", bzfs.human_readable_duration(3 * 1000 * 1000, long=True))
+
+        self.assertEqual("0 s (0 seconds)", bzfs.human_readable_duration(-0, unit="s", long=True))
+        self.assertEqual("-3 m (-180 seconds)", bzfs.human_readable_duration(-3 * 60, unit="s", long=True))
+        self.assertEqual("-3 h (-10800 seconds)", bzfs.human_readable_duration(-3 * 60, unit="m", long=True))
+        self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3, unit="ms", long=True))
+        self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3 * 1000 * 1000, long=True))
 
 
 #############################################################################
