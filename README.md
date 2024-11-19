@@ -244,15 +244,16 @@ If the resulting TSV output file contains zero lines starting with the
 prefix 'src' and zero lines starting with the prefix 'dst' then no
 source snapshots are missing on the destination, and no destination
 snapshots are missing on the source, indicating that the periodic
-replication and pruning jobs perform as expected. The TSV output file is
-sorted by ZFS creation time within each dataset - the first and last
-line prefixed with 'all' contains the metadata of the oldest and
-latest common snapshot, respectively. The --compare-snapshot-lists
-option also directly logs various summary stats, such as the metadata of
-the latest common snapshot, latest snapshots and oldest snapshots, as
-well as the time diff between the latest common snapshot and latest
-snapshot only in src (and dst), as well as how many src snapshots and
-how many GB of data are missing on dst, etc.
+replication and pruning jobs perform as expected. The TSV output is
+sorted by dataset, and by ZFS creation time within each dataset - the
+first and last line prefixed with 'all' contains the metadata of the
+oldest and latest common snapshot, respectively. The
+--compare-snapshot-lists option also directly logs various summary
+stats, such as the metadata of the latest common snapshot, latest
+snapshots and oldest snapshots, as well as the time diff between the
+latest common snapshot and latest snapshot only in src (and only in
+dst), as well as how many src snapshots and how many GB of data are
+missing on dst, etc.
 
 * Example with further options:
 
@@ -625,10 +626,11 @@ usage: bzfs [-h] [--recursive]
     b) Value is 'false': Exclude the dataset and its descendants.
 
     c) Value is a comma-separated list of fully qualified host names
-    (no spaces, for example: 'tiger.example.com,shark.example.com'):
-    Include the dataset if the fully qualified host name of the host
-    executing bzfs is contained in the list, otherwise exclude the
-    dataset and its descendants.
+    (no spaces, for example:
+    'store001.example.com,store002.example.com'): Include the dataset
+    if the fully qualified host name of the host executing bzfs is
+    contained in the list, otherwise exclude the dataset and its
+    descendants.
 
     If a dataset is excluded its descendants are automatically excluded
     too, and the property values of the descendants are ignored because
@@ -1214,18 +1216,18 @@ usage: bzfs [-h] [--recursive]
     source snapshots are missing on the destination, and no destination
     snapshots are missing on the source, indicating that the periodic
     replication and pruning jobs perform as expected. The TSV output is
-    sorted by ZFS creation time within each dataset - the first and last
-    line prefixed with 'cmp: all' contains the metadata of the oldest
-    and latest common snapshot, respectively. Third party tools can use
-    this info for post-processing, for example using custom scripts or
-    duckdb queries.
+    sorted by rel_dataset, and by ZFS creation time within each
+    rel_dataset - the first and last line prefixed with 'all' contains
+    the metadata of the oldest and latest common snapshot, respectively.
+    Third party tools can use this info for post-processing, for example
+    using custom scripts using 'csplit' or duckdb analytics queries.
 
     The --compare-snapshot-lists option also directly logs various
     summary stats, such as the metadata of the latest common snapshot,
     latest snapshots and oldest snapshots, as well as the time diff
     between the latest common snapshot and latest snapshot only in src
-    (and dst), as well as how many src snapshots and how many GB of data
-    are missing on dst, etc.
+    (and only in dst), as well as how many src snapshots and how many GB
+    of data are missing on dst, etc.
 
     *Note*: Consider omitting the 'all' flag to reduce noise and
     instead focus on missing snapshots only, like so:

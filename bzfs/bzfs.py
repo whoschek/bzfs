@@ -55,7 +55,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import uuid
 from argparse import Namespace
 from collections import defaultdict, Counter
 from contextlib import redirect_stderr
@@ -259,12 +258,12 @@ excluding temporary datasets:
 
 If the resulting TSV output file contains zero lines starting with the prefix 'src' and zero lines starting with the 
 prefix 'dst' then no source snapshots are missing on the destination, and no destination snapshots are missing 
-on the source, indicating that the periodic replication and pruning jobs perform as expected. The TSV output file is 
-sorted by ZFS creation time within each dataset - the first and last line prefixed with 'all' contains the metadata of 
-the oldest and latest common snapshot, respectively. The --compare-snapshot-lists option also directly logs various 
-summary stats, such as the metadata of the latest common snapshot, latest snapshots and oldest snapshots, as well as 
-the time diff between the latest common snapshot and latest snapshot only in src (and dst), as well as how many src 
-snapshots and how many GB of data are missing on dst, etc.
+on the source, indicating that the periodic replication and pruning jobs perform as expected. The TSV output is sorted 
+by dataset, and by ZFS creation time within each dataset - the first and last line prefixed with 'all' contains the 
+metadata of the oldest and latest common snapshot, respectively. The --compare-snapshot-lists option also directly 
+logs various summary stats, such as the metadata of the latest common snapshot, latest snapshots and oldest snapshots, 
+as well as the time diff between the latest common snapshot and latest snapshot only in src (and only in dst), as well 
+as how many src snapshots and how many GB of data are missing on dst, etc.
 
 * Example with further options:
 
@@ -344,8 +343,9 @@ snapshots and how many GB of data are missing on dst, etc.
              "a) Value is 'true' or '-' or empty string or the property is missing: Include the dataset.\n\n"
              "b) Value is 'false': Exclude the dataset and its descendants.\n\n"
              "c) Value is a comma-separated list of fully qualified host names (no spaces, for example: "
-             "'tiger.example.com,shark.example.com'): Include the dataset if the fully qualified host name of the host "
-             f"executing {prog_name} is contained in the list, otherwise exclude the dataset and its descendants.\n\n"
+             "'store001.example.com,store002.example.com'): Include the dataset if the fully qualified host name of "
+             f"the host executing {prog_name} is contained in the list, otherwise exclude the dataset and its "
+             "descendants.\n\n"
              "If a dataset is excluded its descendants are automatically excluded too, and the property values of the "
              "descendants are ignored because exclude takes precedence over include.\n\n"
              "Examples: 'syncoid:sync', 'com.example.eng.project.x:backup'\n\n"
@@ -668,14 +668,14 @@ snapshots and how many GB of data are missing on dst, etc.
              "If the TSV output file contains zero lines starting with the prefix 'src' and zero lines starting with "
              "the prefix 'dst' then no source snapshots are missing on the destination, and no destination "
              "snapshots are missing on the source, indicating that the periodic replication and pruning jobs perform "
-             "as expected. The TSV output is sorted by ZFS creation time within each dataset - the first and last line "
-             "prefixed with 'cmp: all' contains the metadata of the oldest and latest common snapshot, respectively. "
-             "Third party tools can use this info for post-processing, for example using custom scripts or duckdb "
-             "queries.\n\n"
+             "as expected. The TSV output is sorted by rel_dataset, and by ZFS creation time within each rel_dataset "
+             "- the first and last line prefixed with 'all' contains the metadata of the oldest and latest common "
+             "snapshot, respectively. Third party tools can use this info for post-processing, for example using "
+             "custom scripts using 'csplit' or duckdb analytics queries.\n\n"
              "The --compare-snapshot-lists option also directly logs various summary stats, such as the metadata of "
              "the latest common snapshot, latest snapshots and oldest snapshots, as well as the time diff between the "
-             "latest common snapshot and latest snapshot only in src (and dst), as well as how many src snapshots and "
-             "how many GB of data are missing on dst, etc.\n\n"
+             "latest common snapshot and latest snapshot only in src (and only in dst), as well as how many src "
+             "snapshots and how many GB of data are missing on dst, etc.\n\n"
              "*Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing snapshots only, "
              "like so: --compare-snapshot-lists=src+dst \n\n")
     parser.add_argument(
@@ -3280,8 +3280,8 @@ class Job:
                 )
             )
             now = time.time()
+            latcom = "latest common snapshot"
             for loc in all_src_dst:
-                latcom = "latest common snapshot"
                 s = stats[loc]
                 msgs.append(f"{prefix} Latest snapshot only in {loc}: {s.latest_snapshot_row_str or 'n/a'}")
                 msgs.append(f"{prefix} Oldest snapshot only in {loc}: {s.oldest_snapshot_row_str or 'n/a'}")
@@ -3331,8 +3331,8 @@ class Job:
             src_only = rel_datasets["src"].difference(rel_datasets["dst"])
             dst_only = rel_datasets["dst"].difference(rel_datasets["src"])
             for rel_dataset in rel_src_or_dst:
-                cmp = "src" if rel_dataset in src_only else "dst" if rel_dataset in dst_only else "all"
-                row = [cmp, rel_dataset]
+                loc = "src" if rel_dataset in src_only else "dst" if rel_dataset in dst_only else "all"
+                row = [loc, rel_dataset]
                 if not p.dry_run:
                     fd.write("\t".join(row) + "\n")
         os.rename(tmp_tsv_file, tsv_file)
