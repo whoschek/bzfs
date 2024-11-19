@@ -3482,12 +3482,12 @@ class Job:
         return re.compile(zfs_dataset_busy_if_mods), re.compile(zfs_dataset_busy_if_send)
 
     def run_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**32
+        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
     ) -> None:
         collections.deque(self.itr_ssh_cmd_batched(r, cmd, cmd_args, func, max_batch_items=max_batch_items), maxlen=0)
 
     def itr_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**32
+        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
     ) -> Any:
         """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
