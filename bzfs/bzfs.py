@@ -57,6 +57,7 @@ import tempfile
 import time
 from argparse import Namespace
 from collections import defaultdict, Counter
+from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import redirect_stderr
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -677,7 +678,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "latest common snapshot and latest snapshot only in src (and only in dst), as well as how many src "
              "snapshots and how many GB of data are missing on dst, etc.\n\n"
              "*Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing snapshots only, "
-             "like so: --compare-snapshot-lists=src+dst \n\n")
+             "like so: --compare-snapshot-lists=src+dst \n\n"
+             "*Note*: The source can also be an empty dataset, such as the hardcoded virtual dataset named "
+             f"'{dummy_dataset}'.\n\n"
+             "*Note*: --compare-snapshot-lists is typically *much* faster than standard 'zfs list -t snapshot' CLI "
+             "usage because the former issues I/O requests with a higher degree of parallelism than the latter.\n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -1197,6 +1202,8 @@ class Params:
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
+        self.getconf_program: str = self.program_name("getconf")  # print number of CPUs on POSIX except Solaris
+        self.psrinfo_program: str = self.program_name("psrinfo")  # print number of CPUs on Solaris
         self.mbuffer_program: str = self.program_name(args.mbuffer_program)
         self.mbuffer_program_opts: List[str] = self.split_args(args.mbuffer_program_opts)
         self.ps_program: str = self.program_name(args.ps_program)
@@ -1214,8 +1221,10 @@ class Params:
 
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
-        self.max_datasets_per_batch_on_list_snaps = int(getenv_any("max_datasets_per_batch_on_list_snaps", 1000))
+        self.max_datasets_per_batch_on_list_snaps = int(getenv_any("max_datasets_per_batch_on_list_snaps", 1024))
+        self.max_datasets_per_minibatch_on_list_snaps = int(getenv_any("max_datasets_per_minibatch_on_list_snaps", -1))
 
+        self.os_cpu_count: int = os.cpu_count()
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
         self.python_version: str = sys.version
@@ -1437,6 +1446,8 @@ class Job:
         self.first_exception: Optional[BaseException] = None
         self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
         self.zfs_dataset_busy_if_mods, self.zfs_dataset_busy_if_send = self.get_is_zfs_dataset_busy_regexes()  # Pattern
+        self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
+        self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
 
         self.is_test_mode: bool = False  # for testing only
@@ -1617,6 +1628,25 @@ class Job:
             zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = fix_solaris_raw_mode(zfs_send_program_opts)
         p.curr_zfs_send_program_opts = zfs_send_program_opts
+
+        self.max_workers = {}
+        self.max_datasets_per_minibatch_on_list_snaps = {}
+        for r in [src, dst]:
+            cpus = max(1, int(p.available_programs[r.location].get("getconf_cpu_count", 8)))
+            # ssh default is max 10 multiplexed sessions over the same TCP connection per sshd_config(5) MaxSessions
+            max_workers = cpus if not r.ssh_user_host else min(cpus, 8 if src.cache_key() != dst.cache_key() else 4)
+            self.max_workers[r.location] = max_workers
+            max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
+            if max_datasets_per_minibatch <= 0:
+                bs = p.max_datasets_per_batch_on_list_snaps  # 1024 by default
+                max_datasets_per_minibatch = max(2 * cpus, bs // cpus) if r.ssh_user_host else 2 * cpus
+            self.max_datasets_per_minibatch_on_list_snaps[r.location] = max_datasets_per_minibatch
+            log.trace(
+                f"max_datasets_per_batch_on_list_snaps: {p.max_datasets_per_batch_on_list_snaps}, "
+                f"max_datasets_per_minibatch_on_list_snaps: {max_datasets_per_minibatch}, "
+                f"max_workers: {max_workers}",
+                f"loc: {r.location}, ",
+            )
         log.trace("Validated Param values: %s", pretty_print_formatter(self.params))
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
@@ -1823,7 +1853,8 @@ class Job:
             cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
 
             def flush_batch(batch: List[str]) -> None:
-                datasets_having_snapshots = self.run_ssh_command(dst, log_trace, cmd=cmd + batch).splitlines()
+                minibatch_sz = self.max_datasets_per_minibatch_on_list_snaps[dst.location]
+                datasets_having_snapshots = list(self.itr_ssh_command_parallel(dst, cmd, batch, executor, minibatch_sz))
                 if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                     replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
                 datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
@@ -1846,7 +1877,8 @@ class Job:
                     # Run flush_batch(orphans) without creating a command line that's too big for the OS to handle.
                     # This updates dst_datasets_having_snapshots for real use in the second run.
                     orphans = isorted(orphans)
-                    self.run_ssh_cmd_batched(dst, cmd, orphans, flush_batch, p.max_datasets_per_batch_on_list_snaps)
+                    with ThreadPoolExecutor(max_workers=self.max_workers[dst.location]) as executor:
+                        self.run_ssh_cmd_batched(dst, cmd, orphans, flush_batch, p.max_datasets_per_batch_on_list_snaps)
                 else:
                     self.delete_datasets(dst, orphans)
                     dst_datasets = isorted(set(dst_datasets).difference(orphans))
@@ -3177,14 +3209,17 @@ class Job:
                 written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
             props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
             cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
-
-            def flush_batch(batch: List[str]) -> Any:
-                return (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines()
-
-            datasets = sorted(datasets)
-            for itr in self.itr_ssh_cmd_batched(r, cmd, datasets, flush_batch, p.max_datasets_per_batch_on_list_snaps):
-                for line in itr:
-                    yield line
+            max_datasets_per_batch = p.max_datasets_per_batch_on_list_snaps
+            max_datasets_per_minibatch = self.max_datasets_per_minibatch_on_list_snaps[r.location]
+            with ThreadPoolExecutor(max_workers=self.max_workers[r.location]) as executor:
+                for itr in self.itr_ssh_cmd_batched(
+                    r,
+                    cmd,
+                    sorted(datasets),
+                    lambda batch: self.itr_ssh_command_parallel(r, cmd, batch, executor, max_datasets_per_minibatch),
+                    max_datasets_per_batch,
+                ):
+                    yield from itr
 
         def snapshot_iterator(
             root_dataset: str, sorted_itr: Generator[str, None, None]
@@ -3367,8 +3402,11 @@ class Job:
         for i, item in enumerate(choices):
             if item in choice:
                 flags |= 1 << i
-        src_next = next(src_itr, None)
-        dst_next = next(dst_itr, None)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            # perf: fetch initial results in parallel from src and dst in order to reduce latency
+            future: Future = executor.submit(lambda: next(src_itr, None))  # async 'zfs list -t snapshot' on src
+            dst_next = next(dst_itr, None)  # blocks until 'zfs list -t snapshot' CLI on dst returns with first results
+            src_next = future.result()  # blocks until 'zfs list -t snapshot' CLI on src returns with first results
         while not (src_next is None and dst_next is None):
             if src_next == dst_next:
                 n = 2
@@ -3452,6 +3490,11 @@ class Job:
                     log.trace(f"available_programs[{key}][uname]: %s", uname)
                     available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
                     log.trace(f"available_programs[{key}][os]: %s", available_programs[key]["os"])
+                elif program.startswith("getconf_cpu_count-"):
+                    available_programs[key].pop(program)
+                    getconf_cpu_count = program[len("getconf_cpu_count-") :]
+                    available_programs[key]["getconf_cpu_count"] = getconf_cpu_count
+                    log.trace(f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
 
         for key, value in available_programs.items():
             log.debug(f"available_programs[{key}]: %s", list_formatter(value, separator=", "))
@@ -3476,6 +3519,8 @@ class Job:
         command -v {params.mbuffer_program} > /dev/null && echo mbuffer
         command -v {params.pv_program} > /dev/null && echo pv
         command -v {params.ps_program} > /dev/null && echo ps
+        command -v {params.psrinfo_program} > /dev/null && printf getconf_cpu_count- && {params.psrinfo_program} -p  # print num CPUs on Solaris
+        ! command -v {params.psrinfo_program} && command -v {params.getconf_program} > /dev/null && printf getconf_cpu_count- && {params.getconf_program} _NPROCESSORS_ONLN  # print num CPUs on POSIX except Solaris
         command -v {params.uname_program} > /dev/null && printf uname- && {params.uname_program} -a || true
         """
 
@@ -3639,6 +3684,21 @@ class Job:
         results = flush()
         if results is not None:
             yield results
+
+    def itr_ssh_command_parallel(
+        self, r: Remote, cmd: List[str], batch: List[str], executor: ThreadPoolExecutor, max_ds_per_minibatch: int
+    ) -> Any:
+        """Perf: calls 'zfs list -t snapshot' (or similar) in parallel mini batches; massively improves throughput."""
+        minibatches = [batch[i : i + max_ds_per_minibatch] for i in range(0, len(batch), max_ds_per_minibatch)]
+        futures: List[Future] = [
+            executor.submit(
+                lambda mbatch: (self.try_ssh_command(r, log_trace, cmd=cmd + mbatch) or "").splitlines(),
+                minibatch,
+            )
+            for minibatch in minibatches
+        ]
+        for future in futures:
+            yield from future.result()  # blocks until CLI returns
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""

@@ -285,6 +285,7 @@ class BZFSTestCase(ParametrizedTestCase):
         max_command_line_bytes=None,
         creation_prefix=None,
         max_exceptions_to_summarize=None,
+        max_datasets_per_minibatch_on_list_snaps=None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -412,6 +413,14 @@ class BZFSTestCase(ParametrizedTestCase):
         if max_exceptions_to_summarize is not None:
             job.max_exceptions_to_summarize = max_exceptions_to_summarize
 
+        old_max_datasets_per_minibatch_on_list_snaps = os.environ.get(
+            bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"
+        )
+        if max_datasets_per_minibatch_on_list_snaps is not None:
+            os.environ[bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = str(
+                max_datasets_per_minibatch_on_list_snaps
+            )
+
         returncode = 0
         try:
             job.run_main(bzfs.argument_parser().parse_args(args), args)
@@ -438,6 +447,14 @@ class BZFSTestCase(ParametrizedTestCase):
                     os.environ.pop(bzfs.env_var_prefix + "min_pipe_transfer_size", None)
                 else:
                     os.environ[bzfs.env_var_prefix + "min_pipe_transfer_size"] = old_min_pipe_transfer_size
+
+            if max_datasets_per_minibatch_on_list_snaps is not None:
+                if old_max_datasets_per_minibatch_on_list_snaps is None:
+                    os.environ.pop(bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps", None)
+                else:
+                    os.environ[bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = (
+                        old_max_datasets_per_minibatch_on_list_snaps
+                    )
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
@@ -2587,7 +2604,13 @@ class LocalTestCase(BZFSTestCase):
                         self.assertLessEqual("-", lines[2].split("\t")[written])
 
                     for cmp in cmp_choices:
-                        job = self.run_bzfs(src_root_dataset, dst_root_dataset, f"--compare-snapshot-lists={cmp}", "-r")
+                        job = self.run_bzfs(
+                            src_root_dataset,
+                            dst_root_dataset,
+                            f"--compare-snapshot-lists={cmp}",
+                            "-r",
+                            max_datasets_per_minibatch_on_list_snaps=1,
+                        )
                         n_src, n_dst, n_all = stats(job)
                         self.assertEqual(0, n_src)
                         self.assertEqual(0, n_dst)

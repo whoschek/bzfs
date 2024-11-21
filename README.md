@@ -1233,6 +1233,14 @@ usage: bzfs [-h] [--recursive]
     instead focus on missing snapshots only, like so:
     --compare-snapshot-lists=src+dst
 
+    *Note*: The source can also be an empty dataset, such as the
+    hardcoded virtual dataset named 'dummy'.
+
+    *Note*: --compare-snapshot-lists is typically *much* faster
+    than standard 'zfs list -t snapshot' CLI usage because the former
+    issues I/O requests with a higher degree of parallelism than the
+    latter.
+
 <!-- -->
 
 <div id="--dryrun"></div>
