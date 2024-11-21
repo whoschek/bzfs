@@ -191,15 +191,23 @@ datasets to tank2/boo/bar:
 
 ```$ zfs list -t snapshot -r tank1/foo/bar
 tank1/foo/bar@test_2024-11-06_08:30:05_daily
+tank1/foo/bar@test_2024-11-06_08:30:05_hourly
 tank1/foo/bar@test_2024-11-07_08:30:06_daily
+tank1/foo/bar@test_2024-11-07_08:30:06_hourly
 tank1/foo/bar/baz@test_2024-11-06_08:40:00_daily
+tank1/foo/bar/baz@test_2024-11-06_08:40:00_hourly
 tank1/foo/bar/baz@test_2024-11-07_08:40:00_daily
+tank1/foo/bar/baz@test_2024-11-07_08:40:00_hourly
 
 $ zfs list -t snapshot -r tank2/boo/bar
 tank2/boo/bar@test_2024-11-06_08:30:05_daily
+tank2/boo/bar@test_2024-11-06_08:30:05_hourly
 tank2/boo/bar@test_2024-11-07_08:30:06_daily
+tank2/boo/bar@test_2024-11-07_08:30:06_hourly
 tank2/boo/bar/baz@test_2024-11-06_08:40:00_daily
+tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly
 tank2/boo/bar/baz@test_2024-11-07_08:40:00_daily
+tank2/boo/bar/baz@test_2024-11-07_08:40:00_hourly
 ```
 
 * Example that makes destination identical to source even if the two have drastically diverged:
@@ -245,7 +253,7 @@ of creation time:
 * Delete all tmp datasets within tank2/boo/bar:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
---include-dataset-regex 'tmp.*'`
+--include-dataset-regex '(.*/)?tmp.*'`
 
 * Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
 been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'), 
@@ -255,7 +263,7 @@ excluding temporary datasets:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists=src+dst+all --recursive
 --include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' 
---exclude-dataset-regex 'tmp.*'`
+--exclude-dataset-regex '(.*/)?tmp.*'`
 
 If the resulting TSV output file contains zero lines starting with the prefix 'src' and zero lines starting with the 
 prefix 'dst' then no source snapshots are missing on the destination, and no destination snapshots are missing 
@@ -682,7 +690,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "*Note*: The source can also be an empty dataset, such as the hardcoded virtual dataset named "
              f"'{dummy_dataset}'.\n\n"
              "*Note*: --compare-snapshot-lists is typically *much* faster than standard 'zfs list -t snapshot' CLI "
-             "usage because the former issues I/O requests with a higher degree of parallelism than the latter.\n\n")
+             "usage because the former issues requests with a higher degree of parallelism than the latter.\n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
