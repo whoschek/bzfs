@@ -23,7 +23,7 @@ ideally using bzfs --verbose or even bzfs --verbose --verbose flags for more dia
 **Versions (please complete the following information):**
  - bzfs --version: 
  - zfs --version: 
- - python --version: 
+ - python3 --version: 
  - uname -a: 
 
 **Additional context**
