@@ -4,7 +4,12 @@ All notable changes to bzfs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.1] -  TBD
+## [1.5.2] -  TBD
+
+## [1.5.1] -  November 23, 2024
+
+### Fixed
+- See https://github.com/whoschek/bzfs/compare/v1.5.0...v1.5.1
 
 ## [1.5.0] -  November 21, 2024
 
