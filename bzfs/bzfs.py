@@ -1456,6 +1456,7 @@ class Job:
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.param_injection_triggers: Dict[str, Dict[str, bool]] = {}  # for testing only
         self.inject_params: Dict[str, bool] = {}  # for testing only
+        self.inject_max_workers: Optional[Dict[str, int]] = None  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
@@ -1636,10 +1637,13 @@ class Job:
             # ssh default is max 10 multiplexed sessions over the same TCP connection per sshd_config(5) MaxSessions
             max_workers = cpus if not r.ssh_user_host else min(cpus, 8 if src.cache_key() != dst.cache_key() else 4)
             self.max_workers[r.location] = max_workers
+            if self.inject_max_workers is not None:
+                self.max_workers = self.inject_max_workers  # for testing only
+            bs = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
             max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
             if max_datasets_per_minibatch <= 0:
-                bs = p.max_datasets_per_batch_on_list_snaps  # 1024 by default
                 max_datasets_per_minibatch = max(2 * cpus, bs // cpus) if r.ssh_user_host else 2 * cpus
+            max_datasets_per_minibatch = min(bs, max_datasets_per_minibatch)
             self.max_datasets_per_minibatch_on_list_snaps[r.location] = max_datasets_per_minibatch
             log.trace(
                 f"max_datasets_per_batch_on_list_snaps: {p.max_datasets_per_batch_on_list_snaps}, "
@@ -1852,14 +1856,6 @@ class Job:
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
             cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
 
-            def flush_batch(batch: List[str]) -> None:
-                minibatch_sz = self.max_datasets_per_minibatch_on_list_snaps[dst.location]
-                datasets_having_snapshots = list(self.itr_ssh_command_parallel(dst, cmd, batch, executor, minibatch_sz))
-                if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
-                    replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
-                datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
-                dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
-
             # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of
             # one filter run is an optimization. The first run only computes candidate orphans, without incurring I/O,
             # to reduce the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from
@@ -1874,11 +1870,12 @@ class Job:
                         if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
                             orphans.add(dst_dataset)
                 if run == 0:
-                    # Run flush_batch(orphans) without creating a command line that's too big for the OS to handle.
-                    # This updates dst_datasets_having_snapshots for real use in the second run.
-                    orphans = isorted(orphans)
-                    with ThreadPoolExecutor(max_workers=self.max_workers[dst.location]) as executor:
-                        self.run_ssh_cmd_batched(dst, cmd, orphans, flush_batch, p.max_datasets_per_batch_on_list_snaps)
+                    # update dst_datasets_having_snapshots for real use in the second run
+                    for datasets_having_snapshots in self.itr_ssh_command_parallel(dst, cmd, isorted(orphans)):
+                        if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
+                            replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snaps
+                        datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
+                        dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
                 else:
                     self.delete_datasets(dst, orphans)
                     dst_datasets = isorted(set(dst_datasets).difference(orphans))
@@ -3209,17 +3206,8 @@ class Job:
                 written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
             props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
             cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
-            max_datasets_per_batch = p.max_datasets_per_batch_on_list_snaps
-            max_datasets_per_minibatch = self.max_datasets_per_minibatch_on_list_snaps[r.location]
-            with ThreadPoolExecutor(max_workers=self.max_workers[r.location]) as executor:
-                for itr in self.itr_ssh_cmd_batched(
-                    r,
-                    cmd,
-                    sorted(datasets),
-                    lambda batch: self.itr_ssh_command_parallel(r, cmd, batch, executor, max_datasets_per_minibatch),
-                    max_datasets_per_batch,
-                ):
-                    yield from itr
+            for lines in self.itr_ssh_command_parallel(r, cmd, sorted(datasets)):
+                yield from lines
 
         def snapshot_iterator(
             root_dataset: str, sorted_itr: Generator[str, None, None]
@@ -3685,20 +3673,27 @@ class Job:
         if results is not None:
             yield results
 
-    def itr_ssh_command_parallel(
-        self, r: Remote, cmd: List[str], batch: List[str], executor: ThreadPoolExecutor, max_ds_per_minibatch: int
-    ) -> Any:
-        """Perf: calls 'zfs list -t snapshot' (or similar) in parallel mini batches; massively improves throughput."""
-        minibatches = [batch[i : i + max_ds_per_minibatch] for i in range(0, len(batch), max_ds_per_minibatch)]
-        futures: List[Future] = [
-            executor.submit(
-                lambda mbatch: (self.try_ssh_command(r, log_trace, cmd=cmd + mbatch) or "").splitlines(),
-                minibatch,
+    def itr_ssh_command_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
+        max_workers = self.max_workers[r.location]
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            iterator = self.itr_ssh_cmd_batched(
+                r,
+                cmd,
+                datasets,
+                lambda batch: executor.submit(
+                    lambda: (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines()
+                ),
+                self.max_datasets_per_minibatch_on_list_snaps[r.location],
             )
-            for minibatch in minibatches
-        ]
-        for future in futures:
-            yield from future.result()  # blocks until CLI returns
+            # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
+            buffer: collections.deque[Future] = collections.deque(itertools.islice(iterator, max_workers))
+
+            while buffer:
+                curr_future: Future = buffer.popleft()
+                next_future: Future = next(iterator, None)
+                if next_future is not None:
+                    buffer.append(next_future)
+                yield curr_future.result()  # blocks until CLI returns
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
