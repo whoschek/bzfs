@@ -466,7 +466,8 @@ usage: bzfs [-h] [--recursive]
             [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
             [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
             [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
-            [--bwlimit STRING] [--compression-program STRING]
+            [--threads INT[%]] [--bwlimit STRING]
+            [--compression-program STRING]
             [--compression-program-opts STRING]
             [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
             [--ps-program STRING] [--pv-program STRING]
@@ -1612,6 +1613,21 @@ usage: bzfs [-h] [--recursive]
 
 *  Path to SSH ssh_config(5) file to connect to dst (optional); will be
     passed into ssh -F CLI.
+
+<!-- -->
+
+<div id="--threads"></div>
+
+**--threads** *INT[%]*
+
+*  The maximum number of threads to use for parallel operations; can be
+    given as a positive integer, optionally followed by the % percent
+    character (min: 1, default: 150%). Percentages are relative to the
+    number of CPU cores on the machine. Example: 200% uses twice as many
+    threads as there are cores on the machine, and 75% uses num_threads
+    = num_cores * 0.75. Currently this option only applies to
+    --compare-snapshot-lists and --delete-empty-dst-datasets.
+    Examples: 4
 
 <!-- -->
 
