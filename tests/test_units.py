@@ -49,6 +49,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckPercentRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
@@ -1531,6 +1532,36 @@ class TestCheckRange(unittest.TestCase):
         parser.add_argument("--age", type=int, action=bzfs.CheckRange)
         args = parser.parse_args(["--age", "50"])
         self.assertEqual(args.age, 50)
+
+
+#############################################################################
+class TestCheckPercentRange(unittest.TestCase):
+
+    def test_valid_range_min(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
+        args = parser.parse_args(["--threads", "1"])
+        threads, is_percent = args.threads
+        self.assertEqual(threads, 1.0)
+        self.assertFalse(is_percent)
+
+    def test_valid_range_percent(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
+        args = parser.parse_args(["--threads", "5.2%"])
+        threads, is_percent = args.threads
+        self.assertEqual(threads, 5.2)
+        self.assertTrue(is_percent)
+
+    def test_invalid(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--threads", "0"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--threads", "0%"])
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--threads", "abc"])
 
 
 #############################################################################

@@ -286,7 +286,6 @@ class BZFSTestCase(ParametrizedTestCase):
         creation_prefix=None,
         max_exceptions_to_summarize=None,
         max_datasets_per_minibatch_on_list_snaps=None,
-        max_workers=None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -413,9 +412,6 @@ class BZFSTestCase(ParametrizedTestCase):
 
         if max_exceptions_to_summarize is not None:
             job.max_exceptions_to_summarize = max_exceptions_to_summarize
-
-        if max_workers is not None:
-            job.inject_max_workers = max_workers
 
         old_max_datasets_per_minibatch_on_list_snaps = os.environ.get(
             bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"
@@ -2620,15 +2616,15 @@ class LocalTestCase(BZFSTestCase):
                         self.assertEqual(0, n_dst)
                         self.assertEqual(3 + 3 + 3 if "all" in cmp else 0, n_all)
 
-                    for max_workers in range(1, 6):
+                    for threads in range(1, 6):
                         job = self.run_bzfs(
                             src_root_dataset,
                             dst_root_dataset,
                             "--skip-replication",
                             "--compare-snapshot-lists",
                             "-r",
+                            f"--threads={threads}",
                             max_datasets_per_minibatch_on_list_snaps=1,
-                            max_workers={"src": max_workers, "dst": max_workers},
                         )
                         n_src, n_dst, n_all = stats(job)
                         self.assertEqual(0, n_src)

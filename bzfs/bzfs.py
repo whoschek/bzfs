@@ -867,6 +867,14 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         parser.add_argument(
             f"--ssh-{loc}-config-file", type=str, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
+    threads_default = 150  # percent
+    parser.add_argument(
+        "--threads", min=1, default=(threads_default, True), action=CheckPercentRange, metavar="INT[%]",
+        help="The maximum number of threads to use for parallel operations; can be given as a positive integer, "
+             f"optionally followed by the %% percent character (min: 1, default: {threads_default}%%). Percentages "
+             f"are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many threads as "
+             f"there are cores on the machine, and 75%% uses num_threads = num_cores * 0.75. Currently this "
+             f"option only applies to --compare-snapshot-lists and --delete-empty-dst-datasets. Examples: 4\n\n")
     parser.add_argument(
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
@@ -1231,6 +1239,7 @@ class Params:
         self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
         self.max_datasets_per_batch_on_list_snaps = int(getenv_any("max_datasets_per_batch_on_list_snaps", 1024))
         self.max_datasets_per_minibatch_on_list_snaps = int(getenv_any("max_datasets_per_minibatch_on_list_snaps", -1))
+        self.threads = args.threads
 
         self.os_cpu_count: int = os.cpu_count()
         self.os_geteuid: int = os.geteuid()
@@ -1464,7 +1473,6 @@ class Job:
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.param_injection_triggers: Dict[str, Dict[str, bool]] = {}  # for testing only
         self.inject_params: Dict[str, bool] = {}  # for testing only
-        self.inject_max_workers: Optional[Dict[str, int]] = None  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
@@ -1641,23 +1649,24 @@ class Job:
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}
         for r in [src, dst]:
-            cpus = max(1, int(p.available_programs[r.location].get("getconf_cpu_count", 8)))
+            cpus = int(p.available_programs[r.location].get("getconf_cpu_count", 8))
+            threads, is_percent = p.threads
+            cpus = max(1, round(cpus * threads / 100.0) if is_percent else round(threads))
             # ssh default is max 10 multiplexed sessions over the same TCP connection per sshd_config(5) MaxSessions
-            max_workers = cpus if not r.ssh_user_host else min(cpus, 8 if src.cache_key() != dst.cache_key() else 4)
-            self.max_workers[r.location] = max_workers
-            if self.inject_max_workers is not None:
-                self.max_workers = self.inject_max_workers  # for testing only
+            cpus = cpus if not r.ssh_user_host else min(cpus, 8 if src.cache_key() != dst.cache_key() else 4)
+            self.max_workers[r.location] = cpus
             bs = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
             max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
             if max_datasets_per_minibatch <= 0:
-                max_datasets_per_minibatch = max(2 * cpus, bs // cpus) if r.ssh_user_host else 2 * cpus
+                max_datasets_per_minibatch = max(1, bs // cpus if r.ssh_user_host else bs // cpus // 8)
             max_datasets_per_minibatch = min(bs, max_datasets_per_minibatch)
             self.max_datasets_per_minibatch_on_list_snaps[r.location] = max_datasets_per_minibatch
             log.trace(
+                "%s",
                 f"max_datasets_per_batch_on_list_snaps: {p.max_datasets_per_batch_on_list_snaps}, "
                 f"max_datasets_per_minibatch_on_list_snaps: {max_datasets_per_minibatch}, "
-                f"max_workers: {max_workers}",
-                f"loc: {r.location}, ",
+                f"max_workers: {self.max_workers[r.location]}, "
+                f"location: {r.location}",
             )
         log.trace("Validated Param values: %s", pretty_print_formatter(self.params))
 
@@ -4720,6 +4729,24 @@ class CheckRange(argparse.Action):
                 raise argparse.ArgumentError(self, self.interval())
         setattr(namespace, self.dest, values)
 # fmt: on
+
+
+#############################################################################
+class CheckPercentRange(CheckRange):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        assert isinstance(values, str)
+        original = values
+        values = values.strip()
+        is_percent = values.endswith("%")
+        if is_percent:
+            values = values[0:-1]
+        try:
+            values = float(values)
+        except ValueError:
+            parser.error(f"{option_string}: Invalid percentage or number: {original}")
+        super().__call__(parser, namespace, values, option_string=option_string)
+        setattr(namespace, self.dest, (getattr(namespace, self.dest), is_percent))
 
 
 #############################################################################
