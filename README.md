@@ -23,9 +23,9 @@
 [![Build](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml)
 [![Coverage](https://whoschek.github.io/bzfs/badges/coverage-badge.svg)](https://whoschek.github.io/bzfs/coverage/)
 [![os](https://whoschek.github.io/bzfs/badges/os-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
-[![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![python](https://whoschek.github.io/bzfs/badges/python-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![](https://whoschek.github.io/bzfs/badges/pypi-badge.svg)](https://pypi.org/project/bzfs)
+[![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
