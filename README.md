@@ -1357,16 +1357,16 @@ usage: bzfs [-h] [--recursive]
 **--no-resume-recv**
 
 *  Replication of snapshots via 'zfs send/receive' can be interrupted
-    by intermittent network hiccups, hardware issues, etc. Interrupted
-    'zfs send/receive' operations are retried if the --retries and
-    --retry-* options enable it (see above). In normal operation bzfs
-    automatically retries such that only the portion of the snapshot is
-    transmitted that has not yet been fully received on the destination.
-    For example, this helps to progressively transfer a large individual
-    snapshot over a wireless network in a timely manner despite frequent
-    intermittent network hiccups. This optimization is called 'resume
-    receive' and uses the 'zfs receive -s' and 'zfs send -t'
-    feature.
+    by intermittent network hiccups, reboots, hardware issues, etc.
+    Interrupted 'zfs send/receive' operations are retried if the
+    --retries and --retry-* options enable it (see above). In normal
+    operation bzfs automatically retries such that only the portion of
+    the snapshot is transmitted that has not yet been fully received on
+    the destination. For example, this helps to progressively transfer a
+    large individual snapshot over a wireless network in a timely manner
+    despite frequent intermittent network hiccups. This optimization is
+    called 'resume receive' and uses the 'zfs receive -s' and 'zfs
+    send -t' feature.
 
     The --no-resume-recv option disables this optimization such that a
     retry now retransmits the entire snapshot from scratch, which could
@@ -1433,6 +1433,7 @@ usage: bzfs [-h] [--recursive]
     mindful of that. By convention, a bookmark created by bzfs has the
     same name as its corresponding snapshot, the only difference being
     the leading '#' separator instead of the leading '@' separator.
+    Also see https://www.youtube.com/watch?v=LaNgoAZeTww&t=316s.
 
     You can list bookmarks, like so: `zfs list -t bookmark -o
     name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and
@@ -1631,10 +1632,10 @@ usage: bzfs [-h] [--recursive]
     given as a positive integer, optionally followed by the % percent
     character (min: 1, default: 150%). Percentages are relative to the
     number of CPU cores on the machine. Example: 200% uses twice as many
-    threads as there are cores on the machine, and 75% uses num_threads
-    = num_cores * 0.75. Currently this option only applies to
+    threads as there are cores on the machine; 75% uses num_threads =
+    num_cores * 0.75. Currently this option only applies to
     --compare-snapshot-lists and --delete-empty-dst-datasets.
-    Examples: 4
+    Examples: 4, 75%
 
 <!-- -->
 

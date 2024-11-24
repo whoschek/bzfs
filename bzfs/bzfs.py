@@ -56,7 +56,7 @@ import sys
 import tempfile
 import time
 from argparse import Namespace
-from collections import defaultdict, Counter
+from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import redirect_stderr
 from dataclasses import dataclass, field
@@ -746,7 +746,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--no-resume-recv", action="store_true",
         help="Replication of snapshots via 'zfs send/receive' can be interrupted by intermittent network hiccups, "
-             "hardware issues, etc. Interrupted 'zfs send/receive' operations are retried if the --retries "
+             "reboots, hardware issues, etc. Interrupted 'zfs send/receive' operations are retried if the --retries "
              f"and --retry-* options enable it (see above). In normal operation {prog_name} automatically retries "
              "such that only the portion of the snapshot is transmitted that has not yet been fully received on the "
              "destination. For example, this helps to progressively transfer a large individual snapshot over a "
@@ -791,7 +791,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "to be deleted on the source after successful replication, it still requires that its snapshot is not "
              "somehow deleted prematurely on the destination dataset, so be mindful of that. "
              f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
-             "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator.\n\n"
+             "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
+             "Also see https://www.youtube.com/watch?v=LaNgoAZeTww&t=316s.\n\n"
              "You can list bookmarks, like so: "
              "`zfs list -t bookmark -o name,guid,createtxg,creation -d 1 $SRC_DATASET`, and you can (and should) "
              "periodically prune obsolete bookmarks just like snapshots, like so: "
@@ -872,9 +873,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--threads", min=1, default=(threads_default, True), action=CheckPercentRange, metavar="INT[%]",
         help="The maximum number of threads to use for parallel operations; can be given as a positive integer, "
              f"optionally followed by the %% percent character (min: 1, default: {threads_default}%%). Percentages "
-             f"are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many threads as "
-             f"there are cores on the machine, and 75%% uses num_threads = num_cores * 0.75. Currently this "
-             f"option only applies to --compare-snapshot-lists and --delete-empty-dst-datasets. Examples: 4\n\n")
+             "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many threads as "
+             "there are cores on the machine; 75%% uses num_threads = num_cores * 0.75. Currently this option only "
+             "applies to --compare-snapshot-lists and --delete-empty-dst-datasets. Examples: 4, 75%%\n\n")
     parser.add_argument(
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
@@ -3661,7 +3662,7 @@ class Job:
     def run_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
     ) -> None:
-        collections.deque(self.itr_ssh_cmd_batched(r, cmd, cmd_args, func, max_batch_items=max_batch_items), maxlen=0)
+        deque(self.itr_ssh_cmd_batched(r, cmd, cmd_args, func, max_batch_items=max_batch_items), maxlen=0)
 
     def itr_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
@@ -3703,13 +3704,13 @@ class Job:
                 self.max_datasets_per_minibatch_on_list_snaps[r.location],
             )
             # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
-            buffer: collections.deque[Future] = collections.deque(itertools.islice(iterator, max_workers))
+            fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))
 
-            while buffer:
-                curr_future: Future = buffer.popleft()
+            while fifo_buffer:
+                curr_future: Future = fifo_buffer.popleft()
                 next_future: Future = next(iterator, None)
                 if next_future is not None:
-                    buffer.append(next_future)
+                    fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
@@ -3966,7 +3967,7 @@ def tail(file, n: int):
     if not os.path.isfile(file):
         return []
     with open(file, "r", encoding="utf-8") as fd:
-        return collections.deque(fd, maxlen=n)
+        return deque(fd, maxlen=n)
 
 
 def append_if_absent(lst: List, *items) -> List:

@@ -2623,6 +2623,7 @@ class LocalTestCase(BZFSTestCase):
                             "--skip-replication",
                             "--compare-snapshot-lists",
                             "-r",
+                            "-v",
                             f"--threads={threads}",
                             max_datasets_per_minibatch_on_list_snaps=1,
                         )
