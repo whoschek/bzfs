@@ -1430,13 +1430,6 @@ class RetryPolicy:
 
 
 #############################################################################
-@dataclass(order=True)
-class ComparableSnapshot:
-    key: Tuple[str, str]
-    cols: List[str] = field(compare=False)
-
-
-#############################################################################
 def main() -> None:
     """API for command line clients."""
     try:
@@ -3664,7 +3657,7 @@ class Job:
 
     def itr_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
-    ) -> Any:
+    ) -> Generator[Any, None, None]:
         """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
         fsenc = sys.getfilesystemencoding()
