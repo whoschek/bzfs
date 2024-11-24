@@ -30,9 +30,9 @@ on:
         type: choice
         options:
         - test_ubuntu_24_04_fast
-        - test_ubuntu_24_04
         - test_ubuntu_24_04_zfs_latest
         - test_ubuntu_24_04_zfs_2_2_latest
+        - test_ubuntu_24_04
         - test_ubuntu_22_04
         - test_ubuntu_20_04
         - test_freebsd_14_1
@@ -103,41 +103,6 @@ jobs:
         flake8 . --count --ignore=E203,W503 --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
 
-  test_ubuntu_24_04:  # currently uses zfs-2.2.2
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        python-version: ["3.12"]
-    timeout-minutes: 80
-    steps:
-    - uses: actions/checkout@v4
-    - name: Run common preparation steps
-      uses: ./.github/workflows/common
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Test with unittest
-      run: |
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      uses: ./.github/workflows/coverage-upload
-
-
   test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.0rc3
     if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
     runs-on: ubuntu-24.04
@@ -203,6 +168,41 @@ jobs:
         ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
+    - name: Run common preparation steps
+      uses: ./.github/workflows/common
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Display ZFS version and Python version
+      run: |
+        id -u -n
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+    - name: Test with unittest
+      run: |
+        ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+        echo "bzfs-testrun-success"
+    - name: Upload code coverage report to workflow run page
+      uses: ./.github/workflows/coverage-upload
+
+
+  test_ubuntu_24_04:  # currently uses zfs-2.2.2
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    timeout-minutes: 80
+    steps:
+    - uses: actions/checkout@v4
     - name: Run common preparation steps
       uses: ./.github/workflows/common
       with:
@@ -379,9 +379,9 @@ jobs:
   combine_coverage_reports:
     runs-on: ubuntu-24.04
     needs:
-      - test_ubuntu_24_04
       - test_ubuntu_24_04_zfs_latest
       - test_ubuntu_24_04_zfs_2_2_latest
+      - test_ubuntu_24_04
       - test_ubuntu_22_04
       - test_ubuntu_20_04
       - test_freebsd_14_1
@@ -393,11 +393,6 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
-          name: coverage-test_ubuntu_24_04
-          path: coverage-test_ubuntu_24_04
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v4
-        with:
           name: coverage-test_ubuntu_24_04_zfs_latest
           path: coverage-test_ubuntu_24_04_zfs_latest
       - name: Download coverage artifact
@@ -405,6 +400,11 @@ jobs:
         with:
           name: coverage-test_ubuntu_24_04_zfs_2_2_latest
           path: coverage-test_ubuntu_24_04_zfs_2_2_latest
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_ubuntu_24_04
+          path: coverage-test_ubuntu_24_04
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
