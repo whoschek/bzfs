@@ -2819,14 +2819,12 @@ class Job:
             # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
             for snapshot_tag in snapshot_tags:
                 self.delete_snapshot(remote, f"{dataset}@{snapshot_tag}")
-        else:  # delete snapshots in batches, without creating a command line that's too big for the OS to handle
-
-            def flush_batch(batch: List[str]) -> None:
-                self.delete_snapshot(remote, dataset + "@" + ",".join(batch))
-
-            # run flush_batch(snapshot_tags) without creating a command line that's too big for the OS to handle
+        else:  # delete snapshots in batches without creating a command line that's too big for the OS to handle
             self.run_ssh_cmd_batched(
-                remote, self.delete_snapshot_cmd(remote, dataset + "@"), snapshot_tags, flush_batch
+                remote,
+                self.delete_snapshot_cmd(remote, dataset + "@"),
+                snapshot_tags,
+                lambda batch: self.delete_snapshot(remote, dataset + "@" + ",".join(batch)),
             )
 
     def delete_snapshot(self, r: Remote, snaps_to_delete: str) -> None:
