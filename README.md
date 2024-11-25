@@ -121,11 +121,11 @@ $ bzfs tank1/foo/bar tank2/boo/bar
 ```
 $ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@test_2024-11-06_08:30:05_daily
-tank1/foo/bar@test_2024-11-07_08:30:06_daily
+tank1/foo/bar@test_2024-11-06_08:30:05_hourly
 
 $ zfs list -t snapshot tank2/boo/bar
 tank2/boo/bar@test_2024-11-06_08:30:05_daily
-tank2/boo/bar@test_2024-11-07_08:30:06_daily 
+tank2/boo/bar@test_2024-11-06_08:30:05_hourly 
 ```
 
 
@@ -155,22 +155,14 @@ $ bzfs tank1/foo/bar tank2/boo/bar --recursive
 $ zfs list -t snapshot -r tank1/foo/bar
 tank1/foo/bar@test_2024-11-06_08:30:05_daily
 tank1/foo/bar@test_2024-11-06_08:30:05_hourly
-tank1/foo/bar@test_2024-11-07_08:30:06_daily
-tank1/foo/bar@test_2024-11-07_08:30:06_hourly
 tank1/foo/bar/baz@test_2024-11-06_08:40:00_daily
 tank1/foo/bar/baz@test_2024-11-06_08:40:00_hourly
-tank1/foo/bar/baz@test_2024-11-07_08:40:00_daily
-tank1/foo/bar/baz@test_2024-11-07_08:40:00_hourly
 
 $ zfs list -t snapshot -r tank2/boo/bar
 tank2/boo/bar@test_2024-11-06_08:30:05_daily
 tank2/boo/bar@test_2024-11-06_08:30:05_hourly
-tank2/boo/bar@test_2024-11-07_08:30:06_daily
-tank2/boo/bar@test_2024-11-07_08:30:06_hourly
 tank2/boo/bar/baz@test_2024-11-06_08:40:00_daily
-tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly
-tank2/boo/bar/baz@test_2024-11-07_08:40:00_daily
-tank2/boo/bar/baz@test_2024-11-07_08:40:00_hourly 
+tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly 
 ```
 
 
