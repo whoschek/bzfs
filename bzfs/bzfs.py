@@ -1434,14 +1434,13 @@ def main() -> None:
 
 def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None) -> None:
     """API for Python clients; visible for testing; may become a public API eventually."""
-
     # On CTRL-C send SIGTERM to the entire process group to also terminate child processes started via subprocess.run()
     old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: terminate_process_group())
     try:
         Job().run_main(args, sys_argv, log)
-    except BaseException:
+    except BaseException as e:
         terminate_process_group(except_current_process=True)
-        raise
+        raise e
     finally:
         signal.signal(signal.SIGINT, old_sigint_handler)  # restore original signal handler
 
@@ -3218,7 +3217,7 @@ class Job:
                 written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
             props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
             types = "snapshot"
-            if self.is_zpool_bookmarks_feature_enabled_or_active(r) and r.location == "src":
+            if p.use_bookmark and r.location == "src" and self.is_zpool_bookmarks_feature_enabled_or_active(r):
                 types = "snapshot,bookmark"
             cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
             for lines in self.itr_ssh_command_parallel(r, cmd, sorted(datasets)):
@@ -3437,7 +3436,7 @@ class Job:
                         name = src_next.cols[-1]
                         if "@" in name:
                             yield choices[n], src_next  # include snapshot
-                        else:  # ignore bookmarks for which no snapshot in dst exists; they aren't useful
+                        else:  # ignore src bookmarks for which no snapshot exists in dst; those aren't useful
                             assert "#" in name
                     else:
                         yield choices[n], src_next
