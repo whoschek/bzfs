@@ -3325,15 +3325,16 @@ class Job:
                     f"{prefix} Snapshot data written only in {loc} since {latcom}: "
                     f"{na or human_readable_bytes(s.sum_written_since)}"
                 )
-                latest = ("latest", s.latest_snapshot_creation, stats["all"].latest_snapshot_creation)
-                oldest = ("oldest", s.oldest_snapshot_creation, stats["all"].oldest_snapshot_creation)
-                for label, s_creation, all_creation in latest, oldest:
+                all_creation = stats["all"].latest_snapshot_creation
+                latest = ("latest", s.latest_snapshot_creation)
+                oldest = ("oldest", s.oldest_snapshot_creation)
+                for label, s_creation in latest, oldest:
                     if loc != "all":
                         hd = "n/a"
                         if s_creation and k >= 0:
                             hd = human_readable_duration(int(all_creation) - int(s_creation), unit="s")
                         msgs.append(f"{prefix} Time diff between {latcom} and {label} snapshot only in {loc}: {hd}")
-                for label, s_creation, all_creation in latest, oldest:
+                for label, s_creation in latest, oldest:
                     hd = "n/a" if not s_creation else human_readable_duration(round(now - int(s_creation)), unit="s")
                     msgs.append(f"{prefix} Time diff between now and {label} snapshot only in {loc}: {hd}")
             log.info("%s", "\n".join(msgs))
