@@ -3622,7 +3622,7 @@ class Job:
         the same destination dataset. However, it's actually safe to run an incremental 'zfs receive' into a dataset
         in parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where
         A replicates to B, and B replicates to C."""
-        p = self.params
+        p, log = self.params, self.params.log
         if not self.is_program_available("ps", remote.location):
             return True
         cmd = p.split_args(f"{p.ps_program} -Ao args")
@@ -3635,6 +3635,7 @@ class Job:
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
         except SystemExit as e:
+            log.warning("%s", str(e))
             raise RetryableError("dst currently busy with zfs mutation op") from e
 
     def is_zfs_dataset_busy(self, procs: List[str], dataset: str, busy_if_send: bool) -> bool:
