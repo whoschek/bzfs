@@ -3225,7 +3225,10 @@ class Job:
             if self.is_solaris_zfs(r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
                 written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
             props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
-            cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
+            types = "snapshot"
+            if self.is_zpool_bookmarks_feature_enabled_or_active(r) and r.location == "src":
+                types = "snapshot,bookmark"
+            cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
             for lines in self.itr_ssh_command_parallel(r, cmd, sorted(datasets)):
                 yield from lines
 
@@ -3236,14 +3239,21 @@ class Job:
             snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges
             src snapshots and dst snapshots."""
             # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in groupby(sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
+            for dataset, group in groupby(
+                sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.replace("#", "@").index("@")]
+            ):
                 snapshots = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
                 snapshots = self.filter_snapshots(snapshots)  # apply include/exclude policy
-                snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # sort by GUID
+                snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # stable sort by GUID (2nd remains createtxg)
                 rel_dataset = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
+                last_guid = ""
                 for line in snapshots:
                     cols = line.split("\t")
                     creation, guid, createtxg, written, snapshot_name = cols
+                    if guid == last_guid:
+                        assert "#" in snapshot_name
+                        continue  # ignore bookmarks whose snapshot still exists. also ignore dupes of bookmarks
+                    last_guid = guid
                     if written == "snapshot":
                         written = "-"  # sanitize solaris-11.4 work-around
                         cols = [creation, guid, createtxg, written, snapshot_name]
@@ -3256,7 +3266,7 @@ class Job:
                 key=lambda entry: (
                     int(entry[1].cols[0]),
                     int(entry[1].cols[2]),
-                    entry[1].cols[-1][entry[1].cols[-1].index("@") + 1 :],
+                    entry[1].cols[-1][entry[1].cols[-1].replace("#", "@").index("@") + 1 :],
                 ),
             )
 
@@ -3430,7 +3440,14 @@ class Job:
             else:
                 n = 0
                 if (flags & (1 << n)) != 0:
-                    yield choices[n], src_next
+                    if isinstance(src_next, Job.ComparableSnapshot):
+                        name = src_next.cols[-1]
+                        if "@" in name:
+                            yield choices[n], src_next  # include snapshot
+                        else:  # ignore bookmarks for which no snapshot in dst exists; they aren't useful
+                            assert "#" in name
+                    else:
+                        yield choices[n], src_next
                 src_next = next(src_itr, None)
 
     def is_program_available(self, program: str, location: str) -> bool:
@@ -4003,7 +4020,7 @@ def terminate_process_group(except_current_process=False):
     """Sends SIGTERM to the entire process group to also terminate child processes started via subprocess.run()"""
     signalnum = signal.SIGTERM
     old_sigterm_handler = (
-        signal.signal(signalnum, lambda signum, frame: None)  # temporarily disable signal on current process
+        signal.signal(signalnum, lambda signum, frame: None)  # temporarily disable signal handler on current process
         if except_current_process
         else signal.getsignal(signalnum)
     )

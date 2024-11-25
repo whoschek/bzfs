@@ -2697,8 +2697,23 @@ class LocalTestCase(BZFSTestCase):
                     self.assertEqual(0, n_dst)
                     self.assertEqual(3 + 3, n_all)
 
+                    if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+                        continue
+
                     src_foo = src_root_dataset + "/foo"
-                    destroy(snapshots(src_foo)[0])
+                    destroy(snapshots(src_foo)[0])  # but retain bookmark
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(3, n_src)
+                    self.assertEqual(0, n_dst)
+                    self.assertEqual(3 + 3, n_all)
+                    lines = snapshot_list(job, "dst")
+                    self.assertEqual(0, len(lines))
+
+                    src_foo = src_root_dataset + "/foo"
+                    destroy(bookmarks(src_foo)[0])  # also delete bookmark now
                     job = self.run_bzfs(
                         src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
                     )
@@ -2718,8 +2733,30 @@ class LocalTestCase(BZFSTestCase):
                     )
                     n_src, n_dst, n_all = stats(job)
                     self.assertEqual(3, n_src)
+                    self.assertEqual(2, n_dst)
+                    self.assertEqual(4, n_all)
+
+                    for bookmark in bookmarks(src_foo):
+                        destroy(bookmark)
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(3, n_src)
                     self.assertEqual(3, n_dst)
                     self.assertEqual(3, n_all)
+
+                    src_foo_a = src_root_dataset + "/foo/a"
+                    dst_foo_a = dst_root_dataset + "/foo/a"
+                    destroy(snapshots(src_foo_a)[-1])
+                    destroy(snapshots(dst_foo_a)[-1])
+                    job = self.run_bzfs(
+                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists", "-r"
+                    )
+                    n_src, n_dst, n_all = stats(job)
+                    self.assertEqual(3, n_src)
+                    self.assertEqual(3, n_dst)
+                    self.assertEqual(3 - 1, n_all)
                 finally:
                     if old_value is None:
                         os.environ.pop(param_name, None)
