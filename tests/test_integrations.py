@@ -3528,6 +3528,14 @@ class LocalTestCase(BZFSTestCase):
                 "--skip-replication",
             )
 
+    def test_main(self):
+        self.setup_basic()
+        with self.assertRaises(SystemExit):
+            bzfs.main()
+        with self.assertRaises(SystemExit):
+            bzfs.run_main(bzfs.argument_parser().parse_args(["xxxx", dst_root_dataset]))
+        bzfs.run_main(bzfs.argument_parser().parse_args([src_root_dataset, dst_root_dataset]))
+
     def test_program_name_must_not_contain_whitespace(self):
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--zfs-program=zfs zfs", expected_status=die_status)
 
