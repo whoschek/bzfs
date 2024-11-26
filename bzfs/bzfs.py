@@ -1865,7 +1865,7 @@ class Job:
                 children[parent].append(dst_dataset)
 
             # find datasets that have at least one snapshot
-            dst_datasets_having_snapshots = set()
+            dst_datasets_having_snapshots: Set[str] = set()
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
             cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
 
@@ -1876,7 +1876,7 @@ class Job:
             # eliminates the I/O to list snapshots for ancestors of excluded datasets. The second run computes the
             # real orphans.
             for run in range(0, 2):
-                orphans = set()
+                orphans: Set[str] = set()
                 for dst_dataset in reversed(dst_datasets):
                     if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
                         # all children turned out to be orphans so the dataset itself could be an orphan
@@ -1954,7 +1954,7 @@ class Job:
         # a snapshot is "true" if it is not a bookmark.
         oldest_src_snapshot = ""
         latest_src_snapshot = ""
-        included_src_guids = set()
+        included_src_guids: Set[str] = set()
         for line in src_snapshots_with_guids:
             guid, snapshot = line.split("\t", 1)
             included_src_guids.add(guid)
