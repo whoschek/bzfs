@@ -1909,10 +1909,9 @@ class Job:
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
         log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
-        # list GUID and name for dst snapshots, sorted ascending by txn (more precise than creation time)
+        # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
         use_bookmark = p.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
-        props = self.creation_prefix + "creation,guid,name" if use_bookmark else "guid,name"
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
         dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
@@ -1941,24 +1940,7 @@ class Job:
         if src_snapshots_and_bookmarks is None:
             log.warning("Third party deleted source: %s", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
-        src_snapshots_and_bookmarks = src_snapshots_and_bookmarks.splitlines()
-
-        if use_bookmark:
-            # src bookmarks serve no purpose if the destination dataset has no snapshot, or if the src bookmark is
-            # older than the oldest destination snapshot or newer than the latest destination snapshot. So here we
-            # ignore them if that's the case. This is an optimization that helps if a large number of bookmarks
-            # accumulate over time without periodic pruning.
-            src_snapshots_and_bookmarks = self.filter_snapshots_by_creation_time(
-                src_snapshots_and_bookmarks,
-                include_snapshot_times=None,
-                bookmark_time_range=(
-                    int(dst_snapshots_with_guids[0].split("\t", 1)[0]),
-                    int(dst_snapshots_with_guids[-1].split("\t", 1)[0]) + 1,
-                ),
-                quiet=True,
-            )
-            dst_snapshots_with_guids = cut(field=2, lines=dst_snapshots_with_guids)
-        src_snapshots_with_guids = src_snapshots_and_bookmarks
+        src_snapshots_with_guids = src_snapshots_and_bookmarks.splitlines()
         src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
@@ -2693,9 +2675,7 @@ class Job:
             if name == snapshot_regex_filter_name:
                 snapshots = self.filter_snapshots_by_regex(snapshots, regexes=_filter.options)
             elif name == "include_snapshot_times":
-                snapshots = self.filter_snapshots_by_creation_time(
-                    snapshots, include_snapshot_times=_filter.timerange, bookmark_time_range=None
-                )
+                snapshots = self.filter_snapshots_by_creation_time(snapshots, include_snapshot_times=_filter.timerange)
             else:
                 assert name == "include_snapshot_times_and_ranks"
                 snapshots = self.filter_snapshots_by_creation_time_and_rank(
@@ -2723,26 +2703,19 @@ class Job:
                 is_debug and log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
-    def filter_snapshots_by_creation_time(
-        self, snaps: List[str], include_snapshot_times: UnixTimeRange, bookmark_time_range: UnixTimeRange, quiet=False
-    ) -> List[str]:
+    def filter_snapshots_by_creation_time(self, snaps: List[str], include_snapshot_times: UnixTimeRange) -> List[str]:
         p, log = self.params, self.params.log
-        is_debug = log.isEnabledFor(log_debug) and not quiet
+        is_debug = log.isEnabledFor(log_debug)
         lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
-        lo_booktime, hi_booktime = bookmark_time_range or (0, unixtime_infinity_secs)
         results = []
         for snapshot in snaps:
-            creation_time = int(snapshot[0 : snapshot.index("\t")])
             if "@" not in snapshot:
-                include = lo_booktime <= creation_time < hi_booktime
-            else:
-                include = lo_snaptime <= creation_time < hi_snaptime
-                if include:
-                    is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-                else:
-                    is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-            if include:
+                results.append(snapshot)  # retain bookmarks to help find common snaps, apply filter only to snapshots
+            elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
                 results.append(snapshot)
+                is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+            else:
+                is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_creation_time_and_rank(
