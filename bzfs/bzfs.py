@@ -3529,15 +3529,15 @@ class Job:
         except subprocess.CalledProcessError as e:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
                 available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4 zfs does not know --version flag
-            elif not e.stdout.startswith("zfs-"):
+            elif not e.stdout.startswith("zfs"):
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
             else:
                 lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
                 assert lines
         if lines:
             line = lines.splitlines()[0]
-            assert line.startswith("zfs-")
-            # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5
+            assert line.startswith("zfs")
+            # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5, zfswin-2.2.3rc5 -> 2.2.3
             version = line.split("-")[1].strip()
             match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
             assert match, "Unparsable zfs version string: " + version

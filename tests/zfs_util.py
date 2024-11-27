@@ -312,7 +312,7 @@ def zfs_version():
     except subprocess.CalledProcessError as e:
         if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
             return None  # solaris-11.4 zfs does not know --version flag
-        elif not e.stdout.startswith("zfs-"):
+        elif not e.stdout.startswith("zfs"):
             raise
         else:
             lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
