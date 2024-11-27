@@ -3526,22 +3526,24 @@ class Job:
             # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
             # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
             # option is not known there
-            lines = self.run_ssh_command(remote, log_trace, print_stderr=False, cmd=[p.zfs_program, "--version"])
+            # on Windows, zfs.exe seems to require elevated privileges by default, so we add 'sudo' if available
+            sudo = [p.sudo_program] if p.sudo_program and p.sudo_program != disable_prg else []
+            lines = self.run_ssh_command(remote, log_trace, print_stderr=False, cmd=sudo + [p.zfs_program, "--version"])
             assert lines
         except (FileNotFoundError, PermissionError):  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
         except subprocess.CalledProcessError as e:
             if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
                 available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4 zfs does not know --version flag
-            elif not e.stdout.startswith("zfs-"):
+            elif not e.stdout.startswith("zfs"):
                 die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
             else:
                 lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
                 assert lines
         if lines:
             line = lines.splitlines()[0]
-            assert line.startswith("zfs-")
-            # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5
+            assert line.startswith("zfs")
+            # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5,  zfswin-2.2.3rc5 -> 2.2.3
             version = line.split("-")[1].strip()
             match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
             assert match, "Unparsable zfs version string: " + version
@@ -3549,6 +3551,10 @@ class Job:
             available_programs[location]["zfs"] = version
             if is_version_at_least(version, "2.1.0"):
                 available_programs[location][zfs_version_is_at_least_2_1_0] = True
+            if line.startswith("zfswin"):
+                key = location
+                available_programs[key]["os"] = "Windows"
+                log.trace(f"available_programs[{key}][os]: %s", available_programs[key]["os"])
         log.trace(f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
 
         if p.shell_program != disable_prg:
