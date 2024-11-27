@@ -2040,6 +2040,11 @@ class Job:
         self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"])))]
         self.mbuffer_current_opts += p.mbuffer_program_opts
         dry_run_no_send = False
+        right_just = 8
+
+        def format_size(num_bytes: int) -> str:
+            return human_readable_bytes(num_bytes, long=False).rjust(right_just)
+
         if not latest_common_src_snapshot:
             # no common snapshot was found. delete all dst snapshots, if any
             if latest_dst_snapshot:
@@ -2085,8 +2090,8 @@ class Job:
                             self.create_filesystem(dst_dataset_parent)
 
                 recv_resume_token, send_resume_opts, recv_resume_opts = self.get_receive_resume_token(dst_dataset)
-                size_bytes = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
-                size_human = human_readable_bytes(size_bytes, long=False)
+                curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
+                human_size = format_size(curr_size)
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2097,12 +2102,15 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
-                log.info(p.dry("Full zfs send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({size_human}) ...")
+                log.info(
+                    p.dry("Full zfs send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({human_size.strip()}) ..."
+                )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 dry_run_no_send = dry_run_no_send or p.dry_run_no_send
                 self.maybe_inject_params(error_trigger="full_zfs_send_params")
+                human_size = human_size.rjust(right_just * 3 + 2)
                 self.run_zfs_send_receive(
-                    dst_dataset, send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, "full_zfs_send"
+                    dst_dataset, send_cmd, recv_cmd, curr_size, human_size, dry_run_no_send, "full_zfs_send"
                 )
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not dry_run_no_send and not p.dry_run:
@@ -2161,9 +2169,17 @@ class Job:
                     cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
                 )
                 log.trace("steps_todo: %s", list_formatter(steps_todo, "; "))
+            estimate_send_sizes = [
+                self.estimate_send_size(
+                    src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
+                )
+                for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo)
+            ]
+            sum_size = sum(estimate_send_sizes)
+            done_size = 0
             for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo):
-                size_bytes = self.estimate_send_size(src, dst_dataset, recv_resume_token, incr_flag, from_snap, to_snap)
-                size_human = human_readable_bytes(size_bytes, long=False)
+                curr_size = estimate_send_sizes[i]
+                human_size = format_size(sum_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2174,7 +2190,7 @@ class Job:
                 )
                 log.info(
                     p.dry(f"Incremental zfs send {incr_flag}: %s"),
-                    f"{from_snap} {to_snap} --> {dst_dataset} ({size_human}) ...",
+                    f"{from_snap} {to_snap} --> {dst_dataset} ({human_size.strip()}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
@@ -2182,8 +2198,9 @@ class Job:
                 dry_run_no_send = dry_run_no_send or p.dry_run_no_send
                 self.maybe_inject_params(error_trigger="incr_zfs_send_params")
                 self.run_zfs_send_receive(
-                    dst_dataset, send_cmd, recv_cmd, size_bytes, size_human, dry_run_no_send, "incr_zfs_send"
+                    dst_dataset, send_cmd, recv_cmd, curr_size, human_size, dry_run_no_send, "incr_zfs_send"
                 )
+                done_size += curr_size
                 recv_resume_token = None
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
@@ -2438,7 +2455,7 @@ class Job:
             size = f"--size={size_estimate_bytes}"
             if disable_progress_bar:
                 size = ""
-            readable = size_estimate_human.replace(" ", "")
+            readable = shlex.quote(size_estimate_human)
             lp = p.log_params
             return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {lp.pv_log_file}"
         else:
