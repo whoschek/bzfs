@@ -1928,12 +1928,8 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        if use_bookmark or filter_needs_creation_time:
-            props = self.creation_prefix + "creation,guid,name"
-            types = "snapshot,bookmark" if use_bookmark else "snapshot"
-        else:
-            props = "guid,name"
-            types = "snapshot"
+        types = "snapshot,bookmark" if use_bookmark else "snapshot"
+        props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         src_snapshots_and_bookmarks = self.try_ssh_command(src, log_trace, cmd=cmd)
@@ -1946,7 +1942,7 @@ class Job:
         # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
         basis_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
-        if use_bookmark or filter_needs_creation_time:
+        if filter_needs_creation_time:
             src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
             basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
 
