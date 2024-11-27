@@ -186,7 +186,7 @@ creation time:
 
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%'
 --include-snapshot-times-and-ranks '*..7 days ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the
@@ -197,8 +197,9 @@ replace the 'dummy' source with 'tank1/foo/bar'):
 
 ` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
-'.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest
-100%' --include-snapshot-times-and-ranks '*..7 days ago'`
+'.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest
+7..latest 100%' --include-snapshot-times-and-ranks '*..7 days
+ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the
 latest 7 daily snapshots (per dataset) are retained regardless of
@@ -208,8 +209,8 @@ snapshot exists in the source dataset (same as above except append
 
 ` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
-'.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest
-100%' --include-snapshot-times-and-ranks '*..7 days ago'
+'.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest
+7..latest 100%' --include-snapshot-times-and-ranks '*..7 days ago'
 --delete-dst-snapshots-no-crosscheck`
 
 * Delete all daily bookmarks older than 90 days, but retain the latest
@@ -217,8 +218,9 @@ snapshot exists in the source dataset (same as above except append
 
 ` bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots=bookmarks --include-snapshot-regex
-'.*_daily' --include-snapshot-times-and-ranks 'latest 200..latest
-100%' --include-snapshot-times-and-ranks '*..90 days ago'`
+'.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest
+200..latest 100%' --include-snapshot-times-and-ranks '*..90 days
+ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
 
@@ -715,7 +717,7 @@ usage: bzfs [-h] [--recursive]
     Specify to delete all daily snapshots older than 7 days, but ensure
     that the latest 7 daily snapshots (per dataset) are retained
     regardless of creation time, like so: `--include-snapshot-regex
-    '.*_daily' --include-snapshot-times-and-ranks 'latest
+    '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest
     7..latest 100%' --include-snapshot-times-and-ranks '*..7 days
     ago'`
 

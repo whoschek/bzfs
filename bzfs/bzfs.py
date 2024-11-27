@@ -218,7 +218,7 @@ snapshots (per dataset) are replicated regardless of creation time:
 regardless of creation time:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%'
 --include-snapshot-times-and-ranks '*..7 days ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
@@ -226,7 +226,7 @@ regardless of creation time. Additionally, only delete a snapshot if no correspo
 the source dataset (same as above except replace the 'dummy' source with 'tank1/foo/bar'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%'
 --include-snapshot-times-and-ranks '*..7 days ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
@@ -234,14 +234,14 @@ regardless of creation time. Additionally, only delete a snapshot if no correspo
 dataset (same as above except append 'no-crosscheck'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%'
 --include-snapshot-times-and-ranks '*..7 days ago' --delete-dst-snapshots-no-crosscheck`
 
 * Delete all daily bookmarks older than 90 days, but retain the latest 200 daily bookmarks (per dataset) regardless
 of creation time:
 
 `   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 200..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 200..latest 100%'
 --include-snapshot-times-and-ranks '*..90 days ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
@@ -394,7 +394,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "<b>*Deletion Example (no UNION):* </b>\n\n"
              "Specify to delete all daily snapshots older than 7 days, but ensure that the "
              "latest 7 daily snapshots (per dataset) are retained regardless of creation time, like so: "
-             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks 'latest 7..latest 100%%' "
+             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%%' "
              "--include-snapshot-times-and-ranks '*..7 days ago'`"
              "\n\n"
              "This helps to safely cope with irregular scenarios where no snapshots were created or received within "
