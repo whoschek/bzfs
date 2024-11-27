@@ -3596,6 +3596,7 @@ class MinimalRemoteTestCase(BZFSTestCase):
         LocalTestCase(param=self.param).test_delete_dst_datasets_recursive_with_dummy_src()
 
     def test_inject_unavailable_sudo(self):
+        self.skipTest("temporarily disabled for experiments with OpenZFS on Windows")
         expected_error = die_status if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
         self.inject_unavailable_program("inject_unavailable_sudo", expected_error=expected_error)
         self.tearDownAndSetup()

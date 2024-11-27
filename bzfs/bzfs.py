@@ -1362,6 +1362,7 @@ class Remote:
         self.basis_root_dataset: str = ""  # deferred until run_main()
         self.pool: str = ""
         self.sudo: str = ""
+        self.winsudo: str = ""
         self.use_zfs_delegation: bool = False
         self.ssh_cmd: List[str] = []
         self.ssh_cmd_quoted: List[str] = []
@@ -1731,7 +1732,7 @@ class Job:
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
-            f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name -s name {p.recursive_flag}",
+            f"{src.winsudo} {p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name -s name {p.recursive_flag}",
             src.root_dataset,
         )
         src_datasets_with_sizes = []
@@ -1768,7 +1769,9 @@ class Job:
         ):
             return
         log.info("Listing dst datasets: %s", task_description_with_dots)
-        cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
+        cmd = p.split_args(
+            f"{dst.winsudo} {p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset
+        )
         basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
         if basis_dst_datasets is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
@@ -1799,7 +1802,9 @@ class Job:
             src_datasets_set = set(src_datasets)
 
             def delete_destination_snapshots(dst_dataset: str) -> bool:
-                cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+                cmd = p.split_args(
+                    f"{dst.winsudo} {p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset
+                )
                 self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
                 dst_snaps_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd)
                 if dst_snaps_with_guids is None:
@@ -1818,7 +1823,9 @@ class Job:
                     src_kind = kind
                     if not p.delete_dst_snapshots_no_crosscheck:
                         src_kind = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
-                    cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
+                    cmd = p.split_args(
+                        f"{src.winsudo} {p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset
+                    )
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(
                         set(src_snapshots_with_guids)
@@ -1867,7 +1874,7 @@ class Job:
             # find datasets that have at least one snapshot
             dst_datasets_having_snapshots: Set[str] = set()
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
-            cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
+            cmd = p.split_args(f"{dst.winsudo} {p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
 
             # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of
             # one filter run is an optimization. The first run only computes candidate orphans, without incurring I/O,
@@ -1911,7 +1918,9 @@ class Job:
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
         use_bookmark = p.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
+        cmd = p.split_args(
+            f"{dst.winsudo} {p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset
+        )
         dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
@@ -1935,7 +1944,9 @@ class Job:
             props = "guid,name"
             types = "snapshot"
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
-        cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
+        cmd = p.split_args(
+            f"{src.winsudo} {p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset
+        )
         src_snapshots_and_bookmarks = self.try_ssh_command(src, log_trace, cmd=cmd)
         if src_snapshots_and_bookmarks is None:
             log.warning("Third party deleted source: %s", src_dataset)
@@ -2382,7 +2393,9 @@ class Job:
         recv_resume_token = None
         send_resume_opts = []
         if self.dst_dataset_exists[dst_dataset]:
-            cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
+            cmd = p.split_args(
+                f"{p.dst.winsudo} {p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset
+            )
             recv_resume_token = self.run_ssh_command(p.dst, log_trace, cmd=cmd).rstrip()
             if recv_resume_token == "-" or not recv_resume_token:
                 recv_resume_token = None
@@ -2640,7 +2653,8 @@ class Job:
             skip_dataset = DONT_SKIP_DATASET
             # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
             cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset
+                f"{remote.winsudo} {p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}",
+                dataset,
             )
             self.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
             property_value = self.try_ssh_command(remote, log_trace, cmd=cmd)
@@ -3082,7 +3096,9 @@ class Job:
         cache_key = (sources, output_columns, propnames)
         props = props_cache.get(cache_key)
         if props is None:
-            cmd = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
+            cmd = p.split_args(
+                f"{remote.winsudo} {p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset
+            )
             lines = self.run_ssh_command(remote, log_trace, cmd=cmd)
             is_name_value_pair = "," in output_columns
             props = {}
@@ -3192,7 +3208,9 @@ class Job:
             types = "snapshot"
             if p.use_bookmark and r.location == "src" and self.is_zpool_bookmarks_feature_enabled_or_active(r):
                 types = "snapshot,bookmark"
-            cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
+            cmd = p.split_args(
+                f"{r.winsudo} {p.zfs_program} list -t {types} -d 1 -Hp -o {props}"
+            )  # sorted by dataset, createtxg
             for lines in self.itr_ssh_command_parallel(r, cmd, sorted(datasets)):
                 yield from lines
 
@@ -3527,8 +3545,10 @@ class Job:
             # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
             # option is not known there
             # on Windows, zfs.exe seems to require elevated privileges by default, so we add 'sudo' if available
-            sudo = [p.sudo_program] if p.sudo_program and p.sudo_program != disable_prg else []
-            lines = self.run_ssh_command(remote, log_trace, print_stderr=False, cmd=sudo + [p.zfs_program, "--version"])
+            winsudo = [p.sudo_program] if p.sudo_program and p.sudo_program != disable_prg else []
+            lines = self.run_ssh_command(
+                remote, log_trace, print_stderr=False, cmd=winsudo + [p.zfs_program, "--version"]
+            )
             assert lines
         except (FileNotFoundError, PermissionError):  # location is local and program file was not found
             die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
@@ -3553,6 +3573,7 @@ class Job:
                 available_programs[location][zfs_version_is_at_least_2_1_0] = True
             if line.startswith("zfswin"):
                 key = location
+                remote.winsudo = p.sudo_program if p.sudo_program and p.sudo_program != disable_prg else ""
                 available_programs[key]["os"] = "Windows"
                 log.trace(f"available_programs[{key}][os]: %s", available_programs[key]["os"])
         log.trace(f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
@@ -3587,8 +3608,9 @@ class Job:
         if self.is_dummy_src(r):
             params.zpool_features[loc] = {}
             return
+        winsudo = p.sudo_program if p.sudo_program and p.sudo_program != disable_prg else ""
         if params.zpool_program != disable_prg:
-            cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
+            cmd = params.split_args(f"{winsudo} {params.zpool_program} get -Hp -o property,value all", r.pool)
             try:
                 lines = self.run_ssh_command(remote, log_trace, check=False, cmd=cmd).splitlines()
             except (FileNotFoundError, PermissionError) as e:
@@ -3601,7 +3623,7 @@ class Job:
                 props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
                 features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
         if len(lines) == 0:
-            cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
+            cmd = p.split_args(f"{winsudo} {p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
             if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
                 die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
         params.zpool_features[loc] = features
