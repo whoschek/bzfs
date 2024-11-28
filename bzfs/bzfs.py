@@ -1726,8 +1726,7 @@ class Job:
     def run_task(self) -> None:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
-        task_description_with_dots = task_description + " ..."
+        task_description_with_dots = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
@@ -1936,10 +1935,10 @@ class Job:
         if src_snapshots_and_bookmarks is None:
             log.warning("Third party deleted source: %s", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
-        src_snapshots_with_guids = src_snapshots_and_bookmarks.splitlines()
+        src_snapshots_with_guids: List[str] = src_snapshots_and_bookmarks.splitlines()
         src_snapshots_and_bookmarks = None
 
-        # apply include/exclude regexes to ignore irrelevant src snapshots and bookmarks
+        # apply include/exclude regexes to ignore irrelevant src snapshots
         basis_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
         if filter_needs_creation_time:
@@ -2168,7 +2167,7 @@ class Job:
                 steps_todo = self.incremental_send_steps_wrapper(
                     cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
                 )
-                log.trace("steps_todo: %s", list_formatter(steps_todo, "; "))
+            log.trace("steps_todo: %s", list_formatter(steps_todo, "; "))
             estimate_send_sizes = [
                 self.estimate_send_size(
                     src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
