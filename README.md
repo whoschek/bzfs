@@ -1242,6 +1242,7 @@ usage: bzfs [-h] [--recursive]
     *Note*: --compare-snapshot-lists is typically *much* faster
     than standard 'zfs list -t snapshot' CLI usage because the former
     issues requests with a higher degree of parallelism than the latter.
+    The degree is configurable with the --threads option (see below).
 
 <!-- -->
 
