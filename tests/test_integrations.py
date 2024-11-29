@@ -220,7 +220,7 @@ class BZFSTestCase(ParametrizedTestCase):
         if zpool_features is None:
             zpool_features = {}
             detect_zpool_features("src", src_pool_name)
-            print(f"zpool bookmarks feature: {is_zpool_bookmarks_feature_enabled_or_active('src')}", file=sys.stderr)
+            print(f"zpool bookmarks feature: {are_bookmarks_enabled('src')}", file=sys.stderr)
             props = zpool_features["src"]
             features = "\n".join(
                 [f"{k}: {v}" for k, v in sorted(props.items()) if k.startswith("feature@") or k == "delegation"]
@@ -571,7 +571,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[0]])
-        if is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if are_bookmarks_enabled("src"):
             create_bookmark(src_foo, expected_results[0], expected_results[0])
             destroy(src_snapshot)
             self.run_bzfs(src_foo, dst_foo, "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
@@ -1733,7 +1733,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
     def test_basic_replication_flat_with_bookmarks1(self):
-        if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
         for i in range(0, 2):
@@ -1768,7 +1768,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertBookmarkNames(src_root_dataset, ["d1", "d2"])
 
     def test_basic_replication_flat_with_bookmarks2(self):
-        if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
         for i in range(0, 2):
@@ -1817,7 +1817,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertBookmarkNames(src_root_dataset, ["d1", "d2"])
 
     def test_basic_replication_flat_with_bookmarks3(self):
-        if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
         for i in range(0, 2):
@@ -1871,7 +1871,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_flat_with_bookmarks_already_exists(self):
         """check that run_bzfs works as usual even if the bookmark already exists"""
-        if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
         snapshot_tag = snapshots(src_root_dataset)[0].split("@", 1)[1]
@@ -2100,7 +2100,7 @@ class LocalTestCase(BZFSTestCase):
         self.test_complex_replication_flat_use_bookmarks(volume=True)
 
     def test_complex_replication_flat_use_bookmarks(self, volume=False):
-        if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.setup_basic()
@@ -2697,7 +2697,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertEqual(0, n_dst)
                     self.assertEqual(3 + 3, n_all)
 
-                    if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+                    if not are_bookmarks_enabled("src"):
                         continue
 
                     src_foo = src_root_dataset + "/foo"
@@ -2984,7 +2984,7 @@ class LocalTestCase(BZFSTestCase):
                 with stop_on_failure_subtest(i=j * 3 + i):
                     destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
                     destroy_snapshots(dst_root_dataset, snapshots(dst_root_dataset))
-                    if is_zpool_bookmarks_feature_enabled_or_active("src"):
+                    if are_bookmarks_enabled("src"):
                         for bookmark in bookmarks(src_root_dataset):
                             destroy(bookmark)
                     take_snapshot(src_root_dataset, fix("s1"))
@@ -2994,7 +2994,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertSnapshots(dst_root_dataset, 3, "s")
                     if i > 0:
                         destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
-                    if i > 1 and is_zpool_bookmarks_feature_enabled_or_active("src"):
+                    if i > 1 and are_bookmarks_enabled("src"):
                         for bookmark in bookmarks(src_root_dataset):
                             destroy(bookmark)
                     crosscheck = [] if j == 0 else ["--delete-dst-snapshots-no-crosscheck"]
@@ -3004,7 +3004,7 @@ class LocalTestCase(BZFSTestCase):
                     if i == 0:
                         self.assertSnapshots(dst_root_dataset, 3, "s")
                     elif i == 1:
-                        if j == 0 and is_zpool_bookmarks_feature_enabled_or_active("src"):
+                        if j == 0 and are_bookmarks_enabled("src"):
                             self.assertSnapshotNames(dst_root_dataset, ["s1", "s3"])
                         else:
                             self.assertSnapshotNames(dst_root_dataset, [])
@@ -3038,7 +3038,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
                 self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
 
-        if is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if are_bookmarks_enabled("src"):
             tag0 = snapshot_name(snapshots(src_root_dataset)[0])
             create_bookmark(dst_root_dataset, tag0, tag0)
             for snap in snapshots(src_root_dataset, max_depth=None) + snapshots(dst_root_dataset, max_depth=None):
@@ -3061,7 +3061,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset))
 
     def test_delete_dst_bookmarks_flat(self):
-        if not is_zpool_bookmarks_feature_enabled_or_active("src"):
+        if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         for i in range(0, 1):
             with stop_on_failure_subtest(i=i):
@@ -3786,7 +3786,7 @@ def is_zpool_feature_enabled_or_active(location, feature):
     return zpool_features[location].get(feature) in ("active", "enabled")
 
 
-def is_zpool_bookmarks_feature_enabled_or_active(location):
+def are_bookmarks_enabled(location):
     return is_zpool_feature_enabled_or_active(location, "feature@bookmark_v2") and is_zpool_feature_enabled_or_active(
         location, "feature@bookmark_written"
     )

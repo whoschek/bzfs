@@ -1792,7 +1792,6 @@ class Job:
         if p.delete_dst_snapshots and not failed:
             log.info(p.dry("--delete-dst-snapshots: %s"), task_description_with_dots)
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
-            src_has_bookmark_feature = self.is_zpool_bookmarks_feature_enabled_or_active(src)
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
             src_datasets_set = set(src_datasets)
@@ -1813,10 +1812,10 @@ class Job:
                 if filter_needs_creation_time:
                     dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in src_datasets_set and (src_has_bookmark_feature or not p.delete_dst_bookmarks):
+                if src_dataset in src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
                     src_kind = kind
                     if not p.delete_dst_snapshots_no_crosscheck:
-                        src_kind = "snapshot,bookmark" if src_has_bookmark_feature else "snapshot"
+                        src_kind = "snapshot,bookmark" if self.are_bookmarks_enabled(src) else "snapshot"
                     cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
                     src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
                     missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(
@@ -1833,7 +1832,7 @@ class Job:
                     self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
                 return True
 
-            if self.is_zpool_bookmarks_feature_enabled_or_active(dst) or not p.delete_dst_bookmarks:
+            if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
                 failed = self.process_datasets_fault_tolerant(
                     dst_datasets,
                     process_dataset=lambda dataset: delete_destination_snapshots(dataset),
@@ -1850,8 +1849,7 @@ class Job:
         if p.delete_empty_dst_datasets and p.recursive and not failed:
             log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description_with_dots)
             delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
-                p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots
-                and self.is_zpool_bookmarks_feature_enabled_or_active(dst)
+                p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and self.are_bookmarks_enabled(dst)
             )
 
             # Compute the direct children of each NON-FILTERED dataset. Thus, no excluded dataset and no ancestor of
@@ -1913,8 +1911,7 @@ class Job:
         dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
-        use_bookmark = p.use_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(src)
-        use_bookmark = use_bookmark and len(dst_snapshots_with_guids) > 0
+        use_bookmark = p.use_bookmark and self.are_bookmarks_enabled(src) and len(dst_snapshots_with_guids) > 0
         filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
@@ -2881,7 +2878,7 @@ class Job:
         p, log = self.params, self.params.log
         assert "@" in src_snapshot
         bookmark = replace_prefix(src_snapshot, old_prefix=f"{src_dataset}@", new_prefix=f"{src_dataset}#")
-        if p.create_bookmark and self.is_zpool_bookmarks_feature_enabled_or_active(remote):
+        if p.create_bookmark and self.are_bookmarks_enabled(remote):
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
             try:
                 self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
@@ -3202,7 +3199,7 @@ class Job:
                 written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
             props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
             types = "snapshot"
-            if p.use_bookmark and r.location == "src" and self.is_zpool_bookmarks_feature_enabled_or_active(r):
+            if p.use_bookmark and r.location == "src" and self.are_bookmarks_enabled(r):
                 types = "snapshot,bookmark"
             cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
             for lines in self.itr_ssh_command_parallel(r, cmd, sorted(datasets)):
@@ -3615,7 +3612,7 @@ class Job:
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
         return self.params.zpool_features[remote.location].get(feature) in ("active", "enabled")
 
-    def is_zpool_bookmarks_feature_enabled_or_active(self, remote: Remote) -> bool:
+    def are_bookmarks_enabled(self, remote: Remote) -> bool:
         return self.is_zpool_feature_enabled_or_active(
             remote, "feature@bookmark_v2"
         ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
