@@ -1112,16 +1112,16 @@ class LogParams:
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
-        dot_current_dir = os.path.join(log_parent_dir, ".current")
+        current = "current"
+        dot_current_dir = os.path.join(log_parent_dir, f".{current}")
         current_dir = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
         os.makedirs(current_dir, exist_ok=True)
-        create_symlink(self.log_file, current_dir, "current.log")
-        create_symlink(self.pv_log_file, current_dir, "current.pv")
-        create_symlink(self.log_dir, current_dir, "current.dir")
-        dst = "current"
-        dst_file = os.path.join(current_dir, dst)
+        create_symlink(self.log_file, current_dir, f"{current}.log")
+        create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
+        create_symlink(self.log_dir, current_dir, f"{current}.dir")
+        dst_file = os.path.join(current_dir, current)
         os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
-        os.replace(dst_file, os.path.join(log_parent_dir, dst))  # atomic rename
+        os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
         delete_stale_files(dot_current_dir, prefix="", secs=60, dirs=True, exclude=os.path.basename(current_dir))
 
     def __repr__(self) -> str:
@@ -1200,7 +1200,7 @@ class Params:
         self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
-        self.compare_snapshot_lists = args.compare_snapshot_lists
+        self.compare_snapshot_lists: Optional[str] = args.compare_snapshot_lists
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.resume_recv: bool = not args.no_resume_recv
@@ -1234,7 +1234,7 @@ class Params:
         self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
         self.max_datasets_per_batch_on_list_snaps = int(getenv_any("max_datasets_per_batch_on_list_snaps", 1024))
         self.max_datasets_per_minibatch_on_list_snaps = int(getenv_any("max_datasets_per_minibatch_on_list_snaps", -1))
-        self.threads = args.threads
+        self.threads: Tuple[int, bool] = args.threads
 
         self.os_cpu_count: int = os.cpu_count()
         self.os_geteuid: int = os.geteuid()
@@ -1344,7 +1344,7 @@ class Remote:
         """Option values for either location=='src' or location=='dst'; reads from ArgumentParser via args."""
         # immutable variables:
         assert loc == "src" or loc == "dst"
-        self.location = loc
+        self.location: str = loc
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
@@ -1726,7 +1726,7 @@ class Job:
     def run_task(self) -> None:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        task_description_with_dots = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
+        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
 
         # find src dataset or all datasets in src dataset tree (with --recursive)
         cmd = p.split_args(
@@ -1749,7 +1749,7 @@ class Job:
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
-            log.info("Starting replication task: %s", task_description_with_dots)
+            log.info("Starting replication task: %s", task_description)
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             selected_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
@@ -1766,7 +1766,7 @@ class Job:
             p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets or p.compare_snapshot_lists
         ):
             return
-        log.info("Listing dst datasets: %s", task_description_with_dots)
+        log.info("Listing dst datasets: %s", task_description)
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
         basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
         if basis_dst_datasets is None:
@@ -1778,7 +1778,7 @@ class Job:
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.
         if p.delete_dst_datasets and not failed:
-            log.info(p.dry("--delete-dst-datasets: %s"), task_description_with_dots)
+            log.info(p.dry("--delete-dst-datasets: %s"), task_description)
             dst_datasets = set(dst_datasets)
             to_delete = dst_datasets.difference(
                 {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in src_datasets}
@@ -1790,7 +1790,7 @@ class Job:
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
         # via --{include|exclude}-dataset* policy.
         if p.delete_dst_snapshots and not failed:
-            log.info(p.dry("--delete-dst-snapshots: %s"), task_description_with_dots)
+            log.info(p.dry("--delete-dst-snapshots: %s"), task_description)
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
@@ -1847,7 +1847,7 @@ class Job:
         # a reverse sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct
         # children but the entire tree. Finally, delete all orphan datasets in an efficient batched way.
         if p.delete_empty_dst_datasets and p.recursive and not failed:
-            log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description_with_dots)
+            log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
             delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
                 p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and self.are_bookmarks_enabled(dst)
             )
@@ -1891,7 +1891,7 @@ class Job:
                     dst_datasets = isorted(set(dst_datasets).difference(orphans))
 
         if p.compare_snapshot_lists and not failed:
-            log.info("--compare-snapshot-lists: %s", task_description_with_dots)
+            log.info("--compare-snapshot-lists: %s", task_description)
             if len(src_datasets) == 0 and not self.is_dummy_src(src):
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             if selected_src_datasets is None:
@@ -2171,11 +2171,11 @@ class Job:
                 )
                 for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo)
             ]
-            sum_size = sum(estimate_send_sizes)
+            total_size = sum(estimate_send_sizes)
             done_size = 0
             for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo):
                 curr_size = estimate_send_sizes[i]
-                human_size = format_size(sum_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
+                human_size = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2999,8 +2999,7 @@ class Job:
         is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
         * The is_resume param is necessary as 'zfs send -t' does not support sending more than a single snapshot
         on resuming a previously interrupted 'zfs receive -s'. Thus, here too, we convert a -I step to a -i step
-        followed by zero or more -i/-I steps.
-        """
+        followed by zero or more -i/-I steps."""
 
         def append_run(i: int, label: str) -> int:
             step = ("-I", src_snapshots[start], src_snapshots[i])
