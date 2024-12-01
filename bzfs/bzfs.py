@@ -3358,11 +3358,16 @@ class Job:
         tsv_file = tsv_file[0 : tsv_file.rindex(".")] + ".rel_datasets_tsv"
         tmp_tsv_file = tsv_file + ".tmp"
         with open(tmp_tsv_file, "w", encoding="utf-8") as fd:
+            header = "#location rel_dataset src_dataset dst_dataset"
+            fd.write(header.replace(" ", "\t") + "\n")
             src_only = rel_datasets["src"].difference(rel_datasets["dst"])
             dst_only = rel_datasets["dst"].difference(rel_datasets["src"])
             for rel_dataset in rel_src_or_dst:
                 loc = "src" if rel_dataset in src_only else "dst" if rel_dataset in dst_only else "all"
-                row = [loc, rel_dataset]
+                src_dataset = src.root_dataset + rel_dataset if rel_dataset not in dst_only else ""
+                dst_dataset = dst.root_dataset + rel_dataset if rel_dataset not in src_only else ""
+                row = [loc, rel_dataset, src_dataset, dst_dataset]
+                # Example: all /foo/bar tank1/src/foo/bar tank2/dst/foo/bar
                 if not p.dry_run:
                     fd.write("\t".join(row) + "\n")
         os.rename(tmp_tsv_file, tsv_file)
