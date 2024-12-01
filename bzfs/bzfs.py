@@ -2635,6 +2635,9 @@ class Job:
                 log.debug("Excluding b/c dataset regex: %s", dataset)
         if p.exclude_dataset_property:
             results = self.filter_datasets_by_exclude_property(remote, results)
+        is_debug = p.log.isEnabledFor(log_debug)
+        for dataset in results:
+            is_debug and log.debug(f"Finally included {remote.location} dataset: %s", dataset)
         return results
 
     def filter_datasets_by_exclude_property(self, remote: Remote, datasets: List[str]) -> List[str]:
