@@ -26,6 +26,7 @@
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
 * The core replication algorithm is in run_task() and especially in replicate_dataset().
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
+* The --delete-* and --compare-* algorithms also start in run_task().
 * Consider using an IDE/editor that can open multiple windows for the same file, such as PyCharm or Sublime Text, etc.
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.py.
 Simply run that script whenever you change or add ArgumentParser help text.
@@ -1538,13 +1539,13 @@ class Job:
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                 raise self.first_exception  # reraise first swallowed exception
         except subprocess.CalledProcessError as e:
-            log.error(f"Exiting with status code: {e.returncode}")
+            log.error("Exiting with status code: %s", e.returncode)
             raise
         except SystemExit as e:
-            log.error(f"Exiting with status code: {e.code}")
+            log.error("Exiting with status code: %s", e.code)
             raise
         except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-            log.error(f"Exiting with status code: {die_status}")
+            log.error("Exiting with status code: %s", die_status)
             raise SystemExit(die_status) from e
         except re.error as e:
             log.error("%s within regex %s", e, e.pattern)
@@ -3193,7 +3194,8 @@ class Job:
         compare_snapshot_lists = set(p.compare_snapshot_lists.split("+"))
         is_src_dst_all = all(choice in compare_snapshot_lists for choice in cmp_choices_items)
         all_src_dst = [loc for loc in ("all", "src", "dst") if loc in compare_snapshot_lists]
-        is_first_row = [True]
+        is_first_row = True
+        now = None
 
         def zfs_list_snapshot_iterator(r: Remote, datasets: List[str]) -> Generator[str, None, None]:
             """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
@@ -3261,8 +3263,9 @@ class Job:
             # print metadata of snapshots of current dataset to TSV file; custom stats can later be computed from there
             stats = defaultdict(SnapshotStats)
             header = "#location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
+            nonlocal is_first_row
+            is_first_row = is_first_row and fd.write(header.replace(" ", "\t") + "\n") and False
             for i, entry in enumerate(entries):
-                is_first_row[0] = is_first_row[0] and (fd.write(header.replace(" ", "\t") + "\n") and False)
                 loc = location = entry[0]
                 creation, guid, createtxg, written, name = entry[1].cols
                 root_dataset = dst.root_dataset if location == cmp_choices_items[1] else src.root_dataset
@@ -3308,7 +3311,8 @@ class Job:
                     )
                 )
             )
-            now = time.time()
+            nonlocal now
+            now = now or round(time.time())  # uses the same timestamp across the entire dataset tree
             latcom = "latest common snapshot"
             for loc in all_src_dst:
                 s = stats[loc]
@@ -3332,7 +3336,7 @@ class Job:
                             hd = human_readable_duration(int(all_creation) - int(s_creation), unit="s")
                         msgs.append(f"{prefix} Time diff between {latcom} and {label} snapshot only in {loc}: {hd}")
                 for label, s_creation in latest, oldest:
-                    hd = "n/a" if not s_creation else human_readable_duration(round(now - int(s_creation)), unit="s")
+                    hd = "n/a" if not s_creation else human_readable_duration(now - int(s_creation), unit="s")
                     msgs.append(f"{prefix} Time diff between now and {label} snapshot only in {loc}: {hd}")
             log.info("%s", "\n".join(msgs))
 
