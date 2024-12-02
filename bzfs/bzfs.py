@@ -70,7 +70,7 @@ from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import Iterable, Dict, List, Set, Tuple, Any, Callable, Generator, Optional, Union
 
-__version__ = "1.6.0"
+__version__ = "1.7.0-dev"
 prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
