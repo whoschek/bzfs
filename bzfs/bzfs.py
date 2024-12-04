@@ -1799,9 +1799,20 @@ class Job:
             src_datasets_set = set(src_datasets)
 
             def delete_destination_snapshots(dst_dataset: str) -> bool:
-                cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+                src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
+                if src_dataset in src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
+                    src_kind = kind
+                    if not p.delete_dst_snapshots_no_crosscheck:
+                        src_kind = "snapshot,bookmark" if self.are_bookmarks_enabled(src) else "snapshot"
+                    src_cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
+                else:
+                    src_cmd = None
+                dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
-                dst_snaps_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd)
+                src_snaps_with_guids, dst_snaps_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
+                    lambda: set(self.run_ssh_command(src, log_trace, cmd=src_cmd).splitlines() if src_cmd else []),
+                    lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd),
+                )
                 if dst_snaps_with_guids is None:
                     log.warning("Third party deleted destination: %s", dst_dataset)
                     return False
@@ -1813,19 +1824,8 @@ class Job:
                     replace_in_lines(dst_snaps_with_guids, old="@", new="#")  # restore pre-filtering bookmark state
                 if filter_needs_creation_time:
                     dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
-                src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
-                    src_kind = kind
-                    if not p.delete_dst_snapshots_no_crosscheck:
-                        src_kind = "snapshot,bookmark" if self.are_bookmarks_enabled(src) else "snapshot"
-                    cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
-                    src_snapshots_with_guids = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
-                    missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(
-                        set(src_snapshots_with_guids)
-                    )
-                    missing_snapshot_tags = self.filter_lines(dst_snaps_with_guids, missing_snapshot_guids)
-                else:
-                    missing_snapshot_tags = dst_snaps_with_guids
+                missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
+                missing_snapshot_tags = self.filter_lines(dst_snaps_with_guids, missing_snapshot_guids)
                 separator = "#" if p.delete_dst_bookmarks else "@"
                 missing_snapshot_tags = cut(field=2, separator=separator, lines=missing_snapshot_tags)
                 if p.delete_dst_bookmarks:
@@ -1909,12 +1909,7 @@ class Job:
         log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
-        dst_snapshots_with_guids = self.try_ssh_command(dst, log_trace, cmd=cmd, error_trigger="zfs_list_snapshot_dst")
-        self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
-        dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
-        use_bookmark = p.use_bookmark and self.are_bookmarks_enabled(src) and len(dst_snapshots_with_guids) > 0
-        filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
+        dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -1926,11 +1921,17 @@ class Job:
         # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
         # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
         # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
-        types = "snapshot,bookmark" if use_bookmark else "snapshot"
+        filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
+        types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+        src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
-        cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
-        src_snapshots_and_bookmarks = self.try_ssh_command(src, log_trace, cmd=cmd)
+        src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
+            lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
+            lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
+        )
+        self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
+        dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
         if src_snapshots_and_bookmarks is None:
             log.warning("Third party deleted source: %s", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
@@ -3392,8 +3393,8 @@ class Job:
             func(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
             i += 1
 
-    @staticmethod
     def merge_sorted_iterators(
+        self,
         choices: List[str],  # ["src", "dst", "all"]
         choice: str,  # Example: "src+dst+all"
         src_itr: Generator[ComparableSnapshot, None, None],
@@ -3406,11 +3407,7 @@ class Job:
         for i, item in enumerate(choices):
             if item in choice:
                 flags |= 1 << i
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            # perf: fetch initial results in parallel from src and dst in order to reduce latency
-            future: Future = executor.submit(lambda: next(src_itr, None))  # async 'zfs list -t snapshot' on src
-            dst_next = next(dst_itr, None)  # blocks until 'zfs list -t snapshot' CLI on dst returns with first results
-            src_next = future.result()  # blocks until 'zfs list -t snapshot' CLI on src returns with first results
+        src_next, dst_next = self.run_in_parallel(lambda: next(src_itr, None), lambda: next(dst_itr, None))
         while not (src_next is None and dst_next is None):
             if src_next == dst_next:
                 n = 2
@@ -3718,6 +3715,15 @@ class Job:
                 if next_future is not None:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
+
+    @staticmethod
+    def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any]) -> Tuple[Any, Any]:
+        """perf: Runs both I/O functions in parallel/concurrently."""
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future: Future = executor.submit(fn2)  # async fn2
+            result1 = fn1()  # blocks until fn1 call returns
+            result2 = future.result()  # blocks until fn2 call returns
+            return result1, result2
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
