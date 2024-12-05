@@ -1715,6 +1715,7 @@ class Job:
         i = 0
         has_converged = False
         while i < max_convergence_iterations and not has_converged:
+            stats = f" {i + 1}/{max_convergence_iterations}" if max_convergence_iterations > 1 else ""
             has_converged = True
             for dataset in datasets:
                 if is_descendant(dataset, of_root_dataset=skip_dataset):
@@ -1737,7 +1738,7 @@ class Job:
                     self.append_exception(e, task_name, dataset)
                 finally:
                     elapsed_nanos = int(time.time_ns() - start_time_nanos)
-                    log.debug(task_name + " done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
+                    log.debug(task_name + stats + " done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
             i += 1
         return failed
 
