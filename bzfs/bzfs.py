@@ -3234,7 +3234,7 @@ class Job:
                         continue  # ignore bookmarks whose snapshot still exists. also ignore dupes of bookmarks
                     last_guid = guid
                     if written == "snapshot":
-                        written = "-"  # sanitize solaris-11.4 work-around
+                        written = "-"  # sanitize solaris-11.4 work-around (solaris-11.4 also has no bookmark feature)
                         cols = [creation, guid, createtxg, written, snapshot_name]
                     key = (rel_dataset, guid)  # ensures src snaps and dst snaps with the same GUID will be adjacent
                     yield Job.ComparableSnapshot(key, cols)
