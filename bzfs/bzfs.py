@@ -566,6 +566,13 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              " The timer resets after each operation completes or retries exhaust, such that subsequently failing "
              "operations can again be retried.\n\n")
     parser.add_argument(
+        "--max-convergence-iterations", type=int, min=1, default=1, action=CheckRange, metavar="INT",
+        # help="The maximum number of times to replicate the SRC_DATASET tree (default: 1, min: 1). If zero snapshots "
+        #      "are replicated during a replication iteration then skip to the next SRC_DATASET immediately. "
+        #      "Consider this option for large data transfers over slow networks if eventual consistency shall be "
+        #      "achieved ASAP, as the snapshot list may become stale during replication.\n\n")
+        help=argparse.SUPPRESS)
+    parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
         help="During replication and deletion, if an error is not retryable, or --retries has been exhausted, "
              "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
@@ -1193,6 +1200,7 @@ class Params:
         self.skip_missing_snapshots: str = args.skip_missing_snapshots
         self.skip_on_error: str = args.skip_on_error
         self.retry_policy: RetryPolicy = RetryPolicy(args, self)
+        self.max_convergence_iterations = args.max_convergence_iterations
         self.skip_replication: bool = args.skip_replication
         self.delete_dst_snapshots: bool = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: bool = args.delete_dst_snapshots == "bookmarks"
@@ -1693,9 +1701,10 @@ class Job:
     def process_datasets_fault_tolerant(
         self,
         datasets: List[str],
-        process_dataset: Callable[[str], bool],  # lambda
+        process_dataset: Callable[[str], Tuple[bool, bool]],  # lambda
         skip_tree_on_error: Callable[[str], bool],  # lambda
         task_name: str,
+        max_convergence_iterations: int = 1,
     ) -> bool:
         """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling + retries.
         Assumes that the input dataset list is sorted."""
@@ -1703,26 +1712,33 @@ class Job:
         log.trace("Retry policy: %s", p.retry_policy)
         failed = False
         skip_dataset = DONT_SKIP_DATASET
-        for dataset in datasets:
-            if is_descendant(dataset, of_root_dataset=skip_dataset):
-                # skip_dataset has been deleted by some third party while we're running
-                continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
-            skip_dataset = DONT_SKIP_DATASET
-            start_time_nanos = time.time_ns()
-            try:
-                if not self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset)):
-                    skip_dataset = dataset
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                failed = True
-                if p.skip_on_error == "fail":
-                    raise
-                elif p.skip_on_error == "tree" or skip_tree_on_error(dataset):
-                    skip_dataset = dataset
-                log.error("%s", str(e))
-                self.append_exception(e, task_name, dataset)
-            finally:
-                elapsed_nanos = int(time.time_ns() - start_time_nanos)
-                log.debug(task_name + " done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
+        i = 0
+        has_converged = False
+        while i < max_convergence_iterations and not has_converged:
+            has_converged = True
+            for dataset in datasets:
+                if is_descendant(dataset, of_root_dataset=skip_dataset):
+                    # skip_dataset has been deleted by some third party while we're running
+                    continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
+                skip_dataset = DONT_SKIP_DATASET
+                start_time_nanos = time.time_ns()
+                try:
+                    no_skip, converged = self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset))
+                    has_converged = has_converged and converged
+                    if not no_skip:
+                        skip_dataset = dataset
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                    failed = True
+                    if p.skip_on_error == "fail":
+                        raise
+                    elif p.skip_on_error == "tree" or skip_tree_on_error(dataset):
+                        skip_dataset = dataset
+                    log.error("%s", str(e))
+                    self.append_exception(e, task_name, dataset)
+                finally:
+                    elapsed_nanos = int(time.time_ns() - start_time_nanos)
+                    log.debug(task_name + " done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
+            i += 1
         return failed
 
     def run_task(self) -> None:
@@ -1762,6 +1778,7 @@ class Job:
                     replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
                 ],
                 task_name="Replicating",
+                max_convergence_iterations=p.max_convergence_iterations,
             )
 
         if failed or not (
@@ -1798,7 +1815,8 @@ class Job:
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
             src_datasets_set = set(src_datasets)
 
-            def delete_destination_snapshots(dst_dataset: str) -> bool:
+            def delete_destination_snapshots(dst_dataset: str) -> Tuple[bool, bool]:
+                has_converged = True
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
                     src_kind = kind
@@ -1815,7 +1833,7 @@ class Job:
                 )
                 if dst_snaps_with_guids is None:
                     log.warning("Third party deleted destination: %s", dst_dataset)
-                    return False
+                    return False, has_converged
                 dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="#", new="@")  # treat bookmarks as snapshots
@@ -1832,7 +1850,7 @@ class Job:
                     self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
                 else:
                     self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
-                return True
+                return True, has_converged
 
             if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
                 failed = self.process_datasets_fault_tolerant(
@@ -1900,13 +1918,14 @@ class Job:
                 selected_src_datasets = self.filter_datasets(src, src_datasets)  # apply include/exclude policy
             self.run_compare_snapshot_lists(selected_src_datasets, dst_datasets)
 
-    def replicate_dataset(self, src_dataset: str) -> bool:
+    def replicate_dataset(self, src_dataset: str) -> Tuple[bool, bool]:
         """Replicates src_dataset (without handling descendants) to dst_dataset."""
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
         log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
+        has_converged = True
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
         dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
@@ -1934,7 +1953,7 @@ class Job:
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
         if src_snapshots_and_bookmarks is None:
             log.warning("Third party deleted source: %s", src_dataset)
-            return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
+            return False, has_converged  # src dataset has been deleted by some third party while we're running
         src_snapshots_with_guids: List[str] = src_snapshots_and_bookmarks.splitlines()
         src_snapshots_and_bookmarks = None
 
@@ -1967,7 +1986,7 @@ class Job:
                 log.warning("Skipping source dataset because it includes no snapshot: %s", src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and p.recursive:
                     log.warning("Also skipping descendant datasets as dst dataset does not exist:%s", src_dataset)
-                return self.dst_dataset_exists[dst_dataset]
+                return self.dst_dataset_exists[dst_dataset], has_converged
 
         log.debug("latest_src_snapshot: %s", latest_src_snapshot)
         latest_dst_snapshot = ""
@@ -1987,7 +2006,7 @@ class Job:
                     self.try_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
             elif latest_src_snapshot == "":
                 log.info("Already-up-to-date: %s", dst_dataset)
-                return True
+                return True, has_converged
 
             # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
             # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
@@ -2031,7 +2050,7 @@ class Job:
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
                 log.info("Already up-to-date: %s", dst_dataset)
-                return True
+                return True, has_converged
 
         # endif self.dst_dataset_exists[dst_dataset]
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
@@ -2114,6 +2133,7 @@ class Job:
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not dry_run_no_send and not p.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
+                has_converged = has_converged and p.dry_run
                 self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
 
@@ -2153,7 +2173,7 @@ class Job:
                 # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
                 # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
                 # bookmark whose snapshot has been deleted on src.
-                return True  # nothing more tbd
+                return True, has_converged  # nothing more tbd
 
             recv_resume_token, send_resume_opts, recv_resume_opts = self.get_receive_resume_token(dst_dataset)
             recv_opts = p.zfs_recv_program_opts.copy() + recv_resume_opts
@@ -2203,8 +2223,9 @@ class Job:
                 recv_resume_token = None
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
+                has_converged = has_converged and p.dry_run
             self.zfs_set(set_opts, dst, dst_dataset)
-        return True
+        return True, has_converged
 
     def run_zfs_send_receive(
         self,
