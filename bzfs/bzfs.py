@@ -1936,10 +1936,10 @@ class Job:
             log.warning("Third party deleted source: %s", src_dataset)
             return False  # src dataset has been deleted by some third party while we're running - nothing to do anymore
         src_snapshots_with_guids: List[str] = src_snapshots_and_bookmarks.splitlines()
+        src_snapshots_and_bookmarks = None
         if len(dst_snapshots_with_guids) == 0 and "bookmark" in types:
             # src bookmarks serve no purpose if the destination dataset has no snapshot; ignore them
             src_snapshots_with_guids = [snapshot for snapshot in src_snapshots_with_guids if "@" in snapshot]
-        src_snapshots_and_bookmarks = None
 
         # apply include/exclude regexes to ignore irrelevant src snapshots
         basis_src_snapshots_with_guids = src_snapshots_with_guids
