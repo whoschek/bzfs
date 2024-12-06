@@ -3324,12 +3324,13 @@ class Job:
                 msgs.append(f"{prefix} Oldest snapshot only in {loc}: {s.oldest_snapshot_row_str or 'n/a'}")
                 msgs.append(f"{prefix} Snapshots only in {loc}: {s.snapshot_count}")
                 msgs.append(f"{prefix} Snapshot data written only in {loc}: {human_readable_bytes(s.sum_written)}")
-                na = None if loc != "all" and k >= 0 else "n/a"
-                msgs.append(f"{prefix} Snapshots only in {loc} since {latcom}: {na or s.snapshot_count_since}")
-                msgs.append(
-                    f"{prefix} Snapshot data written only in {loc} since {latcom}: "
-                    f"{na or human_readable_bytes(s.sum_written_since)}"
-                )
+                if loc != "all":
+                    na = None if k >= 0 else "n/a"
+                    msgs.append(f"{prefix} Snapshots only in {loc} since {latcom}: {na or s.snapshot_count_since}")
+                    msgs.append(
+                        f"{prefix} Snapshot data written only in {loc} since {latcom}: "
+                        f"{na or human_readable_bytes(s.sum_written_since)}"
+                    )
                 all_creation = stats["all"].latest_snapshot_creation
                 latest = ("latest", s.latest_snapshot_creation)
                 oldest = ("oldest", s.oldest_snapshot_creation)
