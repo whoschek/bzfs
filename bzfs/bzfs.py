@@ -3266,7 +3266,7 @@ class Job:
 
             # print metadata of snapshots of current dataset to TSV file; custom stats can later be computed from there
             stats = defaultdict(SnapshotStats)
-            header = "#location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
+            header = "location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
             nonlocal is_first_row
             is_first_row = is_first_row and fd.write(header.replace(" ", "\t") + "\n") and False
             for i, entry in enumerate(entries):
@@ -3367,7 +3367,7 @@ class Job:
         tsv_file = tsv_file[0 : tsv_file.rindex(".")] + ".rel_datasets_tsv"
         tmp_tsv_file = tsv_file + ".tmp"
         with open(tmp_tsv_file, "w", encoding="utf-8") as fd:
-            header = "#location rel_dataset src_dataset dst_dataset"
+            header = "location rel_dataset src_dataset dst_dataset"
             fd.write(header.replace(" ", "\t") + "\n")
             src_only: Set[str] = rel_datasets["src"].difference(rel_datasets["dst"])
             dst_only: Set[str] = rel_datasets["dst"].difference(rel_datasets["src"])

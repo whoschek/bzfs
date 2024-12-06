@@ -2519,7 +2519,7 @@ class LocalTestCase(BZFSTestCase):
             log_file = _job.params.log_params.log_file
             tsv_file = glob.glob(log_file[0 : log_file.rindex(".log")] + ".cmp/*.tsv")[0]
             with open(tsv_file, "r", encoding="utf-8") as fd:
-                return [line.strip() for line in fd if line.startswith(location) and not line.startswith("#")]
+                return [line.strip() for line in fd if line.startswith(location) and not line.startswith("location")]
 
         def stats(_job):
             _lines = snapshot_list(_job)
