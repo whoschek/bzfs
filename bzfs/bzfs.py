@@ -1310,8 +1310,7 @@ class Params:
             return program + "-xxx"  # substitute a program that cannot be found on the PATH
         if self.inject_params.get("inject_failing_" + program, False):
             return "false"  # substitute a program that will error out with non-zero return code
-        else:
-            return program
+        return program
 
     def unset_matching_env_vars(self, args: argparse.Namespace) -> None:
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
