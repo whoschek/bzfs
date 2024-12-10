@@ -1513,6 +1513,7 @@ class Job:
                             log.error(f"{msg} per %s", lock_file)
                             raise SystemExit(die_status) from e
                         try:
+                            # On CTRL-C send signal to the entire process group to also terminate child processes
                             old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: self.terminate())
                             try:
                                 self.run_tasks()

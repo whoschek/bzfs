@@ -1035,7 +1035,8 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertNotEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
 
     def test_parse_datetime_with_timezone(self):
-        if sys.version_info < (3, 11):
+        tz_py_version = (3, 11)
+        if sys.version_info < tz_py_version:
             self.skipTest("Timezone support in datetime.fromisoformat() requires python >= 3.11")
 
         # Test ISO 8601 datetime strings with timezone info
