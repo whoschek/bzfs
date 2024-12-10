@@ -96,6 +96,7 @@ log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in 
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 DONT_SKIP_DATASET = ""
+DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
 
 
@@ -2328,7 +2329,7 @@ class Job:
         if not dry_run_no_send:
             try:
                 self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-                process = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
+                process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 no_sleep = False
                 if not isinstance(e, UnicodeDecodeError):
@@ -2527,14 +2528,14 @@ class Job:
                 # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
                 ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-                if subprocess.run(ssh_socket_cmd, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+                if subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
                     log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
                 else:
                     log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                     ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                     ssh_socket_cmd += ["-M", "-o", "ControlPersist=60s", remote.ssh_user_host, "exit"]
                     log.debug("Executing: %s", list_formatter(ssh_socket_cmd))
-                    process = subprocess.run(ssh_socket_cmd, stderr=PIPE, text=True)
+                    process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
                     if process.returncode != 0:
                         log.error("%s", process.stderr.rstrip())
                         die(
@@ -2549,7 +2550,7 @@ class Job:
             return ""
         else:
             try:
-                process = subprocess.run(ssh_cmd + cmd, stdout=PIPE, stderr=PIPE, text=True, check=check)
+                process = subprocess.run(ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=check)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), run=print_stdout, end="")
@@ -3448,10 +3449,12 @@ class Job:
         if "local" not in available_programs:
             cmd = [p.shell_program_local, "-c", self.find_available_programs()]
             available_programs["local"] = dict.fromkeys(
-                subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True, check=False).stdout.splitlines()
+                subprocess.run(
+                    cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True, check=False
+                ).stdout.splitlines()
             )
             cmd = [p.shell_program_local, "-c", "exit"]
-            if subprocess.run(cmd, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
+            if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
                 self.disable_program("sh", ["local"])
 
         for r in [p.dst, p.src]:
@@ -4026,7 +4029,6 @@ def terminate_process_group(except_current_process=False):
         is_test or os.killpg(os.getpgrp(), signum)  # avoid confusing python's unit test framework with killpg()
     finally:
         signal.signal(signum, old_signal_handler)  # reenable and restore original handler
-
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
