@@ -1496,7 +1496,8 @@ class Job:
                             # The (advisory) lock is auto-released when the process terminates or the fd is closed.
                             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
                         except BlockingIOError as e:
-                            log.error("Exiting as same previous periodic job is still running without completion yet.")
+                            msg = "Exiting as same previous periodic job is still running without completion yet"
+                            log.error(f"{msg} per %s", lock_file)
                             raise SystemExit(die_status) from e
                         try:
                             self.run_tasks()
