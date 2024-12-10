@@ -2877,6 +2877,7 @@ class Job:
                     if (
                         "filesystem successfully created, but it may only be mounted by root" not in e.stderr
                         and "filesystem successfully created, but not mounted" not in e.stderr  # SolarisZFS
+                        and "dataset already exists" not in e.stderr
                     ):
                         raise
                 if not p.dry_run:
