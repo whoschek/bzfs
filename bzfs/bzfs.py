@@ -1377,7 +1377,7 @@ class Remote:
 
     def cache_key(self) -> Tuple:
         # fmt: off
-        return (self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
+        return (self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
                 tuple(self.ssh_private_key_files), tuple(self.ssh_extra_opts))
         # fmt: on
 
@@ -1436,15 +1436,7 @@ def main() -> None:
 
 def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None) -> None:
     """API for Python clients; visible for testing; may become a public API eventually."""
-    # On CTRL-C sends signal to the entire process group to also terminate child processes started via subprocess.run()
-    old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: terminate_process_group())
-    try:
-        Job().run_main(args, sys_argv, log)
-    except BaseException as e:
-        terminate_process_group(except_current_process=True)
-        raise e
-    finally:
-        signal.signal(signal.SIGINT, old_sigint_handler)  # restore original signal handler
+    Job().run_main(args, sys_argv, log)
 
 
 #############################################################################
@@ -1472,6 +1464,26 @@ class Job:
         self.param_injection_triggers: Dict[str, Dict[str, bool]] = {}  # for testing only
         self.inject_params: Dict[str, bool] = {}  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
+
+    def cleanup(self):
+        """Exit any multiplexed ssh sessions that may be leftover."""
+        p, log = self.params, self.params.log
+        cache_items = self.remote_conf_cache.values()
+        for i, cache_item in enumerate(cache_items):
+            ssh_cmd = cache_item[-1]
+            if len(ssh_cmd) > 0 and p.reuse_ssh_connection:
+                ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
+                ssh_socket_cmd_quoted = " ".join([shlex.quote(item) for item in ssh_socket_cmd])
+                log.debug(f"Executing {i+1}/{len(cache_items)}: %s", ssh_socket_cmd_quoted)
+                process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+                if process.returncode != 0:
+                    log.trace("%s", process.stderr.rstrip())
+
+    def terminate(self, except_current_process=False):
+        try:
+            self.cleanup()
+        finally:
+            terminate_process_group(except_current_process=except_current_process)
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
         assert isinstance(self.error_injection_triggers, dict)
@@ -1501,7 +1513,16 @@ class Job:
                             log.error(f"{msg} per %s", lock_file)
                             raise SystemExit(die_status) from e
                         try:
-                            self.run_tasks()
+                            old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: self.terminate())
+                            try:
+                                self.run_tasks()
+                            except BaseException as e:
+                                self.terminate(except_current_process=True)
+                                raise e
+                            finally:
+                                signal.signal(signal.SIGINT, old_sigint_handler)  # restore original signal handler
+                            for i in range(2 if self.max_command_line_bytes else 1):
+                                self.cleanup()
                         finally:
                             unlink_missing_ok(lock_file)  # avoid accumulation of stale lock files
         finally:
