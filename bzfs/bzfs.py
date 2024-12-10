@@ -1435,7 +1435,7 @@ def main() -> None:
 
 def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None) -> None:
     """API for Python clients; visible for testing; may become a public API eventually."""
-    # On CTRL-C send SIGTERM to the entire process group to also terminate child processes started via subprocess.run()
+    # On CTRL-C sends signal to the entire process group to also terminate child processes started via subprocess.run()
     old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: terminate_process_group())
     try:
         Job().run_main(args, sys_argv, log)
@@ -4014,18 +4014,19 @@ def unlink_missing_ok(file: str) -> None:  # workaround for compat with python <
 
 
 def terminate_process_group(except_current_process=False):
-    """Sends SIGTERM to the entire process group to also terminate child processes started via subprocess.run()"""
-    signalnum = signal.SIGTERM
-    old_sigterm_handler = (
-        signal.signal(signalnum, lambda signum, frame: None)  # temporarily disable signal handler on current process
+    """Sends signal to the entire process group to also terminate child processes started via subprocess.run()"""
+    signum = signal.SIGTERM
+    old_signal_handler = (
+        signal.signal(signum, lambda signalnum, frame: None)  # temporarily disable signal handler on current process
         if except_current_process
-        else signal.getsignal(signalnum)
+        else signal.getsignal(signum)
     )
     try:
         is_test = any("unittest" in frame.filename for frame in inspect.stack())
-        is_test or os.killpg(os.getpgrp(), signalnum)  # avoid confusing python's unit test framework with killpg()
+        is_test or os.killpg(os.getpgrp(), signum)  # avoid confusing python's unit test framework with killpg()
     finally:
-        signal.signal(signalnum, old_sigterm_handler)  # reenable and restore original handler
+        signal.signal(signum, old_signal_handler)  # reenable and restore original handler
+
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
