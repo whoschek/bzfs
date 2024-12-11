@@ -60,6 +60,7 @@ def main():
     content = content.replace(r"\`\`\`", "\n```\n")
     content = re.sub(r"\\([`#-_|~>\[*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
     content = re.sub(r"\\'", r"'", content)  # s/\\\'/'/g
+    content = re.sub(r'\\"', r'"', content)  # s/\\\"/"/g
     content = re.sub(r"\\]", r"\]", content)  # s/\\\]/\]/g
     content = re.sub(r"# OPTIONS", "", content)  # s/# OPTIONS//g
     content = re.sub(r": {3}", r"*  ", content)  # s/:   /*  /g
