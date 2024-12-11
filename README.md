@@ -97,6 +97,10 @@ copy the file wherever you like, for example into /usr/local/bin or
 similar, and simply run it like any stand-alone shell script or binary
 executable.
 
+bzfs automatically replicates the snapshots of multiple datasets in
+parallel for best performance. Similarly, it quickly deletes (or
+compares) snapshots of multiple datasets in parallel.
+
 Optionally, bzfs applies bandwidth rate-limiting and progress monitoring
 (via 'pv' CLI) during 'zfs send/receive' data transfers. When run
 across the network, bzfs also transparently inserts lightweight data
@@ -302,6 +306,8 @@ properties to replicate or delete or compare.
 delete mode.
 * Continously tested on Linux, FreeBSD and Solaris.
 * Code is almost 100% covered by tests.
+* Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly 
+deletes (or compares) snapshots of multiple datasets in parallel.
 * Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
 files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.
 * Stays true to the ZFS send/receive spirit. Retains the ability to use ZFS CLI options for fine tuning. Does not
@@ -528,6 +534,18 @@ usage: bzfs [-h] [--recursive]
     Has same naming format as SRC_DATASET. During replication,
     destination datasets that do not yet exist are created as necessary,
     along with their parent and ancestors.
+
+    *Performance Note:* bzfs automatically replicates multiple
+    datasets in parallel. It replicates snapshots in parallel across
+    datasets and serially within a dataset. All child datasets of a
+    dataset may be processed in parallel. For consistency, processing of
+    a dataset only starts after processing of all its ancestor datasets
+    has completed. Further, when a thread is ready to start processing
+    another dataset, it chooses the next dataset wrt. case-insensitive
+    sort order from the datasets that are currently available for start
+    of processing. Initially, only the roots of the selected dataset
+    subtrees are available for start of processing. The degree of
+    parallelism is configurable with the --threads option (see below).
 
 
 
@@ -1136,7 +1154,11 @@ usage: bzfs [-h] [--recursive]
     *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks
     instead of snapshots, in which case no snapshots are selected and
     the --{include|exclude}-snapshot-* filter options treat bookmarks
-    as snapshots wrt. selecting.
+    as snapshots wrt. selecting. *Performance Note:*
+    --delete-dst-snapshots operates on multiple datasets in parallel
+    (and serially within a dataset), using the same dataset order as
+    bzfs replication. The degree of parallelism is configurable with the
+    --threads option (see below).
 
 <!-- -->
 
@@ -1625,12 +1647,19 @@ usage: bzfs [-h] [--recursive]
 
 *  The maximum number of threads to use for parallel operations; can be
     given as a positive integer, optionally followed by the % percent
-    character (min: 1, default: 150%). Percentages are relative to the
+    character (min: 1, default: 100%). Percentages are relative to the
     number of CPU cores on the machine. Example: 200% uses twice as many
     threads as there are cores on the machine; 75% uses num_threads =
-    num_cores * 0.75. Currently this option only applies to
-    --compare-snapshot-lists and --delete-empty-dst-datasets.
-    Examples: 4, 75%
+    num_cores * 0.75. Currently this option only applies to dataset and
+    snapshot replication, --delete-dst-snapshots,
+    --delete-empty-dst-datasets, and --compare-snapshot-lists. The
+    ideal value for this parameter depends on the use case and its
+    performance requirements, as well as the number of available CPU
+    cores and the parallelism offered by NVMEs vs. rotational drives,
+    ZFS geometry and configuration, as well as the network bandwidth and
+    other workloads simultaneously running on the system. The current
+    default is geared towards a high degreee of parallelism, and as such
+    may perform poorly on HDDs. Examples: 1, 4, 150%
 
 <!-- -->
 
@@ -1770,12 +1799,18 @@ usage: bzfs [-h] [--recursive]
 
 *  Path to the log output directory on local host (optional). Default:
     $HOME/bzfs-logs. The logger that is used by default writes log
-    files there, in addition to the console. The current.log symlink
-    always points to the most recent log file. The current.pv symlink
-    always points to the most recent data transfer monitoring log. Run
-    'tail --follow=name --max-unchanged-stats=1' on both symlinks to
-    follow what's currently going on. The current.dir symlink always
-    points to the sub directory containing the most recent log file.
+    files there, in addition to the console. The current.dir symlink
+    always points to the subdirectory containing the most recent log
+    file. The current.log symlink always points to the most recent log
+    file. The current.pv symlink always points to the most recent data
+    transfer monitoring log. Run `tail --follow=name
+    --max-unchanged-stats=1` on both symlinks to follow what's
+    currently going on. Parallel replication generates a separate .pv
+    file per thread. To monitor these, run something like `while true;
+    do clear; for f in $(realpath
+    $HOME/bzfs-logs/current/current.pv)*; do tac -s $(printf '\r')
+    $f | tr '\r' '\n' | grep -m1 -v '^$'; done; sleep 1;
+    done`
 
 <!-- -->
 

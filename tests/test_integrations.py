@@ -257,6 +257,18 @@ class BZFSTestCase(ParametrizedTestCase):
         take_snapshot(src_foo_a, fix("u2"))
         take_snapshot(src_foo_a, fix("u3"))
 
+    def setup_basic_woo(self, w=1, q=0):
+        for i in range(w):
+            src_woo = create_filesystem(src_root_dataset, f"woo{i}")
+            take_snapshot(src_woo, fix("w1"))
+            take_snapshot(src_woo, fix("w2"))
+            take_snapshot(src_woo, fix("w3"))
+            for j in range(q):
+                src_woo_qoo = create_filesystem(src_woo, f"qoo{j}")
+                take_snapshot(src_woo_qoo, fix("q1"))
+                take_snapshot(src_woo_qoo, fix("q2"))
+                take_snapshot(src_woo_qoo, fix("q3"))
+
     def setup_basic_with_recursive_replication_done(self):
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive")
@@ -394,12 +406,15 @@ class BZFSTestCase(ParametrizedTestCase):
         job.is_test_mode = True
         if error_injection_triggers is not None:
             job.error_injection_triggers = error_injection_triggers
+            args = args + ["--threads=1"]
 
         if delete_injection_triggers is not None:
             job.delete_injection_triggers = delete_injection_triggers
+            args = args + ["--threads=1"]
 
         if param_injection_triggers is not None:
             job.param_injection_triggers = param_injection_triggers
+            args = args + ["--threads=1"]
 
         if inject_params is not None:
             job.inject_params = inject_params
@@ -724,6 +739,24 @@ class LocalTestCase(BZFSTestCase):
                     encryption_prop = dataset_property(dst_root_dataset + "/foo/a", "encryption")
                     self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else "off")
 
+    def test_basic_replication_recursive_parallel(self):
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+        self.setup_basic()
+        w, q = 3, 3
+        self.setup_basic_woo(w=w, q=q)
+        for i in range(0, 1):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--threads=4")
+                self.assertSnapshots(dst_root_dataset, 3, "s")
+                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
+                for j in range(w):
+                    self.assertSnapshots(dst_root_dataset + f"/woo{j}", 3, "w")
+                    for k in range(q):
+                        self.assertSnapshots(dst_root_dataset + f"/woo{j}/qoo{k}", 3, "q")
+
     def test_basic_replication_flat_pool(self):
         for child in datasets(src_pool) + datasets(dst_pool):
             destroy(child, recursive=True)
@@ -849,6 +882,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_recursive_with_skip_parent(self):
         self.setup_basic()
+        self.setup_basic_woo()
         destroy(dst_root_dataset, recursive=True)
         self.assertFalse(dataset_exists(dst_root_dataset))
         for i in range(0, 2):
@@ -860,6 +894,7 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertSnapshots(dst_root_dataset, 0)
                     self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assertSnapshots(dst_root_dataset + "/woo0", 3, "w")
 
         destroy(dst_root_dataset, recursive=True)
         self.assertFalse(dataset_exists(dst_root_dataset))
@@ -881,6 +916,7 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertSnapshots(dst_root_dataset, 0)
                     self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assertSnapshots(dst_root_dataset + "/woo0", 3, "w")
 
     def test_include_snapshot_time_range_full(self):
         self.setup_basic()

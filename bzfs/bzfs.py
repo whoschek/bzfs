@@ -34,8 +34,10 @@ Simply run that script whenever you change or add ArgumentParser help text.
 
 import argparse
 import collections
+import concurrent
 import fcntl
 import hashlib
+import heapq
 import inspect
 import itertools
 import json
@@ -57,10 +59,11 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from argparse import Namespace
 from collections import defaultdict, deque, Counter
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from contextlib import redirect_stderr
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -153,6 +156,9 @@ stand-alone shell script or binary executable. It is designed to be able to run 
 environments. No external Python packages are required; indeed no Python package management at all is required.
 You can just copy the file wherever you like, for example into /usr/local/bin or similar, and simply run it like
 any stand-alone shell script or binary executable.
+
+{prog_name} automatically replicates the snapshots of multiple datasets in parallel for best performance. 
+Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
@@ -299,7 +305,15 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "DST_DATASET: "
              "Destination ZFS dataset for replication and deletion. Has same naming format as SRC_DATASET. During "
              "replication, destination datasets that do not yet exist are created as necessary, along with their "
-             "parent and ancestors.\n\n")
+             "parent and ancestors.\n\n"
+             f"*Performance Note:* {prog_name} automatically replicates multiple datasets in parallel. It replicates "
+             "snapshots in parallel across datasets and serially within a dataset. All child datasets of a dataset "
+             "may be processed in parallel. For consistency, processing of a dataset only starts after processing of "
+             "all its ancestor datasets has completed. Further, when a thread is ready to start processing another "
+             "dataset, it chooses the next dataset wrt. case-insensitive sort order from the datasets that are "
+             "currently available for start of processing. Initially, only the roots of the selected dataset subtrees "
+             "are available for start of processing. The degree of parallelism is configurable with the --threads "
+             "option (see below).\n\n")
     parser.add_argument(
         "--recursive", "-r", action="store_true",
         help="During replication and deletion, also consider descendant datasets, i.e. datasets within the dataset "
@@ -623,8 +637,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--include-snapshot-regex '.*_daily' --recursive`\n\n"
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
-             "snapshots wrt. selecting."
-             "\n\n")
+             "snapshots wrt. selecting. "
+             "*Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and serially "
+             f"within a dataset), using the same dataset order as {prog_name} replication. "
+             "The degree of parallelism is configurable with the --threads option (see below).\n\n")
     parser.add_argument(
         "--delete-dst-snapshots-no-crosscheck", action="store_true",
         help="This flag indicates that --delete-dst-snapshots=snapshots shall check the source dataset only for "
@@ -866,14 +882,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         parser.add_argument(
             f"--ssh-{loc}-config-file", type=str, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
-    threads_default = 150  # percent
+    threads_default = 100  # percent
     parser.add_argument(
         "--threads", min=1, default=(threads_default, True), action=CheckPercentRange, metavar="INT[%]",
         help="The maximum number of threads to use for parallel operations; can be given as a positive integer, "
              f"optionally followed by the %% percent character (min: 1, default: {threads_default}%%). Percentages "
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many threads as "
              "there are cores on the machine; 75%% uses num_threads = num_cores * 0.75. Currently this option only "
-             "applies to --compare-snapshot-lists and --delete-empty-dst-datasets. Examples: 4, 75%%\n\n")
+             "applies to dataset and snapshot replication, --delete-dst-snapshots, --delete-empty-dst-datasets, and "
+             "--compare-snapshot-lists. The ideal value for this parameter depends on the use case and its performance "
+             "requirements, as well as the number of available CPU cores and the parallelism offered by NVMEs vs. "
+             "rotational drives, ZFS geometry and configuration, as well as the network bandwidth and other "
+             "workloads simultaneously running on the system. The current default is geared towards a high degreee of "
+             "parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 150%%\n\n")
     parser.add_argument(
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
@@ -931,11 +952,14 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--log-dir", type=str, metavar="DIR",
         help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "
-             "that is used by default writes log files there, in addition to the console. The current.log symlink "
+             "that is used by default writes log files there, in addition to the console. The current.dir symlink "
+             "always points to the subdirectory containing the most recent log file. The current.log symlink "
              "always points to the most recent log file. The current.pv symlink always points to the most recent "
-             "data transfer monitoring log. Run 'tail --follow=name --max-unchanged-stats=1' on both symlinks to "
-             "follow what's currently going on. The current.dir symlink always points to the sub directory containing "
-             "the most recent log file.\n\n")
+             "data transfer monitoring log. Run `tail --follow=name --max-unchanged-stats=1` on both symlinks to "
+             "follow what's currently going on. Parallel replication generates a separate .pv file per thread. To "
+             "monitor these, run something like "
+             "`while true; do clear; for f in $(realpath $HOME/bzfs-logs/current/current.pv)*; "
+             "do tac -s $(printf '\\r') $f | tr '\\r' '\\n' | grep -m1 -v '^$'; done; sleep 1; done`\n\n")
     h_fix = ("The path name of the log file on local host is "
              "`${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-suffix}-<random>.log`. "
              "Example: `--log-file-prefix=zrun_ --log-file-suffix=_daily` will generate log file names such as "
@@ -1136,6 +1160,7 @@ class LogParams:
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 UnixTimeRange = Optional[Tuple[int, int]]  # Type alias
 RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
+Tree = Dict[str, Optional[Dict]]  # Type alias
 
 
 #############################################################################
@@ -1185,8 +1210,8 @@ class Params:
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
 
         self.force_rollback_to_latest_snapshot: bool = args.force_rollback_to_latest_snapshot
-        self.force_rollback_to_latest_common_snapshot: bool = args.force_rollback_to_latest_common_snapshot
-        self.force: bool = args.force
+        self.force_rollback_to_latest_common_snapshot = SynchronizedBool(args.force_rollback_to_latest_common_snapshot)
+        self.force: SynchronizedBool = SynchronizedBool(args.force)
         self.force_once: bool = args.force_once
         self.force_unmount: str = "-f" if args.force_unmount else ""
         self.force_hard: str = "-R" if args.force_hard else ""
@@ -1447,7 +1472,6 @@ class Job:
         self.all_dst_dataset_exists: Dict[str, Dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: Dict[str, bool] = {}
         self.src_properties: Dict[str, Dict[str, str | int]] = {}
-        self.mbuffer_current_opts: List[str] = []
         self.all_exceptions: List[str] = []
         self.all_exceptions_count = 0
         self.max_exceptions_to_summarize = 10000
@@ -1455,6 +1479,7 @@ class Job:
         self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
+        self.dual_list_snaps: Dict[str, bool] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
 
         self.is_test_mode: bool = False  # for testing only
@@ -1463,6 +1488,7 @@ class Job:
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.param_injection_triggers: Dict[str, Dict[str, bool]] = {}  # for testing only
         self.inject_params: Dict[str, bool] = {}  # for testing only
+        self.injection_lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
     def cleanup(self):
@@ -1629,7 +1655,7 @@ class Job:
                 r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
             r.sudo, r.use_zfs_delegation = self.sudo_cmd(r.ssh_user_host, r.ssh_user)
-        self.dst_dataset_exists = self.all_dst_dataset_exists[dst.ssh_user_host]  # returns False for absent keys
+        self.dst_dataset_exists = SynchronizedDict(self.all_dst_dataset_exists[dst.ssh_user_host])
 
         if src.ssh_host == dst.ssh_host:
             if src.root_dataset == dst.root_dataset:
@@ -1669,12 +1695,14 @@ class Job:
 
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}
+        self.dual_list_snaps = {}
         for r in [src, dst]:
             cpus = int(p.available_programs[r.location].get("getconf_cpu_count", 8))
             threads, is_percent = p.threads
             cpus = max(1, round(cpus * threads / 100.0) if is_percent else round(threads))
-            # ssh default is max 10 multiplexed sessions over the same TCP connection per sshd_config(5) MaxSessions
-            cpus = cpus if not r.ssh_user_host else min(cpus, 8 if src.cache_key() != dst.cache_key() else 4)
+            maxsessions = 8  # max 10 multiplexed ssh sessions over same TCP connection per sshd_config(5) MaxSessions
+            cpus = cpus if not r.ssh_user_host else min(cpus, maxsessions)
+            self.dual_list_snaps[r.location] = not r.ssh_user_host or cpus <= maxsessions // 2
             self.max_workers[r.location] = cpus
             bs = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
             max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
@@ -1713,41 +1741,6 @@ class Job:
         else:
             return "", True
 
-    def process_datasets_fault_tolerant(
-        self,
-        datasets: List[str],
-        process_dataset: Callable[[str], bool],  # lambda
-        skip_tree_on_error: Callable[[str], bool],  # lambda
-        task_name: str,
-    ) -> bool:
-        """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling + retries.
-        Assumes that the input dataset list is sorted."""
-        p, log = self.params, self.params.log
-        log.trace("Retry policy: %s", p.retry_policy)
-        failed = False
-        skip_dataset = DONT_SKIP_DATASET
-        for dataset in datasets:
-            if is_descendant(dataset, of_root_dataset=skip_dataset):
-                # skip_dataset has been deleted by some third party while we're running
-                continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
-            skip_dataset = DONT_SKIP_DATASET
-            start_time_nanos = time.time_ns()
-            try:
-                if not self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset)):
-                    skip_dataset = dataset
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                failed = True
-                if p.skip_on_error == "fail":
-                    raise
-                elif p.skip_on_error == "tree" or skip_tree_on_error(dataset):
-                    skip_dataset = dataset
-                log.error("%s", str(e))
-                self.append_exception(e, task_name, dataset)
-            finally:
-                elapsed_nanos = int(time.time_ns() - start_time_nanos)
-                log.debug(task_name + " done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
-        return failed
-
     def run_task(self) -> None:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
@@ -1778,9 +1771,10 @@ class Job:
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             selected_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
-            failed = self.process_datasets_fault_tolerant(
+            # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
+            failed = self.process_datasets_in_parallel_and_fault_tolerant(
                 selected_src_datasets,
-                process_dataset=lambda dataset: self.replicate_dataset(dataset),
+                process_dataset=self.replicate_dataset,  # lambda
                 skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
                     replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
                 ],
@@ -1821,7 +1815,7 @@ class Job:
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
             src_datasets_set = set(src_datasets)
 
-            def delete_destination_snapshots(dst_dataset: str) -> bool:
+            def delete_destination_snapshots(dst_dataset: str, tid: str) -> bool:  # thread-safe
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
                     src_kind = kind
@@ -1835,6 +1829,7 @@ class Job:
                 src_snaps_with_guids, dst_snaps_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
                     lambda: set(self.run_ssh_command(src, log_trace, cmd=src_cmd).splitlines() if src_cmd else []),
                     lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd),
+                    enable=self.dual_list_snaps[src.location] and self.dual_list_snaps[dst.location],
                 )
                 if dst_snaps_with_guids is None:
                     log.warning("Third party deleted destination: %s", dst_dataset)
@@ -1857,10 +1852,11 @@ class Job:
                     self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
                 return True
 
+            # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
             if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
-                failed = self.process_datasets_fault_tolerant(
+                failed = self.process_datasets_in_parallel_and_fault_tolerant(
                     dst_datasets,
-                    process_dataset=lambda dataset: delete_destination_snapshots(dataset),
+                    process_dataset=delete_destination_snapshots,  # lambda
                     skip_tree_on_error=lambda dataset: False,
                     task_name="--delete-dst-snapshots",
                 )
@@ -1921,13 +1917,13 @@ class Job:
                 selected_src_datasets = self.filter_datasets(src, src_datasets)  # apply include/exclude policy
             self.run_compare_snapshot_lists(selected_src_datasets, dst_datasets)
 
-    def replicate_dataset(self, src_dataset: str) -> bool:
-        """Replicates src_dataset (without handling descendants) to dst_dataset."""
+    def replicate_dataset(self, src_dataset: str, tid: str) -> bool:
+        """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
-        log.debug(p.dry("Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
+        log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
         dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
@@ -1950,6 +1946,7 @@ class Job:
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
             lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
+            enable=self.dual_list_snaps[src.location] and self.dual_list_snaps[dst.location],
         )
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
@@ -2010,7 +2007,7 @@ class Job:
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
                     self.try_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
             elif latest_src_snapshot == "":
-                log.info("Already-up-to-date: %s", dst_dataset)
+                log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
                 return True
 
             # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
@@ -2041,8 +2038,8 @@ class Job:
                         "for example via --force-rollback-to-latest-common-snapshot (or --force) option."
                     )
                 if p.force_once:
-                    p.force = False
-                    p.force_rollback_to_latest_common_snapshot = False
+                    p.force.value = False
+                    p.force_rollback_to_latest_common_snapshot.value = False
                 log.info(
                     p.dry("Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot
                 )
@@ -2054,14 +2051,12 @@ class Job:
                 self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
-                log.info("Already up-to-date: %s", dst_dataset)
+                log.info(f"{tid} Already up-to-date: %s", dst_dataset)
                 return True
 
         # endif self.dst_dataset_exists[dst_dataset]
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
         log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
-        self.mbuffer_current_opts = ["-s", str(max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"])))]
-        self.mbuffer_current_opts += p.mbuffer_program_opts
         dry_run_no_send = False
         right_just = 8
 
@@ -2078,7 +2073,7 @@ class Job:
                         "delete all existing destination snapshots in order to be able to proceed with replication."
                     )
                 if p.force_once:
-                    p.force = False
+                    p.force.value = False
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 if self.is_solaris_zfs(dst):
                     # solaris-11.4 has no wildcard syntax to delete all snapshots in a single CLI invocation
@@ -2114,7 +2109,7 @@ class Job:
 
                 recv_resume_token, send_resume_opts, recv_resume_opts = self.get_receive_resume_token(dst_dataset)
                 curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
-                human_size = format_size(curr_size)
+                humansize = format_size(curr_size)
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2126,14 +2121,14 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 log.info(
-                    p.dry("Full zfs send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({human_size.strip()}) ..."
+                    p.dry(f"{tid} Full send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({humansize.strip()}) ..."
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 dry_run_no_send = dry_run_no_send or p.dry_run_no_send
                 self.maybe_inject_params(error_trigger="full_zfs_send_params")
-                human_size = human_size.rjust(right_just * 3 + 2)
+                humansize = humansize.rjust(right_just * 3 + 2)
                 self.run_zfs_send_receive(
-                    dst_dataset, send_cmd, recv_cmd, curr_size, human_size, dry_run_no_send, "full_zfs_send"
+                    src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
                 )
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not dry_run_no_send and not p.dry_run:
@@ -2202,7 +2197,7 @@ class Job:
             done_size = 0
             for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo):
                 curr_size = estimate_send_sizes[i]
-                human_size = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
+                humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2212,8 +2207,8 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
                 log.info(
-                    p.dry(f"Incremental zfs send {incr_flag}: %s"),
-                    f"{from_snap} {to_snap} --> {dst_dataset} ({human_size.strip()}) ...",
+                    p.dry(f"{tid} Incremental send {incr_flag}: %s"),
+                    f"{from_snap} {to_snap} --> {dst_dataset} ({humansize.strip()}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
@@ -2221,7 +2216,7 @@ class Job:
                 dry_run_no_send = dry_run_no_send or p.dry_run_no_send
                 self.maybe_inject_params(error_trigger="incr_zfs_send_params")
                 self.run_zfs_send_receive(
-                    dst_dataset, send_cmd, recv_cmd, curr_size, human_size, dry_run_no_send, "incr_zfs_send"
+                    src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
                 )
                 done_size += curr_size
                 recv_resume_token = None
@@ -2232,6 +2227,7 @@ class Job:
 
     def run_zfs_send_receive(
         self,
+        src_dataset: str,
         dst_dataset: str,
         send_cmd: List[str],
         recv_cmd: List[str],
@@ -2250,9 +2246,10 @@ class Job:
         else:  # no compression is used if source and destination do not both support compression
             _compress_cmd, _decompress_cmd = "cat", "cat"
 
-        src_buffer = self.mbuffer_cmd("src", size_estimate_bytes)
-        dst_buffer = self.mbuffer_cmd("dst", size_estimate_bytes)
-        local_buffer = self.mbuffer_cmd("local", size_estimate_bytes)
+        recordsize = max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"]))
+        src_buffer = self.mbuffer_cmd("src", size_estimate_bytes, recordsize)
+        dst_buffer = self.mbuffer_cmd("dst", size_estimate_bytes, recordsize)
+        local_buffer = self.mbuffer_cmd("local", size_estimate_bytes, recordsize)
 
         pv_src_cmd = ""
         pv_dst_cmd = ""
@@ -2429,7 +2426,7 @@ class Job:
         recv_resume_opts = ["-s"]
         return recv_resume_token, send_resume_opts, recv_resume_opts
 
-    def mbuffer_cmd(self, loc: str, size_estimate_bytes: int) -> str:
+    def mbuffer_cmd(self, loc: str, size_estimate_bytes: int, recordsize: int) -> str:
         """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
         smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
         p = self.params
@@ -2442,7 +2439,7 @@ class Job:
             )
             and self.is_program_available("mbuffer", loc)
         ):
-            return f"{p.mbuffer_program} {' '.join(self.mbuffer_current_opts)}"
+            return f"{p.mbuffer_program} {' '.join(['-s', str(recordsize)] + p.mbuffer_program_opts)}"
         else:
             return "cat"
 
@@ -2470,6 +2467,8 @@ class Job:
         else:
             return "cat"
 
+    worker_thread_number_regex: re.Pattern = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
+
     def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
         """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
@@ -2479,8 +2478,14 @@ class Job:
             if disable_progress_bar:
                 size = ""
             readable = shlex.quote(size_estimate_human)
-            lp = p.log_params
-            return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {lp.pv_log_file}"
+            pv_log_file = p.log_params.pv_log_file
+            thread_name = threading.current_thread().name
+            match = Job.worker_thread_number_regex.fullmatch(thread_name)
+            if match:
+                worker = int(match.group(1))
+                if worker > 0:
+                    pv_log_file += f"_{worker:03}"
+            return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
         else:
             return "cat"
 
@@ -2606,8 +2611,7 @@ class Job:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
         if error_trigger:
             counter = self.error_injection_triggers.get("before")
-            if counter and counter[error_trigger] > 0:
-                counter[error_trigger] -= 1
+            if counter and self.decrement_injection_counter(counter, error_trigger):
                 try:
                     raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
                 except subprocess.CalledProcessError as e:
@@ -2620,9 +2624,8 @@ class Job:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
         assert delete_trigger
         counter = self.delete_injection_triggers.get("before")
-        if counter and counter[delete_trigger] > 0:
-            counter[delete_trigger] -= 1
-            p, log = self.params, self.params.log
+        if counter and self.decrement_injection_counter(counter, delete_trigger):
+            p = self.params
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
             self.run_ssh_command(remote, log_debug, print_stdout=True, cmd=cmd)
 
@@ -2630,11 +2633,18 @@ class Job:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
         assert error_trigger
         counter = self.error_injection_triggers.get("before")
-        if counter and counter[error_trigger] > 0:
-            counter[error_trigger] -= 1
+        if counter and self.decrement_injection_counter(counter, error_trigger):
             self.inject_params = self.param_injection_triggers[error_trigger]
         elif error_trigger in self.param_injection_triggers:
             self.inject_params = {}
+
+    def decrement_injection_counter(self, counter: Counter, trigger: str) -> bool:
+        """For testing only."""
+        with self.injection_lock:
+            if counter[trigger] <= 0:
+                return False
+            counter[trigger] -= 1
+            return True
 
     def squote(self, ssh_cmd: List[str], arg: str) -> str:
         return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
@@ -3460,6 +3470,94 @@ class Job:
                         yield choices[n], src_next
                 src_next = next(src_itr, None)
 
+    def process_datasets_in_parallel_and_fault_tolerant(
+        self,
+        datasets: List[str],
+        process_dataset: Callable[[str, str], bool],  # lambda, must be thread-safe
+        skip_tree_on_error: Callable[[str], bool],  # lambda, must be thread-safe
+        task_name: str,
+    ) -> bool:
+        """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling and retries
+        and parallel execution. Assumes that the input dataset list is sorted. All children of a dataset may be
+        processed in parallel. For consistency (even during parallel dataset replication/deletion), processing of a
+        dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is
+        ready to start processing another dataset, it chooses the "smallest" dataset wrt. case-insensitive sort order
+        from the datasets that are currently available for start of processing. Initially, only the roots of the
+        selected dataset subtrees are available for start of processing."""
+        p, log = self.params, self.params.log
+        log.trace("Retry policy: %s", p.retry_policy)
+
+        def _process_dataset(dataset: str, tid: str):
+            start_time_nanos = time.time_ns()
+            try:
+                return self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset, tid))
+            finally:
+                elapsed_nanos = int(time.time_ns() - start_time_nanos)
+                log.debug(f"{tid} {task_name} done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
+
+        def build_dataset_tree_and_find_roots() -> List[Tuple[str, str, Tree]]:
+            """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
+            tree: Tree = build_dataset_tree(datasets)  # tree consists of nested dictionaries
+            skip_dataset = DONT_SKIP_DATASET
+            roots = []
+            for dataset in datasets:
+                if is_descendant(dataset, of_root_dataset=skip_dataset):
+                    continue
+                skip_dataset = dataset
+                children = tree
+                for component in dataset.split("/"):
+                    children = children[component]
+                roots.append((dataset.casefold(), dataset, children))
+            return roots
+
+        max_workers = min(self.max_workers[p.src.location], self.max_workers[p.dst.location])
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            priority_queue: List[Tuple[str, str, Tree]] = build_dataset_tree_and_find_roots()
+            heapq.heapify(priority_queue)  # same order as isorted(), i.e. sorted by dataset.casefold()
+            todo_futures: Set[Future] = set()
+            submitted = 0
+
+            def submit_datasets() -> bool:
+                while len(priority_queue) > 0 and len(todo_futures) < max_workers:
+                    # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
+                    node: Tuple[str, str, Tree] = heapq.heappop(priority_queue)
+                    _, dataset, children = node
+                    nonlocal submitted
+                    submitted += 1
+                    tid = f"{submitted}/{len(datasets)}"
+                    log.trace(f"{tid} Thread pool submission: %s", dataset)
+                    future = executor.submit(_process_dataset, dataset, tid)
+                    future.node = node
+                    todo_futures.add(future)
+                return len(todo_futures) > 0
+
+            failed = False
+            while submit_datasets():
+                log.trace("Thread pool: %s: %s, priority_queue: %s", "todo", len(todo_futures), len(priority_queue))
+                done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # block
+                if log.isEnabledFor(log_trace):
+                    log.trace("done:%s,todo:%s", [d.node[1:] for d in done_futures], [d.node[1:] for d in todo_futures])
+                for done_future in done_futures:
+                    _, dataset, children = done_future.node
+                    try:
+                        no_skip = done_future.result()  # does not block as processing has already completed
+                    except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                        failed = True
+                        if p.skip_on_error == "fail":
+                            for todo_future in todo_futures:
+                                todo_future.cancel()
+                            terminate_process_group(except_current_process=True)
+                            raise e
+                        no_skip = not (p.skip_on_error == "tree" or skip_tree_on_error(dataset))
+                        log.error("%s", str(e))
+                        self.append_exception(e, task_name, dataset)
+                    if no_skip and children:  # make child datasets available for start of processing ...
+                        for child, grandchildren in children.items():  # as processing of parent has now completed
+                            child = f"{dataset}/{child}"
+                            heapq.heappush(priority_queue, (child.casefold(), child, grandchildren))
+            assert len(priority_queue) == 0
+            return failed
+
     def is_program_available(self, program: str, location: str) -> bool:
         return program in self.params.available_programs[location]
 
@@ -3728,7 +3826,7 @@ class Job:
                 cmd,
                 datasets,
                 lambda batch: executor.submit(
-                    lambda: (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines()
+                    lambda lst: (self.try_ssh_command(r, log_trace, cmd=cmd + lst) or "").splitlines(), batch
                 ),
                 self.max_datasets_per_minibatch_on_list_snaps[r.location],
             )
@@ -3743,13 +3841,16 @@ class Job:
                 yield curr_future.result()  # blocks until CLI returns
 
     @staticmethod
-    def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any]) -> Tuple[Any, Any]:
+    def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any], enable=True) -> Tuple[Any, Any]:
         """perf: Runs both I/O functions in parallel/concurrently."""
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future: Future = executor.submit(fn2)  # async fn2
-            result1 = fn1()  # blocks until fn1 call returns
-            result2 = future.result()  # blocks until fn2 call returns
-            return result1, result2
+        if enable:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future: Future = executor.submit(fn2)  # async fn2
+                result1 = fn1()  # blocks until fn1 call returns
+                result2 = future.result()  # blocks until fn2 call returns
+                return result1, result2
+        else:
+            return fn1(), fn2()
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
@@ -3819,6 +3920,24 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
         if i == len(lst) or (lst[i] != "none" and lst[i] != "compress"):
             lst.insert(i, "none")
     return lst
+
+
+def build_dataset_tree(datasets: List[str]) -> Tree:
+    """Takes a sorted list of datasets and returns a sorted directory tree containing the same dataset names,
+    in the form of nested dicts."""
+    tree: Tree = {}
+    for dataset in datasets:
+        current = tree
+        for component in dataset.split("/"):
+            if component not in current:
+                current[component] = {}
+            current = current[component]
+
+    def sort_tree(d: Tree) -> Tree:
+        # Recursively sort keys and rebuild the dictionary, replacing empty leaf dictionaries with None
+        return {k: sort_tree(d[k]) if d[k] else None for k in isorted(d.keys())}
+
+    return sort_tree(tree)
 
 
 def delete_stale_files(root_dir: str, prefix: str, secs: int = 30 * 24 * 60 * 60, dirs=False, exclude=None) -> None:
@@ -4801,6 +4920,89 @@ class CheckPercentRange(CheckRange):
             parser.error(f"{option_string}: Invalid percentage or number: {original}")
         super().__call__(parser, namespace, values, option_string=option_string)
         setattr(namespace, self.dest, (getattr(namespace, self.dest), is_percent))
+
+
+#############################################################################
+class SynchronizedBool:
+    def __init__(self, val: bool):
+        assert isinstance(val, bool)
+        self._lock: threading.Lock = threading.Lock()
+        self._value: bool = val
+
+    @property
+    def value(self) -> bool:
+        with self._lock:
+            return self._value
+
+    @value.setter
+    def value(self, new_value: bool) -> None:
+        with self._lock:
+            self._value = new_value
+
+    def __bool__(self) -> bool:
+        return self.value
+
+    def __repr__(self) -> str:
+        return repr(self.value)
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+#############################################################################
+K = TypeVar("K")
+V = TypeVar("V")
+
+
+class SynchronizedDict(Generic[K, V]):
+    def __init__(self, val: Dict[K, V]):
+        assert isinstance(val, dict)
+        self._lock: threading.Lock = threading.Lock()
+        self._dict: Dict[K, V] = val
+
+    def __getitem__(self, key: K) -> V:
+        with self._lock:
+            return self._dict[key]
+
+    def __setitem__(self, key: K, value: V) -> None:
+        with self._lock:
+            self._dict[key] = value
+
+    def __delitem__(self, key: K) -> None:
+        with self._lock:
+            self._dict.pop(key)
+
+    def __contains__(self, key: K) -> bool:
+        with self._lock:
+            return key in self._dict
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._dict)
+
+    def __repr__(self) -> str:
+        with self._lock:
+            return repr(self._dict)
+
+    def __str__(self) -> str:
+        with self._lock:
+            return str(self._dict)
+
+    def get(self, key: K, default: Optional[V] = None) -> Optional[V]:
+        with self._lock:
+            return self._dict.get(key, default)
+
+    def pop(self, key: K, default: Optional[V] = None) -> V:
+        with self._lock:
+            return self._dict.pop(key, default)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._dict.clear()
+
+    def items(self) -> ItemsView[K, V]:
+        with self._lock:
+            return self._dict.copy().items()
 
 
 #############################################################################
