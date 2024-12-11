@@ -29,7 +29,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Sequence, Callable, Optional, TypeVar, Union
+from typing import Sequence, Callable, Optional, TypeVar, Union, Dict
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
@@ -42,6 +42,9 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBuildTree))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedBool))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedDict))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
@@ -672,6 +675,104 @@ class TestReplaceCapturingGroups(unittest.TestCase):
         complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
         expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
         self.assertEqual(self.replace_capturing_group(complex_pattern), expected_result)
+
+
+#############################################################################
+class TestBuildTree(unittest.TestCase):
+    def assert_keys_sorted(self, tree: Dict[str, Optional[Dict]]):
+        keys = list(tree.keys())
+        self.assertEqual(keys, bzfs.isorted(keys), f"Keys are not sorted: {keys}")
+        for value in tree.values():
+            if isinstance(value, dict):
+                self.assert_keys_sorted(value)
+
+    def test_basic_tree(self):
+        datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
+        expected_tree = {"pool": {"dataset": {"sub": None}, "other": {"sub": {"child": None}}}}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_empty_input(self):
+        datasets = []
+        expected_tree = {}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+
+    def test_single_root(self):
+        datasets = ["pool"]
+        expected_tree = {"pool": None}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_single_branch(self):
+        datasets = ["pool/dataset/sub/child"]
+        expected_tree = {"pool": {"dataset": {"sub": {"child": None}}}}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_multiple_roots(self):
+        datasets = ["pool", "otherpool", "anotherpool"]
+        expected_tree = {"anotherpool": None, "otherpool": None, "pool": None}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_large_dataset(self):
+        datasets = [f"pool/dataset{i}" for i in range(100)]
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(len(tree["pool"]), 100)
+        self.assert_keys_sorted(tree)
+
+    def test_nested_structure(self):
+        datasets = [
+            "pool/parent",
+            "pool/parent/child1",
+            "pool/parent/child2",
+            "pool/parent/child2/grandchild",
+            "pool/parent/child3",
+        ]
+        expected_tree = {"pool": {"parent": {"child1": None, "child2": {"grandchild": None}, "child3": None}}}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_no_children(self):
+        datasets = ["pool", "otherpool"]
+        expected_tree = {"otherpool": None, "pool": None}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_single_level(self):
+        datasets = ["pool", "pool1", "pool2", "pool3"]
+        expected_tree = {"pool": None, "pool1": None, "pool2": None, "pool3": None}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_multiple_roots_with_hierarchy(self):
+        datasets = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
+        expected_tree = {"pool": None, "pool1": {"dataset1": None}, "pool2": {"dataset2": {"sub": None}}, "pool3": None}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_multiple_roots_flat(self):
+        datasets = ["root1", "root2", "root3", "root4"]
+        expected_tree = {"root1": None, "root2": None, "root3": None, "root4": None}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_multiple_roots_mixed_depth(self):
+        datasets = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
+        expected_tree = {"a": {"b": {"c": None}}, "x": {"y": None}, "z": {"1": None, "2": {"3": None}}}
+        tree = bzfs.build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
 
 
 #############################################################################
@@ -1727,6 +1828,102 @@ class TestIncrementalSendSteps(unittest.TestCase):
             is_resume=is_resume,
             force_convert_I_to_i=force_convert_I_to_i,
         )
+
+
+#############################################################################
+class TestSynchronizedBool(unittest.TestCase):
+    def test_initialization(self):
+        b = bzfs.SynchronizedBool(True)
+        self.assertTrue(b.value)
+
+        b = bzfs.SynchronizedBool(False)
+        self.assertFalse(b.value)
+
+        with self.assertRaises(AssertionError):
+            bzfs.SynchronizedBool("not_a_bool")
+
+    def test_value_property(self):
+        b = bzfs.SynchronizedBool(True)
+        self.assertTrue(b.value)
+
+        b.value = False
+        self.assertFalse(b.value)
+
+    def test_loop(self):
+        b = bzfs.SynchronizedBool(False)
+        for _ in range(3):
+            b.value = not b.value
+        self.assertIsInstance(b.value, bool)
+
+    def test_bool_conversion(self):
+        b = bzfs.SynchronizedBool(True)
+        self.assertTrue(bool(b))
+
+        b.value = False
+        self.assertFalse(bool(b))
+
+    def test_str_and_repr(self):
+        b = bzfs.SynchronizedBool(True)
+        self.assertEqual(str(b), "True")
+        self.assertEqual(repr(b), "True")
+
+        b.value = False
+        self.assertEqual(str(b), "False")
+        self.assertEqual(repr(b), "False")
+
+
+#############################################################################
+class TestSynchronizedDict(unittest.TestCase):
+    def setUp(self):
+        self.sync_dict = bzfs.SynchronizedDict({"a": 1, "b": 2, "c": 3})
+
+    def test_getitem(self):
+        self.assertEqual(self.sync_dict["a"], 1)
+        self.assertEqual(self.sync_dict["b"], 2)
+
+    def test_setitem(self):
+        self.sync_dict["d"] = 4
+        self.assertEqual(self.sync_dict["d"], 4)
+
+    def test_delitem(self):
+        del self.sync_dict["a"]
+        self.assertNotIn("a", self.sync_dict)
+
+    def test_contains(self):
+        self.assertTrue("a" in self.sync_dict)
+        self.assertFalse("z" in self.sync_dict)
+
+    def test_len(self):
+        self.assertEqual(len(self.sync_dict), 3)
+        del self.sync_dict["a"]
+        self.assertEqual(len(self.sync_dict), 2)
+
+    def test_repr(self):
+        self.assertEqual(repr(self.sync_dict), repr({"a": 1, "b": 2, "c": 3}))
+
+    def test_str(self):
+        self.assertEqual(str(self.sync_dict), str({"a": 1, "b": 2, "c": 3}))
+
+    def test_get(self):
+        self.assertEqual(self.sync_dict.get("a"), 1)
+        self.assertEqual(self.sync_dict.get("z", 42), 42)
+
+    def test_pop(self):
+        value = self.sync_dict.pop("b")
+        self.assertEqual(value, 2)
+        self.assertNotIn("b", self.sync_dict)
+
+    def test_clear(self):
+        self.sync_dict.clear()
+        self.assertEqual(len(self.sync_dict), 0)
+
+    def test_items(self):
+        items = self.sync_dict.items()
+        self.assertEqual(set(items), {("a", 1), ("b", 2), ("c", 3)})
+
+    def test_loop(self):
+        self.sync_dict["key"] = 1
+        self.assertIn("key", self.sync_dict)
 
 
 #############################################################################
