@@ -69,7 +69,8 @@ from logging import Logger
 from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import Iterable, Dict, List, Set, Tuple, Any, Callable, Generator, Optional, Union
+from typing import Iterable, Dict, List, Set, Tuple, Any, Callable, Generator, Generic, ItemsView, Optional
+from typing import TypeVar, Union
 
 __version__ = "1.7.0-dev"
 prog_name = "bzfs"
