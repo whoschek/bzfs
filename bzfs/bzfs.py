@@ -1452,7 +1452,6 @@ class Job:
         self.max_exceptions_to_summarize = 10000
         self.first_exception: Optional[BaseException] = None
         self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
-        self.zfs_dataset_busy_if_mods, self.zfs_dataset_busy_if_send = self.get_is_zfs_dataset_busy_regexes()  # Pattern
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
@@ -3680,18 +3679,15 @@ class Job:
             log.warning("%s", str(e))
             raise RetryableError("dst currently busy with zfs mutation op") from e
 
+    zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas) )?([^ ]*?/)?zfs (receive|recv"
+    zfs_dataset_busy_if_mods = re.compile((zfs_dataset_busy_prefix + ") .*").replace("(", "(?:"))
+    zfs_dataset_busy_if_send = re.compile((zfs_dataset_busy_prefix + "|send) .*").replace("(", "(?:"))
+
     def is_zfs_dataset_busy(self, procs: List[str], dataset: str, busy_if_send: bool) -> bool:
-        regex = self.zfs_dataset_busy_if_send if busy_if_send else self.zfs_dataset_busy_if_mods
+        regex = Job.zfs_dataset_busy_if_send if busy_if_send else Job.zfs_dataset_busy_if_mods
         suffix = " " + dataset
         infix = " " + dataset + "@"
         return any(filter(lambda proc: (proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc), procs))
-
-    @staticmethod
-    def get_is_zfs_dataset_busy_regexes() -> Tuple[re.Pattern, re.Pattern]:
-        zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas) )?([^ ]*?/)?zfs (receive|recv"
-        zfs_dataset_busy_if_mods = (zfs_dataset_busy_prefix + ") .*").replace("(", "(?:")
-        zfs_dataset_busy_if_send = (zfs_dataset_busy_prefix + "|send) .*").replace("(", "(?:")
-        return re.compile(zfs_dataset_busy_if_mods), re.compile(zfs_dataset_busy_if_send)
 
     def run_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
