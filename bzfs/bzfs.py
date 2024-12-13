@@ -35,6 +35,7 @@ Simply run that script whenever you change or add ArgumentParser help text.
 import argparse
 import collections
 import concurrent
+import copy
 import fcntl
 import hashlib
 import heapq
@@ -99,6 +100,8 @@ log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway i
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
+SHARED = "shared"
+DEDICATED = "dedicated"
 DONT_SKIP_DATASET = ""
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
@@ -1234,7 +1237,6 @@ class Params:
 
         self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
-        self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -1283,6 +1285,7 @@ class Params:
         self.zfs_recv_ox_names: Set[str] = set()
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
+        self.connection_pools = {}
 
     def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
         """Splits option string on runs of one or more whitespace into an option list."""
@@ -1369,6 +1372,7 @@ class Remote:
         # immutable variables:
         assert loc == "src" or loc == "dst"
         self.location: str = loc
+        self.params = p
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
@@ -1380,6 +1384,17 @@ class Remote:
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
             self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
+        # max 10 concurrent multiplexed ssh sessions over the same TCP connection, per sshd_config(5) MaxSessions
+        self.max_concurrent_ssh_sessions_per_tcp_connection = int(
+            getenv_any("max_concurrent_ssh_sessions_per_tcp_connection", 8)
+        )
+        self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
+        if self.reuse_ssh_connection:
+            self.socket_dir = os.path.join(get_home_directory(), ".ssh", "bzfs")
+            os.makedirs(os.path.dirname(self.socket_dir), exist_ok=True)
+            os.makedirs(self.socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+            self.socket_prefix = "s"
+            delete_stale_files(self.socket_dir, self.socket_prefix)
 
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
@@ -1387,15 +1402,46 @@ class Remote:
         self.pool: str = ""
         self.sudo: str = ""
         self.use_zfs_delegation: bool = False
-        self.ssh_cmd: List[str] = []
-        self.ssh_cmd_quoted: List[str] = []
         self.ssh_user: str = ""
         self.ssh_host: str = ""
         self.ssh_user_host: str = ""
 
-    def set_ssh_cmd(self, ssh_cmd: List[str]) -> None:
-        self.ssh_cmd = ssh_cmd
-        self.ssh_cmd_quoted = [shlex.quote(item) for item in ssh_cmd]
+    def local_ssh_command(self) -> List[str]:
+        """Returns the ssh CLI command to run locally in order to talk to the remote host. This excludes the (trailing)
+        command to run on the remote host, which will be appended later."""
+        if self.ssh_user_host == "":
+            return []  # dataset is on local host - don't use ssh
+
+        # dataset is on remote host
+        p = self.params
+        if p.ssh_program == disable_prg:
+            die("Cannot talk to remote host because ssh CLI is disabled.")
+        ssh_cmd = [p.ssh_program] + self.ssh_extra_opts
+        if self.ssh_config_file:
+            ssh_cmd += ["-F", self.ssh_config_file]
+        for ssh_private_key_file in self.ssh_private_key_files:
+            ssh_cmd += ["-i", ssh_private_key_file]
+        if self.ssh_cipher:
+            ssh_cmd += ["-c", self.ssh_cipher]
+        if self.ssh_port:
+            ssh_cmd += ["-p", str(self.ssh_port)]
+        if self.reuse_ssh_connection:
+            # performance: reuse ssh connection for low latency startup of frequent ssh invocations
+            # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
+            # generate unique private socket file name in user's home dir
+            def sanitize(name: str) -> str:
+                # replace any whitespace, /, $, \, @ with a ~ tilde char
+                name = re.sub(r"[\s\\/@$]", "~", name)
+                # Remove characters not in the allowed set
+                name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
+                return name
+
+            unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
+            socket_name = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
+            socket_file = os.path.join(self.socket_dir, socket_name)[: max(100, len(self.socket_dir) + 10)]
+            ssh_cmd += ["-oControlMaster=auto", "-oControlPersist=60s", "-S", socket_file]
+        ssh_cmd += [self.ssh_user_host]
+        return ssh_cmd
 
     def cache_key(self) -> Tuple:
         # fmt: off
@@ -1472,10 +1518,9 @@ class Job:
         self.all_exceptions_count = 0
         self.max_exceptions_to_summarize = 10000
         self.first_exception: Optional[BaseException] = None
-        self.remote_conf_cache: Dict[Tuple, Tuple[Dict[str, str], Dict[str, str], List[str]]] = {}
+        self.remote_conf_cache: Dict[Tuple, Tuple[ConnectionPools, Dict[str, str], Dict[str, str]]] = {}
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
-        self.dual_list_snaps: Dict[str, bool] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
 
         self.is_test_mode: bool = False  # for testing only
@@ -1489,17 +1534,9 @@ class Job:
 
     def cleanup(self):
         """Exit any multiplexed ssh sessions that may be leftover."""
-        p, log = self.params, self.params.log
         cache_items = self.remote_conf_cache.values()
         for i, cache_item in enumerate(cache_items):
-            ssh_cmd = cache_item[-1]
-            if len(ssh_cmd) > 0 and p.reuse_ssh_connection:
-                ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
-                ssh_socket_cmd_quoted = " ".join([shlex.quote(item) for item in ssh_socket_cmd])
-                log.debug(f"Executing {i+1}/{len(cache_items)}: %s", ssh_socket_cmd_quoted)
-                process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
-                if process.returncode != 0:
-                    log.trace("%s", process.stderr.rstrip())
+            cache_item[0].cleanup(f"{i + 1}/{len(cache_items)}")
 
     def terminate(self, except_current_process=False):
         try:
@@ -1691,14 +1728,10 @@ class Job:
 
         self.max_workers = {}
         self.max_datasets_per_minibatch_on_list_snaps = {}
-        self.dual_list_snaps = {}
         for r in [src, dst]:
             cpus = int(p.available_programs[r.location].get("getconf_cpu_count", 8))
             threads, is_percent = p.threads
             cpus = max(1, round(cpus * threads / 100.0) if is_percent else round(threads))
-            maxsessions = 8  # max 10 multiplexed ssh sessions over same TCP connection per sshd_config(5) MaxSessions
-            cpus = cpus if not r.ssh_user_host else min(cpus, maxsessions)
-            self.dual_list_snaps[r.location] = not r.ssh_user_host or cpus <= maxsessions // 2
             self.max_workers[r.location] = cpus
             bs = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
             max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
@@ -1825,7 +1858,6 @@ class Job:
                 src_snaps_with_guids, dst_snaps_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
                     lambda: set(self.run_ssh_command(src, log_trace, cmd=src_cmd).splitlines() if src_cmd else []),
                     lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd),
-                    enable=self.dual_list_snaps[src.location] and self.dual_list_snaps[dst.location],
                 )
                 if dst_snaps_with_guids is None:
                     log.warning("Third party deleted destination: %s", dst_dataset)
@@ -1942,7 +1974,6 @@ class Job:
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
             lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
-            enable=self.dual_list_snaps[src.location] and self.dual_list_snaps[dst.location],
         )
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
@@ -2280,7 +2311,7 @@ class Job:
             send_cmd = f"{send_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if src_pipe != "":
             src_pipe = f"{send_cmd} | {src_pipe}"
-            if len(p.src.ssh_cmd) > 0:
+            if p.src.ssh_user_host != "":
                 src_pipe = p.shell_program + " -c " + self.dquote(src_pipe)
         else:
             src_pipe = send_cmd
@@ -2317,7 +2348,7 @@ class Job:
             recv_cmd = f"{recv_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if dst_pipe != "":
             dst_pipe = f"{dst_pipe} | {recv_cmd}"
-            if len(p.dst.ssh_cmd) > 0:
+            if p.dst.ssh_user_host != "":
                 dst_pipe = p.shell_program + " -c " + self.dquote(dst_pipe)
         else:
             dst_pipe = recv_cmd
@@ -2331,30 +2362,37 @@ class Job:
         if not self.is_program_available("sh", "local"):
             local_pipe = ""
 
-        src_pipe = self.squote(p.src.ssh_cmd, src_pipe)
-        dst_pipe = self.squote(p.dst.ssh_cmd, dst_pipe)
-        src_ssh_cmd = " ".join(p.src.ssh_cmd_quoted)
-        dst_ssh_cmd = " ".join(p.dst.ssh_cmd_quoted)
-
-        cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
-        msg = "Would execute: %s" if dry_run_no_send else "Executing: %s"
-        log.debug(msg, cmd[2].lstrip())
-        if not dry_run_no_send:
-            try:
-                self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-                process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True)
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-                no_sleep = False
-                if not isinstance(e, UnicodeDecodeError):
-                    xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
-                    log.warning("%s", stderr_to_str(e.stderr).rstrip())
-                if isinstance(e, subprocess.CalledProcessError):
-                    no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, e.stderr)
-                # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
-            else:
-                xprint(log, process.stdout, file=sys.stdout)
-                xprint(log, process.stderr, file=sys.stderr)
+        src_pipe = self.squote(p.src, src_pipe)
+        dst_pipe = self.squote(p.dst, dst_pipe)
+        src_conn_pool = p.connection_pools["src"].pool(DEDICATED)
+        src_conn = src_conn_pool.get_connection()
+        dst_conn_pool = p.connection_pools["dst"].pool(DEDICATED)
+        dst_conn = dst_conn_pool.get_connection()
+        try:
+            src_ssh_cmd = " ".join(src_conn.ssh_cmd_quoted)
+            dst_ssh_cmd = " ".join(dst_conn.ssh_cmd_quoted)
+            cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
+            msg = "Would execute: %s" if dry_run_no_send else "Executing: %s"
+            log.debug(msg, cmd[2].lstrip())
+            if not dry_run_no_send:
+                try:
+                    self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
+                    process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True)
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                    no_sleep = False
+                    if not isinstance(e, UnicodeDecodeError):
+                        xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
+                        log.warning("%s", stderr_to_str(e.stderr).rstrip())
+                    if isinstance(e, subprocess.CalledProcessError):
+                        no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, e.stderr)
+                    # op isn't idempotent so retries regather current state from the start of replicate_dataset()
+                    raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+                else:
+                    xprint(log, process.stdout, file=sys.stdout)
+                    xprint(log, process.stderr, file=sys.stderr)
+        finally:
+            src_conn_pool.return_connection(src_conn)
+            dst_conn_pool.return_connection(dst_conn)
 
     def clear_resumable_recv_state_if_necessary(self, dst_dataset: str, stderr: str) -> bool:
         def clear_resumable_recv_state() -> bool:
@@ -2485,91 +2523,28 @@ class Job:
         else:
             return "cat"
 
-    def local_ssh_command(self, remote: Remote) -> List[str]:
-        """Returns the ssh CLI command to run locally in order to talk to the remote host. This excludes the (trailing)
-        command to run on the remote host, which will be appended later."""
-        if remote.ssh_user_host == "":
-            return []  # dataset is on local host - don't use ssh
-
-        # dataset is on remote host
-        p = self.params
-        if p.ssh_program == disable_prg:
-            die("Cannot talk to remote host because ssh CLI is disabled.")
-        ssh_cmd = [p.ssh_program] + remote.ssh_extra_opts
-        if remote.ssh_config_file:
-            ssh_cmd += ["-F", remote.ssh_config_file]
-        for ssh_private_key_file in remote.ssh_private_key_files:
-            ssh_cmd += ["-i", ssh_private_key_file]
-        if remote.ssh_cipher:
-            ssh_cmd += ["-c", remote.ssh_cipher]
-        if remote.ssh_port:
-            ssh_cmd += ["-p", str(remote.ssh_port)]
-        if p.reuse_ssh_connection:
-            # performance: reuse ssh connection for low latency startup of frequent ssh invocations
-            # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-            # generate unique private socket file name in user's home dir
-            socket_dir = os.path.join(p.log_params.home_dir, ".ssh", "bzfs")
-            os.makedirs(os.path.dirname(socket_dir), exist_ok=True)
-            os.makedirs(socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
-            prefix = "s"
-            delete_stale_files(socket_dir, prefix)
-
-            def sanitize(name: str) -> str:
-                # replace any whitespace, /, $, \, @ with a ~ tilde char
-                name = re.sub(r"[\s\\/@$]", "~", name)
-                # Remove characters not in the allowed set
-                name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
-                return name
-
-            unique = f"{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
-            socket_name = f"{prefix}{os.getpid()}@{unique}@{sanitize(remote.ssh_host)[:45]}@{sanitize(remote.ssh_user)}"
-            socket_file = os.path.join(socket_dir, socket_name)[: max(100, len(socket_dir) + 10)]
-            ssh_cmd += ["-S", socket_file]
-        ssh_cmd += [remote.ssh_user_host]
-        return ssh_cmd
-
     def run_ssh_command(
         self, remote: Remote, level: int = -1, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
     ) -> str:
         """Runs the given cmd via ssh on the given remote, and returns stdout. The full command is the concatenation
-        of both the command to run on the localhost in order to talk to the remote host ($remote.ssh_cmd) and the
-        command to run on the given remote host ($cmd)."""
+        of both the command to run on the localhost in order to talk to the remote host ($remote.local_ssh_command())
+        and the command to run on the given remote host ($cmd)."""
         level = level if level >= 0 else logging.INFO
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p, log = self.params, self.params.log
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
-        ssh_cmd: List[str] = remote.ssh_cmd
-        if len(ssh_cmd) > 0:
-            if not self.is_program_available("ssh", "local"):
-                die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
-            cmd = quoted_cmd
-            if p.reuse_ssh_connection:
-                # performance: reuse ssh connection for low latency startup of frequent ssh invocations
-                # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-                # 'ssh -S /path/socket -O check' doesn't talk over the network so common case is a low latency fast path
-                ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-                if subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
-                    log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
-                else:
-                    log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-                    ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                    ssh_socket_cmd += ["-M", "-o", "ControlPersist=60s", remote.ssh_user_host, "exit"]
-                    log.debug("Executing: %s", list_formatter(ssh_socket_cmd))
-                    process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
-                    if process.returncode != 0:
-                        log.error("%s", process.stderr.rstrip())
-                        die(
-                            f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. "
-                            "Fix ssh configuration first, considering diagnostic log file output from running "
-                            f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
-                        )
-
-        msg = "Would execute: %s" if is_dry else "Executing: %s"
-        log.log(level, msg, list_formatter(remote.ssh_cmd_quoted + quoted_cmd, lstrip=True))
-        if is_dry:
-            return ""
-        else:
+        conn_pool = p.connection_pools[remote.location].pool(SHARED)
+        conn = conn_pool.get_connection()
+        try:
+            ssh_cmd: List[str] = conn.ssh_cmd
+            if remote.ssh_user_host != "":
+                if not self.is_program_available("ssh", "local"):
+                    die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
+                cmd = quoted_cmd
+            msg = "Would execute: %s" if is_dry else "Executing: %s"
+            log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
+            if is_dry:
+                return ""
             try:
                 process = subprocess.run(ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=check)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
@@ -2581,6 +2556,8 @@ class Job:
                 xprint(log, process.stdout, run=print_stdout, end="")
                 xprint(log, process.stderr, run=print_stderr, end="")
                 return process.stdout
+        finally:
+            conn_pool.return_connection(conn)
 
     def try_ssh_command(
         self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, exists=True, error_trigger=None
@@ -2642,8 +2619,8 @@ class Job:
             counter[trigger] -= 1
             return True
 
-    def squote(self, ssh_cmd: List[str], arg: str) -> str:
-        return arg if len(ssh_cmd) == 0 else shlex.quote(arg)
+    def squote(self, remote: Remote, arg: str) -> str:
+        return arg if remote.ssh_user_host == "" else shlex.quote(arg)
 
     def dquote(self, arg: str) -> str:
         """shell-escapes double quotes and backticks, then surrounds with double quotes."""
@@ -3578,13 +3555,18 @@ class Job:
             cache_item = self.remote_conf_cache.get(remote_conf_cache_key)
             if cache_item is not None:
                 # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
-                available_programs[loc], p.zpool_features[loc], ssh_cmd = cache_item
-                r.set_ssh_cmd(ssh_cmd)
+                p.connection_pools[loc], available_programs[loc], p.zpool_features[loc] = cache_item
                 continue
-            r.set_ssh_cmd(self.local_ssh_command(r))
+            p.connection_pools[loc] = ConnectionPools(
+                r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
+            )
             self.detect_zpool_features(r)
             self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
-            self.remote_conf_cache[remote_conf_cache_key] = (available_programs[loc], p.zpool_features[loc], r.ssh_cmd)
+            self.remote_conf_cache[remote_conf_cache_key] = (
+                p.connection_pools[loc],
+                available_programs[loc],
+                p.zpool_features[loc],
+            )
             if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
                 die(
                     f"Permission denied as ZFS delegation is disabled for {r.location} "
@@ -3737,8 +3719,19 @@ class Job:
                 features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
         if len(lines) == 0:
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-            if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
-                die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
+            try:
+                if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
+                    basis_root_dataset = r.basis_root_dataset
+                    die(f"Pool does not exist for {loc} dataset: {basis_root_dataset}. Manually create the pool first!")
+            except RetryableError as e:
+                cause = e.__cause__  # , subprocess.TimeoutExpired,
+                if isinstance(cause, (subprocess.TimeoutExpired, subprocess.CalledProcessError)):
+                    die(
+                        f"Cannot ssh into remote host via '{' '.join(cause.cmd)}'. "
+                        "Fix ssh configuration first, considering diagnostic log file output from running "
+                        f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
+                    )
+                raise e
         params.zpool_features[loc] = features
 
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
@@ -3793,7 +3786,10 @@ class Job:
         """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
         fsenc = sys.getfilesystemencoding()
-        header_bytes = len(" ".join(r.ssh_cmd + cmd).encode(fsenc))
+        conn_pool = self.params.connection_pools[r.location].pool(SHARED)
+        conn = conn_pool.get_connection()
+        header_bytes = len(" ".join(conn.ssh_cmd + cmd).encode(fsenc))
+        conn_pool.return_connection(conn)
         batch: List[str] = []
         total_bytes: int = header_bytes
 
@@ -3822,7 +3818,7 @@ class Job:
                 cmd,
                 datasets,
                 lambda batch: executor.submit(
-                    lambda lst: (self.try_ssh_command(r, log_trace, cmd=cmd + lst) or "").splitlines(), batch
+                    lambda cmd, lst: (self.try_ssh_command(r, log_trace, cmd=cmd + lst) or "").splitlines(), cmd, batch
                 ),
                 self.max_datasets_per_minibatch_on_list_snaps[r.location],
             )
@@ -3837,16 +3833,13 @@ class Job:
                 yield curr_future.result()  # blocks until CLI returns
 
     @staticmethod
-    def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any], enable=True) -> Tuple[Any, Any]:
+    def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any]) -> Tuple[Any, Any]:
         """perf: Runs both I/O functions in parallel/concurrently."""
-        if enable:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future: Future = executor.submit(fn2)  # async fn2
-                result1 = fn1()  # blocks until fn1 call returns
-                result2 = future.result()  # blocks until fn2 call returns
-                return result1, result2
-        else:
-            return fn1(), fn2()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future: Future = executor.submit(fn2)  # async fn2
+            result1 = fn1()  # blocks until fn1 call returns
+            result2 = future.result()  # blocks until fn2 call returns
+            return result1, result2
 
     def get_max_command_line_bytes(self, location: str, os_name: Optional[str] = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
@@ -3871,6 +3864,132 @@ class Job:
             return self.max_command_line_bytes  # for testing only
         else:
             return max_bytes
+
+
+#############################################################################
+@dataclass(order=True, repr=False)
+class Connection:
+    """Represents the ability to multiplex N=capacity concurrent SSH sessions over the same TCP connection."""
+
+    free: int = field(default=0)
+    last_modified: int = field(default=0)
+    replacement: Any = field(default=None, compare=False)
+    ssh_cmd: List[str] = field(default=None, compare=False)
+    ssh_cmd_quoted: List[str] = field(default=None, compare=False)
+
+    def __init__(self, capacity: int, remote: Remote):
+        assert capacity > 0
+        self.free = -capacity  # reverse sort order
+        self.ssh_cmd = remote.local_ssh_command()
+        self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
+
+    def __repr__(self) -> str:
+        return str({"free": abs(self.free), "removed": self.replacement is not None})
+
+    def increment_free(self, value: int) -> None:
+        self.free += value * -1  # use reverse sort order
+
+    def is_full(self) -> bool:
+        return self.free >= 0  # use reverse sort order
+
+    def update_last_modified(self) -> None:
+        self.last_modified = -time.time_ns()  # use reverse sort order
+
+    def cleanup(self, msg_prefix: str, p: Params) -> None:
+        ssh_cmd = self.ssh_cmd
+        if ssh_cmd:
+            ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
+            ssh_socket_cmd_quoted = [shlex.quote(item) for item in ssh_socket_cmd]
+            p.log.debug(f"Executing {msg_prefix}: %s", " ".join(ssh_socket_cmd_quoted))
+            process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+            if process.returncode != 0:
+                p.log.trace("%s", process.stderr.rstrip())
+
+
+#############################################################################
+class ConnectionPool:
+    """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse.
+    Uses a thread-safe priority queue that can handle updates to the priority of items that are already contained in
+    the queue. This is done by tagging an item with a pointer to the updated shallow copy that is the replacement for
+    the item. Items that are tagged like that are garbage and are skipped on pop(). They are also periodically deleted
+    to free up memory, in a way that retains amortized O(log N) time complexity."""
+
+    def __init__(self, remote: Remote, capacity: int):
+        self.remote = remote
+        self.capacity: int = capacity
+        self.priority_queue: List[Connection] = []  # sorted by number of free slots (desc), and by timestamp (desc)
+        self.replaced: int = 0
+        self.dirty: int = 0
+        self._lock: threading.Lock = threading.Lock()
+
+    def _pop(self) -> Connection:
+        conn = None
+        while conn is None and self.priority_queue:
+            conn = heapq.heappop(self.priority_queue)
+            if conn.replacement is not None:  # skip garbage that was replaced by a copy with updated priority
+                conn = None
+                self.replaced -= 1
+        return conn
+
+    def get_connection(self) -> Connection:
+        with self._lock:
+            conn = self._pop()
+            if conn is None or conn.is_full():
+                conn = Connection(self.capacity, self.remote)
+            conn.increment_free(-1)
+            heapq.heappush(self.priority_queue, conn)
+            return conn
+
+    def return_connection(self, old_conn: Connection) -> None:
+        with self._lock:
+            curr_conn = old_conn.replacement if old_conn.replacement is not None else old_conn
+            new_conn = copy.copy(curr_conn)
+            old_conn.replacement = new_conn  # tag garbage with ptr to the updated shallow copy that replaces this item
+            curr_conn.replacement = new_conn  # ditto
+            new_conn.replacement = None
+            new_conn.increment_free(1)
+            new_conn.update_last_modified()
+            heapq.heappush(self.priority_queue, new_conn)
+
+            # periodically delete replaced entries to free memory, yet retain amortized O(log N) time complexity
+            self.replaced += 1
+            self.dirty += 1
+            if self.dirty > len(self.priority_queue) - self.replaced:
+                self.priority_queue = [conn for conn in self.priority_queue if conn.replacement is None]
+                heapq.heapify(self.priority_queue)
+                self.replaced = 0
+                self.dirty = 0
+
+    def cleanup(self, msg_prefix: str) -> None:
+        conn = self._pop()
+        while conn:
+            conn.cleanup(msg_prefix, self.remote.params)
+            conn = self._pop()
+
+    def __repr__(self) -> str:
+        with self._lock:
+            # fmt: off
+            return str({"capacity": self.capacity, "replaced": self.replaced, "queue_len": len(self.priority_queue),
+                        "queue": self.priority_queue, "dirty": self.dirty})
+            # fmt: on
+
+
+#############################################################################
+class ConnectionPools:
+    """A bunch of named connection pools with various multiplexing capacities."""
+
+    def __init__(self, remote: Remote, capacities: Dict[str, int]):
+        self.pools = {name: ConnectionPool(remote, capacity) for name, capacity in capacities.items()}
+
+    def __repr__(self) -> str:
+        return str(self.pools)
+
+    def pool(self, name: str) -> ConnectionPool:
+        return self.pools[name]
+
+    def cleanup(self, msg_prefix: str) -> None:
+        for name, pool in self.pools.items():
+            pool.cleanup(msg_prefix + "/" + name)
 
 
 #############################################################################
