@@ -1887,7 +1887,6 @@ class Job:
                 children[parent].append(dst_dataset)
 
             # find datasets that have at least one snapshot
-            dst_datasets_having_snapshots: Set[str] = set()
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
             cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
 
@@ -1897,6 +1896,7 @@ class Job:
             # dst_datasets to a subset of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this
             # eliminates the I/O to list snapshots for ancestors of excluded datasets. The second run computes the
             # real orphans.
+            dst_datasets_having_snapshots: Set[str] = set()
             for run in range(0, 2):
                 orphans: Set[str] = set()
                 for dst_dataset in reversed(dst_datasets):
