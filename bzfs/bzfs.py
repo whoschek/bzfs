@@ -3871,26 +3871,34 @@ class Job:
 class Connection:
     """Represents the ability to multiplex N=capacity concurrent SSH sessions over the same TCP connection."""
 
+    @dataclass(order=True)
+    class Free:
+        value: int  # essentially a semaphore with a shared counter
+
     free: int = field(default=0)  # sort order evens out the number of concurrent sessions among the TCP connections
-    last_modified: int = field(default=0)  # tie-breaker in favor of most recently used TCP conn as that's hot + alive
+    last_modified: int = field(default=0)  # tie-breaker in favor of most recently returned conn as that's hot + alive
+    capacity: int = field(default=0, compare=False)
     replacement: Any = field(default=None, compare=False)
     ssh_cmd: List[str] = field(default=None, compare=False)
     ssh_cmd_quoted: List[str] = field(default=None, compare=False)
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
-        self.free = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
+        self.capacity = max_concurrent_ssh_sessions_per_tcp_connection
+        self.free: Connection.Free = Connection.Free(-max_concurrent_ssh_sessions_per_tcp_connection)  # reverse order
         self.ssh_cmd = remote.local_ssh_command()
         self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
 
     def __repr__(self) -> str:
-        return str({"free": abs(self.free), "removed": self.replacement is not None})
+        return str({"free": abs(self.free.value), "removed": self.replacement is not None})
 
     def increment_free(self, value: int) -> None:
-        self.free += value * -1  # use reverse sort order
+        self.free.value += value * -1  # use reverse sort order
+        assert self.free.value <= 0
+        assert self.free.value >= -self.capacity
 
     def is_full(self) -> bool:
-        return self.free >= 0  # use reverse sort order
+        return self.free.value >= 0  # use reverse sort order
 
     def update_last_modified(self) -> None:
         self.last_modified = -time.time_ns()  # use reverse sort order
@@ -3948,6 +3956,7 @@ class ConnectionPool:
             return conn
 
     def return_connection(self, old_conn: Connection) -> None:
+        assert old_conn is not None
         with self._lock:
             curr_conn = old_conn.replacement if old_conn.replacement is not None else old_conn
             new_conn = copy.copy(curr_conn)

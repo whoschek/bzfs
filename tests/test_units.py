@@ -1697,14 +1697,182 @@ class TestPythonVersionCheck(unittest.TestCase):
 
 #############################################################################
 class TestConnectionPool(unittest.TestCase):
+    def setUp(self):
+        args = argparser_parse_args(args=["src", "dst", "-v"])
+        p = bzfs.Params(args, log=bzfs.get_logger(bzfs.LogParams(args), args))
+        self.src = p.src
+        self.dst = p.dst
+        self.dst.ssh_user_host = "127.0.0.1"
+        self.remote = bzfs.Remote("src", args, p)
+
+    def assert_priority_queue(self, cpool, priority_queue_len, replaced, dirty=None):
+        self.assertEqual(len(cpool.priority_queue), priority_queue_len)
+        self.assertEqual(cpool.replaced, replaced)
+        if dirty is not None:
+            self.assertEqual(cpool.dirty, dirty)
 
     def test_basic(self):
-        args = argparser_parse_args(args=["src", "dst"])
-        p = bzfs.Params(args)
-        remote = bzfs.Remote("src", args, p)
-        cpool = bzfs.ConnectionPool(remote, 2)
-        conn = cpool.get_connection()
-        cpool.return_connection(conn)
+        counter1 = itertools.count()
+        counter2 = itertools.count()
+        self.src.local_ssh_command = lambda: [str(next(counter1))]
+
+        with self.assertRaises(AssertionError):
+            bzfs.ConnectionPool(self.src, 0)
+
+        capacity = 2
+        cpool = bzfs.ConnectionPool(self.src, capacity)
+        self.assert_priority_queue(cpool, 0, 0, 0)
+        self.assertIsNotNone(repr(cpool))
+        self.assertIsNotNone(str(cpool))
+        cpool.shutdown("foo")
+
+        conn1 = cpool.get_connection()
+        self.assert_priority_queue(cpool, 1, 0, 0)
+        self.assertEqual(conn1.free.value, (capacity - 1) * -1)
+        self.assertEqual(conn1.last_modified, 0)
+        self.assertIsNone(conn1.replacement)
+        i = [str(next(counter2))]
+        self.assertEqual(conn1.ssh_cmd, i)
+        self.assertEqual(conn1.ssh_cmd_quoted, i)
+        self.assertIsNotNone(repr(conn1))
+        self.assertIsNotNone(str(conn1))
+
+        cpool.return_connection(conn1)
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertEqual(conn1.free.value, capacity * -1)
+        self.assertEqual(conn1.last_modified, 0)
+
+        conn2 = cpool.get_connection()
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIsNot(conn1, conn2)
+        self.assertEqual(conn2.free.value, (capacity - 1) * -1)
+        self.assertNotEqual(conn2.last_modified, 0)
+        self.assertIsNone(conn2.replacement)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertIs(conn1.free, conn2.free)
+
+        conn3 = cpool.get_connection()
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIs(conn2, conn3)
+        self.assertEqual(conn3.free.value, (capacity - 2) * -1)
+        self.assertNotEqual(conn3.last_modified, 0)
+        self.assertIsNone(conn3.replacement)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertIsNone(conn2.replacement)
+        self.assertIs(conn1.free, conn2.free)
+        self.assertIs(conn2.free, conn3.free)
+
+        cpool.return_connection(conn2)
+        self.assert_priority_queue(cpool, 1, 0, 0)
+        self.assertIsNotNone(conn2.replacement)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertIsNotNone(conn3.replacement)
+        self.assertEqual(conn2.free.value, (capacity - 1) * -1)
+        self.assertNotEqual(conn2.last_modified, 0)
+        self.assertIs(conn2.free, conn3.free)
+
+        cpool.return_connection(conn3)
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertIsNotNone(conn2.replacement)
+        self.assertIsNotNone(conn3.replacement)
+        self.assertEqual(conn3.free.value, capacity * -1)
+        self.assertNotEqual(conn3.last_modified, 0)
+        self.assertIs(conn1.free, conn2.free)
+        self.assertIs(conn2.free, conn3.free)
+
+        with self.assertRaises(AssertionError):
+            cpool.return_connection(None)
+        with self.assertRaises(AssertionError):
+            cpool.return_connection(conn3)
+        with self.assertRaises(AssertionError):
+            cpool.return_connection(conn3)
+
+    def test_multiple_TCP_connections(self):
+        capacity = 2
+        cpool = bzfs.ConnectionPool(self.remote, capacity)
+
+        conn1 = cpool.get_connection()
+        self.assertEqual(conn1.free.value, (capacity - 1) * -1)
+        conn2 = cpool.get_connection()
+        self.assertIs(conn1.free, conn2.free)
+        self.assertEqual(conn2.free.value, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 1, 0, 0)
+        conn3 = cpool.get_connection()
+        self.assertIsNot(conn2.free, conn3.free)
+        self.assertEqual(conn3.free.value, (capacity - 1) * -1)
+        self.assertEqual(conn2.free.value, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 2, 0, 0)
+        conn4 = cpool.get_connection()
+        self.assertIs(conn3.free, conn4.free)
+        self.assertEqual(conn4.free.value, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 2, 0, 0)
+        conn5 = cpool.get_connection()
+        self.assertIsNot(conn4.free, conn5.free)
+        self.assertEqual(conn5.free.value, (capacity - 1) * -1)
+        self.assertEqual(conn4.free.value, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 3, 0, 0)
+
+        cpool.return_connection(conn3)
+        self.assertEqual(conn3.free.value, (capacity - 1) * -1)
+        self.assert_priority_queue(cpool, 4, 1, 1)
+        cpool.return_connection(conn4)
+        self.assertEqual(conn3.free.value, (capacity - 0) * -1)
+        self.assert_priority_queue(cpool, 5, 2, 2)
+
+        cpool.return_connection(conn2)
+        self.assertEqual(conn2.free.value, (capacity - 1) * -1)
+        self.assert_priority_queue(cpool, 6, 3, 3)
+        cpool.return_connection(conn1)
+        self.assertEqual(conn1.free.value, (capacity - 0) * -1)
+        self.assert_priority_queue(cpool, 3, 0, 0)
+
+        cpool.return_connection(conn5)
+        self.assertEqual(conn5.free.value, (capacity - 0) * -1)
+        self.assert_priority_queue(cpool, 4, 1, 1)
+
+        # assert sort order evens out the number of concurrent sessions among the TCP connections
+        conn5a = cpool.get_connection()
+        self.assertEqual(conn5a.free.value, (capacity - 1) * -1)
+        self.assertIs(conn5.free, conn5a.free)
+
+        conn2a = cpool.get_connection()
+        self.assertEqual(conn2a.free.value, (capacity - 1) * -1)
+        self.assertIs(conn2.free, conn2a.free)
+
+        conn4a = cpool.get_connection()
+        self.assertEqual(conn4a.free.value, (capacity - 1) * -1)
+        self.assertIs(conn4.free, conn4a.free)
+
+        # assert tie-breaker in favor of most recently returned TCP connection
+        conn6 = cpool.get_connection()
+        self.assertEqual(conn6.free.value, (capacity - 2) * -1)
+        self.assertIs(conn5.free, conn6.free)
+
+        conn1a = cpool.get_connection()
+        self.assertEqual(conn1a.free.value, (capacity - 2) * -1)
+        self.assertIs(conn1a.free, conn2a.free)
+
+        conn4a = cpool.get_connection()
+        self.assertEqual(conn4a.free.value, (capacity - 2) * -1)
+        self.assertIs(conn4a.free, conn4.free)
+
+        cpool.shutdown("foo")
+
+    def test_pools(self):
+        with self.assertRaises(AssertionError):
+            bzfs.ConnectionPools(self.dst, {"shared": 0})
+
+        bzfs.ConnectionPools(self.dst, {}).shutdown("foo")
+
+        pools = bzfs.ConnectionPools(self.dst, {"shared": 8, "dedicated": 1})
+        self.assertIsNotNone(pools.pool("shared"))
+        self.assertIsNotNone(repr(pools))
+        self.assertIsNotNone(str(pools))
+        pools.shutdown("foo")
+        conn = pools.pool("shared").get_connection()
+        pools.shutdown("foo")
 
 
 #############################################################################
