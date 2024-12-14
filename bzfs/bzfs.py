@@ -1886,16 +1886,13 @@ class Job:
                 parent = os.path.dirname(dst_dataset)
                 children[parent].append(dst_dataset)
 
-            # find datasets that have at least one snapshot
-            btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
-            cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-
             # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of
             # one filter run is an optimization. The first run only computes candidate orphans, without incurring I/O,
             # to reduce the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from
             # dst_datasets to a subset of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this
             # eliminates the I/O to list snapshots for ancestors of excluded datasets. The second run computes the
             # real orphans.
+            btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
             dst_datasets_having_snapshots: Set[str] = set()
             for run in range(0, 2):
                 orphans: Set[str] = set()
@@ -1905,7 +1902,8 @@ class Job:
                         if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
                             orphans.add(dst_dataset)
                 if run == 0:
-                    # update dst_datasets_having_snapshots for real use in the second run
+                    # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
+                    cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
                     for datasets_having_snapshots in self.itr_ssh_command_parallel(dst, cmd, isorted(orphans)):
                         if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                             replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snaps
