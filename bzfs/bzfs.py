@@ -1385,8 +1385,8 @@ class Remote:
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
             self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
         # max 10 concurrent multiplexed ssh sessions over the same TCP connection, per sshd_config(5) MaxSessions
-        self.max_concurrent_ssh_sessions_per_tcp_connection = int(
-            getenv_any("max_concurrent_ssh_sessions_per_tcp_connection", 8)
+        self.max_concurrent_ssh_sessions_per_tcp_connection = max(
+            1, int(getenv_any("max_concurrent_ssh_sessions_per_tcp_connection", 8))
         )
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
@@ -1512,7 +1512,7 @@ class Job:
     def __init__(self):
         self.params: Params
         self.all_dst_dataset_exists: Dict[str, Dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
-        self.dst_dataset_exists: Dict[str, bool] = {}
+        self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: Dict[str, Dict[str, str | int]] = {}
         self.all_exceptions: List[str] = []
         self.all_exceptions_count = 0
@@ -3929,6 +3929,7 @@ class ConnectionPool:
             if conn.replacement is not None:  # skip garbage that was replaced by a copy with updated priority
                 conn = None
                 self.replaced -= 1
+                assert self.replaced >= 0
         return conn
 
     def get_connection(self) -> Connection:

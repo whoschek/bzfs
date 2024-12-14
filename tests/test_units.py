@@ -55,6 +55,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckPercentRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
@@ -1692,6 +1693,18 @@ class TestPythonVersionCheck(unittest.TestCase):
 
         importlib.reload(bzfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()
+
+
+#############################################################################
+class TestConnectionPool(unittest.TestCase):
+
+    def test_basic(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        p = bzfs.Params(args)
+        remote = bzfs.Remote("src", args, p)
+        cpool = bzfs.ConnectionPool(remote, 2)
+        conn = cpool.get_connection()
+        cpool.return_connection(conn)
 
 
 #############################################################################
