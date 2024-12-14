@@ -1536,7 +1536,7 @@ class Job:
         """Exit any multiplexed ssh sessions that may be leftover."""
         cache_items = self.remote_conf_cache.values()
         for i, cache_item in enumerate(cache_items):
-            cache_item[0].cleanup(f"{i + 1}/{len(cache_items)}")
+            cache_item[0].shutdown(f"{i + 1}/{len(cache_items)}")
 
     def terminate(self, except_current_process=False):
         try:
@@ -3871,15 +3871,15 @@ class Job:
 class Connection:
     """Represents the ability to multiplex N=capacity concurrent SSH sessions over the same TCP connection."""
 
-    free: int = field(default=0)
-    last_modified: int = field(default=0)
+    free: int = field(default=0)  # sort order evens out the number of concurrent sessions among the TCP connections
+    last_modified: int = field(default=0)  # tie-breaker in favor of most recently used TCP conn as that's hot + alive
     replacement: Any = field(default=None, compare=False)
     ssh_cmd: List[str] = field(default=None, compare=False)
     ssh_cmd_quoted: List[str] = field(default=None, compare=False)
 
-    def __init__(self, capacity: int, remote: Remote):
-        assert capacity > 0
-        self.free = -capacity  # reverse sort order
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
+        assert max_concurrent_ssh_sessions_per_tcp_connection > 0
+        self.free = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
         self.ssh_cmd = remote.local_ssh_command()
         self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
 
@@ -3895,7 +3895,7 @@ class Connection:
     def update_last_modified(self) -> None:
         self.last_modified = -time.time_ns()  # use reverse sort order
 
-    def cleanup(self, msg_prefix: str, p: Params) -> None:
+    def shutdown(self, msg_prefix: str, p: Params) -> None:
         ssh_cmd = self.ssh_cmd
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
@@ -3909,20 +3909,24 @@ class Connection:
 #############################################################################
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse.
-    Uses a thread-safe priority queue that can handle updates to the priority of items that are already contained in
-    the queue. This is done by tagging an item with a pointer to the updated shallow copy that is the replacement for
-    the item. Items that are tagged like that are garbage and are skipped on pop(). They are also periodically deleted
-    to free up memory, in a way that retains amortized O(log N) time complexity."""
+    Implemented using a (thread-safe) priority queue that can handle updates to the priority of items that are already
+    contained in the queue. This is done by retaining inside the queue both the item before the update as well as the
+    item after the update, such that the item-before-the-update is tagged with an auxiliary pointer to the updated
+    shallow copy that is the item-after-the-update aka the replacement for the item. Items that are tagged like that
+    are garbage and are skipped on reads. They are also periodically garbage collected, i.e. deleted from the queue to
+    free up memory, in a way that retains amortized O(log N) time complexity."""
 
-    def __init__(self, remote: Remote, capacity: int):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
+        assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote = remote
-        self.capacity: int = capacity
+        self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.priority_queue: List[Connection] = []  # sorted by number of free slots (desc), and by timestamp (desc)
         self.replaced: int = 0
         self.dirty: int = 0
         self._lock: threading.Lock = threading.Lock()
 
     def _pop(self) -> Connection:
+        """Returns the "smallest" item wrt. sort order from the priority queue."""
         conn = None
         while conn is None and self.priority_queue:
             conn = heapq.heappop(self.priority_queue)
@@ -3938,7 +3942,7 @@ class ConnectionPool:
             if conn is None or conn.is_full():
                 if conn is not None:
                     heapq.heappush(self.priority_queue, conn)
-                conn = Connection(self.capacity, self.remote)
+                conn = Connection(self.remote, self.capacity)  # add a new connection
             conn.increment_free(-1)
             heapq.heappush(self.priority_queue, conn)
             return conn
@@ -3954,7 +3958,7 @@ class ConnectionPool:
             new_conn.update_last_modified()
             heapq.heappush(self.priority_queue, new_conn)
 
-            # periodically delete replaced entries to free memory, yet retain amortized O(log N) time complexity
+            # gc: periodically delete replaced entries to free memory, yet retain amortized O(log N) time complexity
             self.replaced += 1
             self.dirty += 1
             if self.dirty > len(self.priority_queue) - self.replaced:
@@ -3963,10 +3967,10 @@ class ConnectionPool:
                 self.replaced = 0
                 self.dirty = 0
 
-    def cleanup(self, msg_prefix: str) -> None:
+    def shutdown(self, msg_prefix: str) -> None:
         conn = self._pop()
         while conn is not None:
-            conn.cleanup(msg_prefix, self.remote.params)
+            conn.shutdown(msg_prefix, self.remote.params)
             conn = self._pop()
 
     def __repr__(self) -> str:
@@ -3990,9 +3994,9 @@ class ConnectionPools:
     def pool(self, name: str) -> ConnectionPool:
         return self.pools[name]
 
-    def cleanup(self, msg_prefix: str) -> None:
+    def shutdown(self, msg_prefix: str) -> None:
         for name, pool in self.pools.items():
-            pool.cleanup(msg_prefix + "/" + name)
+            pool.shutdown(msg_prefix + "/" + name)
 
 
 #############################################################################
