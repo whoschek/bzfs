@@ -894,6 +894,13 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "rotational drives, ZFS geometry and configuration, as well as the network bandwidth and other "
              "workloads simultaneously running on the system. The current default is geared towards a high degreee of "
              "parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 150%%\n\n")
+    maxsessions_dflt = 8
+    parser.add_argument(
+        "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=maxsessions_dflt,
+        action=CheckRange, metavar="INT",
+        # max 10 concurrent multiplexed ssh sessions over the same TCP connection, per sshd_config(5) MaxSessions
+        # help="TODO \n\n")
+        help=argparse.SUPPRESS)
     parser.add_argument(
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
@@ -1384,10 +1391,7 @@ class Remote:
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
             self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
-        # max 10 concurrent multiplexed ssh sessions over the same TCP connection, per sshd_config(5) MaxSessions
-        self.max_concurrent_ssh_sessions_per_tcp_connection = max(
-            1, int(getenv_any("max_concurrent_ssh_sessions_per_tcp_connection", 8))
-        )
+        self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
             self.socket_dir = os.path.join(get_home_directory(), ".ssh", "bzfs")
