@@ -3935,6 +3935,8 @@ class ConnectionPool:
         with self._lock:
             conn = self._pop()
             if conn is None or conn.is_full():
+                if conn is not None:
+                    heapq.heappush(self.priority_queue, conn)
                 conn = Connection(self.capacity, self.remote)
             conn.increment_free(-1)
             heapq.heappush(self.priority_queue, conn)
@@ -3962,7 +3964,7 @@ class ConnectionPool:
 
     def cleanup(self, msg_prefix: str) -> None:
         conn = self._pop()
-        while conn:
+        while conn is not None:
             conn.cleanup(msg_prefix, self.remote.params)
             conn = self._pop()
 
