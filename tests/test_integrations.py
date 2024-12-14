@@ -404,6 +404,7 @@ class BZFSTestCase(ParametrizedTestCase):
 
         job = bzfs.Job()
         job.is_test_mode = True
+        args = args + ["--threads=2"]
         if error_injection_triggers is not None:
             job.error_injection_triggers = error_injection_triggers
             args = args + ["--threads=1"]
