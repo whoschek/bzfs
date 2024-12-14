@@ -218,9 +218,6 @@ jobs:
         pv --version | head -n 1
         mbuffer --version |& head -n 1
         command -v sh | xargs ls -l
-    - name: Test with unittest
-      run: |
-        ./test.sh
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
