@@ -3877,20 +3877,22 @@ class Connection:
 
     free: int = field(default=0)  # sort order evens out the number of concurrent sessions among the TCP connections
     last_modified: int = field(default=0)  # LIFO: tie-breaker favors latest returned conn as that's most alive and hot
+    cid: int = field(default=0, compare=False)
     capacity: int = field(default=0, compare=False)
     replacement: Any = field(default=None, compare=False)
     ssh_cmd: List[str] = field(default=None, compare=False)
     ssh_cmd_quoted: List[str] = field(default=None, compare=False)
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity = max_concurrent_ssh_sessions_per_tcp_connection
         self.free = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
+        self.cid = cid
         self.ssh_cmd = remote.local_ssh_command()
         self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
 
     def __repr__(self) -> str:
-        return str({"free": abs(self.free), "removed": self.replacement is not None})
+        return str({"free": abs(self.free), "cid": self.cid, "removed": self.replacement is not None})
 
     def increment_free(self, value: int) -> None:
         self.free += -value  # use reverse sort order
@@ -3931,7 +3933,10 @@ class ConnectionPool:
         self.priority_queue: List[Connection] = []  # sorted by number of free slots (desc), and by timestamp (desc)
         self.replaced: int = 0
         self.dirty: int = 0
+        self.cid = itertools.count()  # monotonically increasing sequence number
         self._lock: threading.Lock = threading.Lock()
+        self.returns = 0
+        self.return_iters = 0
 
     def _pop(self) -> Connection:
         """Returns the "smallest" item wrt. sort order from the priority queue."""
@@ -3949,8 +3954,10 @@ class ConnectionPool:
             conn = self._pop()
             if conn is None or conn.is_full():
                 if conn is not None:
+                    assert conn.replacement is None
                     heapq.heappush(self.priority_queue, conn)
-                conn = Connection(self.remote, self.capacity)  # add a new connection
+                conn = Connection(self.remote, self.capacity, next(self.cid))  # add a new connection
+            assert conn.replacement is None
             conn.increment_free(-1)
             heapq.heappush(self.priority_queue, conn)
             return conn
@@ -3959,6 +3966,12 @@ class ConnectionPool:
         assert old_conn is not None
         with self._lock:
             curr_conn = old_conn.replacement if old_conn.replacement is not None else old_conn
+            next_conn = curr_conn.replacement
+            while next_conn is not None:
+                curr_conn = next_conn
+                next_conn = next_conn.replacement
+                self.return_iters += 1
+            self.returns += 1
             new_conn = copy.copy(curr_conn)
             old_conn.replacement = new_conn  # tag garbage with ptr to the updated shallow copy that replaces this item
             curr_conn.replacement = new_conn  # ditto
@@ -3986,6 +3999,7 @@ class ConnectionPool:
         with self._lock:
             # fmt: off
             return str({"capacity": self.capacity, "replaced": self.replaced, "queue_len": len(self.priority_queue),
+                        "returns": self.returns, "return_iters": self.return_iters,
                         "queue": self.priority_queue, "dirty": self.dirty})
             # fmt: on
 
