@@ -90,17 +90,17 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite():
-    test_mode = getenv_any("test_mode", "functional")  # Consider toggling this when testing isolated code changes
+    test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
     is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
 
-    for ssh_mode in ["pull-push"]:
-        # for ssh_mode in ["local", "pull-push"]:
-        # for ssh_mode in []:
-        # for ssh_mode in ["local"]:
+    # for ssh_mode in ["pull-push"]:
+    # for ssh_mode in ["local", "pull-push"]:
+    # for ssh_mode in []:
+    for ssh_mode in ["local"]:
         for min_pipe_transfer_size in [1024**2]:
             for affix in [""]:
                 # no_privilege_elevation_modes = []
@@ -129,11 +129,11 @@ def suite():
         return suite
 
     # ssh_modes = []
-    ssh_modes = ["pull-push"]
+    # ssh_modes = ["pull-push"]
     # ssh_modes = ["local", "pull-push", "push", "pull"]
     # ssh_modes = ["local"]
-    # ssh_modes = ["local", "pull-push"]
-    # ssh_modes = ["local"] if is_functional_test else ssh_modes
+    ssh_modes = ["local", "pull-push"]
+    ssh_modes = ["local"] if is_functional_test else ssh_modes
     for ssh_mode in ssh_modes:
         min_pipe_transfer_sizes = [0, 1024**2]
         min_pipe_transfer_sizes = [0] if is_functional_test else min_pipe_transfer_sizes
