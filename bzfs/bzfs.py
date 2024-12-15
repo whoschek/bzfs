@@ -3965,8 +3965,7 @@ class ConnectionPool:
     def return_connection(self, old_conn: Connection) -> None:
         assert old_conn is not None
         with self._lock:
-            curr_conn = old_conn.replacement if old_conn.replacement is not None else old_conn
-            next_conn = curr_conn.replacement
+            next_conn = old_conn
             while next_conn is not None:
                 curr_conn = next_conn
                 next_conn = next_conn.replacement
