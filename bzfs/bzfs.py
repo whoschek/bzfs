@@ -898,9 +898,16 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=maxsessions_dflt,
         action=CheckRange, metavar="INT",
-        # max 10 concurrent multiplexed ssh sessions over the same TCP connection, per sshd_config(5) MaxSessions
-        # help="TODO \n\n")
-        help=argparse.SUPPRESS)
+        help=f"For best throughput, {prog_name} uses multiple SSH TCP connections in parallel, as indicated by "
+             "--threads (see above). For best startup latency, each such parallel TCP connection can carry a "
+             "maximum of S concurrent SSH sessions, where "
+             "S=--max-concurrent-ssh-sessions-per-tcp-connection (default: {maxsessions_dflt}, min: 1). "
+             "This client-side parameter must not be higher than the server-side sshd_config(5) MaxSessions parameter "
+             "(which defaults to 10, see https://manpages.ubuntu.com/manpages/focal/man5/sshd_config.5.html).\n\n"
+             f"*Note:* For better throughput, {prog_name} uses one dedicated TCP connection per parallel ZFS "
+             f"send/receive operation such that the dedicated connection is never used by any other "
+             f"concurrent SSH session, effectively ignoring the value of the "
+             f"--max-concurrent-ssh-sessions-per-tcp-connection parameter in the ZFS send/receive case.\n\n")
     parser.add_argument(
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
