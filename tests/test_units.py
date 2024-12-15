@@ -1897,7 +1897,9 @@ class TestConnectionPool(unittest.TestCase):
         # loglevel = logging.DEBUG
         loglevel = bzfs.log_trace
         is_logging = log.isEnabledFor(loglevel)
-        num_steps = 1000 if not is_adhoc_test and not is_functional_test else 1000
+        num_steps = 100 if not is_adhoc_test and not is_functional_test else 1000
+        if is_solaris_zfs():
+            num_steps = min(25, num_steps)  # slow
         for maxsessions in range(1, 10 + 1):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()

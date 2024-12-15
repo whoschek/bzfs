@@ -3933,7 +3933,7 @@ class ConnectionPool:
         self.priority_queue: List[Connection] = []  # sorted by number of free slots (desc), and by timestamp (desc)
         self.replaced: int = 0
         self.dirty: int = 0
-        self.cid = itertools.count()  # monotonically increasing sequence number
+        self.cid = itertools.count()  # monotonically increasing connection number
         self._lock: threading.Lock = threading.Lock()
         self.returns = 0
         self.return_iters = 0
