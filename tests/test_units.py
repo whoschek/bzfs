@@ -1818,9 +1818,10 @@ class TestConnectionPool(unittest.TestCase):
         self.assertEqual(conn3.free.value, (capacity - 1) * -1)
         self.assert_priority_queue(cpool, 4, 1, 1)
         cpool.return_connection(conn4)
-        self.assertEqual(conn3.free.value, (capacity - 0) * -1)
+        self.assertEqual(conn4.free.value, (capacity - 0) * -1)
         self.assert_priority_queue(cpool, 5, 2, 2)
 
+        time.sleep(0.01)
         cpool.return_connection(conn2)
         self.assertEqual(conn2.free.value, (capacity - 1) * -1)
         self.assert_priority_queue(cpool, 6, 3, 3)
@@ -1828,6 +1829,7 @@ class TestConnectionPool(unittest.TestCase):
         self.assertEqual(conn1.free.value, (capacity - 0) * -1)
         self.assert_priority_queue(cpool, 3, 0, 0)
 
+        time.sleep(0.01)
         cpool.return_connection(conn5)
         self.assertEqual(conn5.free.value, (capacity - 0) * -1)
         self.assert_priority_queue(cpool, 4, 1, 1)
