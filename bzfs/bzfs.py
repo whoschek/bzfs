@@ -3875,12 +3875,8 @@ class Job:
 class Connection:
     """Represents the ability to multiplex N=capacity concurrent SSH sessions over the same TCP connection."""
 
-    @dataclass(order=True)
-    class Free:
-        value: int  # essentially a semaphore with a shared counter
-
     free: int = field(default=0)  # sort order evens out the number of concurrent sessions among the TCP connections
-    last_modified: int = field(default=0)  # tie-breaker in favor of most recently returned conn as that's hot + alive
+    last_modified: int = field(default=0)  # LIFO: tie-breaker favors latest returned conn as that's most alive and hot
     capacity: int = field(default=0, compare=False)
     replacement: Any = field(default=None, compare=False)
     ssh_cmd: List[str] = field(default=None, compare=False)
@@ -3889,20 +3885,20 @@ class Connection:
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity = max_concurrent_ssh_sessions_per_tcp_connection
-        self.free: Connection.Free = Connection.Free(-max_concurrent_ssh_sessions_per_tcp_connection)  # reverse order
+        self.free = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
         self.ssh_cmd = remote.local_ssh_command()
         self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
 
     def __repr__(self) -> str:
-        return str({"free": abs(self.free.value), "removed": self.replacement is not None})
+        return str({"free": abs(self.free), "removed": self.replacement is not None})
 
     def increment_free(self, value: int) -> None:
-        self.free.value += value * -1  # use reverse sort order
-        assert self.free.value <= 0
-        assert self.free.value >= -self.capacity
+        self.free += -value  # use reverse sort order
+        assert self.free <= 0
+        assert self.free >= -self.capacity
 
     def is_full(self) -> bool:
-        return self.free.value >= 0  # use reverse sort order
+        return self.free >= 0  # use reverse sort order
 
     def update_last_modified(self) -> None:
         self.last_modified = -time.time_ns()  # use reverse sort order
@@ -3922,7 +3918,7 @@ class Connection:
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse.
     Implemented using a (thread-safe) priority queue that can handle updates to the priority of items that are already
-    contained in the queue. This is done by retaining inside the queue both the item before the update as well as the
+    contained in the queue. This is done by retaining inside the queue both the item before the update, as well as the
     item after the update, such that the item-before-the-update is tagged with an auxiliary pointer to the updated
     shallow copy that is the item-after-the-update aka the replacement for the item. Items that are tagged like that
     are garbage and are skipped on reads. They are also periodically garbage collected, i.e. deleted from the queue to
@@ -3968,7 +3964,7 @@ class ConnectionPool:
             curr_conn.replacement = new_conn  # ditto
             new_conn.replacement = None
             new_conn.increment_free(1)
-            new_conn.update_last_modified()
+            new_conn.update_last_modified()  # LIFO: tiebreaker favor latest returned conn as that's most alive and hot
             heapq.heappush(self.priority_queue, new_conn)
 
             # gc: periodically delete replaced entries to free memory, yet retain amortized O(log N) time complexity
