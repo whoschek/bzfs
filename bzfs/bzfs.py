@@ -3528,8 +3528,7 @@ class Job:
                     except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                         failed = True
                         if p.skip_on_error == "fail":
-                            for todo_future in todo_futures:
-                                todo_future.cancel()
+                            [todo_future.cancel() for todo_future in todo_futures]
                             terminate_process_group(except_current_process=True)
                             raise e
                         no_skip = not (p.skip_on_error == "tree" or skip_tree_on_error(dataset))
