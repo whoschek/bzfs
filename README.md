@@ -1657,7 +1657,7 @@ usage: bzfs [-h] [--recursive]
     ZFS geometry and configuration, as well as the network bandwidth and
     other workloads simultaneously running on the system. The current
     default is geared towards a high degreee of parallelism, and as such
-    may perform poorly on HDDs. Examples: 1, 4, 150%
+    may perform poorly on HDDs. Examples: 1, 4, 75%, 150%
 
 <!-- -->
 
