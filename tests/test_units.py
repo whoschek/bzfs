@@ -1911,6 +1911,7 @@ class TestConnectionPool(unittest.TestCase):
         is_logging = log.isEnabledFor(loglevel)
         num_steps = 1000 if not is_adhoc_test and not is_functional_test else 100
         log.info(f"num_random_steps: {num_steps}")
+        start_time_nanos = time.time_ns()
         for maxsessions in range(1, 10 + 1):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()
@@ -1955,6 +1956,8 @@ class TestConnectionPool(unittest.TestCase):
                     raise
                 log.log(loglevel, "cpool: %s", cpool)
                 # log.log(bzfs.log_debug, "cpool: %s", cpool)
+        elapsed_secs = (time.time_ns() - start_time_nanos) / 1000_000_000
+        log.info("random_walk took %s secs", elapsed_secs)
 
 
 #############################################################################

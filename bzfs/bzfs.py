@@ -3981,7 +3981,7 @@ class ConnectionPool:
                 next_conn = next_conn.replacement
                 self.return_iters += 1
             self.returns += 1
-            new_conn = copy.copy(curr_conn)
+            new_conn = copy.copy(curr_conn)  # shallow copy
             old_conn.replacement = new_conn  # tag garbage with ptr to the updated shallow copy that replaces this item
             curr_conn.replacement = new_conn  # ditto
             new_conn.replacement = None
@@ -3990,7 +3990,7 @@ class ConnectionPool:
             new_conn.update_last_modified(self.last_modified)  # LIFO: tiebreaker favor latest conn as that's most alive
             heapq.heappush(self.priority_queue, new_conn)
 
-            # gc: periodically delete replaced entries to free memory, yet retain amortized O(log N) time complexity
+            # gc: periodically delete replaced entries to free up memory, yet retain amortized O(log N) time complexity
             self.replaced += 1
             self.dirty += 1
             if self.dirty > len(self.priority_queue) - self.replaced:
