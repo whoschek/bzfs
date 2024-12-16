@@ -468,6 +468,17 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3, unit="ms", long=True))
         self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3 * 1000 * 1000, long=True))
 
+    def test_pv_cmd(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        log_params = bzfs.LogParams(args)
+        try:
+            job = bzfs.Job()
+            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            job.params.available_programs = {"src": {"pv": "pv"}}
+            self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
+        finally:
+            bzfs.reset_logger()
+
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
