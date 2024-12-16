@@ -4009,7 +4009,7 @@ class ConnectionPool:
         with self._lock:
             # fmt: off
             return str({"capacity": self.capacity, "replaced": self.replaced, "queue_len": len(self.priority_queue),
-                        "returns": self.returns, "return_iters": self.return_iters,
+                        "cid": self.cid, "returns": self.returns, "return_iters": self.return_iters,
                         "queue": self.priority_queue, "dirty": self.dirty})
             # fmt: on
 

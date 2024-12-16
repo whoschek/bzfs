@@ -1890,7 +1890,21 @@ class TestConnectionPool(unittest.TestCase):
         conn = pools.pool("shared").get_connection()
         pools.shutdown("foo")
 
-    def test_random_walk(self):
+    def test_return_sequence(self):
+        maxsessions = 10
+        items = 10
+        for j in range(0, 3):
+            cpool = bzfs.ConnectionPool(self.src, maxsessions)
+            dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
+            rng = random.Random(12345)
+            conns = [self.get_connection(cpool, dpool) for _ in range(0, items)]
+            while conns:
+                i = rng.randint(0, len(conns) - 1) if j == 0 else 0 if j == 1 else len(conns) - 1
+                conn, donn = conns.pop(i)
+                self.return_connection(cpool, conn, dpool, donn)
+            print(f"cpool: {cpool}")
+
+    def test_long_random_walk(self):
         log = logging.getLogger(bzfs.__name__)
         # loglevel = logging.DEBUG
         loglevel = bzfs.log_trace
@@ -1921,7 +1935,14 @@ class TestConnectionPool(unittest.TestCase):
                             log.log(loglevel, "get")
                             conns.append(self.get_connection(cpool, dpool))
                         else:
-                            i = rng.randint(0, len(conns) - 1)
+                            # k = rng.randint(0, 2)
+                            k = 0
+                            if k == 0:
+                                i = rng.randint(0, len(conns) - 1)
+                            elif k == 1:
+                                i = 0
+                            else:
+                                i = len(conns) - 1
                             conn, donn = conns.pop(i)
                             if is_logging:
                                 log.log(loglevel, f"return {i}/{len(conns)+1}: conn: {conn}, donn: {donn} ")
@@ -1933,6 +1954,7 @@ class TestConnectionPool(unittest.TestCase):
                     print(f"dlen: {len(dpool.priority_queue)}, dpool: {dpool.priority_queue}")
                     raise
                 log.log(loglevel, "cpool: %s", cpool)
+                # log.log(bzfs.log_debug, "cpool: %s", cpool)
 
 
 #############################################################################
