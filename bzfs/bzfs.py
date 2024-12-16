@@ -3894,6 +3894,7 @@ class Connection:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity = max_concurrent_ssh_sessions_per_tcp_connection
         self.free = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
+        self.last_modified = 0
         self.cid = cid
         self.ssh_cmd = remote.local_ssh_command()
         self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
@@ -3909,8 +3910,8 @@ class Connection:
     def is_full(self) -> bool:
         return self.free >= 0  # use reverse sort order
 
-    def update_last_modified(self) -> None:
-        self.last_modified = -time.time_ns()  # use reverse sort order
+    def update_last_modified(self, last_modified) -> None:
+        self.last_modified = -last_modified  # use reverse sort order
 
     def shutdown(self, msg_prefix: str, p: Params) -> None:
         ssh_cmd = self.ssh_cmd
@@ -3935,15 +3936,16 @@ class ConnectionPool:
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
-        self.remote = remote
+        self.remote: Remote = remote
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.priority_queue: List[Connection] = []  # sorted by number of free slots (desc), and by timestamp (desc)
         self.replaced: int = 0
         self.dirty: int = 0
-        self.cid = itertools.count()  # monotonically increasing connection number
+        self.last_modified: int = 0  # monotonically increasing sequence number
+        self.cid: int = 0  # monotonically increasing connection number
         self._lock: threading.Lock = threading.Lock()
-        self.returns = 0
-        self.return_iters = 0
+        self.returns: int = 0
+        self.return_iters: int = 0
 
     def _pop(self) -> Connection:
         """Returns the "smallest" item wrt. sort order from the priority queue."""
@@ -3963,7 +3965,8 @@ class ConnectionPool:
                 if conn is not None:
                     assert conn.replacement is None
                     heapq.heappush(self.priority_queue, conn)
-                conn = Connection(self.remote, self.capacity, next(self.cid))  # add a new connection
+                conn = Connection(self.remote, self.capacity, self.cid)  # add a new connection
+                self.cid += 1
             assert conn.replacement is None
             conn.increment_free(-1)
             heapq.heappush(self.priority_queue, conn)
@@ -3983,7 +3986,8 @@ class ConnectionPool:
             curr_conn.replacement = new_conn  # ditto
             new_conn.replacement = None
             new_conn.increment_free(1)
-            new_conn.update_last_modified()  # LIFO: tiebreaker favor latest returned conn as that's most alive and hot
+            self.last_modified += 1
+            new_conn.update_last_modified(self.last_modified)  # LIFO: tiebreaker favor latest conn as that's most alive
             heapq.heappush(self.priority_queue, new_conn)
 
             # gc: periodically delete replaced entries to free memory, yet retain amortized O(log N) time complexity

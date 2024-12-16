@@ -18,6 +18,7 @@ import argparse
 import itertools
 import logging
 import os
+import platform
 import random
 import re
 import socket
@@ -1740,6 +1741,7 @@ class TestConnectionPool(unittest.TestCase):
         counter1b = itertools.count()
         self.src.local_ssh_command = lambda: [str(next(counter1a))]
         self.src2.local_ssh_command = lambda: [str(next(counter1b))]
+        initial_last_modified = 0
 
         with self.assertRaises(AssertionError):
             bzfs.ConnectionPool(self.src, 0)
@@ -1755,7 +1757,7 @@ class TestConnectionPool(unittest.TestCase):
         conn1, donn1 = self.get_connection(cpool, dpool)
         self.assert_priority_queue(cpool, 1, 0, 0)
         self.assertEqual(conn1.free, (capacity - 1) * -1)
-        self.assertEqual(conn1.last_modified, 0)
+        self.assertEqual(conn1.last_modified, initial_last_modified)
         self.assertIsNone(conn1.replacement)
         i = [str(next(counter2a))]
         self.assertEqual(conn1.ssh_cmd, i)
@@ -1766,13 +1768,13 @@ class TestConnectionPool(unittest.TestCase):
         self.return_connection(cpool, conn1, dpool, donn1)
         self.assert_priority_queue(cpool, 2, 1, 1)
         self.assertIsNotNone(conn1.replacement)
-        self.assertEqual(conn1.last_modified, 0)
+        self.assertEqual(conn1.last_modified, initial_last_modified)
 
         conn2, donn2 = self.get_connection(cpool, dpool)
         self.assert_priority_queue(cpool, 2, 1, 1)
         self.assertIsNot(conn1, conn2)
         self.assertEqual(conn2.free, (capacity - 1) * -1)
-        self.assertNotEqual(conn2.last_modified, 0)
+        self.assertNotEqual(conn2.last_modified, initial_last_modified)
         self.assertIsNone(conn2.replacement)
         self.assertIsNotNone(conn1.replacement)
 
@@ -1780,7 +1782,7 @@ class TestConnectionPool(unittest.TestCase):
         self.assert_priority_queue(cpool, 2, 1, 1)
         self.assertIs(conn2, conn3)
         self.assertEqual(conn3.free, (capacity - 2) * -1)
-        self.assertNotEqual(conn3.last_modified, 0)
+        self.assertNotEqual(conn3.last_modified, initial_last_modified)
         self.assertIsNone(conn3.replacement)
         self.assertIsNotNone(conn1.replacement)
         self.assertIsNone(conn2.replacement)
@@ -1790,14 +1792,14 @@ class TestConnectionPool(unittest.TestCase):
         self.assertIsNotNone(conn2.replacement)
         self.assertIsNotNone(conn1.replacement)
         self.assertIsNotNone(conn3.replacement)
-        self.assertNotEqual(conn2.last_modified, 0)
+        self.assertNotEqual(conn2.last_modified, initial_last_modified)
 
         self.return_connection(cpool, conn3, dpool, donn3)
         self.assert_priority_queue(cpool, 2, 1, 1)
         self.assertIsNotNone(conn1.replacement)
         self.assertIsNotNone(conn2.replacement)
         self.assertIsNotNone(conn3.replacement)
-        self.assertNotEqual(conn3.last_modified, 0)
+        self.assertNotEqual(conn3.last_modified, initial_last_modified)
 
         with self.assertRaises(AssertionError):
             cpool.return_connection(None)
@@ -1835,20 +1837,18 @@ class TestConnectionPool(unittest.TestCase):
 
         cpool.return_connection(conn3)
         self.assert_priority_queue(cpool, 4, 1, 1)
-        t4 = time.time_ns()
         cpool.return_connection(conn4)
+        t4 = cpool.last_modified
         self.assert_priority_queue(cpool, 5, 2, 2)
 
-        time.sleep(0.01)
         cpool.return_connection(conn2)
         self.assert_priority_queue(cpool, 6, 3, 3)
-        t2 = time.time_ns()
         cpool.return_connection(conn1)
+        t2 = cpool.last_modified
         self.assert_priority_queue(cpool, 3, 0, 0)
 
-        time.sleep(0.01)
-        t5 = time.time_ns()
         cpool.return_connection(conn5)
+        t5 = cpool.last_modified
         self.assert_priority_queue(cpool, 4, 1, 1)
 
         # assert sort order evens out the number of concurrent sessions among the TCP connections
@@ -1864,17 +1864,15 @@ class TestConnectionPool(unittest.TestCase):
         # assert tie-breaker in favor of most recently returned TCP connection
         conn6 = cpool.get_connection()
         self.assertEqual(conn6.free, (capacity - 2) * -1)
-        self.assertGreaterEqual(abs(conn6.last_modified), t5)
+        self.assertEqual(abs(conn6.last_modified), t5)
 
         conn1a = cpool.get_connection()
         self.assertEqual(conn1a.free, (capacity - 2) * -1)
-        self.assertGreaterEqual(abs(conn1a.last_modified), t2)
-        self.assertLess(abs(conn1a.last_modified), t5)
+        self.assertEqual(abs(conn1a.last_modified), t2)
 
         conn4a = cpool.get_connection()
         self.assertEqual(conn4a.free, (capacity - 2) * -1)
-        self.assertGreaterEqual(abs(conn4a.last_modified), t4)
-        self.assertLess(abs(conn4a.last_modified), t2)
+        self.assertEqual(abs(conn4a.last_modified), t4)
 
         cpool.shutdown("foo")
 
@@ -1897,9 +1895,13 @@ class TestConnectionPool(unittest.TestCase):
         # loglevel = logging.DEBUG
         loglevel = bzfs.log_trace
         is_logging = log.isEnabledFor(loglevel)
-        num_steps = 100 if not is_adhoc_test and not is_functional_test else 1000
+        # num_steps = 1000 if not is_adhoc_test and not is_functional_test else 100
+        # if not platform.system() == "Linux":
+        #     num_steps = min(25, num_steps)  # slow
+        num_steps = 1000 if not is_adhoc_test and not is_functional_test else 100
         if is_solaris_zfs():
             num_steps = min(25, num_steps)  # slow
+        log.info(f"num_steps: {num_steps}")
         for maxsessions in range(1, 10 + 1):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()
@@ -1928,7 +1930,6 @@ class TestConnectionPool(unittest.TestCase):
                             conn, donn = conns.pop(i)
                             if is_logging:
                                 log.log(loglevel, f"return {i}/{len(conns)+1}: conn: {conn}, donn: {donn} ")
-                            time.sleep(1 / 1000_000)  # avoid tiebreaks via monotonically increasing conn.last_modified
                             self.return_connection(cpool, conn, dpool, donn)
                 except Exception:
                     print("Ooops!")
@@ -1945,7 +1946,8 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
         with self._lock:
             conn = self.priority_queue[0] if self.priority_queue else None
             if conn is None or conn.is_full():
-                conn = bzfs.Connection(self.remote, self.capacity, next(self.cid))
+                conn = bzfs.Connection(self.remote, self.capacity, self.cid)
+                self.cid += 1
                 self.priority_queue.append(conn)
             conn.increment_free(-1)
             self.priority_queue.sort()
@@ -1956,7 +1958,8 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
         with self._lock:
             assert any(old_conn is c for c in self.priority_queue)
             old_conn.increment_free(1)
-            old_conn.update_last_modified()
+            self.last_modified += 1
+            old_conn.update_last_modified(self.last_modified)
             self.priority_queue.sort()
 
     def __repr__(self) -> str:
