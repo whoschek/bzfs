@@ -404,7 +404,6 @@ class BZFSTestCase(ParametrizedTestCase):
 
         job = bzfs.Job()
         job.is_test_mode = True
-        args = args + ["--max-concurrent-ssh-sessions-per-tcp-connection=2"]
         if error_injection_triggers is not None:
             job.error_injection_triggers = error_injection_triggers
             args = args + ["--threads=1"]
@@ -751,7 +750,13 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic_woo(w=w, q=q)
         for i in range(0, 1):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--threads=4")
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--recursive",
+                    "--threads=4",
+                    "--max-concurrent-ssh-sessions-per-tcp-connection=2",
+                )
                 self.assertSnapshots(dst_root_dataset, 3, "s")
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
                 self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
