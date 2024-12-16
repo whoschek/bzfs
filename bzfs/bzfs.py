@@ -2597,6 +2597,8 @@ class Job:
             counter = self.error_injection_triggers.get("before")
             if counter and self.decrement_injection_counter(counter, error_trigger):
                 try:
+                    if error_trigger.endswith("_UnicodeDecodeError"):
+                        raise UnicodeDecodeError("utf-8", error_trigger.encode("utf-8"), 0, 1, error_trigger)
                     raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
                 except subprocess.CalledProcessError as e:
                     if error_trigger.startswith("retryable_"):
@@ -3730,11 +3732,11 @@ class Job:
         if len(lines) == 0:
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
             try:
-                if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
+                if self.try_ssh_command(remote, log_trace, cmd=cmd, error_trigger="zfslist_UnicodeDecodeError") is None:
                     basis_root_dataset = r.basis_root_dataset
                     die(f"Pool does not exist for {loc} dataset: {basis_root_dataset}. Manually create the pool first!")
             except RetryableError as e:
-                cause = e.__cause__  # , subprocess.TimeoutExpired,
+                cause = e.__cause__
                 if isinstance(cause, (subprocess.TimeoutExpired, subprocess.CalledProcessError)):
                     die(
                         f"Cannot ssh into remote host via '{' '.join(cause.cmd)}'. "
