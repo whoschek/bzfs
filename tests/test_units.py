@@ -18,6 +18,8 @@ import argparse
 import itertools
 import logging
 import os
+import platform
+import random
 import re
 import socket
 import subprocess
@@ -33,7 +35,12 @@ from typing import Sequence, Callable, Optional, TypeVar, Union, Dict
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
+from bzfs.bzfs import getenv_any
 from tests.zfs_util import is_solaris_zfs
+
+test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
+is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
+is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
 
 
 def suite():
@@ -55,6 +62,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckPercentRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
@@ -459,6 +467,17 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("-3 h (-10800 seconds)", bzfs.human_readable_duration(-3 * 60, unit="m", long=True))
         self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3, unit="ms", long=True))
         self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3 * 1000 * 1000, long=True))
+
+    def test_pv_cmd(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        log_params = bzfs.LogParams(args)
+        try:
+            job = bzfs.Job()
+            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            job.params.available_programs = {"src": {"pv": "pv"}}
+            self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
+        finally:
+            bzfs.reset_logger()
 
 
 #############################################################################
@@ -1692,6 +1711,291 @@ class TestPythonVersionCheck(unittest.TestCase):
 
         importlib.reload(bzfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()
+
+
+#############################################################################
+class TestConnectionPool(unittest.TestCase):
+    def setUp(self):
+        args = argparser_parse_args(args=["src", "dst", "-v"])
+        p = bzfs.Params(args, log=bzfs.get_logger(bzfs.LogParams(args), args))
+        self.src = p.src
+        self.dst = p.dst
+        self.dst.ssh_user_host = "127.0.0.1"
+        self.remote = bzfs.Remote("src", args, p)
+        self.src2 = bzfs.Remote("src", args, p)
+
+    def assert_priority_queue(self, cpool, queuelen, replaced, dirty=None):
+        if dirty is None:
+            self.assertTupleEqual((len(cpool.priority_queue), cpool.replaced), (queuelen, replaced))
+        else:
+            self.assertTupleEqual((len(cpool.priority_queue), cpool.replaced, cpool.dirty), (queuelen, replaced, dirty))
+        pass
+
+    def assert_equal_connections(self, conn, donn):
+        self.assertTupleEqual((conn.cid, conn.ssh_cmd), (donn.cid, donn.ssh_cmd))
+        self.assertEqual(conn.free, donn.free)
+
+    def get_connection(self, cpool, dpool):
+        conn = cpool.get_connection()
+        donn = dpool.get_connection()
+        self.assert_equal_connections(conn, donn)
+        return conn, donn
+
+    def return_connection(self, cpool, conn, dpool, donn):
+        self.assertTupleEqual((conn.cid, conn.ssh_cmd), (donn.cid, donn.ssh_cmd))
+        cpool.return_connection(conn)
+        dpool.return_connection(donn)
+
+    def test_basic(self):
+        counter1a = itertools.count()
+        counter2a = itertools.count()
+        counter1b = itertools.count()
+        self.src.local_ssh_command = lambda: [str(next(counter1a))]
+        self.src2.local_ssh_command = lambda: [str(next(counter1b))]
+        initial_last_modified = 0
+
+        with self.assertRaises(AssertionError):
+            bzfs.ConnectionPool(self.src, 0)
+
+        capacity = 2
+        cpool = bzfs.ConnectionPool(self.src, capacity)
+        dpool = SlowButCorrectConnectionPool(self.src2, capacity)
+        self.assert_priority_queue(cpool, 0, 0, 0)
+        self.assertIsNotNone(repr(cpool))
+        self.assertIsNotNone(str(cpool))
+        cpool.shutdown("foo")
+
+        conn1, donn1 = self.get_connection(cpool, dpool)
+        self.assert_priority_queue(cpool, 1, 0, 0)
+        self.assertEqual(conn1.free, (capacity - 1) * -1)
+        self.assertEqual(conn1.last_modified, initial_last_modified)
+        self.assertIsNone(conn1.replacement)
+        i = [str(next(counter2a))]
+        self.assertEqual(conn1.ssh_cmd, i)
+        self.assertEqual(conn1.ssh_cmd_quoted, i)
+        self.assertIsNotNone(repr(conn1))
+        self.assertIsNotNone(str(conn1))
+
+        self.return_connection(cpool, conn1, dpool, donn1)
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertEqual(conn1.last_modified, initial_last_modified)
+
+        conn2, donn2 = self.get_connection(cpool, dpool)
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIsNot(conn1, conn2)
+        self.assertEqual(conn2.free, (capacity - 1) * -1)
+        self.assertNotEqual(conn2.last_modified, initial_last_modified)
+        self.assertIsNone(conn2.replacement)
+        self.assertIsNotNone(conn1.replacement)
+
+        conn3, donn3 = self.get_connection(cpool, dpool)
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIs(conn2, conn3)
+        self.assertEqual(conn3.free, (capacity - 2) * -1)
+        self.assertNotEqual(conn3.last_modified, initial_last_modified)
+        self.assertIsNone(conn3.replacement)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertIsNone(conn2.replacement)
+
+        self.return_connection(cpool, conn2, dpool, donn2)
+        self.assert_priority_queue(cpool, 1, 0, 0)
+        self.assertIsNotNone(conn2.replacement)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertIsNotNone(conn3.replacement)
+        self.assertNotEqual(conn2.last_modified, initial_last_modified)
+
+        self.return_connection(cpool, conn3, dpool, donn3)
+        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assertIsNotNone(conn1.replacement)
+        self.assertIsNotNone(conn2.replacement)
+        self.assertIsNotNone(conn3.replacement)
+        self.assertNotEqual(conn3.last_modified, initial_last_modified)
+
+        with self.assertRaises(AssertionError):
+            cpool.return_connection(None)
+        with self.assertRaises(AssertionError):
+            cpool.return_connection(conn3)
+        with self.assertRaises(AssertionError):
+            cpool.return_connection(conn3)
+
+    def test_multiple_TCP_connections(self):
+        capacity = 2
+        cpool = bzfs.ConnectionPool(self.remote, capacity)
+
+        conn1 = cpool.get_connection()
+        self.assertEqual(conn1.free, (capacity - 1) * -1)
+        conn2 = cpool.get_connection()
+        self.assertIs(conn1, conn2)
+        self.assertEqual(conn2.free, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 1, 0, 0)
+
+        conn3 = cpool.get_connection()
+        self.assertIsNot(conn2, conn3)
+        self.assertEqual(conn3.free, (capacity - 1) * -1)
+        self.assertEqual(conn2.free, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 2, 0, 0)
+        conn4 = cpool.get_connection()
+        self.assertIs(conn3, conn4)
+        self.assertEqual(conn4.free, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 2, 0, 0)
+
+        conn5 = cpool.get_connection()
+        self.assertIsNot(conn4, conn5)
+        self.assertEqual(conn5.free, (capacity - 1) * -1)
+        self.assertEqual(conn4.free, (capacity - 2) * -1)
+        self.assert_priority_queue(cpool, 3, 0, 0)
+
+        cpool.return_connection(conn3)
+        self.assert_priority_queue(cpool, 4, 1, 1)
+        cpool.return_connection(conn4)
+        t4 = cpool.last_modified
+        self.assert_priority_queue(cpool, 5, 2, 2)
+
+        cpool.return_connection(conn2)
+        self.assert_priority_queue(cpool, 6, 3, 3)
+        cpool.return_connection(conn1)
+        t2 = cpool.last_modified
+        self.assert_priority_queue(cpool, 3, 0, 0)
+
+        cpool.return_connection(conn5)
+        t5 = cpool.last_modified
+        self.assert_priority_queue(cpool, 4, 1, 1)
+
+        # assert sort order evens out the number of concurrent sessions among the TCP connections
+        conn5a = cpool.get_connection()
+        self.assertEqual(conn5a.free, (capacity - 1) * -1)
+
+        conn2a = cpool.get_connection()
+        self.assertEqual(conn2a.free, (capacity - 1) * -1)
+
+        conn4a = cpool.get_connection()
+        self.assertEqual(conn4a.free, (capacity - 1) * -1)
+
+        # assert tie-breaker in favor of most recently returned TCP connection
+        conn6 = cpool.get_connection()
+        self.assertEqual(conn6.free, (capacity - 2) * -1)
+        self.assertEqual(abs(conn6.last_modified), t5)
+
+        conn1a = cpool.get_connection()
+        self.assertEqual(conn1a.free, (capacity - 2) * -1)
+        self.assertEqual(abs(conn1a.last_modified), t2)
+
+        conn4a = cpool.get_connection()
+        self.assertEqual(conn4a.free, (capacity - 2) * -1)
+        self.assertEqual(abs(conn4a.last_modified), t4)
+
+        cpool.shutdown("foo")
+
+    def test_pools(self):
+        with self.assertRaises(AssertionError):
+            bzfs.ConnectionPools(self.dst, {"shared": 0})
+
+        bzfs.ConnectionPools(self.dst, {}).shutdown("foo")
+
+        pools = bzfs.ConnectionPools(self.dst, {"shared": 8, "dedicated": 1})
+        self.assertIsNotNone(pools.pool("shared"))
+        self.assertIsNotNone(repr(pools))
+        self.assertIsNotNone(str(pools))
+        pools.shutdown("foo")
+        conn = pools.pool("shared").get_connection()
+        pools.shutdown("foo")
+
+    def test_return_sequence(self):
+        maxsessions = 10
+        items = 10
+        for j in range(0, 3):
+            cpool = bzfs.ConnectionPool(self.src, maxsessions)
+            dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
+            rng = random.Random(12345)
+            conns = [self.get_connection(cpool, dpool) for _ in range(0, items)]
+            while conns:
+                i = rng.randint(0, len(conns) - 1) if j == 0 else 0 if j == 1 else len(conns) - 1
+                conn, donn = conns.pop(i)
+                self.return_connection(cpool, conn, dpool, donn)
+            print(f"cpool: {cpool}")
+
+    def test_long_random_walk(self):
+        log = logging.getLogger(bzfs.__name__)
+        # loglevel = logging.DEBUG
+        loglevel = bzfs.log_trace
+        is_logging = log.isEnabledFor(loglevel)
+        num_steps = 1000 if not is_adhoc_test and not is_functional_test else 100
+        log.info(f"num_random_steps: {num_steps}")
+        start_time_nanos = time.time_ns()
+        for maxsessions in range(1, 10 + 1):
+            for items in range(0, 64 + 1):
+                counter1a = itertools.count()
+                counter1b = itertools.count()
+                self.src.local_ssh_command = lambda: [str(next(counter1a))]
+                self.src2.local_ssh_command = lambda: [str(next(counter1b))]
+                cpool = bzfs.ConnectionPool(self.src, maxsessions)
+                dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
+                # dpool = bzfs.ConnectionPool(self.src2, maxsessions)
+                rng = random.Random(12345)
+                conns = []
+                try:
+                    for item in range(0, items):
+                        conns.append(self.get_connection(cpool, dpool))
+                    item = -1
+                    for step in range(0, num_steps):
+                        if is_logging:
+                            log.log(loglevel, f"itr maxsessions: {maxsessions}, items: {items}, step: {step}")
+                            log.log(loglevel, f"clen: {len(cpool.priority_queue)}, cpool: {cpool.priority_queue}")
+                            log.log(loglevel, f"dlen: {len(dpool.priority_queue)}, dpool: {dpool.priority_queue}")
+                        if not conns or rng.randint(0, 1):
+                            log.log(loglevel, "get")
+                            conns.append(self.get_connection(cpool, dpool))
+                        else:
+                            # k = rng.randint(0, 2)
+                            k = 0
+                            if k == 0:
+                                i = rng.randint(0, len(conns) - 1)
+                            elif k == 1:
+                                i = 0
+                            else:
+                                i = len(conns) - 1
+                            conn, donn = conns.pop(i)
+                            if is_logging:
+                                log.log(loglevel, f"return {i}/{len(conns)+1}: conn: {conn}, donn: {donn} ")
+                            self.return_connection(cpool, conn, dpool, donn)
+                except Exception:
+                    print("Ooops!")
+                    print(f"maxsessions: {maxsessions}, items: {items}, step: {step}, item: {item}")
+                    print(f"clen: {len(cpool.priority_queue)}, cpool: {cpool.priority_queue}")
+                    print(f"dlen: {len(dpool.priority_queue)}, dpool: {dpool.priority_queue}")
+                    raise
+                log.log(loglevel, "cpool: %s", cpool)
+                # log.log(bzfs.log_debug, "cpool: %s", cpool)
+        elapsed_secs = (time.time_ns() - start_time_nanos) / 1000_000_000
+        log.info("random_walk took %s secs", elapsed_secs)
+
+
+#############################################################################
+class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better implementation against this baseline
+    def get_connection(self) -> bzfs.Connection:
+        with self._lock:
+            conn = self.priority_queue[0] if self.priority_queue else None
+            if conn is None or conn.is_full():
+                conn = bzfs.Connection(self.remote, self.capacity, self.cid)
+                self.cid += 1
+                self.priority_queue.append(conn)
+            conn.increment_free(-1)
+            self.priority_queue.sort()
+            return conn
+
+    def return_connection(self, old_conn: bzfs.Connection) -> None:
+        assert old_conn is not None
+        with self._lock:
+            assert any(old_conn is c for c in self.priority_queue)
+            old_conn.increment_free(1)
+            self.last_modified += 1
+            old_conn.update_last_modified(self.last_modified)
+            self.priority_queue.sort()
+
+    def __repr__(self) -> str:
+        with self._lock:
+            return str({"capacity": self.capacity, "queue_len": len(self.priority_queue), "queue": self.priority_queue})
 
 
 #############################################################################

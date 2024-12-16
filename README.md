@@ -474,8 +474,9 @@ usage: bzfs [-h] [--recursive]
             [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
             [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
             [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
-            [--threads INT[%]] [--bwlimit STRING]
-            [--compression-program STRING]
+            [--threads INT[%]]
+            [--max-concurrent-ssh-sessions-per-tcp-connection INT]
+            [--bwlimit STRING] [--compression-program STRING]
             [--compression-program-opts STRING]
             [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
             [--ps-program STRING] [--pv-program STRING]
@@ -1660,6 +1661,31 @@ usage: bzfs [-h] [--recursive]
     other workloads simultaneously running on the system. The current
     default is geared towards a high degreee of parallelism, and as such
     may perform poorly on HDDs. Examples: 1, 4, 150%
+
+<!-- -->
+
+<div id="--max-concurrent-ssh-sessions-per-tcp-connection"></div>
+
+**--max-concurrent-ssh-sessions-per-tcp-connection** *INT*
+
+*  For best throughput, bzfs uses multiple SSH TCP connections in
+    parallel, as indicated by --threads (see above). For best startup
+    latency, each such parallel TCP connection can carry a maximum of S
+    concurrent SSH sessions, where
+    S=--max-concurrent-ssh-sessions-per-tcp-connection (default: 8,
+    min: 1). Concurrent SSH sessions are mostly used for metadata
+    operations such as listing ZFS datasets and their snapshots. This
+    client-side max sessions parameter must not be higher than the
+    server-side sshd_config(5) MaxSessions parameter (which defaults to
+    10, see
+    https://manpages.ubuntu.com/manpages/latest/man5/sshd_config.5.html).
+
+    *Note:* For better throughput, bzfs uses one dedicated TCP
+    connection per ZFS send/receive operation such that the dedicated
+    connection is never used by any other concurrent SSH session,
+    effectively ignoring the value of the
+    --max-concurrent-ssh-sessions-per-tcp-connection parameter in the
+    ZFS send/receive case.
 
 <!-- -->
 
