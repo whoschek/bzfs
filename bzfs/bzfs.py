@@ -894,7 +894,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "requirements, as well as the number of available CPU cores and the parallelism offered by NVMEs vs. "
              "rotational drives, ZFS geometry and configuration, as well as the network bandwidth and other "
              "workloads simultaneously running on the system. The current default is geared towards a high degreee of "
-             "parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 150%%\n\n")
+             "parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%%, 150%%\n\n")
     maxsessions_dflt = 8
     parser.add_argument(
         "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=maxsessions_dflt,
