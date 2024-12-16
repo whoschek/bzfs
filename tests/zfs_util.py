@@ -337,5 +337,5 @@ def is_solaris_zfs():
 
 
 def run_cmd(*params, splitlines=True):
-    stdout = subprocess.run(*params, stdout=subprocess.PIPE, text=True, check=True).stdout
+    stdout = subprocess.run(*params, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, text=True, check=True).stdout
     return stdout.splitlines() if splitlines else stdout[0:-1]  # omit trailing newline char

@@ -747,7 +747,13 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic_woo(w=w, q=q)
         for i in range(0, 1):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--threads=4")
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--recursive",
+                    "--threads=4",
+                    "--max-concurrent-ssh-sessions-per-tcp-connection=2",
+                )
                 self.assertSnapshots(dst_root_dataset, 3, "s")
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
                 self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
@@ -3631,6 +3637,9 @@ class MinimalRemoteTestCase(BZFSTestCase):
     def test_delete_dst_datasets_recursive_with_dummy_src(self):
         LocalTestCase(param=self.param).test_delete_dst_datasets_recursive_with_dummy_src()
 
+    def test_basic_replication_recursive_parallel(self):
+        LocalTestCase(param=self.param).test_basic_replication_recursive_parallel()
+
     def test_inject_unavailable_sudo(self):
         expected_error = die_status if os.geteuid() != 0 and not self.is_no_privilege_elevation() else 0
         self.inject_unavailable_program("inject_unavailable_sudo", expected_error=expected_error)
@@ -3768,6 +3777,21 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
             self.inject_unavailable_program("inject_unavailable_" + ssh_program, expected_error=die_status)
             self.tearDownAndSetup()
             self.inject_unavailable_program("inject_failing_" + ssh_program, expected_error=die_status)
+
+    def test_inject_unavailable_ssh_raises_UnicodeDecodeError(self):
+        if self.param and self.param.get("ssh_mode") != "local":
+            destroy(dst_root_dataset, recursive=True)
+            # inject zfs list failures before this many tries. only after that succeed the operation
+            counter = Counter(zfslist_UnicodeDecodeError=1)
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                error_injection_triggers={"before": counter},
+                inject_params={"inject_unavailable_zpool": True},
+                expected_status=die_status,
+            )
+            self.assertFalse(dataset_exists(dst_root_dataset))
+            self.assertEqual(0, counter["zfslist_UnicodeDecodeError"])
 
     def test_inject_unavailable_zfs(self):
         self.inject_unavailable_program("inject_unavailable_zfs", expected_error=die_status)
