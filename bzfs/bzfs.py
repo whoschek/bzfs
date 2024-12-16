@@ -894,10 +894,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "there are cores on the machine; 75%% uses num_threads = num_cores * 0.75. Currently this option only "
              "applies to dataset and snapshot replication, --delete-dst-snapshots, --delete-empty-dst-datasets, and "
              "--compare-snapshot-lists. The ideal value for this parameter depends on the use case and its performance "
-             "requirements, as well as the number of available CPU cores and the parallelism offered by NVMEs vs. "
-             "rotational drives, ZFS geometry and configuration, as well as the network bandwidth and other "
-             "workloads simultaneously running on the system. The current default is geared towards a high degreee of "
-             "parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 150%%\n\n")
+             "requirements, as well as the number of available CPU cores and the parallelism offered by SSDs vs. "
+             "HDDs, ZFS geometry and configuration, as well as the network bandwidth and other workloads "
+             "simultaneously running on the system. The current default is geared towards a high degreee of "
+             "parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%%, 150%%\n\n")
     maxsessions_dflt = 8
     parser.add_argument(
         "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=maxsessions_dflt,

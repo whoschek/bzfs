@@ -1656,11 +1656,11 @@ usage: bzfs [-h] [--recursive]
     --delete-empty-dst-datasets, and --compare-snapshot-lists. The
     ideal value for this parameter depends on the use case and its
     performance requirements, as well as the number of available CPU
-    cores and the parallelism offered by NVMEs vs. rotational drives,
-    ZFS geometry and configuration, as well as the network bandwidth and
-    other workloads simultaneously running on the system. The current
-    default is geared towards a high degreee of parallelism, and as such
-    may perform poorly on HDDs. Examples: 1, 4, 150%
+    cores and the parallelism offered by SSDs vs. HDDs, ZFS geometry and
+    configuration, as well as the network bandwidth and other workloads
+    simultaneously running on the system. The current default is geared
+    towards a high degreee of parallelism, and as such may perform
+    poorly on HDDs. Examples: 1, 4, 75%, 150%
 
 <!-- -->
 
