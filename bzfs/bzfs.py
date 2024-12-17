@@ -2049,7 +2049,7 @@ class Job:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
                 if p.force_rollback_to_latest_snapshot or p.force:
-                    log.info(p.dry("Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
+                    log.info(p.dry(f"{tid} Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
@@ -2089,7 +2089,8 @@ class Job:
                     p.force.value = False
                     p.force_rollback_to_latest_common_snapshot.value = False
                 log.info(
-                    p.dry("Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot
+                    p.dry(f"{tid} Rolling back destination to most recent common snapshot: %s"),
+                    latest_common_dst_snapshot,
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 cmd = p.split_args(
