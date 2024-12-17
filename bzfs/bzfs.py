@@ -3523,10 +3523,10 @@ class Job:
 
             failed = False
             while submit_datasets():
-                log.trace("Thread pool: %s: %s, priority_queue: %s", "todo", len(todo_futures), len(priority_queue))
+                log.debug("Thread pool: %s: %s, priority_queue: %s", "todo", len(todo_futures), len(priority_queue))
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # block
-                if log.isEnabledFor(log_trace):
-                    log.trace("done:%s,todo:%s", [d.node[1:] for d in done_futures], [d.node[1:] for d in todo_futures])
+                if True or log.isEnabledFor(log_trace):
+                    log.debug("done:%s,todo:%s", [d.node[1:] for d in done_futures], [d.node[1:] for d in todo_futures])
                 for done_future in done_futures:
                     _, dataset, children = done_future.node
                     try:
@@ -3545,6 +3545,7 @@ class Job:
                             name = f"{dataset}/{name}"
                             heapq.heappush(priority_queue, (name.casefold(), name, grandchildren))
             assert len(priority_queue) == 0
+            log.debug("done with executor")
             return failed
 
     def is_program_available(self, program: str, location: str) -> bool:
