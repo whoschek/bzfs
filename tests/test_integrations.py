@@ -334,7 +334,7 @@ class BZFSTestCase(ParametrizedTestCase):
                 "--ssh-dst-extra-opts",
                 "-o StrictHostKeyChecking=no",
             ]
-            if ssh_program == "ssh" and has_netcat_prog and (is_solaris_zfs_at_least_11_4_42() or not is_solaris_zfs()):
+            if ssh_program == "ssh" and has_netcat_prog and not is_solaris_zfs() and not platform.system() == "FreeBSD":
                 r = rng.randint(0, 2)
                 if r % 3 == 0:
                     args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
