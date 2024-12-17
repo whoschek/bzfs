@@ -2224,7 +2224,7 @@ class Job:
             recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
             if p.no_stream:
                 # skip intermediate snapshots
-                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot)]
+                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, 1)]
             else:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
@@ -2236,13 +2236,16 @@ class Job:
                 self.estimate_send_size(
                     src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
                 )
-                for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo)
+                for i, (incr_flag, from_snap, to_snap, num_snapshots) in enumerate(steps_todo)
             ]
             total_size = sum(estimate_send_sizes)
+            total_num = sum(num_snapshots for incr_flag, from_snap, to_snap, num_snapshots in steps_todo)
             done_size = 0
-            for i, (incr_flag, from_snap, to_snap) in enumerate(steps_todo):
+            done_num = 0
+            for i, (incr_flag, from_snap, to_snap, curr_num) in enumerate(steps_todo):
                 curr_size = estimate_send_sizes[i]
                 humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
+                humannum = f"{total_num}/{done_num}/{curr_num} snapshots"
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2253,7 +2256,7 @@ class Job:
                 )
                 log.info(
                     p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-                    f"{from_snap} {to_snap} --> {dst_dataset} ({humansize.strip()}) ...",
+                    f"{from_snap} {to_snap} --> {dst_dataset} ({humansize.strip()}) ({humannum}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
@@ -2264,6 +2267,7 @@ class Job:
                     src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
                 )
                 done_size += curr_size
+                done_num += curr_num
                 recv_resume_token = None
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
@@ -3006,7 +3010,7 @@ class Job:
 
     def incremental_send_steps_wrapper(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
-    ) -> List[Tuple[str, str, str]]:
+    ) -> List[Tuple[str, str, str, int]]:
         force_convert_I_to_i = False
         if self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", False):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
@@ -3016,7 +3020,7 @@ class Job:
 
     def incremental_send_steps(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume, force_convert_I_to_i
-    ) -> List[Tuple[str, str, str]]:
+    ) -> List[Tuple[str, str, str, int]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
@@ -3037,16 +3041,16 @@ class Job:
         followed by zero or more -i/-I steps."""
 
         def append_run(i: int, label: str) -> int:
-            step = ("-I", src_snapshots[start], src_snapshots[i])
+            step = ("-I", src_snapshots[start], src_snapshots[i], i - start)
             # print(f"{label} {self.send_step_to_str(step)}")
             is_not_resume = len(steps) > 0 or not is_resume
             if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start] and is_not_resume:
                 steps.append(step)
             elif "@" in src_snapshots[start] and is_not_resume:
                 for j in range(start, i):  # convert -I step to -i steps
-                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1]))
+                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1], 1))
             else:  # it's a bookmark src or zfs send -t; convert -I step to -i step followed by zero or more -i/-I steps
-                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1]))
+                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1], 1))
                 i = start + 1
             return i - 1
 
@@ -3073,7 +3077,7 @@ class Job:
                         i += 1
                     if i < n:
                         assert start != i
-                        step = ("-i", src_snapshots[start], src_snapshots[i])
+                        step = ("-i", src_snapshots[start], src_snapshots[i], 1)
                         # print(f"r1 {self.send_step_to_str(step)}")
                         steps.append(step)
                         i -= 1

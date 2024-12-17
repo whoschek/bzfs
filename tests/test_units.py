@@ -2091,7 +2091,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
-        for incr_flag, start_snapshot, end_snapshot in steps:
+        for incr_flag, start_snapshot, end_snapshot, num_snapshots in steps:
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
             end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
             start = input_snapshots.index(start_snapshot)
