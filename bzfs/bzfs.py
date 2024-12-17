@@ -37,6 +37,7 @@ import collections
 import concurrent
 import copy
 import fcntl
+import glob
 import hashlib
 import heapq
 import inspect
@@ -87,6 +88,7 @@ if sys.version_info < min_python_version:
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
+pv_file_thread_separator = "_"
 dummy_dataset = "dummy"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
@@ -1542,6 +1544,8 @@ class Job:
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
+        self.stats_lock = threading.Lock()
+        self.num_snapshots_replicated: int = 0
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix = ""  # for testing only
@@ -1617,6 +1621,7 @@ class Job:
             self.all_exceptions_count = 0
             self.first_exception = None
             self.remote_conf_cache = {}
+            start_time_nanos = time.time_ns()
             src, dst = p.src, p.dst
             for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                 src.root_dataset = src.basis_root_dataset = src_root_dataset
@@ -1641,6 +1646,8 @@ class Job:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                 raise self.first_exception  # reraise first swallowed exception
+            if not p.skip_replication:
+                self.print_replication_stats(start_time_nanos)
         except subprocess.CalledProcessError as e:
             log.error("Exiting with status code: %s", e.returncode)
             raise
@@ -1668,6 +1675,20 @@ class Job:
             self.all_exceptions.append(str(e))
         self.all_exceptions_count += 1
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
+
+    def print_replication_stats(self, start_time_nanos: int):
+        p, log = self.params, self.params.log
+        elapsed_nanos = int(time.time_ns() - start_time_nanos)
+        msg = ""
+        if self.is_program_available("pv", "local"):
+            total_sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+            sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
+            msg = f" zfs sent {human_readable_bytes(total_sent_bytes)} "
+            msg += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
+        log.info(
+            "%s",
+            f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.{msg}",
+        )
 
     def validate_once(self) -> None:
         p = self.params
@@ -2182,6 +2203,8 @@ class Job:
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not dry_run_no_send and not p.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
+                with self.stats_lock:
+                    self.num_snapshots_replicated += 1
                 self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
 
@@ -2273,6 +2296,8 @@ class Job:
                 done_size += curr_size
                 done_num += curr_num
                 recv_resume_token = None
+                with self.stats_lock:
+                    self.num_snapshots_replicated += curr_num
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
             self.zfs_set(set_opts, dst, dst_dataset)
@@ -2544,7 +2569,7 @@ class Job:
             if match:
                 worker = int(match.group(1))
                 if worker > 0:
-                    pv_log_file += f"_{worker:03}"
+                    pv_log_file += pv_file_thread_separator + f"{worker:03}"
             return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
         else:
             return "cat"
@@ -4338,6 +4363,35 @@ def terminate_process_group(except_current_process=False):
         is_test or os.killpg(os.getpgrp(), signum)  # avoid confusing python's unit test framework with killpg()
     finally:
         signal.signal(signum, old_signal_handler)  # reenable and restore original handler
+
+
+pv_size_to_bytes_regex = re.compile(r"(\d+\.?\d*)\s*([KMGTEZ]?)(i?)([Bb]).*")
+
+
+def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb"
+    match = pv_size_to_bytes_regex.fullmatch(size)
+    if match:
+        number = float(match.group(1))
+        i = "KMGTEZ".index(match.group(2)) if match.group(2) else -1
+        m = 1024 if match.group(3) == "i" else 1000
+        b = 1 if match.group(4) == "B" else 8
+        size_in_bytes = round(number * (m ** (i + 1)) / b)
+        return size_in_bytes
+    else:
+        raise ValueError("Invalid pv_size: " + size)
+
+
+def count_num_bytes_transferred_by_zfs_send(pv_log_file: str) -> int:
+    """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
+    total_bytes = 0
+    for pv_log_file in [pv_log_file] + glob.glob(pv_log_file + pv_file_thread_separator + "[0-9]*"):
+        if os.path.isfile(pv_log_file):
+            with open(pv_log_file, "r", encoding="utf-8") as fd:
+                for line in fd:
+                    if ":" in line:
+                        col = line.split(":", 1)[1].strip()
+                        total_bytes += pv_size_to_bytes(col)
+    return total_bytes
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
