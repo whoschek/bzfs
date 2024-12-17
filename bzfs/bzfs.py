@@ -1281,6 +1281,9 @@ class Params:
         self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
         self.max_datasets_per_batch_on_list_snaps = int(getenv_any("max_datasets_per_batch_on_list_snaps", 1024))
         self.max_datasets_per_minibatch_on_list_snaps = int(getenv_any("max_datasets_per_minibatch_on_list_snaps", -1))
+        self.max_snapshots_per_minibatch_on_delete_snaps = int(
+            getenv_any("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
+        )
         self.threads: Tuple[int, bool] = args.threads
 
         self.os_cpu_count: int = os.cpu_count()
@@ -2839,6 +2842,7 @@ class Job:
                 self.delete_snapshot_cmd(remote, dataset + "@"),
                 snapshot_tags,
                 lambda batch: self.delete_snapshot(remote, dataset + "@" + ",".join(batch)),
+                max_batch_items=self.params.max_snapshots_per_minibatch_on_delete_snaps,
             )
 
     def delete_snapshot(self, r: Remote, snaps_to_delete: str) -> None:
