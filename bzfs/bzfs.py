@@ -2466,7 +2466,7 @@ class Job:
         elif not self.is_program_available(zfs_version_is_at_least_2_1_0, "dst"):
             warning = "unreliable as zfs version is too old"  # e.g. zfs-0.8.3 "internal error: Unknown error 1040"
         if warning:
-            log.warning(f"zfs receive resume feature is {warning}. Falling back to --no-resume-recv: %s", dst_dataset)
+            log.warning(f"ZFS receive resume feature is {warning}. Falling back to --no-resume-recv: %s", dst_dataset)
             return None, [], []
         recv_resume_token = None
         send_resume_opts = []
