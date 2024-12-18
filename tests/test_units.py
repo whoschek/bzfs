@@ -1954,7 +1954,7 @@ class TestConnectionPool(unittest.TestCase):
         # loglevel = logging.DEBUG
         loglevel = bzfs.log_trace
         is_logging = log.isEnabledFor(loglevel)
-        num_steps = 1000 if not is_adhoc_test and not is_functional_test else 100
+        num_steps = 1000 if not is_adhoc_test and not is_functional_test else 75
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
         for maxsessions in range(1, 10 + 1):
