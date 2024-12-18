@@ -1641,13 +1641,13 @@ class Job:
                     if p.skip_on_error == "fail":
                         raise
                     self.append_exception(e, "task", task_description)
+            if not p.skip_replication:
+                self.print_replication_stats(start_time_nanos)
             error_count = self.all_exceptions_count
             if error_count > 0:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                 raise self.first_exception  # reraise first swallowed exception
-            if not p.skip_replication:
-                self.print_replication_stats(start_time_nanos)
         except subprocess.CalledProcessError as e:
             log.error("Exiting with status code: %s", e.returncode)
             raise
@@ -1679,16 +1679,13 @@ class Job:
     def print_replication_stats(self, start_time_nanos: int):
         p, log = self.params, self.params.log
         elapsed_nanos = int(time.time_ns() - start_time_nanos)
-        msg = ""
+        m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
             total_sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
-            msg = f" zfs sent {human_readable_bytes(total_sent_bytes)} "
-            msg += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
-        log.info(
-            "%s",
-            f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.{msg}",
-        )
+            m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
+            m += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
+        log.info("%s", m)
 
     def validate_once(self) -> None:
         p = self.params
@@ -4271,7 +4268,7 @@ def xappend(lst, *items) -> List[str]:
 def human_readable_bytes(size: int, long=True) -> str:
     sign = "-" if size < 0 else ""
     s = abs(size)
-    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB")
+    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
     i = 0
     long_form = f" ({size} bytes)" if long else ""
     while s >= 1024 and i < len(units) - 1:
@@ -4365,14 +4362,14 @@ def terminate_process_group(except_current_process=False):
         signal.signal(signum, old_signal_handler)  # reenable and restore original handler
 
 
-pv_size_to_bytes_regex = re.compile(r"(\d+\.?\d*)\s*([KMGTEZ]?)(i?)([Bb]).*")
+pv_size_to_bytes_regex = re.compile(r"(\d+\.?\d*)\s*([KMGTEZY]?)(i?)([Bb]).*")
 
 
-def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb"
+def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     match = pv_size_to_bytes_regex.fullmatch(size)
     if match:
         number = float(match.group(1))
-        i = "KMGTEZ".index(match.group(2)) if match.group(2) else -1
+        i = "KMGTEZY".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
         b = 1 if match.group(4) == "B" else 8
         size_in_bytes = round(number * (m ** (i + 1)) / b)
