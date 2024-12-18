@@ -33,8 +33,8 @@ ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and pu
 cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
 ls -al $HOME $HOME/.ssh/testid_rsa
 
-#echo "Now running tests as root user"; ./test.sh
-#echo "Now running coverage"; ./coverage.sh
+echo "Now running tests as root user"; ./test.sh
+echo "Now running coverage"; ./coverage.sh
 
 echo "Now running tests as non-root user:"
 tuser=test
