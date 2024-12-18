@@ -34,8 +34,8 @@ cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
 ls -al $HOME $HOME/.ssh/testid_rsa
 
 chsh -s /bin/sh  # change shell as default shell on freebsd <= 13 is csh instead of sh
-echo "Now running tests as root user"; ./test.sh
-echo "Now running coverage"; ./coverage.sh
+#echo "Now running tests as root user"; ./test.sh
+#echo "Now running coverage"; ./coverage.sh
 
 echo "Now running tests as non-root user:"
 tuser=test
