@@ -492,6 +492,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(1024**4, bzfs.pv_size_to_bytes("1 TiB"))
         self.assertEqual(1024**5, bzfs.pv_size_to_bytes("1 EiB"))
         self.assertEqual(1024**6, bzfs.pv_size_to_bytes("1 ZiB"))
+        self.assertEqual(1024**7, bzfs.pv_size_to_bytes("1 YiB"))
         with self.assertRaises(ValueError):
             bzfs.pv_size_to_bytes("foo")
 
