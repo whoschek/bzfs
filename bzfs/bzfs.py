@@ -37,6 +37,7 @@ import collections
 import concurrent
 import copy
 import fcntl
+import glob
 import hashlib
 import heapq
 import inspect
@@ -87,6 +88,7 @@ if sys.version_info < min_python_version:
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
+pv_file_thread_separator = "_"
 dummy_dataset = "dummy"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
@@ -519,18 +521,18 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "no destination snapshot that already exists is deleted, and instead the operation is aborted with an "
              "error when encountering a conflicting snapshot.\n\n"
              "Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas "
-             "--force-rollback-to-latest-common-snapshot is a medium sized hammer, and --force is a large hammer. "
+             "--force-rollback-to-latest-common-snapshot is a medium sized hammer, --force is a large hammer, and "
+             "--force-hard is a very large hammer. "
              "Consider using the smallest hammer that can fix the problem. No hammer is ever used by default.\n\n")
+    parser.add_argument(
+        "--force-hard", action="store_true",
+        help="On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will add the "
+             "'-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete dependents such as "
+             "clones and bookmarks. This can be very destructive and is rarely advisable.\n\n")
     parser.add_argument(
         "--force-unmount", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
              "use of 'zfs rollback' and 'zfs destroy'.\n\n")
-    parser.add_argument(
-        "--force-hard", action="store_true",
-        # help="On destination, --force will also delete dependents such as clones and bookmarks via "
-        #      "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you "
-        #      "want!\n\n")
-        help=argparse.SUPPRESS)
     parser.add_argument(
         "--force-once", "--f1", action="store_true",
         help="Use the --force option or --force-rollback-to-latest-common-snapshot option at most once to resolve a "
@@ -1202,6 +1204,7 @@ class Params:
         self.log: Logger = log
         self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
+        self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
         self.unset_matching_env_vars(args)
 
         assert len(args.root_dataset_pairs) > 0
@@ -1459,7 +1462,7 @@ class Remote:
             unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
             socket_name = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
             socket_file = os.path.join(self.socket_dir, socket_name)[: max(100, len(self.socket_dir) + 10)]
-            ssh_cmd += ["-oControlMaster=auto", "-oControlPersist=60s", "-oControlPath=" + socket_file]
+            ssh_cmd += ["-S", socket_file]
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd
 
@@ -1542,6 +1545,8 @@ class Job:
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
+        self.stats_lock = threading.Lock()
+        self.num_snapshots_replicated: int = 0
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix = ""  # for testing only
@@ -1617,6 +1622,7 @@ class Job:
             self.all_exceptions_count = 0
             self.first_exception = None
             self.remote_conf_cache = {}
+            start_time_nanos = time.time_ns()
             src, dst = p.src, p.dst
             for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                 src.root_dataset = src.basis_root_dataset = src_root_dataset
@@ -1636,6 +1642,8 @@ class Job:
                     if p.skip_on_error == "fail":
                         raise
                     self.append_exception(e, "task", task_description)
+            if not p.skip_replication:
+                self.print_replication_stats(start_time_nanos)
             error_count = self.all_exceptions_count
             if error_count > 0:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
@@ -1656,8 +1664,6 @@ class Job:
         finally:
             log.info("%s", "Log file was: " + p.log_params.log_file)
 
-        for line in tail(p.log_params.pv_log_file, 10):
-            log.log(log_stdout, "%s", line.rstrip())
         log.info("Success. Goodbye!")
         print("", end="", file=sys.stderr)
         sys.stderr.flush()
@@ -1668,6 +1674,24 @@ class Job:
             self.all_exceptions.append(str(e))
         self.all_exceptions_count += 1
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
+
+    def print_replication_stats(self, start_time_nanos: int):
+        p, log = self.params, self.params.log
+        elapsed_nanos = int(time.time_ns() - start_time_nanos)
+        m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
+        if self.is_program_available("pv", "local"):
+            N = 10
+            total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=N)
+            sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
+            m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
+            m += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
+            lines = []
+            if len(tails) == 1:
+                lines = tails[0]  # print last N lines of .pv log file if there is only one .pv log file
+            elif len(tails) > 1:
+                lines = [tail[-1] for tail in tails if tail]  # otherwise print last line of each .pv log file
+            m += "\n" + "\n".join(lines) if lines else ""
+        log.info("%s", m)
 
     def validate_once(self) -> None:
         p = self.params
@@ -1787,7 +1811,7 @@ class Job:
         elif self.params.enable_privilege_elevation:
             if self.params.sudo_program == disable_prg:
                 die(f"sudo CLI is not available on host: {ssh_user_host or 'localhost'}")
-            return self.params.sudo_program, False
+            return self.params.sudo_program + " -n", False
         else:
             return "", True
 
@@ -2182,6 +2206,8 @@ class Job:
                 latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
                 if not dry_run_no_send and not p.dry_run:
                     self.dst_dataset_exists[dst_dataset] = True
+                with self.stats_lock:
+                    self.num_snapshots_replicated += 1
                 self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
 
@@ -2258,9 +2284,10 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
+                condensed_humansize = p.two_or_more_spaces_regex.sub("", humansize.strip())
                 log.info(
                     p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-                    f"{from_snap} {to_snap} --> {dst_dataset} ({humansize.strip()}) ({humannum}) ...",
+                    f"{from_snap} {to_snap} --> {dst_dataset} ({condensed_humansize}) ({humannum}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
@@ -2273,6 +2300,8 @@ class Job:
                 done_size += curr_size
                 done_num += curr_num
                 recv_resume_token = None
+                with self.stats_lock:
+                    self.num_snapshots_replicated += curr_num
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
             self.zfs_set(set_opts, dst, dst_dataset)
@@ -2493,7 +2522,7 @@ class Job:
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
             and (
-                loc == "src"
+                (loc == "src" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
                 or (loc == "dst" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
                 or (loc == "local" and p.src.ssh_user_host != "" and p.dst.ssh_user_host != "")
             )
@@ -2544,7 +2573,7 @@ class Job:
             if match:
                 worker = int(match.group(1))
                 if worker > 0:
-                    pv_log_file += f"_{worker:03}"
+                    pv_log_file += pv_file_thread_separator + f"{worker:03}"
             return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
         else:
             return "cat"
@@ -2567,6 +2596,28 @@ class Job:
                 if not self.is_program_available("ssh", "local"):
                     die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
                 cmd = quoted_cmd
+                if remote.reuse_ssh_connection:
+                    # performance: reuse ssh connection for low latency startup of frequent ssh invocations
+                    # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
+                    # 'ssh -S /path/socket -O check' doesn't talk over the net so common case is a low latency fast path
+                    ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                    ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
+                    dvnul = DEVNULL
+                    if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+                        log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
+                    else:
+                        log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+                        ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                        ssh_socket_cmd += ["-M", "-oControlPersist=60s", remote.ssh_user_host, "exit"]
+                        log.debug("Executing: %s", list_formatter(ssh_socket_cmd))
+                        process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+                        if process.returncode != 0:
+                            log.error("%s", process.stderr.rstrip())
+                            die(
+                                f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
+                                f"first, considering diagnostic log file output from running {prog_name} with: "
+                                "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
+                            )
             msg = "Would execute: %s" if is_dry else "Executing: %s"
             log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
             if is_dry:
@@ -2612,8 +2663,6 @@ class Job:
             counter = self.error_injection_triggers.get("before")
             if counter and self.decrement_injection_counter(counter, error_trigger):
                 try:
-                    if error_trigger.endswith("_UnicodeDecodeError"):
-                        raise UnicodeDecodeError("utf-8", error_trigger.encode("utf-8"), 0, 1, error_trigger)
                     raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
                 except subprocess.CalledProcessError as e:
                     if error_trigger.startswith("retryable_"):
@@ -3747,19 +3796,8 @@ class Job:
                 features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
         if len(lines) == 0:
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-            try:
-                if self.try_ssh_command(remote, log_trace, cmd=cmd, error_trigger="zfslist_UnicodeDecodeError") is None:
-                    basis_root_dataset = r.basis_root_dataset
-                    die(f"Pool does not exist for {loc} dataset: {basis_root_dataset}. Manually create the pool first!")
-            except RetryableError as e:
-                cause = e.__cause__
-                if isinstance(cause, (subprocess.TimeoutExpired, subprocess.CalledProcessError)):
-                    die(
-                        f"Cannot ssh into remote host via '{' '.join(cause.cmd)}'. "
-                        "Fix ssh configuration first, considering diagnostic log file output from running "
-                        f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
-                    )
-                raise e
+            if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
+                die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
         params.zpool_features[loc] = features
 
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
@@ -3816,8 +3854,9 @@ class Job:
         fsenc = sys.getfilesystemencoding()
         conn_pool: ConnectionPool = self.params.connection_pools[r.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
-        header_bytes = len(" ".join(conn.ssh_cmd + cmd).encode(fsenc))
+        cmd = conn.ssh_cmd + cmd
         conn_pool.return_connection(conn)
+        header_bytes = len(" ".join(cmd).encode(fsenc))
         batch: List[str] = []
         total_bytes: int = header_bytes
 
@@ -4246,7 +4285,7 @@ def xappend(lst, *items) -> List[str]:
 def human_readable_bytes(size: int, long=True) -> str:
     sign = "-" if size < 0 else ""
     s = abs(size)
-    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB")
+    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
     i = 0
     long_form = f" ({size} bytes)" if long else ""
     while s >= 1024 and i < len(units) - 1:
@@ -4338,6 +4377,45 @@ def terminate_process_group(except_current_process=False):
         is_test or os.killpg(os.getpgrp(), signum)  # avoid confusing python's unit test framework with killpg()
     finally:
         signal.signal(signum, old_signal_handler)  # reenable and restore original handler
+
+
+pv_size_to_bytes_regex = re.compile(r"(\d+\.?\d*)\s*([KMGTEZY]?)(i?)([Bb]).*")
+
+
+def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
+    match = pv_size_to_bytes_regex.fullmatch(size)
+    if match:
+        number = float(match.group(1))
+        i = "KMGTEZY".index(match.group(2)) if match.group(2) else -1
+        m = 1024 if match.group(3) == "i" else 1000
+        b = 1 if match.group(4) == "B" else 8
+        size_in_bytes = round(number * (m ** (i + 1)) / b)
+        return size_in_bytes
+    else:
+        raise ValueError("Invalid pv_size: " + size)
+
+
+def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int) -> Tuple[int, List[deque[str]]]:
+    """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
+    total_bytes = 0
+    files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
+    files.sort(key=lambda file: os.stat(file).st_mtime)
+    tails = []
+    for file in files:
+        if os.path.isfile(file):
+            with open(file, newline="\r\n", encoding="utf-8") as fd:
+                tail = deque(maxlen=maxlen)
+                for line in fd:
+                    line = line.rstrip()
+                    i = line.rfind("\r")
+                    if i >= 0:
+                        line = line[i + 1 :]  # skip all but the most recent status update of each transfer
+                    if ":" in line:
+                        col = line.split(":", 1)[1].strip()
+                        total_bytes += pv_size_to_bytes(col)
+                        tail.append(line)
+                tails.append(tail)
+    return total_bytes, tails
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):

@@ -21,6 +21,7 @@ import os
 import platform
 import random
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -478,6 +479,39 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
         finally:
             bzfs.reset_logger()
+
+    def test_pv_size_to_bytes(self):
+        self.assertEqual(800, bzfs.pv_size_to_bytes("800B foo"))
+        self.assertEqual(1, bzfs.pv_size_to_bytes("8b"))
+        self.assertEqual(round(4.12 * 1024), bzfs.pv_size_to_bytes("4.12 KiB"))
+        self.assertEqual(2 * 1024**2, bzfs.pv_size_to_bytes("2 MiB"))
+        self.assertEqual(1000**2, bzfs.pv_size_to_bytes("1 MB"))
+        self.assertEqual(1024**3, bzfs.pv_size_to_bytes("1 GiB"))
+        self.assertEqual(1024**3, bzfs.pv_size_to_bytes("8 Gib"))
+        self.assertEqual(1000**3, bzfs.pv_size_to_bytes("8 Gb"))
+        self.assertEqual(1024**4, bzfs.pv_size_to_bytes("1 TiB"))
+        self.assertEqual(1024**5, bzfs.pv_size_to_bytes("1 EiB"))
+        self.assertEqual(1024**6, bzfs.pv_size_to_bytes("1 ZiB"))
+        self.assertEqual(1024**7, bzfs.pv_size_to_bytes("1 YiB"))
+        with self.assertRaises(ValueError):
+            bzfs.pv_size_to_bytes("foo")
+
+    def test_count_num_bytes_transferred_by_zfs_send(self):
+        pv1_fd, pv1 = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
+        os.write(pv1_fd, ": 800B foo".encode("utf-8"))
+        pv2 = pv1 + bzfs.pv_file_thread_separator + "001"
+        with open(pv2, "w", encoding="utf-8") as fd:
+            fd.write("1 MB\n")
+            fd.write("42 KiB:1 MB\n")
+        pv3 = pv1 + bzfs.pv_file_thread_separator + "002"
+        os.makedirs(pv3, exist_ok=True)
+        try:
+            num_bytes, tails = bzfs.count_num_bytes_transferred_by_zfs_send(pv1, 10)
+            self.assertEqual(800 + 1000 * 1000, num_bytes)
+        finally:
+            os.remove(pv1)
+            os.remove(pv2)
+            shutil.rmtree(pv3)
 
 
 #############################################################################
