@@ -1805,7 +1805,7 @@ class Job:
         elif self.params.enable_privilege_elevation:
             if self.params.sudo_program == disable_prg:
                 die(f"sudo CLI is not available on host: {ssh_user_host or 'localhost'}")
-            return self.params.sudo_program, False
+            return self.params.sudo_program + " -n", False
         else:
             return "", True
 
