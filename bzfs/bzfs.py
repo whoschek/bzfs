@@ -3562,6 +3562,8 @@ class Job:
 
         max_workers = min(self.max_workers[p.src.location], self.max_workers[p.dst.location])
         # max_workers = 1
+        if platform.platform().startswith("FreeBSD-13.4"):
+            max_workers = 1
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             priority_queue: List[Tuple[str, str, Tree]] = build_dataset_tree_and_find_roots()
             heapq.heapify(priority_queue)  # same order as isorted(), i.e. sorted by dataset.casefold()
