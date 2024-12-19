@@ -4390,10 +4390,10 @@ def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "
         raise ValueError("Invalid pv_size: " + size)
 
 
-def count_num_bytes_transferred_by_zfs_send(pv_log_file: str) -> int:
+def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
     total_bytes = 0
-    for pv_log_file in [pv_log_file] + glob.glob(pv_log_file + pv_file_thread_separator + "[0-9]*"):
+    for pv_log_file in [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*"):
         if os.path.isfile(pv_log_file):
             with open(pv_log_file, "r", encoding="utf-8") as fd:
                 for line in fd:
