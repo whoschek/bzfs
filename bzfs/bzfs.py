@@ -3025,7 +3025,7 @@ class Job:
             results.append(regex)
         return results
 
-    def run_with_retries(self, policy: RetryPolicy, func, *args, **kwargs) -> Any:
+    def run_with_retries(self, policy: RetryPolicy, fn: Callable, *args, **kwargs) -> Any:
         """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
         log = self.params.log
         max_sleep_mark = policy.min_sleep_nanos
@@ -3033,7 +3033,7 @@ class Job:
         start_time_nanos = time.time_ns()
         while True:
             try:
-                return func(*args, **kwargs)  # Call the target function with the provided arguments
+                return fn(*args, **kwargs)  # Call the target function with the provided arguments
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
                 if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
@@ -3460,19 +3460,19 @@ class Job:
         os.rename(tmp_tsv_file, tsv_file)
 
     @staticmethod
-    def print_datasets(group: groupby, func: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
+    def print_datasets(group: groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
         rel_datasets = sorted(rel_datasets)
         n = len(rel_datasets)
         i = 0
         for rel_dataset, entries in group:
             while i < n and rel_datasets[i] < rel_dataset:
-                func(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
+                fn(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
                 i += 1
             assert i >= n or rel_datasets[i] == rel_dataset
             i += 1
-            func(rel_dataset, entries)
+            fn(rel_dataset, entries)
         while i < n:
-            func(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
+            fn(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
             i += 1
 
     def merge_sorted_iterators(
@@ -3836,14 +3836,14 @@ class Job:
         return any(filter(lambda proc: (proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc), procs))
 
     def run_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
+        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29
     ) -> None:
-        deque(self.itr_ssh_cmd_batched(r, cmd, cmd_args, func, max_batch_items=max_batch_items), maxlen=0)
+        deque(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items), maxlen=0)
 
     def itr_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], func: Callable[[List[str]], Any], max_batch_items=2**29
+        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29
     ) -> Generator[Any, None, None]:
-        """Runs func(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
+        """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
         fsenc = sys.getfilesystemencoding()
         conn_pool: ConnectionPool = self.params.connection_pools[r.location].pool(SHARED)
@@ -3856,7 +3856,7 @@ class Job:
 
         def flush() -> Any:
             if len(batch) > 0:
-                return func(batch)
+                return fn(batch)
 
         for cmd_arg in cmd_args:
             curr_bytes = len(f" {cmd_arg}".encode(fsenc))
