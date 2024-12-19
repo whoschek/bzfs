@@ -452,7 +452,8 @@ usage: bzfs [-h] [--recursive]
             [--zfs-recv-program-opt STRING]
             [--force-rollback-to-latest-snapshot]
             [--force-rollback-to-latest-common-snapshot] [--force]
-            [--force-unmount] [--force-once] [--skip-parent]
+            [--force-hard] [--force-unmount] [--force-once]
+            [--skip-parent]
             [--skip-missing-snapshots [{fail,dataset,continue}]]
             [--retries INT] [--retry-min-sleep-secs FLOAT]
             [--retry-max-sleep-secs FLOAT]
@@ -940,9 +941,21 @@ usage: bzfs [-h] [--recursive]
 
     Analogy: --force-rollback-to-latest-snapshot is a tiny hammer,
     whereas --force-rollback-to-latest-common-snapshot is a medium
-    sized hammer, and --force is a large hammer. Consider using the
-    smallest hammer that can fix the problem. No hammer is ever used by
-    default.
+    sized hammer, --force is a large hammer, and --force-hard is a
+    very large hammer. Consider using the smallest hammer that can fix
+    the problem. No hammer is ever used by default.
+
+<!-- -->
+
+<div id="--force-hard"></div>
+
+**--force-hard**
+
+*  On destination, --force and
+    --force-rollback-to-latest-common-snapshot and --delete-* will
+    add the '-R' flag to their use of 'zfs rollback' and 'zfs
+    destroy', causing them to delete dependents such as clones and
+    bookmarks. This can be very destructive and is rarely advisable.
 
 <!-- -->
 
