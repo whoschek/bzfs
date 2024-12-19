@@ -1680,17 +1680,10 @@ class Job:
         elapsed_nanos = int(time.time_ns() - start_time_nanos)
         m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
-            N = 10
-            total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=N)
+            total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
             sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
             m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
             m += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
-            lines = []
-            if len(tails) == 1:
-                lines = tails[0]  # print last N lines of .pv log file if there is only one .pv log file
-            elif len(tails) > 1:
-                lines = [tail[-1] for tail in tails if tail]  # otherwise print last line of each .pv log file
-            m += "\n" + "\n".join(lines) if lines else ""
         log.info("%s", m)
 
     def validate_once(self) -> None:
