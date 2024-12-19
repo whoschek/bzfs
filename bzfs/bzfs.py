@@ -74,7 +74,7 @@ from logging import Logger
 from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import Iterable, Dict, List, Set, Tuple, Any, Callable, Generator, Generic, ItemsView, Optional
+from typing import Iterable, Deque, Dict, List, Set, Tuple, Any, Callable, Generator, Generic, ItemsView, Optional
 from typing import TypeVar, Union
 
 __version__ = "1.7.0-dev"
@@ -1664,8 +1664,6 @@ class Job:
         finally:
             log.info("%s", "Log file was: " + p.log_params.log_file)
 
-        for line in tail(p.log_params.pv_log_file, 10):
-            log.log(log_stdout, "%s", line.rstrip())
         log.info("Success. Goodbye!")
         print("", end="", file=sys.stderr)
         sys.stderr.flush()
@@ -1682,10 +1680,17 @@ class Job:
         elapsed_nanos = int(time.time_ns() - start_time_nanos)
         m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
-            total_sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+            N = 10
+            total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=N)
             sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
             m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
             m += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
+            lines = []
+            if len(tails) == 1:
+                lines = tails[0]  # print last N lines of .pv log file if there is only one .pv log file
+            elif len(tails) > 1:
+                lines = [tail[-1] for tail in tails if tail]  # otherwise print last line of each .pv log file
+            m += "\n" + "\n".join(lines) if lines else ""
         log.info("%s", m)
 
     def validate_once(self) -> None:
@@ -4390,17 +4395,27 @@ def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "
         raise ValueError("Invalid pv_size: " + size)
 
 
-def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
+def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int) -> Tuple[int, List[Deque[str]]]:
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
     total_bytes = 0
-    for pv_log_file in [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*"):
-        if os.path.isfile(pv_log_file):
-            with open(pv_log_file, "r", encoding="utf-8") as fd:
+    files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
+    files.sort(key=lambda file: os.stat(file).st_mtime)
+    tails = []
+    for file in files:
+        if os.path.isfile(file):
+            with open(file, newline="\r\n", encoding="utf-8") as fd:
+                tail = deque(maxlen=maxlen)
                 for line in fd:
+                    line = line.rstrip()
+                    i = line.rfind("\r")
+                    if i >= 0:
+                        line = line[i + 1 :]  # skip all but the most recent status update of each transfer
                     if ":" in line:
                         col = line.split(":", 1)[1].strip()
                         total_bytes += pv_size_to_bytes(col)
-    return total_bytes
+                        tail.append(col)
+                tails.append(tail)
+    return total_bytes, tails
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
