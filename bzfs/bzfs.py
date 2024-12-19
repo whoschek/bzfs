@@ -521,18 +521,18 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "no destination snapshot that already exists is deleted, and instead the operation is aborted with an "
              "error when encountering a conflicting snapshot.\n\n"
              "Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas "
-             "--force-rollback-to-latest-common-snapshot is a medium sized hammer, and --force is a large hammer. "
+             "--force-rollback-to-latest-common-snapshot is a medium sized hammer, --force is a large hammer, and "
+             "--force-hard is a very large hammer. "
              "Consider using the smallest hammer that can fix the problem. No hammer is ever used by default.\n\n")
+    parser.add_argument(
+        "--force-hard", action="store_true",
+        help="On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will add the "
+             "'-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete dependents such as "
+             "clones and bookmarks. This can be very destructive and is rarely advisable.\n\n")
     parser.add_argument(
         "--force-unmount", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
              "use of 'zfs rollback' and 'zfs destroy'.\n\n")
-    parser.add_argument(
-        "--force-hard", action="store_true",
-        # help="On destination, --force will also delete dependents such as clones and bookmarks via "
-        #      "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you "
-        #      "want!\n\n")
-        help=argparse.SUPPRESS)
     parser.add_argument(
         "--force-once", "--f1", action="store_true",
         help="Use the --force option or --force-rollback-to-latest-common-snapshot option at most once to resolve a "
