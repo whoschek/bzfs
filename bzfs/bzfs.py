@@ -1629,7 +1629,8 @@ class Job:
                 dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                 p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                 task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
-                log.info("Starting task: %s", task_description + " ...")
+                if len(p.root_dataset_pairs) > 1:
+                    log.info("Starting task: %s", task_description + " ...")
                 try:
                     try:
                         self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
@@ -3849,9 +3850,9 @@ class Job:
         conn: Connection = conn_pool.get_connection()
         cmd = conn.ssh_cmd + cmd
         conn_pool.return_connection(conn)
-        header_bytes = len(" ".join(cmd).encode(fsenc))
-        batch: List[str] = []
+        header_bytes: int = len(" ".join(cmd).encode(fsenc))
         total_bytes: int = header_bytes
+        batch: List[str] = []
 
         def flush() -> Any:
             if len(batch) > 0:
