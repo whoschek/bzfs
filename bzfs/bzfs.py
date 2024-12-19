@@ -2517,7 +2517,7 @@ class Job:
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
             and (
-                loc == "src"
+                (loc == "src" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
                 or (loc == "dst" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
                 or (loc == "local" and p.src.ssh_user_host != "" and p.dst.ssh_user_host != "")
             )
