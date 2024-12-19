@@ -307,8 +307,10 @@ class BZFSTestCase(ParametrizedTestCase):
         src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
         src_user = ["--ssh-src-user", os_username()]
+        private_key_file2 = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/testid_rsa"
+        src_private_key2 = ["--ssh-src-private-key", private_key_file2, "--ssh-dst-private-key", private_key_file2]
         private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
-        src_private_key = ["--ssh-src-private-key", private_key_file, "--ssh-src-private-key", private_key_file]
+        src_private_key = ["--ssh-src-private-key", private_key_file, "--ssh-dst-private-key", private_key_file]
         src_ssh_config_file = ["--ssh-src-config-file", ssh_config_file]
         dst_ssh_config_file = ["--ssh-dst-config-file", ssh_config_file]
         params = self.param
@@ -322,12 +324,16 @@ class BZFSTestCase(ParametrizedTestCase):
                 dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
             args = args + src_host + dst_host + src_port + dst_port
             if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
-                args = args + src_user + src_private_key + src_ssh_config_file + dst_ssh_config_file + ["--ssh-cipher="]
+                args = args + src_user + src_ssh_config_file + dst_ssh_config_file + ["--ssh-cipher="]
             args = args + ["--bwlimit=10000m"]
         elif params and params.get("ssh_mode", "local") != "local":
             raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])
 
         if params and params.get("ssh_mode", "local") != "local":
+            if platform.system() == "Linux":
+                args += src_private_key
+            else:
+                args += src_private_key2
             args = args + [
                 "--ssh-src-extra-opts",
                 "-o StrictHostKeyChecking=no",
