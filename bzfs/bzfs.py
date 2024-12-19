@@ -521,18 +521,18 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "no destination snapshot that already exists is deleted, and instead the operation is aborted with an "
              "error when encountering a conflicting snapshot.\n\n"
              "Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas "
-             "--force-rollback-to-latest-common-snapshot is a medium sized hammer, --force is a large hammer, and "
-             "--force-hard is a very large hammer. "
+             "--force-rollback-to-latest-common-snapshot is a medium sized hammer, and --force is a large hammer. "
              "Consider using the smallest hammer that can fix the problem. No hammer is ever used by default.\n\n")
-    parser.add_argument(
-        "--force-hard", action="store_true",
-        help="On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will add the "
-             "'-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete dependents such as "
-             "clones and bookmarks. This can be very destructive and is rarely advisable.\n\n")
     parser.add_argument(
         "--force-unmount", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
              "use of 'zfs rollback' and 'zfs destroy'.\n\n")
+    parser.add_argument(
+        "--force-hard", action="store_true",
+        # help="On destination, --force will also delete dependents such as clones and bookmarks via "
+        #      "'zfs rollback -R' and 'zfs destroy -R'. This can be very destructive and is rarely what you "
+        #      "want!\n\n")
+        help=argparse.SUPPRESS)
     parser.add_argument(
         "--force-once", "--f1", action="store_true",
         help="Use the --force option or --force-rollback-to-latest-common-snapshot option at most once to resolve a "
@@ -1664,6 +1664,8 @@ class Job:
         finally:
             log.info("%s", "Log file was: " + p.log_params.log_file)
 
+        for line in tail(p.log_params.pv_log_file, 10):
+            log.log(log_stdout, "%s", line.rstrip())
         log.info("Success. Goodbye!")
         print("", end="", file=sys.stderr)
         sys.stderr.flush()
@@ -1680,17 +1682,10 @@ class Job:
         elapsed_nanos = int(time.time_ns() - start_time_nanos)
         m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
-            N = 10
-            total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=N)
+            total_sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
             m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
             m += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
-            lines = []
-            if len(tails) == 1:
-                lines = tails[0]  # print last N lines of .pv log file if there is only one .pv log file
-            elif len(tails) > 1:
-                lines = [tail[-1] for tail in tails if tail]  # otherwise print last line of each .pv log file
-            m += "\n" + "\n".join(lines) if lines else ""
         log.info("%s", m)
 
     def validate_once(self) -> None:
@@ -2522,7 +2517,7 @@ class Job:
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
             and (
-                (loc == "src" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
+                loc == "src"
                 or (loc == "dst" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
                 or (loc == "local" and p.src.ssh_user_host != "" and p.dst.ssh_user_host != "")
             )
@@ -4395,27 +4390,17 @@ def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "
         raise ValueError("Invalid pv_size: " + size)
 
 
-def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int) -> Tuple[int, List[deque[str]]]:
+def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
     total_bytes = 0
-    files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
-    files.sort(key=lambda file: os.stat(file).st_mtime)
-    tails = []
-    for file in files:
-        if os.path.isfile(file):
-            with open(file, newline="\r\n", encoding="utf-8") as fd:
-                tail = deque(maxlen=maxlen)
+    for pv_log_file in [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*"):
+        if os.path.isfile(pv_log_file):
+            with open(pv_log_file, "r", encoding="utf-8") as fd:
                 for line in fd:
-                    line = line.rstrip()
-                    i = line.rfind("\r")
-                    if i >= 0:
-                        line = line[i + 1 :]  # skip all but the most recent status update of each transfer
                     if ":" in line:
                         col = line.split(":", 1)[1].strip()
                         total_bytes += pv_size_to_bytes(col)
-                        tail.append(line)
-                tails.append(tail)
-    return total_bytes, tails
+    return total_bytes
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
