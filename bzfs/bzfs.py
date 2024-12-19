@@ -4390,24 +4390,23 @@ def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "
 
 def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int) -> Tuple[int, List[Deque[str]]]:
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
-    total_bytes = 0
     files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
-    files.sort(key=lambda file: os.stat(file).st_mtime)
+    files = [file for file in files if os.path.isfile(file)]
+    total_bytes = 0
     tails = []
-    for file in files:
-        if os.path.isfile(file):
-            with open(file, newline="\r\n", encoding="utf-8") as fd:
-                tail = deque(maxlen=maxlen)
-                for line in fd:
-                    line = line.rstrip()
-                    i = line.rfind("\r")
-                    if i >= 0:
-                        line = line[i + 1 :]  # skip all but the most recent status update of each transfer
-                    if ":" in line:
-                        col = line.split(":", 1)[1].strip()
-                        total_bytes += pv_size_to_bytes(col)
-                        tail.append(col)
-                tails.append(tail)
+    for file in sorted(files, key=lambda file: os.stat(file).st_mtime):
+        with open(file, newline="\r\n", encoding="utf-8") as fd:
+            tail = deque(maxlen=maxlen)
+            for line in fd:
+                line = line.rstrip()
+                i = line.rfind("\r")
+                if i >= 0:
+                    line = line[i + 1 :]  # skip all but the most recent status update of each transfer
+                if ":" in line:
+                    col = line.split(":", 1)[1].strip()
+                    total_bytes += pv_size_to_bytes(col)
+                    tail.append(col)
+            tails.append(tail)
     return total_bytes, tails
 
 
