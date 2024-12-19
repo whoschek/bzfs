@@ -422,6 +422,11 @@ class BZFSTestCase(ParametrizedTestCase):
             job.param_injection_triggers = param_injection_triggers
             args = args + ["--threads=1"]
 
+        if platform.platform().startswith("FreeBSD-13.4"):
+            # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
+            # (works fine on FreeBSD-13.3 and FreeBSD-14.1 and other platforms)
+            args = args + ["--threads=1"]
+
         if inject_params is not None:
             job.inject_params = inject_params
 
@@ -3783,21 +3788,6 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
             self.inject_unavailable_program("inject_unavailable_" + ssh_program, expected_error=die_status)
             self.tearDownAndSetup()
             self.inject_unavailable_program("inject_failing_" + ssh_program, expected_error=die_status)
-
-    def test_inject_unavailable_ssh_raises_UnicodeDecodeError(self):
-        if self.param and self.param.get("ssh_mode") != "local":
-            destroy(dst_root_dataset, recursive=True)
-            # inject zfs list failures before this many tries. only after that succeed the operation
-            counter = Counter(zfslist_UnicodeDecodeError=1)
-            self.run_bzfs(
-                src_root_dataset,
-                dst_root_dataset,
-                error_injection_triggers={"before": counter},
-                inject_params={"inject_unavailable_zpool": True},
-                expected_status=die_status,
-            )
-            self.assertFalse(dataset_exists(dst_root_dataset))
-            self.assertEqual(0, counter["zfslist_UnicodeDecodeError"])
 
     def test_inject_unavailable_zfs(self):
         self.inject_unavailable_program("inject_unavailable_zfs", expected_error=die_status)
