@@ -501,13 +501,17 @@ class TestHelperFunctions(unittest.TestCase):
         os.write(pv1_fd, ": 800B foo".encode("utf-8"))
         pv2 = pv1 + bzfs.pv_file_thread_separator + "001"
         with open(pv2, "w", encoding="utf-8") as fd:
-            fd.write("1 MB\n")
-            fd.write("42 KiB:1 MB\n")
+            fd.write("1 KB\r\n")
+            fd.write("2 KiB:20 KB\r")
+            fd.write("3 KiB:300 KB\r\n")
+            fd.write("4 KiB:4000 KB\r")
+            fd.write("4 KiB:50000 KB\r")
+            fd.write("4 KiB:600000 KB\r")
         pv3 = pv1 + bzfs.pv_file_thread_separator + "002"
         os.makedirs(pv3, exist_ok=True)
         try:
             num_bytes, tails = bzfs.count_num_bytes_transferred_by_zfs_send(pv1, 10)
-            self.assertEqual(800 + 1000 * 1000, num_bytes)
+            self.assertEqual(800 + 300 * 1000 + 600000 * 1000, num_bytes)
         finally:
             os.remove(pv1)
             os.remove(pv2)
