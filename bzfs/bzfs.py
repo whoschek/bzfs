@@ -1204,6 +1204,7 @@ class Params:
         self.log: Logger = log
         self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
+        self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
         self.unset_matching_env_vars(args)
 
         assert len(args.root_dataset_pairs) > 0
@@ -2278,9 +2279,10 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
+                condensed_humansize = p.two_or_more_spaces_regex.sub("", humansize.strip())
                 log.info(
                     p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-                    f"{from_snap} {to_snap} --> {dst_dataset} ({humansize.strip()}) ({humannum}) ...",
+                    f"{from_snap} {to_snap} --> {dst_dataset} ({condensed_humansize}) ({humannum}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
