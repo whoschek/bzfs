@@ -28,10 +28,10 @@ command -v sh | xargs ls -l
 sudo command -v sh | xargs ls -l
 
 mkdir -p $HOME/.ssh
-rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
-ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
-cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
-ls -al $HOME $HOME/.ssh/id_rsa
+rm -f $HOME/.ssh/testid_rsa $HOME/.ssh/testid_rsa.pub
+ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and public key
+cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
+ls -al $HOME $HOME/.ssh/testid_rsa
 
 echo "Now running tests as root user"; ./test.sh
 echo "Now running coverage"; ./coverage.sh
@@ -44,7 +44,7 @@ pw useradd $tuser -d $thome -m
 echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool),$(command -v dd)" >> /usr/local/etc/sudoers
 
 mkdir -p $thome/.ssh
-cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $HOME/.ssh/authorized_keys $thome/.ssh/
+cp -p $HOME/.ssh/testid_rsa $HOME/.ssh/testid_rsa.pub $HOME/.ssh/authorized_keys $thome/.ssh/
 chmod go-rwx "$thome/.ssh/authorized_keys"
 chown -R "$tuser" "$thome/.ssh"
 

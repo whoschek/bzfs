@@ -62,9 +62,9 @@ command -v sh | xargs ls -l
 df -h /tmp
 
 mkdir -p $HOME/.ssh
-rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
-ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N ""  # create private key and public key
-cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+rm -f $HOME/.ssh/testid_rsa $HOME/.ssh/testid_rsa.pub
+ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and public key
+cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
 ls -al $HOME
 
 echo "Now running coverage"; ./coverage.sh
@@ -80,9 +80,9 @@ supath=$(grep "^SUPATH=" /etc/default/login | cut -d'=' -f2)
 echo "PATH=$supath" >> /etc/default/login  # ensure zstd, mbuffer, etc are on the PATH via ssh
 
 mkdir -p $thome/.ssh
-cp -p $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub $thome/.ssh/
+cp -p $HOME/.ssh/testid_rsa $HOME/.ssh/testid_rsa.pub $thome/.ssh/
 chown -R $tuser $thome/.ssh
-cat $HOME/.ssh/id_rsa.pub | sudo -u $tuser tee -a $thome/.ssh/authorized_keys > /dev/null
+cat $HOME/.ssh/testid_rsa.pub | sudo -u $tuser tee -a $thome/.ssh/authorized_keys > /dev/null
 chmod go-rwx $thome/.ssh/authorized_keys
 
 cp -rp . $thome/bzfs # if running with Github Action
