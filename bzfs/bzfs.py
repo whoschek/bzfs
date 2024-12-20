@@ -2413,9 +2413,10 @@ class Job:
 
         src_pipe = self.squote(p.src, src_pipe)
         dst_pipe = self.squote(p.dst, dst_pipe)
-        src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(DEDICATED)
+        conn_pool_name = DEDICATED if platform.system() == "Linux" else SHARED
+        src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
         src_conn: Connection = src_conn_pool.get_connection()
-        dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(DEDICATED)
+        dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
         dst_conn: Connection = dst_conn_pool.get_connection()
         try:
             src_ssh_cmd = " ".join(src_conn.ssh_cmd_quoted)
