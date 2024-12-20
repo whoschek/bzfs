@@ -2266,10 +2266,10 @@ class Job:
             total_num = sum(num_snapshots for incr_flag, from_snap, to_snap, num_snapshots in steps_todo)
             done_size = 0
             done_num = 0
-            for i, (incr_flag, from_snap, to_snap, curr_num) in enumerate(steps_todo):
+            for i, (incr_flag, from_snap, to_snap, curr_num_snapshots) in enumerate(steps_todo):
                 curr_size = estimate_send_sizes[i]
                 humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
-                humannum = f"{total_num}/{done_num}/{curr_num} snapshots"
+                humannum = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2292,10 +2292,10 @@ class Job:
                     src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
                 )
                 done_size += curr_size
-                done_num += curr_num
+                done_num += curr_num_snapshots
                 recv_resume_token = None
                 with self.stats_lock:
-                    self.num_snapshots_replicated += curr_num
+                    self.num_snapshots_replicated += curr_num_snapshots
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
             self.zfs_set(set_opts, dst, dst_dataset)
