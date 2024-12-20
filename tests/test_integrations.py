@@ -485,9 +485,9 @@ class BZFSTestCase(ParametrizedTestCase):
                     )
 
             if old_dedicated_tcp_connection_per_zfssend is None:
-                os.environ.pop(bzfs.env_var_prefix + "old_dedicated_tcp_connection_per_zfssend", None)
+                os.environ.pop(bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend", None)
             else:
-                os.environ[bzfs.env_var_prefix + "old_dedicated_tcp_connection_per_zfssend"] = (
+                os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend"] = (
                     old_dedicated_tcp_connection_per_zfssend
                 )
 
