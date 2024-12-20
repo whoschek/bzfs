@@ -1468,8 +1468,8 @@ class Remote:
 
     def cache_key(self) -> Tuple:
         # fmt: off
-        # return (self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
-        return (self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
+        return (self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
+        # return (self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
                 tuple(self.ssh_private_key_files), tuple(self.ssh_extra_opts))
         # fmt: on
 
