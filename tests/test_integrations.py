@@ -422,11 +422,6 @@ class BZFSTestCase(ParametrizedTestCase):
             job.param_injection_triggers = param_injection_triggers
             args = args + ["--threads=1"]
 
-        # if platform.platform().startswith("FreeBSD-13.4"):
-        #     # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
-        #     # (works fine on FreeBSD-13.3 and FreeBSD-14.1 and other platforms)
-        #     args = args + ["--threads=1"]
-
         if inject_params is not None:
             job.inject_params = inject_params
 
@@ -446,6 +441,13 @@ class BZFSTestCase(ParametrizedTestCase):
             os.environ[bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = str(
                 max_datasets_per_minibatch_on_list_snaps
             )
+
+        old_dedicated_tcp_connection_per_zfssend = os.environ.get(
+            bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend"
+        )
+        if platform.platform().startswith("FreeBSD-") or platform.system() == "SunOS":
+            # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
+            os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend"] = "false"
 
         returncode = 0
         try:
@@ -481,6 +483,13 @@ class BZFSTestCase(ParametrizedTestCase):
                     os.environ[bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = (
                         old_max_datasets_per_minibatch_on_list_snaps
                     )
+
+            if old_dedicated_tcp_connection_per_zfssend is None:
+                os.environ.pop(bzfs.env_var_prefix + "old_dedicated_tcp_connection_per_zfssend", None)
+            else:
+                os.environ[bzfs.env_var_prefix + "old_dedicated_tcp_connection_per_zfssend"] = (
+                    old_dedicated_tcp_connection_per_zfssend
+                )
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
