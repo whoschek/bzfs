@@ -2441,8 +2441,8 @@ class Job:
                     xprint(log, process.stdout, file=sys.stdout)
                     xprint(log, process.stderr, file=sys.stderr)
         finally:
-            src_conn_pool.return_connection(src_conn)
             dst_conn_pool.return_connection(dst_conn)
+            src_conn_pool.return_connection(src_conn)
 
     def clear_resumable_recv_state_if_necessary(self, dst_dataset: str, stderr: str) -> bool:
         def clear_resumable_recv_state() -> bool:
