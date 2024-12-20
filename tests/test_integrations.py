@@ -422,10 +422,10 @@ class BZFSTestCase(ParametrizedTestCase):
             job.param_injection_triggers = param_injection_triggers
             args = args + ["--threads=1"]
 
-        if platform.platform().startswith("FreeBSD-13.4"):
-            # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
-            # (works fine on FreeBSD-13.3 and FreeBSD-14.1 and other platforms)
-            args = args + ["--threads=1"]
+        # if platform.platform().startswith("FreeBSD-13.4"):
+        #     # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
+        #     # (works fine on FreeBSD-13.3 and FreeBSD-14.1 and other platforms)
+        #     args = args + ["--threads=1"]
 
         if inject_params is not None:
             job.inject_params = inject_params
