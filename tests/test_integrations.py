@@ -764,6 +764,8 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.setup_basic()
         w, q = 3, 3
+        threads = 4
+        maxsessions = threads // 2 if platform.system() == "Linux" else threads  # workaround for QEMU Github runner
         self.setup_basic_woo(w=w, q=q)
         for i in range(0, 1):
             with stop_on_failure_subtest(i=i):
@@ -771,8 +773,8 @@ class LocalTestCase(BZFSTestCase):
                     src_root_dataset,
                     dst_root_dataset,
                     "--recursive",
-                    "--threads=4",
-                    "--max-concurrent-ssh-sessions-per-tcp-connection=2",
+                    f"--threads={threads}",
+                    f"--max-concurrent-ssh-sessions-per-tcp-connection={maxsessions}",
                 )
                 self.assertSnapshots(dst_root_dataset, 3, "s")
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
