@@ -3980,7 +3980,8 @@ class Connection:
 #############################################################################
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse.
-    Implemented using a (thread-safe) priority queue that can handle updates to the priority of items that are already
+    Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers but is actually
+    implemented using a (thread-safe) priority queue that can handle updates to the priority of items that are already
     contained in the queue. This is done by retaining inside the queue both the item before the update, as well as the
     item after the update, such that the item-before-the-update is tagged with an auxiliary pointer to the updated
     shallow copy that is the item-after-the-update aka the replacement for the item. Items that are tagged like that
@@ -4030,6 +4031,14 @@ class ConnectionPool:
         with self._lock:
             next_conn = old_conn
             while next_conn is not None:
+                # Typically, loops only once or not at all. In theory, may loop N times, namely if, before this slot is
+                # returned, another slot S[i] of old_conn has already been replaced with S[i+1], which in turn has been
+                # replaced with S[i+2], ... and so on ..., which in turn has been replaced with S[i+N]. For example, if
+                # a long-running operation is shared over the same TCP connection with many concurrent short-running
+                # operations. There is no problem for us though, as our usage pattern is different - in our case
+                # long-running operations (zfs send/receive) have their own dedicated TCP connection, and, in any case,
+                # semantics are such that all our operations soon block waiting for an existing operation to complete
+                # anyway. Thus, only a very small number of updates actually pile up in a replacement chain.
                 curr_conn = next_conn
                 next_conn = next_conn.replacement
                 self.return_iters += 1
