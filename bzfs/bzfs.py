@@ -4049,7 +4049,7 @@ class ConnectionPool:
             new_conn.replacement = None
             new_conn.increment_free(1)
             self.last_modified += 1
-            new_conn.update_last_modified(self.last_modified)  # LIFO: tiebreaker favor latest conn as that's most alive
+            new_conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
             heapq.heappush(self.priority_queue, new_conn)
 
             # gc: periodically delete replaced entries to free up memory, yet retain amortized O(log N) time complexity
