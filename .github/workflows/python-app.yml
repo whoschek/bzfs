@@ -308,7 +308,7 @@ jobs:
   test_freebsd_14_1:  # currently uses zfs-2.2.4
     if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_1'
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 120
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest
@@ -325,7 +325,7 @@ jobs:
   test_freebsd_13_4:  # currently uses zfs-2.1.15
     if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4'
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 120
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest
@@ -342,7 +342,7 @@ jobs:
   test_freebsd_13_3:  # currently uses zfs-2.1.14
     if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_3'
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 120
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest
