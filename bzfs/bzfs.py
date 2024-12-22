@@ -3986,7 +3986,7 @@ class ConnectionPool:
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
-        self.remote: Remote = remote
+        self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.priority_queue: List[Connection] = []  # sorted by number of free slots (desc), and by timestamp (desc)
         self.replaced: int = 0
