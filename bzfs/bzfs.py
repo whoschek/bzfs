@@ -2605,7 +2605,7 @@ class Job:
                         log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                         ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                         ssh_socket_cmd += ["-M", "-oControlPersist=60s", remote.ssh_user_host, "exit"]
-                        log.debug("Executing: %s", list_formatter(ssh_socket_cmd))
+                        log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
                         process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
                         if process.returncode != 0:
                             log.error("%s", process.stderr.rstrip())
@@ -3970,7 +3970,7 @@ class Connection:
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
             ssh_socket_cmd_quoted = [shlex.quote(item) for item in ssh_socket_cmd]
-            p.log.debug(f"Executing {msg_prefix}: %s", " ".join(ssh_socket_cmd_quoted))
+            p.log.trace(f"Executing {msg_prefix}: %s", " ".join(ssh_socket_cmd_quoted))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
                 p.log.trace("%s", process.stderr.rstrip())

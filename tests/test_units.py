@@ -2030,13 +2030,13 @@ class TestConnectionPool(unittest.TestCase):
 class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better implementation against this baseline
     def get_connection(self) -> bzfs.Connection:
         with self._lock:
+            self.priority_queue.sort()
             conn = self.priority_queue[0] if self.priority_queue else None
             if conn is None or conn.is_full():
                 conn = bzfs.Connection(self.remote, self.capacity, self.cid)
                 self.cid += 1
                 self.priority_queue.append(conn)
             conn.increment_free(-1)
-            self.priority_queue.sort()
             return conn
 
     def return_connection(self, old_conn: bzfs.Connection) -> None:
@@ -2046,7 +2046,6 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
             old_conn.increment_free(1)
             self.last_modified += 1
             old_conn.update_last_modified(self.last_modified)
-            self.priority_queue.sort()
 
     def __repr__(self) -> str:
         with self._lock:
