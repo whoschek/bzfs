@@ -1287,6 +1287,7 @@ class Params:
         self.max_snapshots_per_minibatch_on_delete_snaps = int(
             getenv_any("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
         )
+        self.dedicated_tcp_connection_per_zfssend = getenv_bool("dedicated_tcp_connection_per_zfssend", True)
         self.threads: Tuple[int, bool] = args.threads
 
         self.os_cpu_count: int = os.cpu_count()
@@ -2413,9 +2414,10 @@ class Job:
 
         src_pipe = self.squote(p.src, src_pipe)
         dst_pipe = self.squote(p.dst, dst_pipe)
-        src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(DEDICATED)
+        conn_pool_name = DEDICATED if p.dedicated_tcp_connection_per_zfssend else SHARED
+        src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
         src_conn: Connection = src_conn_pool.get_connection()
-        dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(DEDICATED)
+        dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
         dst_conn: Connection = dst_conn_pool.get_connection()
         try:
             src_ssh_cmd = " ".join(src_conn.ssh_cmd_quoted)
