@@ -2440,8 +2440,8 @@ class Job:
                     xprint(log, process.stdout, file=sys.stdout)
                     xprint(log, process.stderr, file=sys.stderr)
         finally:
-            src_conn_pool.return_connection(src_conn)
             dst_conn_pool.return_connection(dst_conn)
+            src_conn_pool.return_connection(src_conn)
 
     def clear_resumable_recv_state_if_necessary(self, dst_dataset: str, stderr: str) -> bool:
         def clear_resumable_recv_state() -> bool:
@@ -3977,14 +3977,15 @@ class Connection:
 #############################################################################
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse.
-    Implemented using a (thread-safe) priority queue that can handle updates to the priority of items that are already
-    contained in the queue. This is done by retaining inside the queue both the item before the update, as well as the
-    item after the update, such that the item-before-the-update is tagged with an auxiliary pointer to the updated
-    shallow copy that is the item-after-the-update aka the replacement for the item. Items that are tagged like that
-    are garbage and are skipped on reads. They are also periodically garbage collected, i.e. deleted from the queue to
-    free up memory, in a way that retains amortized O(log N) time complexity."""
+    Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers but, to avoid a
+    dependency, is actually implemented using a (thread-safe) priority queue that can handle updates to the priority of
+    items that are already contained in the queue. This is done by retaining inside the queue both the item before the
+    update, as well as the item after the update, such that the item-before-the-update is tagged with an auxiliary
+    pointer to the updated shallow copy that is the item-after-the-update aka the replacement for the item. Items that
+    are tagged like that are garbage and are skipped on reads. They are also periodically garbage collected, i.e.
+    deleted from the queue to free up memory, in a way that retains amortized O(log N) time complexity."""
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, is_trace=False):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
@@ -3995,7 +3996,9 @@ class ConnectionPool:
         self.cid: int = 0  # monotonically increasing connection number
         self._lock: threading.Lock = threading.Lock()
         self.returns: int = 0
-        self.return_iters: int = 0
+        self.return_iters_sum: int = 0
+        self.return_iters = Counter()
+        self.is_trace = is_trace
 
     def _pop(self) -> Connection:
         """Returns the "smallest" item wrt. sort order from the priority queue."""
@@ -4025,19 +4028,25 @@ class ConnectionPool:
     def return_connection(self, old_conn: Connection) -> None:
         assert old_conn is not None
         with self._lock:
+            i = 0
+            new_conn = copy.copy(old_conn)  # shallow copy
             next_conn = old_conn
             while next_conn is not None:
+                # Typically, loops only once or not at all. Only a very small number of updates actually pile up in a
+                # replacement chain. Long-running operations (zfs send/receive) have their own dedicated TCP connection.
                 curr_conn = next_conn
                 next_conn = next_conn.replacement
-                self.return_iters += 1
+                curr_conn.replacement = new_conn  # tag garbage with ptr to the updated shallow copy that replaces it
+                i += 1
             self.returns += 1
-            new_conn = copy.copy(curr_conn)  # shallow copy
-            old_conn.replacement = new_conn  # tag garbage with ptr to the updated shallow copy that replaces this item
-            curr_conn.replacement = new_conn  # ditto
+            self.return_iters_sum += i
+            if self.is_trace:
+                self.return_iters[i] += 1
             new_conn.replacement = None
+            new_conn.free = curr_conn.free
             new_conn.increment_free(1)
             self.last_modified += 1
-            new_conn.update_last_modified(self.last_modified)  # LIFO: tiebreaker favor latest conn as that's most alive
+            new_conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
             heapq.heappush(self.priority_queue, new_conn)
 
             # gc: periodically delete replaced entries to free up memory, yet retain amortized O(log N) time complexity
@@ -4059,7 +4068,7 @@ class ConnectionPool:
         with self._lock:
             # fmt: off
             return str({"capacity": self.capacity, "replaced": self.replaced, "queue_len": len(self.priority_queue),
-                        "cid": self.cid, "returns": self.returns, "return_iters": self.return_iters,
+                        "cid": self.cid, "returns": self.returns, "return_iters_sum": self.return_iters_sum,
                         "queue": self.priority_queue, "dirty": self.dirty})
             # fmt: on
 

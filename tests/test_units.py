@@ -28,7 +28,7 @@ import sys
 import tempfile
 import time
 import unittest
-from collections import defaultdict
+from collections import defaultdict, Counter
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1961,13 +1961,16 @@ class TestConnectionPool(unittest.TestCase):
         num_steps = 1000 if not is_adhoc_test and not is_functional_test else 75
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
+        total_returns = 0
+        total_return_iters_sum = 0
+        total_return_iters = Counter()
         for maxsessions in range(1, 10 + 1):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
                 self.src.local_ssh_command = lambda: [str(next(counter1a))]
                 self.src2.local_ssh_command = lambda: [str(next(counter1b))]
-                cpool = bzfs.ConnectionPool(self.src, maxsessions)
+                cpool = bzfs.ConnectionPool(self.src, maxsessions, is_trace=True)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = bzfs.ConnectionPool(self.src2, maxsessions)
                 rng = random.Random(12345)
@@ -2005,8 +2008,22 @@ class TestConnectionPool(unittest.TestCase):
                     raise
                 log.log(loglevel, "cpool: %s", cpool)
                 # log.log(bzfs.log_debug, "cpool: %s", cpool)
+                total_returns += cpool.returns
+                total_return_iters_sum += cpool.return_iters_sum
+                total_return_iters.update(cpool.return_iters)
         elapsed_secs = (time.time_ns() - start_time_nanos) / 1000_000_000
         log.info("random_walk took %s secs", elapsed_secs)
+        s = sum(total_return_iters.values())
+        total_return_iters = {key: value for key, value in sorted(total_return_iters.items())}
+        percentage_iters = {key: 100 * value / s for key, value in total_return_iters.items()}
+        log.info(
+            "%stotal_returns: %s, total_return_iters_sum: %s, total_return_iters: %s, %s",
+            "",
+            total_returns,
+            total_return_iters_sum,
+            total_return_iters,
+            percentage_iters,
+        )
 
 
 #############################################################################
