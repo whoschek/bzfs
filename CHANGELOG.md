@@ -4,7 +4,16 @@ All notable changes to bzfs will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.0] -  TBD
+## [1.7.0] -  December 23, 2024
+
+This release contains performance and documentation enhancements as well as new features, including ...
+- bzfs now automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel.
+- Replication and --delete-dst-snapshots: list snapshots in parallel on src and dst.
+- Improved reliability of connection resource cleanup.
+- bump --force-hard from undocumented to documented feature.
+- Logging readability improvements.
+- Also run nightly tests on zfs-2.2.7
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.6.0...v1.7.0
 
 ## [1.6.0] -  December 2, 2024
 
