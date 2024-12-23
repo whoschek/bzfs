@@ -484,6 +484,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(800, bzfs.pv_size_to_bytes("800B foo"))
         self.assertEqual(1, bzfs.pv_size_to_bytes("8b"))
         self.assertEqual(round(4.12 * 1024), bzfs.pv_size_to_bytes("4.12 KiB"))
+        self.assertEqual(round(46.2 * 1024**3), bzfs.pv_size_to_bytes("46,2GiB"))
         self.assertEqual(2 * 1024**2, bzfs.pv_size_to_bytes("2 MiB"))
         self.assertEqual(1000**2, bzfs.pv_size_to_bytes("1 MB"))
         self.assertEqual(1024**3, bzfs.pv_size_to_bytes("1 GiB"))
