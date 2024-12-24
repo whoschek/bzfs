@@ -4384,13 +4384,14 @@ def terminate_process_group(except_current_process=False):
         signal.signal(signum, old_signal_handler)  # reenable and restore original handler
 
 
-pv_size_to_bytes_regex = re.compile(r"(\d+[\.,]?\d*)\s*([KMGTEZY]?)(i?)([Bb]).*")
+arabic_decimal_separator = "\u066B"  # "٫"
+pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTEZY]?)(i?)([Bb]).*")
 
 
 def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     match = pv_size_to_bytes_regex.fullmatch(size)
     if match:
-        number = float(match.group(1).replace(",", "."))
+        number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
         i = "KMGTEZY".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
         b = 1 if match.group(4) == "B" else 8

@@ -485,6 +485,8 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(1, bzfs.pv_size_to_bytes("8b"))
         self.assertEqual(round(4.12 * 1024), bzfs.pv_size_to_bytes("4.12 KiB"))
         self.assertEqual(round(46.2 * 1024**3), bzfs.pv_size_to_bytes("46,2GiB"))
+        self.assertEqual(round(46.2 * 1024**3), bzfs.pv_size_to_bytes("46.2GiB"))
+        self.assertEqual(round(46.2 * 1024**3), bzfs.pv_size_to_bytes("46" + bzfs.arabic_decimal_separator + "2GiB"))
         self.assertEqual(2 * 1024**2, bzfs.pv_size_to_bytes("2 MiB"))
         self.assertEqual(1000**2, bzfs.pv_size_to_bytes("1 MB"))
         self.assertEqual(1024**3, bzfs.pv_size_to_bytes("1 GiB"))
@@ -496,6 +498,8 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(1024**7, bzfs.pv_size_to_bytes("1 YiB"))
         with self.assertRaises(ValueError):
             bzfs.pv_size_to_bytes("foo")
+        with self.assertRaises(ValueError):
+            bzfs.pv_size_to_bytes("46-2GiB")
 
     def test_count_num_bytes_transferred_by_zfs_send(self):
         pv1_fd, pv1 = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
