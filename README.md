@@ -1168,11 +1168,12 @@ usage: bzfs [-h] [--recursive]
     *Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks
     instead of snapshots, in which case no snapshots are selected and
     the --{include|exclude}-snapshot-* filter options treat bookmarks
-    as snapshots wrt. selecting. *Performance Note:*
-    --delete-dst-snapshots operates on multiple datasets in parallel
-    (and serially within a dataset), using the same dataset order as
-    bzfs replication. The degree of parallelism is configurable with the
-    --threads option (see below).
+    as snapshots wrt. selecting.
+
+    *Performance Note:* --delete-dst-snapshots operates on multiple
+    datasets in parallel (and serially within a dataset), using the same
+    dataset order as bzfs replication. The degree of parallelism is
+    configurable with the --threads option (see below).
 
 <!-- -->
 
