@@ -18,7 +18,7 @@ else
 fi
 
 # see https://coverage.readthedocs.io/
-PYTHONPATH=. python3 -m coverage run --branch --omit='tests/*.py,*/__init__.py' -m tests.test_bzfs
+PYTHONPATH=. python3 -m coverage run --branch --omit='bzfs_tests/*.py,*/__init__.py' -m bzfs_tests.test_bzfs
 python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
 

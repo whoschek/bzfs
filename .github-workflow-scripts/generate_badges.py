@@ -28,7 +28,7 @@ def main():
     """Generate README.md badges for zfs/os/python version. Called by coverage.sh.
     Uses https://smarie.github.io/python-genbadge/"""
     if sys.argv[1] != "merge":
-        from tests.zfs_util import zfs_version
+        from bzfs_tests.zfs_util import zfs_version
 
         version = zfs_version()
         if version is None:

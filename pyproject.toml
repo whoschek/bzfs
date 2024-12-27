@@ -68,7 +68,7 @@ dev = [  # for development only
 
 [project.scripts]
 bzfs = "bzfs.bzfs:main"
-bzfs-test = "tests.test_bzfs:main"
+bzfs-test = "bzfs_tests.test_bzfs:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -80,7 +80,7 @@ tests = ["*.json"]
 version = {attr = "bzfs.bzfs.__version__"}
 
 [tool.hatch.build]
-include = ["bzfs/**", "tests/**"]
+include = ["bzfs/**", "bzfs_tests/**"]
 
 [tool.hatch.version]
 path = "bzfs/bzfs.py"
