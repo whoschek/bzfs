@@ -1939,7 +1939,7 @@ usage: bzfs [-h] [--recursive]
     given after the `+` prefix. Examples: +log_config.json,
     +/path/to/log_config.json. Here is an example config file that
     demonstrates usage:
-    https://github.com/whoschek/bzfs/blob/main/tests/log_config.json
+    https://github.com/whoschek/bzfs/blob/main/bzfs_tests/log_config.json
 
     For more examples see
     https://stackoverflow.com/questions/7507825/where-is-a-complete-example-of-logging-config-dictconfig

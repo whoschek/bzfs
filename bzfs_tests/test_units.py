@@ -37,7 +37,7 @@ from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
 from bzfs.bzfs import getenv_any
-from tests.zfs_util import is_solaris_zfs
+from bzfs_tests.zfs_util import is_solaris_zfs
 
 test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
 is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes

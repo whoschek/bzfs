@@ -18,8 +18,8 @@ import os
 import sys
 import unittest
 
-from tests.test_units import suite as test_units_suite
-from tests.test_integrations import suite as test_integrations_suite
+from bzfs_tests.test_units import suite as test_units_suite
+from bzfs_tests.test_integrations import suite as test_integrations_suite
 
 
 def main():
