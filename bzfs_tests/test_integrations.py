@@ -76,6 +76,7 @@ os.close(zfs_encryption_key_fd)
 ssh_config_file_fd, ssh_config_file = tempfile.mkstemp(prefix="ssh_config_file_")
 os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
 os.write(ssh_config_file_fd, "# Empty ssh_config file".encode("utf-8"))
+os.close(ssh_config_file_fd)
 keylocation = f"file://{zfs_encryption_key}"
 
 rng = random.Random(12345)

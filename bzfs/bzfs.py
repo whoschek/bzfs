@@ -3551,7 +3551,7 @@ class Job:
                 return self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset, tid))
             finally:
                 elapsed_nanos = int(time.time_ns() - start_time_nanos)
-                log.debug(f"{tid} {task_name} done: %s took %s", dataset, human_readable_duration(elapsed_nanos))
+                log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
 
         def build_dataset_tree_and_find_roots() -> List[Tuple[str, str, Tree]]:
             """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
