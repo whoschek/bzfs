@@ -2274,10 +2274,10 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
-                condensed_humansize = p.two_or_more_spaces_regex.sub("", humansize.strip())
+                densesize = p.two_or_more_spaces_regex.sub("", humansize.strip())
                 log.info(
                     p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-                    f"{from_snap} {to_snap} --> {dst_dataset} ({condensed_humansize}) ({humannum}) ...",
+                    f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({densesize}) ({humannum}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
