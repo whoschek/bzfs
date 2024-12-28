@@ -3311,6 +3311,50 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, counter["zfs_list_delete_dst_snapshots"])
         self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_delete_dst_snapshots_flat_with_injected_recv_token1(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        take_snapshot(src_root_dataset, fix("s1"))
+        self.run_bzfs(src_root_dataset, dst_root_dataset)
+        self.assertSnapshots(dst_root_dataset, 1, "s")
+        self.create_resumable_snapshots(2, 3)
+        self.generate_recv_resume_token(src_root_dataset + "@s1", src_root_dataset + "@s2", dst_root_dataset)
+        self.assertSnapshots(dst_root_dataset, 1, "s")
+        self.run_bzfs(
+            "dummy",
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
+            retries=1,
+        )
+        self.assertSnapshots(dst_root_dataset, 0, "s")
+        self.run_bzfs(src_root_dataset, dst_root_dataset)
+        self.assertSnapshots(dst_root_dataset, 2, "s")
+
+    def test_delete_dst_snapshots_flat_with_injected_recv_token2(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        take_snapshot(src_root_dataset, fix("s1"))
+        take_snapshot(src_root_dataset, fix("s2"))
+        self.run_bzfs(src_root_dataset, dst_root_dataset)
+        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.create_resumable_snapshots(3, 5)
+        self.generate_recv_resume_token(src_root_dataset + "@s2", src_root_dataset + "@s3", dst_root_dataset)
+        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.run_bzfs(
+            "dummy",
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-no-crosscheck",
+            "--include-snapshot-regex=s2",
+            retries=1,
+        )
+        self.assertSnapshots(dst_root_dataset, 1, "s")
+        self.run_bzfs(src_root_dataset, dst_root_dataset)
+        self.assertSnapshots(dst_root_dataset, 4, "s")
+
     def test_delete_dst_snapshots_flat_with_time_range_full(self):
         self.setup_basic_with_recursive_replication_done()
         destroy(snapshots(src_root_dataset)[2])

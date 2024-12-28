@@ -2144,16 +2144,11 @@ class Job:
                     p.force.value = False
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 if self.is_solaris_zfs(dst):
-                    # solaris-11.4 has no wildcard syntax to delete all snapshots in a single CLI invocation
                     self.delete_snapshots(
                         dst, dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids)
-                    )
+                    )  # solaris-11.4 has no wildcard syntax to delete all snapshots in a single CLI invocation
                 else:
-                    cmd = p.split_args(
-                        f"{dst.sudo} {p.zfs_program} destroy {p.force_hard} {p.verbose_destroy} {p.dry_run_destroy}",
-                        f"{dst_dataset}@%",
-                    )  # delete all dst snapshots in a batch
-                    self.run_ssh_command(dst, log_debug, cmd=cmd, print_stdout=True)
+                    self.delete_snapshots(dst, dst_dataset, snapshot_tags=["%"])  # delete all dst snapshots in a batch
                 if p.dry_run:
                     # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really
                     # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
@@ -2480,6 +2475,19 @@ class Job:
             "cannot receive new filesystem stream: checksum mismatch or incomplete stream" in stderr
             and "Partially received snapshot is saved" in stderr
         ):
+            return True
+
+        # "cannot destroy 'wb_dest/tmp/dst@s1': snapshot has dependent clones ... use '-R' to destroy the following
+        # datasets: wb_dest/tmp/dst/%recv"
+        clone_dataset = dst_dataset + "/%recv"
+        clone_dataset_match = "use '-R' to destroy the following datasets:\n" + clone_dataset + "\n"
+        if "cannot destroy" in stderr and "snapshot has dependent clones" in stderr and clone_dataset_match in stderr:
+            log.warning(
+                p.dry("Cleaning an interrupted zfs receive -s, deleting partially received clone: %s"), clone_dataset
+            )
+            cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} destroy", clone_dataset)
+            self.try_ssh_command(p.dst, log_trace, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            log.trace(p.dry("Done Cleaning an interrupted zfs receive -s: %s"), clone_dataset)
             return True
 
         return False
@@ -2881,24 +2889,30 @@ class Job:
         if self.is_solaris_zfs(remote):
             # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
             for snapshot_tag in snapshot_tags:
-                self.delete_snapshot(remote, f"{dataset}@{snapshot_tag}")
+                self.delete_snapshot(remote, dataset, f"{dataset}@{snapshot_tag}")
+        elif snapshot_tags == ["%"]:
+            self.delete_snapshot(remote, dataset, f"{dataset}@%")  # delete all dst snapshots in a batch
         else:  # delete snapshots in batches without creating a command line that's too big for the OS to handle
             self.run_ssh_cmd_batched(
                 remote,
                 self.delete_snapshot_cmd(remote, dataset + "@"),
                 snapshot_tags,
-                lambda batch: self.delete_snapshot(remote, dataset + "@" + ",".join(batch)),
+                lambda batch: self.delete_snapshot(remote, dataset, dataset + "@" + ",".join(batch)),
                 max_batch_items=self.params.max_snapshots_per_minibatch_on_delete_snaps,
             )
 
-    def delete_snapshot(self, r: Remote, snaps_to_delete: str) -> None:
+    def delete_snapshot(self, r: Remote, dataset: str, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
         log.info(p.dry("Deleting snapshot(s): %s"), snaps_to_delete)
         cmd = self.delete_snapshot_cmd(r, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(r)  # solaris-11.4 knows no 'zfs destroy -n' flag
-        self.try_ssh_command(
-            r, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd, exists=False, error_trigger="zfs_delete_snapshot"
-        )
+        try:
+            self.maybe_inject_error(cmd=cmd, error_trigger="zfs_delete_snapshot")
+            self.run_ssh_command(r, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+            no_sleep = self.clear_resumable_recv_state_if_necessary(dataset, e.stderr)
+            # op isn't idempotent so retries regather current state from the start
+            raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
     def delete_snapshot_cmd(self, r: Remote, snaps_to_delete: str) -> List[str]:
         p = self.params
