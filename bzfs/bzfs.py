@@ -1679,7 +1679,7 @@ class Job:
 
     def print_replication_stats(self, start_time_nanos: int):
         p, log = self.params, self.params.log
-        elapsed_nanos = int(time.time_ns() - start_time_nanos)
+        elapsed_nanos = time.time_ns() - start_time_nanos
         m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
             total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
@@ -3550,7 +3550,7 @@ class Job:
             try:
                 return self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset, tid))
             finally:
-                elapsed_nanos = int(time.time_ns() - start_time_nanos)
+                elapsed_nanos = time.time_ns() - start_time_nanos
                 log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
 
         def build_dataset_tree_and_find_roots() -> List[Tuple[str, str, Tree]]:
