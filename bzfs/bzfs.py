@@ -1685,7 +1685,7 @@ class Job:
             total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
             sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
             m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
-            m += f"[{human_readable_bytes(sent_bytes_per_sec, long=False)}/s = {sent_bytes_per_sec} bytes/s] per pv."
+            m += f"[{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
         log.info("%s", m)
 
     def validate_once(self) -> None:
@@ -2126,10 +2126,10 @@ class Job:
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
         log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
         dry_run_no_send = False
-        right_just = 8
+        right_just = 7
 
         def format_size(num_bytes: int) -> str:
-            return human_readable_bytes(num_bytes, long=False).rjust(right_just)
+            return human_readable_bytes(num_bytes, separator="").rjust(right_just)
 
         if not latest_common_src_snapshot:
             # no common snapshot was found. delete all dst snapshots, if any
@@ -3056,7 +3056,7 @@ class Job:
                         continue
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(policy.min_sleep_nanos, max_sleep_mark)
-                    human_duration = human_readable_duration(sleep_nanos, long=False)
+                    human_duration = human_readable_duration(sleep_nanos)
                     log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_duration} ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
@@ -4298,19 +4298,41 @@ def xappend(lst, *items) -> List[str]:
     return lst
 
 
-def human_readable_bytes(size: int, long=True) -> str:
+def human_readable_float(number: float) -> str:
+    """If the number has one digit before the decimal point (0 <= abs(number) < 10):
+      Round and use two decimals after the decimal point (e.g., 3.14559 --> "3.15").
+
+    If the number has two digits before the decimal point (10 <= abs(number) < 100):
+      Round and use one decimal after the decimal point (e.g., 12.36 --> "12.4").
+
+    If the number has three or more digits before the decimal point (abs(number) >= 100):
+      Round and use zero decimals after the decimal point (e.g., 123.556 --> "124").
+
+    Ensure no unnecessary trailing zeroes are retained: Example: 1.500 --> "1.5", 1.00 --> "1"
+    """
+    abs_number = abs(number)
+    precision = 2 if abs_number < 10 else 1 if abs_number < 100 else 0
+    if precision == 0:
+        return str(round(number))
+    result = f"{number:.{precision}f}"
+    assert "." in result
+    result = result.rstrip("0").rstrip(".")  # Remove trailing zeros and trailing dot if empty
+    return "0" if result == "-0" else result
+
+
+def human_readable_bytes(size: int, separator=" ", long=False) -> str:
     sign = "-" if size < 0 else ""
     s = abs(size)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
     i = 0
     long_form = f" ({size} bytes)" if long else ""
     while s >= 1024 and i < len(units) - 1:
-        s //= 1024
+        s /= 1024
         i += 1
-    return f"{sign}{s} {units[i]}{long_form}"
+    return f"{sign}{human_readable_float(s)}{separator}{units[i]}{long_form}"
 
 
-def human_readable_duration(duration: int, unit="ns", long=True) -> str:
+def human_readable_duration(duration: int, unit="ns", separator=" ", long=False) -> str:
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
@@ -4318,17 +4340,17 @@ def human_readable_duration(duration: int, unit="ns", long=True) -> str:
     i = units.index(unit)
     long_form = f" ({round(duration * seconds[i])} seconds)" if long else ""
     while t >= 1000 and i < 3:
-        t //= 1000
+        t /= 1000
         i += 1
     if i >= 3:
         while t >= 60 and i < 5:
-            t //= 60
+            t /= 60
             i += 1
     if i >= 5:
         while t >= 24 and i < len(units) - 1:
-            t //= 24
+            t /= 24
             i += 1
-    return f"{sign}{t} {units[i]}{long_form}"
+    return f"{sign}{human_readable_float(t)}{separator}{units[i]}{long_form}"
 
 
 def get_home_directory() -> str:

@@ -431,6 +431,55 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(is_busy("zfs send " + ds + "@snap", ds, busy_if_send=False))
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
+    def assert_human_readable_float(self, actual, expected):
+        self.assertEqual(bzfs.human_readable_float(actual), expected)
+        self.assertEqual(bzfs.human_readable_float(-actual), "-" + expected)
+
+    def test_human_readable_float_with_one_digit_before_decimal(self):
+        self.assert_human_readable_float(3.14159, "3.14")
+        self.assert_human_readable_float(5.0, "5")
+        self.assert_human_readable_float(0.5, "0.5")
+        self.assert_human_readable_float(0.499999, "0.5")
+        self.assert_human_readable_float(3.1477, "3.15")
+        self.assert_human_readable_float(1.999999, "2")
+        self.assert_human_readable_float(2.5, "2.5")
+        self.assert_human_readable_float(3.5, "3.5")
+
+    def test_human_readable_float_with_two_digits_before_decimal(self):
+        self.assert_human_readable_float(12.34, "12.3")
+        self.assert_human_readable_float(12.0, "12")
+        self.assert_human_readable_float(12.54, "12.5")
+        self.assert_human_readable_float(12.56, "12.6")
+
+    def test_human_readable_float_with_three_or_more_digits_before_decimal(self):
+        self.assert_human_readable_float(123.456, "123")
+        self.assert_human_readable_float(123.516, "124")
+        self.assert_human_readable_float(1234.4678, "1234")
+        self.assert_human_readable_float(1234.5678, "1235")
+        self.assert_human_readable_float(12345.078, "12345")
+        self.assert_human_readable_float(12345.678, "12346")
+        self.assert_human_readable_float(999.99, "1000")
+
+    def test_human_readable_float_with_zero(self):
+        self.assertEqual(bzfs.human_readable_float(0.0), "0")
+        self.assertEqual(bzfs.human_readable_float(-0.0), "0")
+        self.assertEqual(bzfs.human_readable_float(0.001), "0")
+        self.assertEqual(bzfs.human_readable_float(-0.001), "0")
+
+    def test_human_readable_float_with_halfway_rounding_behavior(self):
+        # For |n| < 10 => 2 decimals
+        self.assert_human_readable_float(1.15, "1.15")
+        self.assert_human_readable_float(1.25, "1.25")
+        self.assert_human_readable_float(1.35, "1.35")
+        self.assert_human_readable_float(1.45, "1.45")
+
+        # 10.xx => one decimal
+        eps = 1.0e-15
+        self.assert_human_readable_float(10.15, "10.2")
+        self.assert_human_readable_float(10.25, "10.2")
+        self.assert_human_readable_float(10.35 + eps, "10.4")
+        self.assert_human_readable_float(10.45, "10.4")
+
     def test_human_readable_duration(self):
         ms = 1000_000
         self.assertEqual("0 ns", bzfs.human_readable_duration(0, long=False))
@@ -441,19 +490,19 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("3 s", bzfs.human_readable_duration(3000 * ms, long=False))
         self.assertEqual("3 m", bzfs.human_readable_duration(3000 * 60 * ms, long=False))
         self.assertEqual("3 h", bzfs.human_readable_duration(3000 * 60 * 60 * ms, long=False))
-        self.assertEqual("1 d", bzfs.human_readable_duration(3000 * 60 * 60 * 10 * ms, long=False))
-        self.assertEqual("12 d", bzfs.human_readable_duration(3000 * 60 * 60 * 100 * ms, long=False))
+        self.assertEqual("1.25 d", bzfs.human_readable_duration(3000 * 60 * 60 * 10 * ms, long=False))
+        self.assertEqual("12.5 d", bzfs.human_readable_duration(3000 * 60 * 60 * 100 * ms, long=False))
         self.assertEqual("125 ns", bzfs.human_readable_duration(125, long=False))
         self.assertEqual("125 μs", bzfs.human_readable_duration(125 * 1000, long=False))
         self.assertEqual("125 ms", bzfs.human_readable_duration(125 * 1000 * 1000, long=False))
-        self.assertEqual("2 m", bzfs.human_readable_duration(125 * 1000 * 1000 * 1000, long=False))
+        self.assertEqual("2.08 m", bzfs.human_readable_duration(125 * 1000 * 1000 * 1000, long=False))
 
         self.assertEqual("0 s", bzfs.human_readable_duration(0, unit="s", long=False))
         self.assertEqual("3 s", bzfs.human_readable_duration(3, unit="s", long=False))
         self.assertEqual("3 m", bzfs.human_readable_duration(3 * 60, unit="s", long=False))
         self.assertEqual("0 h", bzfs.human_readable_duration(0, unit="h", long=False))
         self.assertEqual("3 h", bzfs.human_readable_duration(3, unit="h", long=False))
-        self.assertEqual("7 d", bzfs.human_readable_duration(3 * 60, unit="h", long=False))
+        self.assertEqual("7.5 d", bzfs.human_readable_duration(3 * 60, unit="h", long=False))
         with self.assertRaises(ValueError):
             bzfs.human_readable_duration(3, unit="hhh", long=False)  # invalid unit
 
