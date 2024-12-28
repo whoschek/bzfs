@@ -2478,17 +2478,14 @@ class Job:
             return True
 
         # "cannot destroy 'wb_dest/tmp/dst@s1': snapshot has dependent clones ... use '-R' to destroy the following
-        # datasets: wb_dest/tmp/dst/%recv"
-        clone_dataset = dst_dataset + "/%recv"
-        clone_dataset_match = "use '-R' to destroy the following datasets:\n" + clone_dataset + "\n"
-        if "cannot destroy" in stderr and "snapshot has dependent clones" in stderr and clone_dataset_match in stderr:
-            log.warning(
-                p.dry("Cleaning an interrupted zfs receive -s, deleting partially received clone: %s"), clone_dataset
-            )
-            cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} destroy", clone_dataset)
-            self.try_ssh_command(p.dst, log_trace, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-            log.trace(p.dry("Done Cleaning an interrupted zfs receive -s: %s"), clone_dataset)
-            return True
+        # datasets: wb_dest/tmp/dst/%recv" # see https://github.com/openzfs/zfs/issues/10439#issuecomment-642774560
+        # This msg indicates a failed 'zfs destroy' via --delete-dst-snapshots. This "clone" is caused by a previously
+        # interrupted 'zfs receive -s'. The fix used here is to delete the partially received state of said
+        # 'zfs receive -s' via 'zfs receive -A', followed by an automatic retry, which will now succeed to delete the
+        # snapshot without user intervention.
+        markers = ["cannot destroy", "snapshot has dependent clone", "use '-R' to destroy the following dataset"]
+        if all(marker in stderr for marker in markers + [f"\n{dst_dataset}/%recv\n"]):
+            return clear_resumable_recv_state()
 
         return False
 
