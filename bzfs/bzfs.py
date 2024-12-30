@@ -64,7 +64,7 @@ import tempfile
 import threading
 import time
 from argparse import Namespace
-from collections import defaultdict, deque, Counter
+from collections import defaultdict, deque, Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from contextlib import redirect_stderr
 from dataclasses import dataclass, field
@@ -1182,6 +1182,7 @@ RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 UnixTimeRange = Optional[Tuple[int, int]]  # Type alias
 RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
 Tree = Dict[str, Optional[Dict]]  # Type alias
+RemoteConfCacheItem = namedtuple("RemoteConfCacheItem", ["connection_pools", "available_programs", "zpool_features"])
 
 
 #############################################################################
@@ -1542,7 +1543,7 @@ class Job:
         self.all_exceptions_count = 0
         self.max_exceptions_to_summarize = 10000
         self.first_exception: Optional[BaseException] = None
-        self.remote_conf_cache: Dict[Tuple, Tuple[ConnectionPools, Dict[str, str], Dict[str, str]]] = {}
+        self.remote_conf_cache: Dict[Tuple, RemoteConfCacheItem] = {}
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
@@ -1562,8 +1563,7 @@ class Job:
         """Exit any multiplexed ssh sessions that may be leftover."""
         cache_items = self.remote_conf_cache.values()
         for i, cache_item in enumerate(cache_items):
-            connection_pools: ConnectionPools = cache_item[0]
-            connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
+            cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
     def terminate(self, except_current_process=False):
         try:
@@ -2484,7 +2484,8 @@ class Job:
         # 'zfs receive -s' via 'zfs receive -A', followed by an automatic retry, which will now succeed to delete the
         # snapshot without user intervention.
         markers = ["cannot destroy", "snapshot has dependent clone", "use '-R' to destroy the following dataset"]
-        if all(marker in stderr for marker in markers + [f"\n{dst_dataset}/%recv\n"]):
+        markers += [f"\n{dst_dataset}/%recv\n"]
+        if all(marker in stderr for marker in markers):
             return clear_resumable_recv_state()
 
         return False
@@ -3636,7 +3637,7 @@ class Job:
         for r in [p.dst, p.src]:
             loc = r.location
             remote_conf_cache_key = r.cache_key()
-            cache_item = self.remote_conf_cache.get(remote_conf_cache_key)
+            cache_item: Optional[RemoteConfCacheItem] = self.remote_conf_cache.get(remote_conf_cache_key)
             if cache_item is not None:
                 # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
                 p.connection_pools[loc], available_programs[loc], p.zpool_features[loc] = cache_item
@@ -3646,7 +3647,7 @@ class Job:
             )
             self.detect_zpool_features(r)
             self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
-            self.remote_conf_cache[remote_conf_cache_key] = (
+            self.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
                 p.connection_pools[loc],
                 available_programs[loc],
                 p.zpool_features[loc],
@@ -4316,7 +4317,7 @@ def human_readable_float(number: float) -> str:
         return str(round(number))
     result = f"{number:.{precision}f}"
     assert "." in result
-    result = result.rstrip("0").rstrip(".")  # Remove trailing zeros and trailing dot if empty
+    result = result.rstrip("0").rstrip(".")  # Remove trailing zeros and trailing decimal point if empty
     return "0" if result == "-0" else result
 
 
