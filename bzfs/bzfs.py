@@ -4150,22 +4150,21 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     return lst
 
 
-def build_dataset_tree(datasets: List[str]) -> Tree:
-    """Takes a sorted list of datasets and returns a sorted directory tree containing the same dataset names,
-    in the form of nested dicts."""
+def build_dataset_tree(sorted_datasets: List[str]) -> Tree:
+    """Returns a sorted directory tree, in the form of nested dicts, containing the (sorted) input dataset names."""
     tree: Tree = {}
-    for dataset in datasets:
+    for dataset in sorted_datasets:
         current = tree
-        for component in dataset.split("/"):
-            if component not in current:
-                current[component] = {}
-            current = current[component]
-
-    def sort_tree(d: Tree) -> Tree:
-        # Recursively sort keys and rebuild the dictionary, replacing empty leaf dictionaries with None
-        return {k: sort_tree(d[k]) if d[k] else None for k in isorted(d.keys())}
-
-    return sort_tree(tree)
+        components = dataset.split("/")
+        i = len(components)
+        for component in components:
+            i -= 1
+            child = current.get(component, None)
+            if child is None:
+                child = {} if i > 0 else None  # perf: use None to indicate empty leaf dictionary
+                current[component] = child
+            current = child
+    return tree
 
 
 def delete_stale_files(root_dir: str, prefix: str, secs: int = 30 * 24 * 60 * 60, dirs=False, exclude=None) -> None:

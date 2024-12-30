@@ -829,13 +829,13 @@ class TestBuildTree(unittest.TestCase):
     def test_multiple_roots(self):
         datasets = ["pool", "otherpool", "anotherpool"]
         expected_tree = {"anotherpool": None, "otherpool": None, "pool": None}
-        tree = bzfs.build_dataset_tree(datasets)
+        tree = bzfs.build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_large_dataset(self):
         datasets = [f"pool/dataset{i}" for i in range(100)]
-        tree = bzfs.build_dataset_tree(datasets)
+        tree = bzfs.build_dataset_tree(sorted(datasets))
         self.assertEqual(len(tree["pool"]), 100)
         self.assert_keys_sorted(tree)
 
@@ -855,7 +855,7 @@ class TestBuildTree(unittest.TestCase):
     def test_no_children(self):
         datasets = ["pool", "otherpool"]
         expected_tree = {"otherpool": None, "pool": None}
-        tree = bzfs.build_dataset_tree(datasets)
+        tree = bzfs.build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
