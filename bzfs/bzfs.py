@@ -1461,7 +1461,7 @@ class Remote:
                 name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
                 return name
 
-            unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999)}"
+            unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
             socket_name = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
             socket_file = os.path.join(self.socket_dir, socket_name)[: max(100, len(self.socket_dir) + 10)]
             ssh_cmd += ["-S", socket_file]
