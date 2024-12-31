@@ -142,7 +142,7 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
-        #if [ "${{ matrix.python-version }}" == "3.11" ]; then export bzfs_test_ssh_program=hpnssh; fi
+        if [ "${{ matrix.python-version }}" == "3.11" ]; then export bzfs_test_ssh_program=hpnssh; fi
         echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
         ./test.sh
     - name: Run tests and generate code coverage
