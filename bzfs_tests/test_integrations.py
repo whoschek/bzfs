@@ -2481,7 +2481,7 @@ class LocalTestCase(BZFSTestCase):
     def test_send_incr_resume_recv(self):
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
-        for i in range(0, 3):
+        for i in range(0, 4):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -2519,17 +2519,20 @@ class LocalTestCase(BZFSTestCase):
                     else:
                         destroy_snapshots(src_root_dataset, snapshots(src_root_dataset)[1:])
                         self.create_resumable_snapshots(2, n)
-                        self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=255)
-                        self.assert_receive_resume_token(dst_root_dataset, exists=False)
-                        self.assertSnapshots(dst_root_dataset, 1, "s")
-                        self.run_bzfs(src_root_dataset, dst_root_dataset)
+                        if i == 2:
+                            self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=255)
+                            self.assert_receive_resume_token(dst_root_dataset, exists=False)
+                            self.assertSnapshots(dst_root_dataset, 1, "s")
+                            self.run_bzfs(src_root_dataset, dst_root_dataset)
+                        else:
+                            self.run_bzfs(src_root_dataset, dst_root_dataset, retries=1)
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
                 self.assertSnapshots(dst_root_dataset, n - 1, "s")
 
     def test_send_full_resume_recv(self):
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
-        for i in range(0, 3):
+        for i in range(0, 4):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -2559,15 +2562,17 @@ class LocalTestCase(BZFSTestCase):
                     self.assertSnapshots(dst_root_dataset, 0, "s")
                     if i == 1:
                         self.run_bzfs(src_root_dataset, dst_root_dataset)
-                    elif i == 2:
+                    else:
                         destroy(snapshots(src_root_dataset)[0])
                         self.create_resumable_snapshots(1, 2)
                         self.assertTrue(dataset_exists(dst_root_dataset))
-                        self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=255)
-                        # cannot resume send: 'wb_src/tmp/src@s1' is no longer the same snapshot used in the initial send
-                        self.assertFalse(dataset_exists(dst_root_dataset))
-
-                        self.run_bzfs(src_root_dataset, dst_root_dataset)
+                        if i == 2:
+                            self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=255)
+                            # cannot resume send: 'wb_src/tmp/src@s1' is no longer the same snapshot used in the initial send
+                            self.assertFalse(dataset_exists(dst_root_dataset))
+                            self.run_bzfs(src_root_dataset, dst_root_dataset)
+                        else:
+                            self.run_bzfs(src_root_dataset, dst_root_dataset, retries=1)
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
                 self.assertSnapshots(dst_root_dataset, 1, "s")
 
