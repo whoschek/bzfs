@@ -3576,10 +3576,10 @@ class Job:
                 roots.append((dataset.casefold(), dataset, children))
             return roots
 
+        priority_queue: List[Tuple[str, str, Tree]] = build_dataset_tree_and_find_roots()
+        heapq.heapify(priority_queue)  # same order as isorted(), i.e. sorted by dataset.casefold()
         max_workers = min(self.max_workers[p.src.location], self.max_workers[p.dst.location])
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            priority_queue: List[Tuple[str, str, Tree]] = build_dataset_tree_and_find_roots()
-            heapq.heapify(priority_queue)  # same order as isorted(), i.e. sorted by dataset.casefold()
             todo_futures: Set[Future] = set()
             submitted = 0
 
@@ -3591,7 +3591,6 @@ class Job:
                     nonlocal submitted
                     submitted += 1
                     tid = f"{submitted}/{len(datasets)}"
-                    log.trace(f"{tid} Thread pool submission: %s", dataset)
                     future = executor.submit(_process_dataset, dataset, tid)
                     future.node = node
                     todo_futures.add(future)
@@ -3599,10 +3598,7 @@ class Job:
 
             failed = False
             while submit_datasets():
-                log.trace("Thread pool: %s: %s, priority_queue: %s", "todo", len(todo_futures), len(priority_queue))
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # block
-                if log.isEnabledFor(log_trace):
-                    log.trace("done:%s,todo:%s", [d.node[1:] for d in done_futures], [d.node[1:] for d in todo_futures])
                 for done_future in done_futures:
                     _, dataset, children = done_future.node
                     try:
@@ -4198,7 +4194,7 @@ def die(msg: str) -> None:
 
 def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
     """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
-    assert lines is not None
+    assert isinstance(lines, list)
     if field == 1:
         return [line[0 : line.index(separator)] for line in lines]
     elif field == 2:
