@@ -1519,6 +1519,12 @@ class RetryPolicy:
 
 
 #############################################################################
+@dataclass
+class Retry:
+    count: int
+
+
+#############################################################################
 def main() -> None:
     """API for command line clients."""
     try:
@@ -1884,7 +1890,7 @@ class Job:
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
             src_datasets_set = set(src_datasets)
 
-            def delete_destination_snapshots(dst_dataset: str, tid: str) -> bool:  # thread-safe
+            def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
                 if src_dataset in src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
                     src_kind = kind
@@ -1985,11 +1991,12 @@ class Job:
                 selected_src_datasets = self.filter_datasets(src, src_datasets)  # apply include/exclude policy
             self.run_compare_snapshot_lists(selected_src_datasets, dst_datasets)
 
-    def replicate_dataset(self, src_dataset: str, tid: str) -> bool:
+    def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
+        retrycount = retry.count
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
         log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
@@ -2170,7 +2177,7 @@ class Job:
                         if dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
 
-                recv_resume_token, send_resume_opts, recv_resume_opts = self.get_receive_resume_token(dst_dataset)
+                recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retrycount)
                 curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
                 humansize = format_size(curr_size)
                 if recv_resume_token:
@@ -2200,6 +2207,7 @@ class Job:
                     self.num_snapshots_replicated += 1
                 self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
+                retrycount = 0
 
         # endif not latest_common_src_snapshot
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
@@ -2239,7 +2247,7 @@ class Job:
                 # bookmark whose snapshot has been deleted on src.
                 return True  # nothing more tbd
 
-            recv_resume_token, send_resume_opts, recv_resume_opts = self.get_receive_resume_token(dst_dataset)
+            recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retrycount)
             recv_opts = p.zfs_recv_program_opts.copy() + recv_resume_opts
             recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
             if p.no_stream:
@@ -2490,8 +2498,8 @@ class Job:
 
         return False
 
-    def get_receive_resume_token(self, dst_dataset: str) -> Tuple[Optional[str], List[str], List[str]]:
-        """Get receive_resume_token ZFS property from dst_dataset and return corresponding opts to use for send+recv"""
+    def _recv_resume_token(self, dst_dataset: str, retrycount: int) -> Tuple[Optional[str], List[str], List[str]]:
+        """Get recv_resume_token ZFS property from dst_dataset and return corresponding opts to use for send+recv"""
         p, log = self.params, self.params.log
         if not p.resume_recv:
             return None, [], []
@@ -3043,27 +3051,27 @@ class Job:
         """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
         log = self.params.log
         max_sleep_mark = policy.min_sleep_nanos
-        retry_count = 0
+        retrycount = 0
         start_time_nanos = time.time_ns()
         while True:
             try:
-                return fn(*args, **kwargs)  # Call the target function with the provided arguments
+                return fn(*args, **kwargs, retry=Retry(retrycount))  # Call the target function with provided args
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
-                if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
-                    retry_count = retry_count + 1
-                    if retryable_error.no_sleep and retry_count <= 1:
-                        log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
+                if retrycount < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
+                    retrycount += 1
+                    if retryable_error.no_sleep and retrycount <= 1:
+                        log.info(f"Retrying [{retrycount}/{policy.retries}] immediately ...")
                         continue
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(policy.min_sleep_nanos, max_sleep_mark)
-                    log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
+                    log.info(f"Retrying [{retrycount}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
                     if policy.retries > 0:
                         log.error(
-                            f"Giving up because the last [{retry_count}/{policy.retries}] retries across "
+                            f"Giving up because the last [{retrycount}/{policy.retries}] retries across "
                             f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )
@@ -3531,7 +3539,7 @@ class Job:
     def process_datasets_in_parallel_and_fault_tolerant(
         self,
         datasets: List[str],
-        process_dataset: Callable[[str, str], bool],  # lambda, must be thread-safe
+        process_dataset: Callable[[str, str, Retry], bool],  # lambda, must be thread-safe
         skip_tree_on_error: Callable[[str], bool],  # lambda, must be thread-safe
         task_name: str,
     ) -> bool:
@@ -3548,7 +3556,7 @@ class Job:
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.time_ns()
             try:
-                return self.run_with_retries(p.retry_policy, lambda: process_dataset(dataset, tid))
+                return self.run_with_retries(p.retry_policy, process_dataset, dataset, tid)
             finally:
                 elapsed_nanos = time.time_ns() - start_time_nanos
                 log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
@@ -4190,6 +4198,7 @@ def die(msg: str) -> None:
 
 def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
     """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
+    assert lines is not None
     if field == 1:
         return [line[0 : line.index(separator)] for line in lines]
     elif field == 2:
