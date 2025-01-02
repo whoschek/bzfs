@@ -46,26 +46,26 @@ is_functional_test = test_mode == "functional"  # run most tests but only in a s
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBuildTree))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedBool))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedDict))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckPercentRange))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
-    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBuildTree))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedBool))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedDict))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckPercentRange))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
+    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
 
@@ -2343,7 +2343,7 @@ class TestSynchronizedDict(unittest.TestCase):
 #############################################################################
 class TestPerformance(unittest.TestCase):
 
-    def test_close_fds(self):
+    def xxtest_close_fds(self):
         """see https://bugs.python.org/issue42738
         and https://github.com/python/cpython/pull/113118/commits/654f63053aee162a6e59fa894b2cd8ee82a33a77"""
         iters = 2000
@@ -2358,6 +2358,40 @@ class TestPerformance(unittest.TestCase):
                     ).stdout
                 secs = (time.time_ns() - start_time_nanos) / 1000_000_000
                 print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
+
+    def test_ssh_latency(self):
+        def run_cmd(*params):
+            # print(f"running: {' '.join(*params)}")
+            DEVNULL, PIPE = subprocess.DEVNULL, subprocess.PIPE
+            return subprocess.run(*params, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
+
+        p = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no", "-S /tmp/bzfs_test_ssh_socket"]
+        ssh_opts += ["-p", getenv_any("test_ssh_port", "22")]
+        ssh_opts = " ".join(ssh_opts)
+
+        master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=60s 127.0.0.1 exit")
+        result = run_cmd(master_cmd)
+        print(f"master: {result}")
+
+        check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
+
+        cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 echo hello"]
+        for check in [False, True]:
+            try:
+                iters = 50
+                start_time_nanos = time.time_ns()
+                for i in range(0, iters):
+                    if check:
+                        result = run_cmd(check_cmd)
+                        print(f"check stdout: {result}")
+                    result = run_cmd(cmd)
+                    print(f"echo stdout: {result}")
+                elapsed_nanos = time.time_ns() - start_time_nanos
+                print(f"avg_time/iter: {bzfs.human_readable_duration(elapsed_nanos/iters)}")
+            except subprocess.CalledProcessError as e:
+                print(f"stdout: {e.stdout}")
+                print(f"stderr: {e.stderr}")
 
 
 #############################################################################

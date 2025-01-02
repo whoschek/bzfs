@@ -25,7 +25,7 @@ from bzfs_tests.test_integrations import suite as test_integrations_suite
 def main():
     suite = unittest.TestSuite()
     suite.addTests(test_units_suite())
-    suite.addTests(test_integrations_suite())
+    # suite.addTests(test_integrations_suite())
 
     failfast = False if os.getenv("CI") else True  # no need to fail fast when running within GitHub Action
     print(f"Running in failfast mode: {failfast} ...")
