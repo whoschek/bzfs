@@ -718,7 +718,8 @@ class TestSSHLatency(BZFSTestCase):
 
         self.setup_basic()
         p = bzfs.Params(bzfs.argument_parser().parse_args(args=["src", "dst"]))
-        ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no", "-S /tmp/bzfs_test_ssh_socket"]
+        ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
+        ssh_opts += ["-S", os.path.join(tempfile.gettempdir(), "bzfs_test_ssh_socket")]
         ssh_opts += ["-p", getenv_any("test_ssh_port", "22")]
         ssh_opts = " ".join(ssh_opts)
 
