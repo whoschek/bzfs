@@ -721,6 +721,16 @@ class TestSSHLatency(BZFSTestCase):
         ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
         ssh_opts += ["-S", os.path.join(p.src.socket_dir, "bzfs_test_ssh_socket")]
         ssh_opts += ["-p", getenv_any("test_ssh_port", "22")]
+
+        private_key_file2 = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/testid_rsa"
+        src_private_key2 = ["-i", private_key_file2]
+        private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
+        src_private_key = ["-i", private_key_file]
+        if platform.system() == "Linux":
+            ssh_opts += src_private_key
+        else:
+            ssh_opts += src_private_key2
+
         ssh_opts = " ".join(ssh_opts)
 
         master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3 127.0.0.1 exit")

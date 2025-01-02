@@ -1564,6 +1564,7 @@ class Job:
         self.inject_params: Dict[str, bool] = {}  # for testing only
         self.injection_lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
+        self.conn_alive: SynchronizedDict[str, str] = SynchronizedDict({})
 
     def cleanup(self):
         """Exit any multiplexed ssh sessions that may be leftover."""
@@ -2001,7 +2002,8 @@ class Job:
         log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
-        dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
+        # dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
+        dst_cmd = p.split_args("echo -n")
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -2016,7 +2018,8 @@ class Job:
         filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
         types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-        src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
+        # src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
+        src_cmd = p.split_args("echo -n")
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
@@ -2600,27 +2603,38 @@ class Job:
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
         conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
+        close_fds = True
         try:
             ssh_cmd: List[str] = conn.ssh_cmd
             if remote.ssh_user_host != "":
                 if not self.is_program_available("ssh", "local"):
                     die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
                 cmd = quoted_cmd
-                if remote.reuse_ssh_connection:
+                control_persist = 60  # seconds
+                limit = (control_persist - 1) * 1000_000_000  # nanos
+                # if remote.reuse_ssh_connection and time.time_ns() - self.conn_alive.get(tuple(ssh_cmd), 0) >= limit:
+                if True:
                     # performance: reuse ssh connection for low latency startup of frequent ssh invocations
                     # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
                     # 'ssh -S /path/socket -O check' doesn't talk over the net so common case is a low latency fast path
                     ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                     ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
                     dvnul = DEVNULL
-                    if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+                    if (
+                        subprocess.run(
+                            ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True, close_fds=close_fds
+                        ).returncode
+                        == 0
+                    ):
                         log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
                     else:
                         log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                         ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                        ssh_socket_cmd += ["-M", "-oControlPersist=60s", remote.ssh_user_host, "exit"]
+                        ssh_socket_cmd += ["-M", f"-oControlPersist={control_persist}s", remote.ssh_user_host, "exit"]
                         log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
-                        process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+                        process = subprocess.run(
+                            ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, close_fds=close_fds
+                        )
                         if process.returncode != 0:
                             log.error("%s", process.stderr.rstrip())
                             die(
@@ -2628,12 +2642,15 @@ class Job:
                                 f"first, considering diagnostic log file output from running {prog_name} with: "
                                 "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                             )
+                    # self.conn_alive[tuple(ssh_cmd)] = time.time_ns()
             msg = "Would execute: %s" if is_dry else "Executing: %s"
             log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
             if is_dry:
                 return ""
             try:
-                process = subprocess.run(ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=check)
+                process = subprocess.run(
+                    ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=check, close_fds=close_fds
+                )
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), run=print_stdout, end="")
