@@ -1461,6 +1461,7 @@ class Remote:
                 name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
                 return name
 
+            ssh_cmd += ["-oControlMaster=auto", "-oControlPersist=60s"]
             unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
             socket_name = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
             socket_file = os.path.join(self.socket_dir, socket_name)[: max(100, len(self.socket_dir) + 10)]
@@ -1564,6 +1565,7 @@ class Job:
         self.inject_params: Dict[str, bool] = {}  # for testing only
         self.injection_lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
+        self.conn_alive: SynchronizedDict[str, int] = SynchronizedDict({})
 
     def cleanup(self):
         """Exit any multiplexed ssh sessions that may be leftover."""
@@ -2002,6 +2004,7 @@ class Job:
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
         dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
+        # dst_cmd = p.split_args("echo -n")
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -2017,6 +2020,7 @@ class Job:
         types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
         src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
+        # src_cmd = p.split_args("echo -n")
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
@@ -2606,28 +2610,33 @@ class Job:
                 if not self.is_program_available("ssh", "local"):
                     die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
                 cmd = quoted_cmd
-                if remote.reuse_ssh_connection:
-                    # performance: reuse ssh connection for low latency startup of frequent ssh invocations
-                    # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-                    # 'ssh -S /path/socket -O check' doesn't talk over the net so common case is a low latency fast path
-                    ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                    ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-                    dvnul = DEVNULL
-                    if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
-                        log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
-                    else:
-                        log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-                        ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                        ssh_socket_cmd += ["-M", "-oControlPersist=60s", remote.ssh_user_host, "exit"]
-                        log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
-                        process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
-                        if process.returncode != 0:
-                            log.error("%s", process.stderr.rstrip())
-                            die(
-                                f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                                f"first, considering diagnostic log file output from running {prog_name} with: "
-                                "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
-                            )
+                # control_persist = 60  # seconds
+                # limit = (control_persist - 1) * 1000_000_000  # nanos
+                # ssh_cmd_key = str(ssh_cmd)
+                # if remote.reuse_ssh_connection and time.time_ns() - self.conn_alive.get(ssh_cmd_key, 0) >= limit:
+                #     # performance: reuse ssh connection for low latency startup of frequent ssh invocations
+                #     # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
+                #     # 'ssh -S /path/socket -O check' doesn't talk over the net so common case is a low latency fast path
+                #     ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                #     ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
+                #     dvnul = DEVNULL
+                #     if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+                #         log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
+                #     else:
+                #         log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+                #         ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                #         ssh_socket_cmd += ["-M", f"-oControlPersist={control_persist}s", remote.ssh_user_host, "exit"]
+                #         log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
+                #         process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+                #         if process.returncode != 0:
+                #             log.error("%s", process.stderr.rstrip())
+                #             die(
+                #                 f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
+                #                 f"first, considering diagnostic log file output from running {prog_name} with: "
+                #                 "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
+                #             )
+                #     if not is_dry:
+                #         self.conn_alive[ssh_cmd_key] = time.time_ns()
             msg = "Would execute: %s" if is_dry else "Executing: %s"
             log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
             if is_dry:
@@ -2673,6 +2682,8 @@ class Job:
             counter = self.error_injection_triggers.get("before")
             if counter and self.decrement_injection_counter(counter, error_trigger):
                 try:
+                    if error_trigger.endswith("_UnicodeDecodeError"):
+                        raise UnicodeDecodeError("utf-8", error_trigger.encode("utf-8"), 0, 1, error_trigger)
                     raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
                 except subprocess.CalledProcessError as e:
                     if error_trigger.startswith("retryable_"):
@@ -3807,8 +3818,21 @@ class Job:
                 features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
         if len(lines) == 0:
             cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-            if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
-                die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
+            # if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
+            #     die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
+            try:
+                if self.try_ssh_command(remote, log_trace, cmd=cmd, error_trigger="zfslist_UnicodeDecodeError") is None:
+                    basis_root_dataset = r.basis_root_dataset
+                    die(f"Pool does not exist for {loc} dataset: {basis_root_dataset}. Manually create the pool first!")
+            except RetryableError as e:
+                cause = e.__cause__
+                if isinstance(cause, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+                    die(
+                        f"Cannot ssh into remote host via '{' '.join(cause.cmd)}'. "
+                        "Fix ssh configuration first, considering diagnostic log file output from running "
+                        f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
+                    )
+                raise e
         params.zpool_features[loc] = features
 
     def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:

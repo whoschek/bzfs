@@ -97,9 +97,8 @@ def suite():
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
-        # suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
+        suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
-    return suite
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -719,7 +718,7 @@ class TestSSHLatency(BZFSTestCase):
             return process.stdout[0:-1], process.stderr[0:-1]  # omit trailing newline char
 
         self.setup_basic()
-        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        args = bzfs.argument_parser().parse_args(args=["src", "dst"] + self.log_dir_opt())
         p = bzfs.Params(args, log_params=bzfs.LogParams(args))
         log = bzfs.get_logger(p.log_params, args, None)
 
@@ -735,12 +734,13 @@ class TestSSHLatency(BZFSTestCase):
             ssh_opts += src_private_key
         else:
             ssh_opts += src_private_key2
+        ssh_opts += ["-oControlMaster=auto", "-oControlPersist=60s"]
         ssh_opts = " ".join(ssh_opts)
         master_is_running = False
         try:
-            master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
-            master_result = run_latency_cmd(master_cmd)
-            log.info(f"master result: {master_result}")
+            # master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
+            # master_result = run_latency_cmd(master_cmd)
+            # log.info(f"master result: {master_result}")
             master_is_running = True
             check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
             echo_cmd = "echo hello"
@@ -748,8 +748,10 @@ class TestSSHLatency(BZFSTestCase):
             for cmd in [echo_cmd, list_cmd]:
                 # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
                 cmd = p.split_args(f"{p.ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
-                for check in [False, True]:
-                    for close_fds in [False, True]:
+                # for check in [False, True]:
+                for check in [False]:
+                    # for close_fds in [False, True]:
+                    for close_fds in [True]:
                         iters = 50
                         start_time_nanos = time.time_ns()
                         for i in range(0, iters):
@@ -3926,6 +3928,21 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_unavailable_program("inject_unavailable_zfs", expected_error=die_status)
         self.tearDownAndSetup()
         self.inject_unavailable_program("inject_failing_zfs", expected_error=die_status)
+
+    def test_inject_unavailable_ssh_raises_UnicodeDecodeError(self):
+        if self.param and self.param.get("ssh_mode") != "local":
+            destroy(dst_root_dataset, recursive=True)
+            # inject zfs list failures before this many tries. only after that succeed the operation
+            counter = Counter(zfslist_UnicodeDecodeError=1)
+            self.run_bzfs(
+                src_root_dataset,
+                dst_root_dataset,
+                error_injection_triggers={"before": counter},
+                inject_params={"inject_unavailable_zpool": True},
+                expected_status=die_status,
+            )
+            self.assertFalse(dataset_exists(dst_root_dataset))
+            self.assertEqual(0, counter["zfslist_UnicodeDecodeError"])
 
     def test_disabled_mbuffer(self):
         self.inject_disabled_program("mbuffer")
