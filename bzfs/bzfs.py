@@ -1420,6 +1420,8 @@ class Remote:
             os.makedirs(self.socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             self.socket_prefix = "s"
             delete_stale_files(self.socket_dir, self.socket_prefix)
+        self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
+        self.sanitize2_regex = re.compile(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]")  # Remove chars not in the allowed set
 
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
@@ -1455,10 +1457,8 @@ class Remote:
             # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
             # generate unique private socket file name in user's home dir
             def sanitize(name: str) -> str:
-                # replace any whitespace, /, $, \, @ with a ~ tilde char
-                name = re.sub(r"[\s\\/@$]", "~", name)
-                # Remove characters not in the allowed set
-                name = re.sub(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]", "", name)
+                name = self.sanitize1_regex.sub("~", name)  # replace whitespace, /, $, \, @ with a ~ tilde char
+                name = self.sanitize2_regex.sub("", name)  # Remove chars not in the allowed set
                 return name
 
             unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
