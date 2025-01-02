@@ -741,32 +741,35 @@ class TestSSHLatency(BZFSTestCase):
             print(f"master stdout: {e.stdout}")
             print(f"master stderr: {e.stderr}")
             raise e
-
-        check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
-
-        echo_cmd = "echo hello"
-        list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
-        for cmd in [echo_cmd, list_cmd]:
-            # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
-            cmd = p.split_args(f"{p.ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
-            for check in [False, True]:
-                try:
-                    iters = 50
-                    start_time_nanos = time.time_ns()
-                    for i in range(0, iters):
-                        if check:
-                            stdout, stderr = run_cmd(check_cmd)
-                            # print(f"check result: {(stdout, stderr)}")
-                            self.assertIn("Master running", stderr)
-                        result = run_cmd(cmd)
-                        # print(f"cmd result: {result}")
-                    elapsed_nanos = time.time_ns() - start_time_nanos
-                    print(f"check: {check}, cmd: {' '.join(cmd)}")
-                    print(f"avg_time/iter: {bzfs.human_readable_duration(elapsed_nanos/iters)}")
-                except subprocess.CalledProcessError as e:
-                    print(f"stdout: {e.stdout}")
-                    print(f"stderr: {e.stderr}")
-                    raise e
+        try:
+            check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
+            echo_cmd = "echo hello"
+            list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
+            for cmd in [echo_cmd, list_cmd]:
+                # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
+                cmd = p.split_args(f"{p.ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
+                for check in [False, True]:
+                    try:
+                        iters = 50
+                        start_time_nanos = time.time_ns()
+                        for i in range(0, iters):
+                            if check:
+                                stdout, stderr = run_cmd(check_cmd)
+                                # print(f"check result: {(stdout, stderr)}")
+                                self.assertIn("Master running", stderr)
+                            result = run_cmd(cmd)
+                            # print(f"cmd result: {result}")
+                        elapsed_nanos = time.time_ns() - start_time_nanos
+                        print(f"check: {check}, cmd: {' '.join(cmd)}")
+                        print(f"avg_time/iter: {bzfs.human_readable_duration(elapsed_nanos/iters)}")
+                    except subprocess.CalledProcessError as e:
+                        print(f"stdout: {e.stdout}")
+                        print(f"stderr: {e.stderr}")
+                        raise e
+        finally:
+            master_exit_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O exit 127.0.0.1")
+            result = run_cmd(master_exit_cmd)
+            print(f"exit result: {result}")
 
 
 #############################################################################
