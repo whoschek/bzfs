@@ -728,8 +728,9 @@ class TestSSHLatency(BZFSTestCase):
             result = run_cmd(master_cmd)
             print(f"master result: {result}")
         except subprocess.CalledProcessError as e:
-            print(f"stdout: {e.stdout}")
-            print(f"stderr: {e.stderr}")
+            print(f"master stdout: {e.stdout}")
+            print(f"master stderr: {e.stderr}")
+            raise e
 
         check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
 
@@ -755,6 +756,7 @@ class TestSSHLatency(BZFSTestCase):
                 except subprocess.CalledProcessError as e:
                     print(f"stdout: {e.stdout}")
                     print(f"stderr: {e.stderr}")
+                    raise e
 
 
 #############################################################################
