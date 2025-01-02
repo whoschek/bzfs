@@ -29,6 +29,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 import unittest
 from collections import Counter
@@ -97,6 +98,7 @@ def suite():
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
+        suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -702,6 +704,73 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
                             self.assertSnapshotNames(dst_foo, expected_results)
                         else:
                             self.assertFalse(dataset_exists(dst_foo))
+
+
+#############################################################################
+class TestSSHLatency(BZFSTestCase):
+
+    def test_ssh_loopback_latency(self):
+        def run_latency_cmd(*params, close_fds=True):
+            PIPE, DEVNULL = subprocess.PIPE, subprocess.DEVNULL
+            process = subprocess.run(
+                *params, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, close_fds=close_fds
+            )
+            return process.stdout[0:-1], process.stderr[0:-1]  # omit trailing newline char
+
+        self.setup_basic()
+        args = bzfs.argument_parser().parse_args(args=["src", "dst"])
+        p = bzfs.Params(args, log_params=bzfs.LogParams(args))
+        log = bzfs.get_logger(p.log_params, args, None)
+
+        ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
+        ssh_opts += ["-S", os.path.join(p.src.socket_dir, "bzfs_test_ssh_socket")]
+        ssh_opts += ["-p", getenv_any("test_ssh_port", "22")]
+
+        private_key_file2 = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/testid_rsa"
+        src_private_key2 = ["-i", private_key_file2]
+        private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
+        src_private_key = ["-i", private_key_file]
+        if platform.system() == "Linux":
+            ssh_opts += src_private_key
+        else:
+            ssh_opts += src_private_key2
+        ssh_opts = " ".join(ssh_opts)
+        master_is_running = False
+        try:
+            master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
+            master_result = run_latency_cmd(master_cmd)
+            log.info(f"master result: {master_result}")
+            master_is_running = True
+            check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
+            echo_cmd = "echo hello"
+            list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
+            for cmd in [echo_cmd, list_cmd]:
+                # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
+                cmd = p.split_args(f"{p.ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
+                for check in [False, True]:
+                    for close_fds in [False, True]:
+                        iters = 50
+                        start_time_nanos = time.time_ns()
+                        for i in range(0, iters):
+                            if check:
+                                stdout, stderr = run_latency_cmd(check_cmd, close_fds=close_fds)
+                                # log.info(f"check result: {(stdout, stderr)}")
+                                self.assertIn("Master running", stderr)
+                            result = run_latency_cmd(cmd, close_fds=close_fds)
+                            # log.info(f"cmd result: {result}")
+                        time_per_iter = bzfs.human_readable_duration((time.time_ns() - start_time_nanos) / iters)
+                        log.info(
+                            f"time/iter: {time_per_iter}, check: {check}, close_fds: {close_fds}, cmd: {' '.join(cmd)}"
+                        )
+        except subprocess.CalledProcessError as e:
+            log.error(f"error: {(e.stdout, e.stderr)}")
+            raise e
+        finally:
+            if master_is_running:
+                master_exit_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O exit 127.0.0.1")
+                result = run_latency_cmd(master_exit_cmd)
+                log.info(f"exit result: {result}")
+            bzfs.reset_logger()
 
 
 #############################################################################
