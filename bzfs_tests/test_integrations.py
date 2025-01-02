@@ -29,6 +29,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 import unittest
 from collections import Counter
@@ -97,6 +98,7 @@ def suite():
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
+    suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -702,6 +704,45 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
                             self.assertSnapshotNames(dst_foo, expected_results)
                         else:
                             self.assertFalse(dataset_exists(dst_foo))
+
+
+#############################################################################
+class TestSSHLatency(BZFSTestCase):
+
+    def test_ssh_latency(self):
+        self.setup_basic()
+        p = bzfs.Params(bzfs.argument_parser().parse_args(args=["src", "dst"]))
+        ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no", "-S /tmp/bzfs_test_ssh_socket"]
+        ssh_opts += ["-p", getenv_any("test_ssh_port", "22")]
+        ssh_opts = " ".join(ssh_opts)
+
+        master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
+        result = run_cmd(master_cmd)
+        print(f"master: {result}")
+
+        check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
+
+        echo_cmd = "echo hello"
+        list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
+        for cmd in [echo_cmd, list_cmd]:
+            # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
+            cmd = p.split_args(f"{p.ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
+            for check in [False, True]:
+                try:
+                    iters = 50
+                    start_time_nanos = time.time_ns()
+                    for i in range(0, iters):
+                        if check:
+                            result = run_cmd(check_cmd)
+                            print(f"check stdout: {result}")
+                        result = run_cmd(cmd)
+                        print(f"cmd stdout: {result}")
+                    elapsed_nanos = time.time_ns() - start_time_nanos
+                    print(f"check: {check}, cmd: {' '.join(cmd)}")
+                    print(f"avg_time/iter: {bzfs.human_readable_duration(elapsed_nanos/iters)}")
+                except subprocess.CalledProcessError as e:
+                    print(f"stdout: {e.stdout}")
+                    print(f"stderr: {e.stderr}")
 
 
 #############################################################################
