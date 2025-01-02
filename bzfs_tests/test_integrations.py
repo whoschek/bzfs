@@ -753,6 +753,7 @@ class TestSSHLatency(BZFSTestCase):
                     # for close_fds in [False, True]:
                     for close_fds in [True]:
                         iters = 50
+                        result = run_latency_cmd(cmd, close_fds=close_fds)
                         start_time_nanos = time.time_ns()
                         for i in range(0, iters):
                             if check:
