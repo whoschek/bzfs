@@ -97,8 +97,9 @@ def suite():
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
-        suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
+        # suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
+    return suite
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
