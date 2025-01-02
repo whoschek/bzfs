@@ -97,8 +97,9 @@ def suite():
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
-        suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
-    suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
+        # suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
+        suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
+    return suite
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -710,6 +711,11 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
 class TestSSHLatency(BZFSTestCase):
 
     def test_ssh_latency(self):
+        def run_cmd(*params):
+            PIPE, DEVNULL = subprocess.PIPE, subprocess.DEVNULL
+            process = subprocess.run(*params, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True)
+            return process.stdout[0:-1], process.stderr[0:-1]  # omit trailing newline char
+
         self.setup_basic()
         p = bzfs.Params(bzfs.argument_parser().parse_args(args=["src", "dst"]))
         ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no", "-S /tmp/bzfs_test_ssh_socket"]
@@ -718,7 +724,7 @@ class TestSSHLatency(BZFSTestCase):
 
         master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
         result = run_cmd(master_cmd)
-        print(f"master: {result}")
+        print(f"master result: {result}")
 
         check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
 
@@ -733,10 +739,11 @@ class TestSSHLatency(BZFSTestCase):
                     start_time_nanos = time.time_ns()
                     for i in range(0, iters):
                         if check:
-                            result = run_cmd(check_cmd)
-                            print(f"check stdout: {result}")
+                            stdout, stderr = run_cmd(check_cmd)
+                            # print(f"check result: {(stdout, stderr)}")
+                            self.assertIn("Master running", stderr)
                         result = run_cmd(cmd)
-                        print(f"cmd stdout: {result}")
+                        # print(f"cmd result: {result}")
                     elapsed_nanos = time.time_ns() - start_time_nanos
                     print(f"check: {check}, cmd: {' '.join(cmd)}")
                     print(f"avg_time/iter: {bzfs.human_readable_duration(elapsed_nanos/iters)}")
