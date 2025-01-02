@@ -733,7 +733,7 @@ class TestSSHLatency(BZFSTestCase):
 
         ssh_opts = " ".join(ssh_opts)
 
-        master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3 127.0.0.1 exit")
+        master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
         try:
             result = run_cmd(master_cmd)
             print(f"master result: {result}")
