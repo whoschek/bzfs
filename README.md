@@ -71,16 +71,16 @@ host which can be either the host that contains the source dataset (push
 mode), or the destination dataset (pull mode), or both datasets (local
 mode, no network required, no ssh required), or any third-party (even
 non-ZFS OSX) host as long as that host is able to SSH (via standard
-'ssh' CLI) into both the source and destination host (pull-push mode).
-In pull-push mode the source 'zfs send's the data stream to the
-initiator which immediately pipes the stream (without storing anything
-locally) to the destination host that 'zfs receive's it. Pull-push
-mode means that bzfs need not be installed or executed on either source
-or destination host. Only the underlying 'zfs' CLI must be installed
-on both source and destination host. bzfs can run as root or non-root
-user, in the latter case via a) sudo or b) when granted corresponding
-ZFS permissions by administrators via 'zfs allow' delegation
-mechanism.
+'ssh' OpenSSH CLI) into both the source and destination host
+(pull-push mode). In pull-push mode the source 'zfs send's the data
+stream to the initiator which immediately pipes the stream (without
+storing anything locally) to the destination host that 'zfs receive's
+it. Pull-push mode means that bzfs need not be installed or executed on
+either source or destination host. Only the underlying 'zfs' CLI must
+be installed on both source and destination host. bzfs can run as root
+or non-root user, in the latter case via a) sudo or b) when granted
+corresponding ZFS permissions by administrators via 'zfs allow'
+delegation mechanism.
 
 bzfs is written in Python and continously runs a wide set of unit tests
 and integration tests to ensure coverage and compatibility with old and

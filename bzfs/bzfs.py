@@ -144,7 +144,7 @@ select which datasets, snapshots and properties to replicate or delete or compar
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
 or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required),
-or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' CLI) into
+or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' OpenSSH CLI) into
 both the source and destination host (pull-push mode). In pull-push mode the source 'zfs send's the data stream
 to the initiator which immediately pipes the stream (without storing anything locally) to the destination
 host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed or executed on either
