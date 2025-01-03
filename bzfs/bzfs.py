@@ -920,6 +920,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
              "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n")
+    parser.add_argument(
+        "--no-estimate-send-size", action="store_true",
+        help=argparse.SUPPRESS)
 
     def hlp(program: str) -> str:
         return f"The name or path to the '{program}' executable (optional). Default is '{program}'. "
@@ -1290,6 +1293,7 @@ class Params:
         )
         self.dedicated_tcp_connection_per_zfssend = getenv_bool("dedicated_tcp_connection_per_zfssend", True)
         self.threads: Tuple[int, bool] = args.threads
+        self.no_estimate_send_size: bool = args.no_estimate_send_size
 
         self.os_cpu_count: int = os.cpu_count()
         self.os_geteuid: int = os.geteuid()
@@ -3020,7 +3024,7 @@ class Job:
     def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: str, *items) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
         p, log = self.params, self.params.log
-        if self.is_solaris_zfs(remote):
+        if p.no_estimate_send_size or self.is_solaris_zfs(remote):
             return 0  # solaris-11.4 does not have a --parsable equivalent
         zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
