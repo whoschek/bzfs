@@ -739,16 +739,16 @@ class TestSSHLatency(BZFSTestCase):
         master_is_running = False
         try:
             conn_statuses = bzfs.SynchronizedDict(defaultdict(bzfs.ConnectionStatus))
-            master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
+            master_cmd = p.split_args(f"{ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
             master_result = run_latency_cmd(master_cmd)
             log.info(f"master result: {master_result}")
             master_is_running = True
-            check_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O check 127.0.0.1")
+            check_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O check 127.0.0.1")
             echo_cmd = "echo hello"
             list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
             for cmd in [echo_cmd, list_cmd]:
                 # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
-                cmd = p.split_args(f"{p.ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
+                cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
                 for check in [0, 1, 2]:
                     # for close_fds in [False, True]:
                     for close_fds in [True]:
@@ -775,7 +775,7 @@ class TestSSHLatency(BZFSTestCase):
             raise e
         finally:
             if master_is_running:
-                master_exit_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -O exit 127.0.0.1")
+                master_exit_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O exit 127.0.0.1")
                 result = run_latency_cmd(master_exit_cmd)
                 log.info(f"exit result: {result}")
             bzfs.reset_logger()
