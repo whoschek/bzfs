@@ -1420,6 +1420,8 @@ class Remote:
             os.makedirs(self.socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             self.socket_prefix = "s"
             delete_stale_files(self.socket_dir, self.socket_prefix)
+        self.control_persist: int = 60  # seconds
+        self.control_persist_limit: int = (self.control_persist - 2) * 1000_000_000  # nanos
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex = re.compile(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]")  # Remove chars not in the allowed set
 
@@ -2423,6 +2425,8 @@ class Job:
         dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
         dst_conn: Connection = dst_conn_pool.get_connection()
         try:
+            self.refresh_ssh_connection_if_necessary(p.src, src_conn)
+            self.refresh_ssh_connection_if_necessary(p.dst, dst_conn)
             src_ssh_cmd = " ".join(src_conn.ssh_cmd_quoted)
             dst_ssh_cmd = " ".join(dst_conn.ssh_cmd_quoted)
             cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
@@ -2597,37 +2601,15 @@ class Job:
         level = level if level >= 0 else logging.INFO
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p, log = self.params, self.params.log
+        r = remote
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
         conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
         try:
             ssh_cmd: List[str] = conn.ssh_cmd
             if remote.ssh_user_host != "":
-                if not self.is_program_available("ssh", "local"):
-                    die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
+                self.refresh_ssh_connection_if_necessary(remote, conn)
                 cmd = quoted_cmd
-                if remote.reuse_ssh_connection:
-                    # performance: reuse ssh connection for low latency startup of frequent ssh invocations
-                    # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-                    # 'ssh -S /path/socket -O check' doesn't talk over the net so common case is a low latency fast path
-                    ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                    ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-                    dvnul = DEVNULL
-                    if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
-                        log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
-                    else:
-                        log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-                        ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                        ssh_socket_cmd += ["-M", "-oControlPersist=60s", remote.ssh_user_host, "exit"]
-                        log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
-                        process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
-                        if process.returncode != 0:
-                            log.error("%s", process.stderr.rstrip())
-                            die(
-                                f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                                f"first, considering diagnostic log file output from running {prog_name} with: "
-                                "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
-                            )
             msg = "Would execute: %s" if is_dry else "Executing: %s"
             log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
             if is_dry:
@@ -2666,6 +2648,39 @@ class Job:
                     return None
                 log.warning("%s", stderr.rstrip())
             raise RetryableError("Subprocess failed") from e
+
+    def refresh_ssh_connection_if_necessary(self, r: Remote, conn) -> None:
+        conn: Connection = conn
+        p, log = self.params, self.params.log
+        if r.ssh_user_host != "":
+            if not self.is_program_available("ssh", "local"):
+                die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
+            with conn.lock:
+                # performance: reuse ssh connection for low latency startup of frequent ssh invocations
+                # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
+                # 'ssh -S /path/sock -O check' doesn't talk over the net; common case is a low latency fast path
+                if r.reuse_ssh_connection and time.time_ns() - conn.last_refresh.value >= r.control_persist_limit:
+                    ssh_cmd = conn.ssh_cmd
+                    ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                    ssh_socket_cmd += ["-O", "check", r.ssh_user_host]
+                    dvnul = DEVNULL
+                    # extend lifetime of ssh master by $control_persist secs via -O check if master is still running
+                    if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+                        log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
+                    else:  # otherwise start a master:
+                        log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+                        ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                        ssh_socket_cmd += ["-M", f"-oControlPersist={r.control_persist}s", r.ssh_user_host, "exit"]
+                        log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
+                        process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+                        if process.returncode != 0:
+                            log.error("%s", process.stderr.rstrip())
+                            die(
+                                f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
+                                f"first, considering diagnostic log file output from running {prog_name} with: "
+                                "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
+                            )
+                    conn.last_refresh.value = time.time_ns()
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
@@ -3957,6 +3972,10 @@ class Connection:
     ssh_cmd: List[str] = field(default=None, compare=False)
     ssh_cmd_quoted: List[str] = field(default=None, compare=False)
 
+    class IntHolder:
+        def __init__(self):
+            self.value: int = 0
+
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity = max_concurrent_ssh_sessions_per_tcp_connection
@@ -3965,6 +3984,8 @@ class Connection:
         self.cid = cid
         self.ssh_cmd = remote.local_ssh_command()
         self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
+        self.lock = threading.Lock()  # shared across all shallow copies
+        self.last_refresh = Connection.IntHolder()  # shared across all shallow copies
 
     def __repr__(self) -> str:
         return str({"free": abs(self.free), "cid": self.cid, "removed": self.replacement is not None})
