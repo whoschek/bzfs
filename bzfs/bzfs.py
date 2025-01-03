@@ -2425,6 +2425,8 @@ class Job:
         dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
         dst_conn: Connection = dst_conn_pool.get_connection()
         try:
+            self.refresh_ssh_connection_if_necessary(p.src, src_conn)
+            self.refresh_ssh_connection_if_necessary(p.dst, dst_conn)
             src_ssh_cmd = " ".join(src_conn.ssh_cmd_quoted)
             dst_ssh_cmd = " ".join(dst_conn.ssh_cmd_quoted)
             cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
