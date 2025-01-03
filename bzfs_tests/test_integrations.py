@@ -738,7 +738,7 @@ class TestSSHLatency(BZFSTestCase):
 
         for mode in range(0, 2):
             with stop_on_failure_subtest(i=mode):
-                control_persist = 2 if mode == 0 else 2
+                control_persist = 2 if mode == 0 else 2  # seconds
                 master_cmd = p.split_args(
                     f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit"
                 )
@@ -753,9 +753,9 @@ class TestSSHLatency(BZFSTestCase):
                     log.info(f"master result: {master_result}")
                     master_is_running = True
                     if mode == 0:  # test assertions
-                        iters = 5
-                        for i in range(0, iters):
-                            time.sleep(1)
+                        start_time = time.time()
+                        while time.time() - start_time < 5:
+                            time.sleep(0.5)
                             stdout, stderr = self.run_latency_cmd(check_cmd)
                             log.info(f"check result: {(stdout, stderr)}")
                             self.assertIn("Master running", stderr)
@@ -775,9 +775,10 @@ class TestSSHLatency(BZFSTestCase):
                             for check in [False, True]:
                                 # for close_fds in [False, True]:
                                 for close_fds in [True]:
-                                    iters = 50
                                     start_time_nanos = time.time_ns()
-                                    for i in range(0, iters):
+                                    iters = 0
+                                    while time.time_ns() - start_time_nanos < 5 * 1000_000_000:
+                                        iters += 1
                                         if check:
                                             stdout, stderr = self.run_latency_cmd(check_cmd, close_fds=close_fds)
                                             # log.info(f"check result: {(stdout, stderr)}")
