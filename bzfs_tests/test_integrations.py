@@ -741,7 +741,6 @@ class TestSSHLatency(BZFSTestCase):
         control_persist_limit: int = (control_persist - 2) * 1000_000_000  # nanos
         master_is_running = False
         try:
-            conn_statuses = bzfs.SynchronizedDict(defaultdict(bzfs.ConnectionStatus))
             master_cmd = p.split_args(f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit")
             master_result = run_latency_cmd(master_cmd)
             log.info(f"master result: {master_result}")
@@ -752,18 +751,13 @@ class TestSSHLatency(BZFSTestCase):
             for cmd in [echo_cmd, list_cmd]:
                 # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
                 cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
-                for check in [0, 1, 2]:
+                for check in [False, True]:
                     # for close_fds in [False, True]:
                     for close_fds in [True]:
                         iters = 50
                         start_time_nanos = time.time_ns()
                         for i in range(0, iters):
-                            if check == 1:
-                                status: bzfs.ConnectionStatus = conn_statuses[str(cmd)]
-                                with status.lock:
-                                    if time.time_ns() - status.last_refresh >= control_persist_limit:
-                                        status.last_refresh = time.time_ns()
-                            if check == 2:
+                            if check:
                                 stdout, stderr = run_latency_cmd(check_cmd, close_fds=close_fds)
                                 # log.info(f"check result: {(stdout, stderr)}")
                                 self.assertIn("Master running", stderr)
