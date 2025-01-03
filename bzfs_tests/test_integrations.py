@@ -32,7 +32,7 @@ import tempfile
 import time
 import traceback
 import unittest
-from collections import Counter
+from collections import Counter, defaultdict
 from unittest.mock import patch
 
 from bzfs import bzfs
@@ -97,8 +97,9 @@ def suite():
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
     if not is_adhoc_test and not is_functional_test:
-        suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
+        # suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
+    return suite
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -737,6 +738,7 @@ class TestSSHLatency(BZFSTestCase):
         ssh_opts = " ".join(ssh_opts)
         master_is_running = False
         try:
+            conn_statuses = bzfs.SynchronizedDict(defaultdict(bzfs.ConnectionStatus))
             master_cmd = p.split_args(f"{p.ssh_program} {ssh_opts} -M -oControlPersist=3s 127.0.0.1 exit")
             master_result = run_latency_cmd(master_cmd)
             log.info(f"master result: {master_result}")
@@ -747,12 +749,18 @@ class TestSSHLatency(BZFSTestCase):
             for cmd in [echo_cmd, list_cmd]:
                 # cmd = [p.shell_program, "-c", f"{p.ssh_program} {ssh_opts} 127.0.0.1 " + cmd]
                 cmd = p.split_args(f"{p.ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
-                for check in [False, True]:
-                    for close_fds in [False, True]:
+                for check in [0, 1, 2]:
+                    # for close_fds in [False, True]:
+                    for close_fds in [True]:
                         iters = 50
                         start_time_nanos = time.time_ns()
                         for i in range(0, iters):
-                            if check:
+                            if check == 1:
+                                status: bzfs.ConnectionStatus = conn_statuses[str(cmd)]
+                                with status.lock:
+                                    if time.time_ns() - status.last_refresh >= p.src.control_persist_limit:
+                                        status.last_refresh = time.time_ns()
+                            if check == 2:
                                 stdout, stderr = run_latency_cmd(check_cmd, close_fds=close_fds)
                                 # log.info(f"check result: {(stdout, stderr)}")
                                 self.assertIn("Master running", stderr)

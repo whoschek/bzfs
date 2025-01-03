@@ -1420,6 +1420,8 @@ class Remote:
             os.makedirs(self.socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             self.socket_prefix = "s"
             delete_stale_files(self.socket_dir, self.socket_prefix)
+        self.control_persist: int = 60  # seconds
+        self.control_persist_limit: int = (self.control_persist - 2) * 1000_000_000  # nanos
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex = re.compile(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]")  # Remove chars not in the allowed set
 
@@ -1564,6 +1566,7 @@ class Job:
         self.inject_params: Dict[str, bool] = {}  # for testing only
         self.injection_lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
+        self.conn_statuses: SynchronizedDict[str, ConnectionStatus] = SynchronizedDict(defaultdict(ConnectionStatus))
 
     def cleanup(self):
         """Exit any multiplexed ssh sessions that may be leftover."""
@@ -2597,6 +2600,7 @@ class Job:
         level = level if level >= 0 else logging.INFO
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
         p, log = self.params, self.params.log
+        r = remote
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
         conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
@@ -2606,28 +2610,32 @@ class Job:
                 if not self.is_program_available("ssh", "local"):
                     die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
                 cmd = quoted_cmd
-                if remote.reuse_ssh_connection:
-                    # performance: reuse ssh connection for low latency startup of frequent ssh invocations
-                    # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-                    # 'ssh -S /path/socket -O check' doesn't talk over the net so common case is a low latency fast path
-                    ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                    ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-                    dvnul = DEVNULL
-                    if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
-                        log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
-                    else:
-                        log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+                status: ConnectionStatus = self.conn_statuses[str(ssh_cmd)]
+                with status.lock:
+                    if remote.reuse_ssh_connection and time.time_ns() - status.last_refresh >= r.control_persist_limit:
+                        # performance: reuse ssh connection for low latency startup of frequent ssh invocations
+                        # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
+                        # 'ssh -S /path/sock -O check' doesn't talk over the net; common case is a low latency fast path
                         ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                        ssh_socket_cmd += ["-M", "-oControlPersist=60s", remote.ssh_user_host, "exit"]
-                        log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
-                        process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
-                        if process.returncode != 0:
-                            log.error("%s", process.stderr.rstrip())
-                            die(
-                                f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                                f"first, considering diagnostic log file output from running {prog_name} with: "
-                                "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
-                            )
+                        ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
+                        d = DEVNULL
+                        # extend lifetime of ssh master by $control_persist secs via -O check if master is still running
+                        if subprocess.run(ssh_socket_cmd, stdin=d, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+                            log.info("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
+                        else:  # otherwise start a master:
+                            log.info("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+                            ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+                            ssh_socket_cmd += ["-M", f"-oControlPersist={r.control_persist}s", r.ssh_user_host, "exit"]
+                            log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
+                            process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+                            if process.returncode != 0:
+                                log.error("%s", process.stderr.rstrip())
+                                die(
+                                    f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh "
+                                    "configuration first, considering diagnostic log file output from running "
+                                    f"{prog_name} with: -v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
+                                )
+                        status.last_refresh = time.time_ns()
             msg = "Would execute: %s" if is_dry else "Executing: %s"
             log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
             if is_dry:
@@ -3942,6 +3950,13 @@ class Job:
             return self.max_command_line_bytes  # for testing only
         else:
             return max_bytes
+
+
+#############################################################################
+class ConnectionStatus:
+    def __init__(self):
+        self.last_refresh: int = 0
+        self.lock: threading.Lock = threading.Lock()
 
 
 #############################################################################
