@@ -301,6 +301,7 @@ class BZFSTestCase(ParametrizedTestCase):
         creation_prefix=None,
         max_exceptions_to_summarize=None,
         max_datasets_per_minibatch_on_list_snaps=None,
+        control_persist_margin_secs=None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -451,6 +452,9 @@ class BZFSTestCase(ParametrizedTestCase):
         if platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS":
             # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
             os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend"] = "false"
+
+        if control_persist_margin_secs is not None:
+            job.control_persist_margin_secs = control_persist_margin_secs
 
         returncode = 0
         try:
@@ -3943,6 +3947,14 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def test_disabled_zpool(self):
         self.inject_disabled_program("zpool")
+
+    def test_ssh_master_check_keeps_tcp_connection_alive_with_replication_recursive(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", control_persist_margin_secs=2**64)
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
 
 #############################################################################
