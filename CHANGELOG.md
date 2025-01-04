@@ -1,10 +1,16 @@
 # Changelog
-All notable changes to bzfs will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0] -  TBD
+## [1.8.0] - January 4, 2025
+
+This release contains performance and documentation enhancements as well as new features, including ...
+- Substantially improved SSH connection latency
+- Improved latency in local mode
+- Parse pv log file correctly even if a locale specific number contains a "," instead of a "." as decimal point
+- Use more human-readable formatting for durations and bytes transferred.
+- Also run nightly tests on FreeBSD-14.2
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.7.0...v1.8.0
 
 ## [1.7.0] -  December 23, 2024
 
