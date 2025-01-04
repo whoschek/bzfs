@@ -776,8 +776,8 @@ class TestSSHLatency(BZFSTestCase):
                         for cmd in [echo_cmd, list_cmd]:
                             cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
                             for check in [False, True]:
-                                # for close_fds in [False, True]:
-                                for close_fds in [True]:
+                                # for close_fds in [True]:
+                                for close_fds in [False, True]:
                                     start_time_nanos = time.time_ns()
                                     iters = 0
                                     while time.time_ns() - start_time_nanos < 5 * 1000_000_000:
