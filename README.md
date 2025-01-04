@@ -281,17 +281,17 @@ missing on dst, etc.
 
 ```
 # Ubuntu / Debian:
-sudo apt-get -y install zfsutils-linux python3 # ensure zfs and python are installed
-sudo apt-get -y install zstd pv mbuffer # auxiliary helpers are optional
+sudo apt-get -y install zfsutils-linux python3  # ensure zfs and python are installed
+sudo apt-get -y install zstd pv mbuffer  # auxiliary helpers are optional
 
 git clone https://github.com/whoschek/bzfs.git
 cd bzfs/bzfs
-./bzfs --help # Run the CLI
-sudo cp bzfs /usr/local/bin/ # Optional system installation
+./bzfs --help  # Run the CLI
+sudo cp bzfs /usr/local/bin/  # Optional system installation
 
 # Alternatively, install a release via pip:
 pip install bzfs
-bzfs --help # Run the CLI
+bzfs --help  # Run the CLI
 ```
 
 

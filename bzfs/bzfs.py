@@ -1509,9 +1509,9 @@ class RetryPolicy:
         self.min_sleep_secs: float = args.retry_min_sleep_secs
         self.max_sleep_secs: float = args.retry_max_sleep_secs
         self.max_elapsed_secs: float = args.retry_max_elapsed_secs
-        self.min_sleep_nanos: int = int(self.min_sleep_secs * 1000_000_000)
-        self.max_sleep_nanos: int = int(self.max_sleep_secs * 1000_000_000)
-        self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1000_000_000)
+        self.min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
+        self.max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
+        self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1_000_000_000)
         self.min_sleep_nanos = max(1, self.min_sleep_nanos)
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
 
@@ -1695,7 +1695,7 @@ class Job:
         m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
             total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
-            sent_bytes_per_sec = round(1000_000_000 * total_sent_bytes / elapsed_nanos)
+            sent_bytes_per_sec = round(1_000_000_000 * total_sent_bytes / elapsed_nanos)
             m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
             m += f"[{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
         log.info("%s", m)
@@ -2661,8 +2661,8 @@ class Job:
             die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
         if not remote.reuse_ssh_connection:
             return
-        control_persist_limit_nanos = (self.control_persist_secs - self.control_persist_margin_secs) * 1000_000_000
-        now = time.time_ns()  # no real need to compute this inside the conn.lock
+        control_persist_limit_nanos = (self.control_persist_secs - self.control_persist_margin_secs) * 1_000_000_000
+        now = time.time_ns()  # no real need to compute this inside the critical section of conn.lock
         with conn.lock:
             # performance: reuse ssh connection for low latency startup of frequent ssh invocations
             # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
@@ -3653,9 +3653,7 @@ class Job:
         if "local" not in available_programs:
             cmd = [p.shell_program_local, "-c", self.find_available_programs()]
             available_programs["local"] = dict.fromkeys(
-                subprocess.run(
-                    cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True, check=False
-                ).stdout.splitlines()
+                subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines()
             )
             cmd = [p.shell_program_local, "-c", "exit"]
             if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
@@ -3975,11 +3973,6 @@ class Connection:
 
     free: int = field(default=0)  # sort order evens out the number of concurrent sessions among the TCP connections
     last_modified: int = field(default=0)  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot
-    cid: int = field(default=0, compare=False)
-    capacity: int = field(default=0, compare=False)
-    replacement: Any = field(default=None, compare=False)
-    ssh_cmd: List[str] = field(default=None, compare=False)
-    ssh_cmd_quoted: List[str] = field(default=None, compare=False)
 
     class IntHolder:
         def __init__(self):
@@ -3987,14 +3980,15 @@ class Connection:
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
-        self.capacity = max_concurrent_ssh_sessions_per_tcp_connection
-        self.free = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
-        self.last_modified = 0
-        self.cid = cid
-        self.ssh_cmd = remote.local_ssh_command()
-        self.ssh_cmd_quoted = [shlex.quote(item) for item in self.ssh_cmd]
-        self.lock = threading.Lock()  # shared across all shallow copies
-        self.last_refresh_time = Connection.IntHolder()  # shared across all shallow copies
+        self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
+        self.free: int = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
+        self.last_modified: int = 0
+        self.cid: int = cid
+        self.replacement: Optional[Connection] = None
+        self.ssh_cmd: List[str] = remote.local_ssh_command()
+        self.ssh_cmd_quoted: List[str] = [shlex.quote(item) for item in self.ssh_cmd]
+        self.lock: threading.Lock = threading.Lock()  # shared across all shallow copies
+        self.last_refresh_time: Connection.IntHolder = Connection.IntHolder()  # shared across all shallow copies
 
     def __repr__(self) -> str:
         return str({"free": abs(self.free), "cid": self.cid, "removed": self.replacement is not None})
@@ -4007,7 +4001,7 @@ class Connection:
     def is_full(self) -> bool:
         return self.free >= 0  # use reverse sort order
 
-    def update_last_modified(self, last_modified) -> None:
+    def update_last_modified(self, last_modified: int) -> None:
         self.last_modified = -last_modified  # use reverse sort order
 
     def shutdown(self, msg_prefix: str, p: Params) -> None:
@@ -4032,7 +4026,7 @@ class ConnectionPool:
     are tagged like that are garbage and are skipped on reads. They are also periodically garbage collected, i.e.
     deleted from the queue to free up memory, in a way that retains amortized O(log N) time complexity."""
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, is_trace=False):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, is_trace: bool = False):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
@@ -4044,15 +4038,15 @@ class ConnectionPool:
         self._lock: threading.Lock = threading.Lock()
         self.returns: int = 0
         self.return_iters_sum: int = 0
-        self.return_iters = Counter()
-        self.is_trace = is_trace
+        self.return_iters: Counter = Counter()
+        self.is_trace: bool = is_trace
 
     def _pop(self) -> Connection:
         """Returns the "smallest" item wrt. sort order from the priority queue."""
         conn = None
         while conn is None and self.priority_queue:
             conn = heapq.heappop(self.priority_queue)
-            if conn.replacement is not None:  # skip garbage that was replaced by a copy with updated priority
+            if conn.replacement is not None:  # skip garbage that was replaced by a shallow copy with updated priority
                 conn = None
                 self.replaced -= 1
                 assert self.replaced >= 0
@@ -4184,7 +4178,8 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
 
 
 def build_dataset_tree(sorted_datasets: List[str]) -> Tree:
-    """Returns a sorted directory tree, in the form of nested dicts, containing the (sorted) input dataset names."""
+    """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names,
+    in the form of nested dicts."""
     tree: Tree = {}
     for dataset in sorted_datasets:
         current = tree
@@ -4370,7 +4365,7 @@ def human_readable_duration(duration: int, unit="ns", separator=" ", long=False)
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
-    seconds = (1.0 / 1000_000_000, 1.0 / 1000_000, 1.0 / 1000, 1, 60, 60 * 60, 60 * 60 * 24)
+    seconds = (1 / 1_000_000_000, 1 / 1_000_000, 1 / 1000, 1, 60, 60 * 60, 60 * 60 * 24)
     i = units.index(unit)
     long_form = f" ({round(duration * seconds[i])} seconds)" if long else ""
     while t >= 1000 and i < 3:
