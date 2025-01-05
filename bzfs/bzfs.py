@@ -4008,11 +4008,11 @@ class Connection:
         ssh_cmd = self.ssh_cmd
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
-            ssh_socket_cmd_quoted = [shlex.quote(item) for item in ssh_socket_cmd]
-            p.log.trace(f"Executing {msg_prefix}: %s", " ".join(ssh_socket_cmd_quoted))
+            is_trace = p.log.isEnabledFor(log_trace)
+            is_trace and p.log.trace(f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
-                p.log.trace("%s", process.stderr.rstrip())
+                is_trace and p.log.trace("%s", process.stderr.rstrip())
 
 
 #############################################################################
