@@ -24,7 +24,7 @@
 [![Coverage](https://whoschek.github.io/bzfs/badges/coverage-badge.svg)](https://whoschek.github.io/bzfs/coverage/)
 [![os](https://whoschek.github.io/bzfs/badges/os-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![python](https://whoschek.github.io/bzfs/badges/python-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
-[![](https://whoschek.github.io/bzfs/badges/pypi-badge.svg)](https://pypi.org/project/bzfs)
+[![pypi](https://img.shields.io/pypi/v/bzfs.svg)](https://pypi.org/project/bzfs)
 [![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
@@ -129,7 +129,7 @@ tank1/foo/bar@test_2024-11-06_08:30:05_hourly
 
 $ zfs list -t snapshot tank2/boo/bar
 tank2/boo/bar@test_2024-11-06_08:30:05_daily
-tank2/boo/bar@test_2024-11-06_08:30:05_hourly 
+tank2/boo/bar@test_2024-11-06_08:30:05_hourly
 ```
 
 
@@ -166,7 +166,7 @@ $ zfs list -t snapshot -r tank2/boo/bar
 tank2/boo/bar@test_2024-11-06_08:30:05_daily
 tank2/boo/bar@test_2024-11-06_08:30:05_hourly
 tank2/boo/bar/baz@test_2024-11-06_08:40:00_daily
-tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly 
+tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly
 ```
 
 
@@ -306,7 +306,7 @@ properties to replicate or delete or compare.
 delete mode.
 * Continously tested on Linux, FreeBSD and Solaris.
 * Code is almost 100% covered by tests.
-* Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly 
+* Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
 deletes (or compares) snapshots of multiple datasets in parallel.
 * Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
 files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.

@@ -4018,8 +4018,9 @@ class Connection:
 #############################################################################
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse.
-    Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers but, to avoid a
-    dependency, is actually implemented using a (thread-safe) priority queue that can handle updates to the priority of
+    Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers or using an
+    indexed priority queue via https://github.com/nvictus/pqdict but, to avoid an external dependency, is actually
+    implemented using a simple yet effective (thread-safe) priority queue that can handle updates to the priority of
     items that are already contained in the queue. This is done by retaining inside the queue both the item before the
     update, as well as the item after the update, such that the item-before-the-update is tagged with an auxiliary
     pointer to the updated shallow copy that is the item-after-the-update aka the replacement for the item. Items that
