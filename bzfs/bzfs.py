@@ -1554,6 +1554,7 @@ class Job:
         self.max_exceptions_to_summarize = 10000
         self.first_exception: Optional[BaseException] = None
         self.remote_conf_cache: Dict[Tuple, RemoteConfCacheItem] = {}
+        self.num_src_datasets = 0
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
@@ -1852,6 +1853,7 @@ class Job:
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             selected_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
+            self.num_src_datasets = len(selected_src_datasets)
             # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
             failed = self.process_datasets_in_parallel_and_fault_tolerant(
                 selected_src_datasets,
@@ -2423,7 +2425,7 @@ class Job:
 
         src_pipe = self.squote(p.src, src_pipe)
         dst_pipe = self.squote(p.dst, dst_pipe)
-        conn_pool_name = DEDICATED if p.dedicated_tcp_connection_per_zfssend else SHARED
+        conn_pool_name = DEDICATED if p.dedicated_tcp_connection_per_zfssend and self.num_src_datasets > 1 else SHARED
         src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
         src_conn: Connection = src_conn_pool.get_connection()
         dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
