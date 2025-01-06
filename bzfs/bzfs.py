@@ -897,7 +897,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "applies to dataset and snapshot replication, --delete-dst-snapshots, --delete-empty-dst-datasets, and "
              "--compare-snapshot-lists. The ideal value for this parameter depends on the use case and its performance "
              "requirements, as well as the number of available CPU cores and the parallelism offered by SSDs vs. "
-             "HDDs, ZFS geometry and configuration, as well as the network bandwidth and other workloads "
+             "HDDs, ZFS topology and configuration, as well as the network bandwidth and other workloads "
              "simultaneously running on the system. The current default is geared towards a high degreee of "
              "parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%%, 150%%\n\n")
     maxsessions_dflt = 8

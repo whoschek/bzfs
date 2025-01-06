@@ -129,7 +129,7 @@ tank1/foo/bar@test_2024-11-06_08:30:05_hourly
 
 $ zfs list -t snapshot tank2/boo/bar
 tank2/boo/bar@test_2024-11-06_08:30:05_daily
-tank2/boo/bar@test_2024-11-06_08:30:05_hourly
+tank2/boo/bar@test_2024-11-06_08:30:05_hourly 
 ```
 
 
@@ -166,7 +166,7 @@ $ zfs list -t snapshot -r tank2/boo/bar
 tank2/boo/bar@test_2024-11-06_08:30:05_daily
 tank2/boo/bar@test_2024-11-06_08:30:05_hourly
 tank2/boo/bar/baz@test_2024-11-06_08:40:00_daily
-tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly
+tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly 
 ```
 
 
@@ -1670,7 +1670,7 @@ usage: bzfs [-h] [--recursive]
     --delete-empty-dst-datasets, and --compare-snapshot-lists. The
     ideal value for this parameter depends on the use case and its
     performance requirements, as well as the number of available CPU
-    cores and the parallelism offered by SSDs vs. HDDs, ZFS geometry and
+    cores and the parallelism offered by SSDs vs. HDDs, ZFS topology and
     configuration, as well as the network bandwidth and other workloads
     simultaneously running on the system. The current default is geared
     towards a high degreee of parallelism, and as such may perform
