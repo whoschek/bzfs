@@ -224,6 +224,40 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
+    def test_compile_regexes(self):
+        def _assertFullMatch(text: str, regex: str, re_suffix="", expected=True):
+            match = bzfs.compile_regexes([regex], suffix=re_suffix)[0][0].fullmatch(text)
+            if expected:
+                self.assertTrue(match)
+            else:
+                self.assertFalse(match)
+
+        def assertFullMatch(text: str, regex: str, re_suffix=""):
+            _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=True)
+
+        def assertNotFullMatch(text: str, regex: str, re_suffix=""):
+            _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=False)
+
+        re_suffix = bzfs.Job().re_suffix
+        assertFullMatch("foo", "foo")
+        assertNotFullMatch("xfoo", "foo")
+        assertNotFullMatch("fooy", "foo")
+        assertNotFullMatch("foo/bar", "foo")
+        assertFullMatch("foo", "foo$")
+        assertFullMatch("foo", ".*")
+        assertFullMatch("foo/bar", ".*")
+        assertFullMatch("foo", ".*", re_suffix)
+        assertFullMatch("foo/bar", ".*", re_suffix)
+        assertFullMatch("foo", "foo", re_suffix)
+        assertFullMatch("foo/bar", "foo", re_suffix)
+        assertFullMatch("foo/bar/baz", "foo", re_suffix)
+        assertFullMatch("foo", "foo$", re_suffix)
+        assertFullMatch("foo$", "foo\\$", re_suffix)
+        assertFullMatch("foo", "!foo", re_suffix)
+        assertFullMatch("foo", "!foo")
+        with self.assertRaises(re.error):
+            bzfs.compile_regexes(["fo$o"], re_suffix)
+
     def test_fix_send_recv_opts(self):
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.fix_recv_opts(["-n"]))
