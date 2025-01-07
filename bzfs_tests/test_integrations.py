@@ -456,6 +456,8 @@ class BZFSTestCase(ParametrizedTestCase):
         )
         if platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS":
             # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
+            # probably caused by https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=283101
+            # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
             os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend"] = "false"
 
         if control_persist_margin_secs is not None:
