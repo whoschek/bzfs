@@ -1291,7 +1291,7 @@ class Params:
         self.max_snapshots_per_minibatch_on_delete_snaps = int(
             getenv_any("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
         )
-        self.dedicated_tcp_connection_per_zfssend = getenv_bool("dedicated_tcp_connection_per_zfssend", True)
+        self.dedicated_tcp_connection_per_zfs_send = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         self.threads: Tuple[int, bool] = args.threads
         self.no_estimate_send_size: bool = args.no_estimate_send_size
 
@@ -1554,7 +1554,7 @@ class Job:
         self.max_exceptions_to_summarize = 10000
         self.first_exception: Optional[BaseException] = None
         self.remote_conf_cache: Dict[Tuple, RemoteConfCacheItem] = {}
-        self.dedicated_tcp_connection_per_zfssend: bool = True
+        self.dedicated_tcp_connection_per_zfs_send: bool = True
         self.max_datasets_per_minibatch_on_list_snaps: Dict[str, int] = {}
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
@@ -1853,8 +1853,8 @@ class Job:
             if len(src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             selected_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
-            self.dedicated_tcp_connection_per_zfssend = (
-                p.dedicated_tcp_connection_per_zfssend
+            self.dedicated_tcp_connection_per_zfs_send = (
+                p.dedicated_tcp_connection_per_zfs_send
                 and len(selected_src_datasets) > 1
                 and min(self.max_workers[p.src.location], self.max_workers[p.dst.location]) > 1
             )
@@ -2429,7 +2429,7 @@ class Job:
 
         src_pipe = self.squote(p.src, src_pipe)
         dst_pipe = self.squote(p.dst, dst_pipe)
-        conn_pool_name = DEDICATED if self.dedicated_tcp_connection_per_zfssend else SHARED
+        conn_pool_name = DEDICATED if self.dedicated_tcp_connection_per_zfs_send else SHARED
         src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
         src_conn: Connection = src_conn_pool.get_connection()
         dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
