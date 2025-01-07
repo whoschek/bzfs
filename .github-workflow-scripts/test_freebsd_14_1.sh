@@ -38,7 +38,7 @@ ls -al $HOME $HOME/.ssh/testid_rsa
 echo "status before ifconfig change:"
 ifconfig -m
 ifconfig em0 -rxcsum -txcsum -tso4 -tso6 -lro -rxcsum6 -txcsum6 -vlanhwcsum -vlanhwtso -vlanhwfilter
-ifconfig lo0 -rxcsum -txcsum
+ifconfig lo0 -rxcsum -txcsum mtu 1500
 echo "status after ifconfig change:"
 ifconfig -m
 
