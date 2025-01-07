@@ -323,7 +323,12 @@ class BZFSTestCase(ParametrizedTestCase):
         elif params and params.get("ssh_mode") == "pull":
             args = args + src_host + src_port
         elif params and params.get("ssh_mode") == "pull-push":
-            if getenv_bool("enable_IPv6", True) and rng.randint(0, 2) % 3 == 0:
+            if (
+                getenv_bool("enable_IPv6", True)
+                and rng.randint(0, 2) % 3 == 0
+                and not (platform.platform().startswith("FreeBSD-") or platform.system() == "SunOS")
+                and not ssh_program == "hpnssh"
+            ):
                 src_host = ["--ssh-src-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
                 dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
             args = args + src_host + dst_host + src_port + dst_port
