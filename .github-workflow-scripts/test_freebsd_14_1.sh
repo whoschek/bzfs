@@ -33,6 +33,15 @@ ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and pu
 cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
 ls -al $HOME $HOME/.ssh/testid_rsa
 
+# Less flaky networking: on QEMU GithubAction, test with disabled hardware NIC features such as TCP checksum offload
+# see https://man.freebsd.org/cgi/man.cgi?ifconfig
+echo "status before ifconfig change:"
+ifconfig -m
+ifconfig em0 -rxcsum -txcsum -tso4 -tso6 -lro -rxcsum6 -txcsum6 -vlanhwcsum -vlanhwtso -vlanhwfilter
+ifconfig lo0 -rxcsum -txcsum
+echo "status after ifconfig change:"
+ifconfig -m
+
 echo "Now running tests as root user"; ./test.sh
 echo "Now running coverage"; ./coverage.sh
 
