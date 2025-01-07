@@ -1741,9 +1741,9 @@ usage: bzfs [-h] [--recursive]
 
 *  The name or path to the 'mbuffer' executable (optional). Default
     is 'mbuffer'. Use '-' to disable the use of this program. The
-    use on dst is auto-disabled if data is transferred locally instead
-    of via the network. This tool is used to smooth out the rate of data
-    flow and prevent bottlenecks caused by network latency or speed
+    use is auto-disabled if data is transferred locally instead of via
+    the network. This tool is used to smooth out the rate of data flow
+    and prevent bottlenecks caused by network latency or speed
     fluctuation.
 
 <!-- -->

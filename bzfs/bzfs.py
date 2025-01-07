@@ -939,7 +939,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Default is '-1' (fastest).\n\n")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("mbuffer") + msg.rstrip() + " The use on dst is auto-disabled if data is transferred locally "
+        help=hlp("mbuffer") + msg.rstrip() + " The use is auto-disabled if data is transferred locally "
                                              "instead of via the network. This tool is used to smooth out the rate "
                                              "of data flow and prevent bottlenecks caused by network latency or "
                                              "speed fluctuation.\n\n")
