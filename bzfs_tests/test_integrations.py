@@ -454,7 +454,11 @@ class BZFSTestCase(ParametrizedTestCase):
         old_dedicated_tcp_connection_per_zfssend = os.environ.get(
             bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend"
         )
-        if platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS":
+        if (
+            platform.platform().startswith("FreeBSD-13")
+            or platform.platform().startswith("FreeBSD-14.1")
+            or platform.system() == "SunOS"
+        ):
             # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
             os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfssend"] = "false"
 
@@ -871,7 +875,13 @@ class LocalTestCase(BZFSTestCase):
         w, q = 3, 3
         threads = 4
         maxsessions = (
-            threads if (platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS") else threads // 2
+            threads
+            if (
+                platform.platform().startswith("FreeBSD-13")
+                or platform.platform().startswith("FreeBSD-14.1")
+                or platform.system() == "SunOS"
+            )
+            else threads // 2
         )  # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU on non-Linux
         self.setup_basic_woo(w=w, q=q)
         for i in range(0, 1):
