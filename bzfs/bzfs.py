@@ -615,7 +615,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="Do nothing if the --delete-dst-datasets option is missing. Otherwise, after successful replication "
              "step, if any, delete existing destination datasets that are selected via --{include|exclude}-dataset* "
              "policy yet do not exist within SRC_DATASET (which can be an empty dataset, such as the hardcoded virtual "
-             f"dataset named '{dummy_dataset}'!). Does not recurse without --recursive.\n\n"
+             f"dataset named '{dummy_dataset}'!). Do not recurse without --recursive. With --recursive, never delete "
+             "non-selected dataset subtrees or their ancestors.\n\n"
              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
              "and the include/exclude policy selects h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
              "the destination to make it 'the same'. On the other hand, if the include/exclude policy "
@@ -662,7 +663,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "delete any selected destination dataset that has no snapshot and no bookmark if all descendants of "
              "that destination dataset are also selected and do not have a snapshot or bookmark either "
              "(again, only if the existing destination dataset is selected via --{include|exclude}-dataset* policy). "
-             "Never delete excluded dataset subtrees or their ancestors.\n\n"
+             "Never delete non-selected dataset subtrees or their ancestors.\n\n"
              "For example, if the destination contains datasets h1,d1, and the include/exclude policy "
              "selects h1,d1, then check if h1,d1 can be deleted. "
              "On the other hand, if the include/exclude policy only selects h1 then only check if h1 "
@@ -1882,15 +1883,24 @@ class Job:
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
-        # included via --{include|exclude}-dataset* policy. Does not recurse without --recursive.
+        # included via --{include|exclude}-dataset* policy. Do not recurse without --recursive. With --recursive,
+        # never delete non-selected dataset subtrees or their ancestors.
         if p.delete_dst_datasets and not failed:
             log.info(p.dry("--delete-dst-datasets: %s"), task_description)
-            dst_datasets = set(dst_datasets)
-            to_delete = dst_datasets.difference(
+            children = defaultdict(set)
+            for dst_dataset in basis_dst_datasets:  # Compute the direct children of each NON-FILTERED dataset
+                parent = os.path.dirname(dst_dataset)
+                children[parent].add(dst_dataset)
+            to_delete: Set[str] = set()
+            for dst_dataset in reversed(dst_datasets):
+                if children[dst_dataset].issubset(to_delete):
+                    to_delete.add(dst_dataset)  # all children are deletable so the dataset itself is deletable too
+            to_delete = to_delete.difference(
                 {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in src_datasets}
             )
             self.delete_datasets(dst, to_delete)
-            dst_datasets = isorted(dst_datasets.difference(to_delete))
+            dst_datasets = isorted(set(dst_datasets).difference(to_delete))
+            basis_dst_datasets = set(basis_dst_datasets).difference(to_delete)
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included

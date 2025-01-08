@@ -1119,8 +1119,9 @@ usage: bzfs [-h] [--recursive]
     existing destination datasets that are selected via
     --{include|exclude}-dataset* policy yet do not exist within
     SRC_DATASET (which can be an empty dataset, such as the hardcoded
-    virtual dataset named 'dummy'!). Does not recurse without
-    --recursive.
+    virtual dataset named 'dummy'!). Do not recurse without
+    --recursive. With --recursive, never delete non-selected dataset
+    subtrees or their ancestors.
 
     For example, if the destination contains datasets h1,h2,h3,d1
     whereas source only contains h3, and the include/exclude policy
@@ -1203,7 +1204,8 @@ usage: bzfs [-h] [--recursive]
     descendants of that destination dataset are also selected and do not
     have a snapshot or bookmark either (again, only if the existing
     destination dataset is selected via --{include|exclude}-dataset*
-    policy). Never delete excluded dataset subtrees or their ancestors.
+    policy). Never delete non-selected dataset subtrees or their
+    ancestors.
 
     For example, if the destination contains datasets h1,d1, and the
     include/exclude policy selects h1,d1, then check if h1,d1 can be

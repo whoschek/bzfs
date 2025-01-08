@@ -2974,6 +2974,25 @@ class LocalTestCase(BZFSTestCase):
                 else:
                     self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_delete_dst_datasets_recursive_with_non_included_dataset(self):
+        dst_foo1 = create_filesystem(dst_root_dataset, "foo1")
+        dst_foo1a = create_filesystem(dst_foo1, "a")
+        dst_foo2 = create_filesystem(dst_root_dataset, "foo2")
+        dst_foo2a = create_filesystem(dst_foo2, "a")
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-datasets",
+            "--recursive",
+            "--include-dataset-regex",
+            "!.*foo1",
+        )
+        self.assertTrue(dataset_exists(dst_root_dataset))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/foo1"))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/foo1/a"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo2"))
+
     def test_delete_dst_datasets_flat_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
         take_snapshot(create_filesystem(dst_root_dataset, "bar"), "b1")
@@ -3094,7 +3113,6 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
-            "--delete-dst-datasets",
             "--delete-empty-dst-datasets",
             "--exclude-dataset",
             "boo",
@@ -3105,6 +3123,36 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo/a/e"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo/c"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
+
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--recursive",
+            "--skip-replication",
+            "--delete-dst-datasets",
+            "--exclude-dataset",
+            "boo",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset + "/axe"))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/foo/a"))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/foo/a/e"))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/foo/c"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
+        self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
+
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            dst_root_dataset,
+            "--recursive",
+            "--skip-replication",
+            "--delete-dst-datasets",
+            "--exclude-dataset",
+            "boo",
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset + "/axe"))
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
 
