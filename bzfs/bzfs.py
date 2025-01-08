@@ -1973,10 +1973,10 @@ class Job:
             # an excluded dataset will ever be added to the "orphan" set. In other words, this treats excluded dataset
             # subtrees as if they all had snapshots, so excluded dataset subtrees and their ancestors are guaranteed
             # to not get deleted.
-            children = defaultdict(list)
+            children = defaultdict(set)
             for dst_dataset in basis_dst_datasets:
                 parent = os.path.dirname(dst_dataset)
-                children[parent].append(dst_dataset)
+                children[parent].add(dst_dataset)
 
             # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of
             # one filter run is an optimization. The first run only computes candidate orphans, without incurring I/O,
@@ -1989,7 +1989,7 @@ class Job:
             for run in range(0, 2):
                 orphans: Set[str] = set()
                 for dst_dataset in reversed(dst_datasets):
-                    if not any(filter(lambda child: child not in orphans, children[dst_dataset])):
+                    if children[dst_dataset].issubset(orphans):
                         # all children turned out to be orphans so the dataset itself could be an orphan
                         if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
                             orphans.add(dst_dataset)
