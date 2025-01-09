@@ -2327,17 +2327,14 @@ class Job:
             self.zfs_set(set_opts, dst, dst_dataset)
         return True
 
-    def run_zfs_send_receive(
+    def prepare_zfs_send_receive(
         self,
         src_dataset: str,
-        dst_dataset: str,
         send_cmd: List[str],
         recv_cmd: List[str],
         size_estimate_bytes: int,
         size_estimate_human: str,
-        dry_run_no_send: bool,
-        error_trigger: Optional[str] = None,
-    ) -> None:
+    ) -> Tuple[str, str, str]:
         p, log = self.params, self.params.log
         send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
         recv_cmd = " ".join([shlex.quote(item) for item in recv_cmd])
@@ -2439,6 +2436,23 @@ class Job:
 
         src_pipe = self.squote(p.src, src_pipe)
         dst_pipe = self.squote(p.dst, dst_pipe)
+        return src_pipe, local_pipe, dst_pipe
+
+    def run_zfs_send_receive(
+        self,
+        src_dataset: str,
+        dst_dataset: str,
+        send_cmd: List[str],
+        recv_cmd: List[str],
+        size_estimate_bytes: int,
+        size_estimate_human: str,
+        dry_run_no_send: bool,
+        error_trigger: Optional[str] = None,
+    ) -> None:
+        p, log = self.params, self.params.log
+        src_pipe, local_pipe, dst_pipe = self.prepare_zfs_send_receive(
+            src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human
+        )
         conn_pool_name = DEDICATED if self.dedicated_tcp_connection_per_zfs_send else SHARED
         src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
         src_conn: Connection = src_conn_pool.get_connection()
