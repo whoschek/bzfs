@@ -26,7 +26,7 @@ from bzfs_tests.test_units import find_match
 def main():
     """
     Run this script to update README.md from the help info contained in bzfs.py.
-    Example usage: cd ~/repos/bzfs; python3 -m bzfs_tests.update_readme bzfs/bzfs.py README.md
+    Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs/bzfs.py README.md
     This essentially does the following steps:
     argparse-manpage --pyfile bzfs/bzfs.py --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
@@ -38,7 +38,7 @@ def main():
     pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
     """
     if len(sys.argv) != 3:
-        print("Usage: cd ~/repos/bzfs; python3 -m bzfs_tests.update_readme /path/to/bzfs.py path/to/README.md")
+        print("Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme /path/to/bzfs.py path/to/README.md")
         sys.exit(1)
 
     bzfs_py_file, readme_file = sys.argv[1], sys.argv[2]

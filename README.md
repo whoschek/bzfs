@@ -373,7 +373,8 @@ only needed on the initiator host.
 * First, on the GitHub page of this repo, click on "Fork/Create a new fork".
 * Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
 * Then select 'All workflows' -> 'Tests' on the left side.
-* Then click the 'Run workflow' dropdown menu on the right side.
+* Then click the 'Run workflow' dropdown menu on the right side, which looks something like 
+[this screenshot](https://github.com/whoschek/bzfs/blob/main/bzfs_docs/run_workflow_dialog.jpg).
 * Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1' or 'test_solaris_11_4', etc) or
 select 'Run all jobs' to test all supported platforms, plus select the git branch to run with (typically the branch
 containing your changes).
