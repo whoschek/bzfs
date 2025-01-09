@@ -229,7 +229,8 @@ ago'`
 * Delete all tmp datasets within tank2/boo/bar:
 
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*'`
+--delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*'
+--exclude-dataset-regex '!.*'`
 
 * Compare source and destination dataset trees recursively, for example
 to check if all recently taken snapshots have been successfully
@@ -1132,9 +1133,9 @@ usage: bzfs [-h] [--recursive]
     datasets h1,h2 on the destination to make it 'the same'.
 
     Example to delete all tmp datasets within tank2/boo/bar: `bzfs
-    dummy tank2/boo/bar --dryrun --skip-replication
-    --delete-dst-datasets --include-dataset-regex 'tmp.*'
-    --recursive`
+    dummy tank2/boo/bar --dryrun --skip-replication --recursive
+    --delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*'
+    --exclude-dataset-regex '!.*'`
 
 <!-- -->
 

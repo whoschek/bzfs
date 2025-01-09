@@ -261,7 +261,7 @@ of creation time:
 * Delete all tmp datasets within tank2/boo/bar:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
---include-dataset-regex '(.*/)?tmp.*'`
+--include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'`
 
 * Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
 been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'), 
@@ -622,8 +622,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "the destination to make it 'the same'. On the other hand, if the include/exclude policy "
              "only selects h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"
              "Example to delete all tmp datasets within tank2/boo/bar: "
-             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication "
-             "--delete-dst-datasets --include-dataset-regex 'tmp.*' --recursive`\n\n")
+             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --recursive "
+             "--delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'`\n\n")
     parser.add_argument(
         "--delete-dst-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
         nargs="?",
