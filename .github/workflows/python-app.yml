@@ -25,6 +25,10 @@ on:
     branches: [ "main", "branch-1.10.x", "branch-1.9.x", "branch-1.8.x", "branch-1.7.x", "branch-1.6.x" ]
   workflow_dispatch:
     inputs:
+      run_all_jobs:
+        description: Run all jobs
+        type: boolean
+        default: False
       name:
         description: "Name of job to run"
         type: choice
@@ -38,11 +42,16 @@ on:
         - test_freebsd_14_2
         - test_freebsd_13_4
         - test_solaris_11_4
+        - none
         default: "test_ubuntu_24_04_fast"
-      run_all_jobs:
-        description: Run all jobs
-        type: boolean
-        default: False
+      job_names:
+        description: "Names of jobs to run, e.g. 'test_ubuntu_24_04,test_ubuntu_22_04'"
+        type: string
+        default: ""
+      num_runs:
+        description: "Number of times to run the jobs"
+        type: string
+        default: "1"
   schedule:
     - cron: '5 3 * * *'  # Run nightly for main at 3:05am UTC,
     # - cron: '0 3 * * *'  # Run nightly for branch-1.1.x at 3am UTC
@@ -58,17 +67,35 @@ on:
 permissions:
   contents: read
 
+env:
+  NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
+
 jobs:
+  create_iteration_matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      iteration_matrix_output: ${{ steps.set_matrix.outputs.iteration_matrix_output }}
+    steps:
+      - id: set_matrix
+        shell: bash
+        run: |
+          seq 1 "$NUM_RUNS"  | jq -R . | jq -s -c '.' > iteration_matrix_output.json
+          echo "iteration_matrix_output=$(cat iteration_matrix_output.json)" >> $GITHUB_OUTPUT
+          
+
   test_ubuntu_24_04_fast:  # currently uses zfs-2.2.2
-    if: (!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch' && github.event.schedule != '0 3 * * *') || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_fast'
+    needs: create_iteration_matrix
+    if: (!contains(github.event.head_commit.message, 'ci skip') && github.event_name != 'workflow_dispatch' && github.event.schedule != '0 3 * * *') || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_fast' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_fast')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
         python-version: ["3.13"]
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
-    - name: Run common preparation steps
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
@@ -103,14 +130,19 @@ jobs:
 
 
   test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.0rc4
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_latest')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
         python-version: ["3.14-dev", "3.11"]
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
+    - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+      run: echo "Now running  iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
         # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
@@ -123,7 +155,7 @@ jobs:
         sudo add-apt-repository ppa:rapier1/hpnssh; sudo apt update
         sudo apt-get -y install hpnssh
         hpnssh -V
-    - name: Run common preparation steps
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
@@ -148,15 +180,19 @@ jobs:
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.7
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_2_2_latest'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04_zfs_2_2_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2_latest')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
         python-version: ["3.11"]
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
@@ -167,7 +203,7 @@ jobs:
         ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
-    - name: Run common preparation steps
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
@@ -190,19 +226,23 @@ jobs:
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_24_04:  # currently uses zfs-2.2.2
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_24_04' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
         python-version: ["3.12"]
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
-    - name: Run common preparation steps
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
@@ -225,19 +265,23 @@ jobs:
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_22_04:   # currently uses zfs-2.1.5
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_22_04' || contains(github.event.inputs.job_names, 'test_ubuntu_22_04')
     runs-on: ubuntu-22.04
     strategy:
       matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
         python-version: ["3.10"]
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
-    - name: Run common preparation steps
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
@@ -266,19 +310,23 @@ jobs:
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   test_ubuntu_20_04:  # currently uses zfs-0.8.3
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_ubuntu_20_04' || contains(github.event.inputs.job_names, 'test_ubuntu_20_04')
     runs-on: ubuntu-20.04
     strategy:
       matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
         python-version: ["3.8", "3.7"]
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
-    - name: Run common preparation steps
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
@@ -301,16 +349,22 @@ jobs:
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   test_freebsd_14_2:  # currently uses zfs-2.2.6
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_2'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_14_2' || contains(github.event.inputs.job_names, 'test_freebsd_14_2')
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
-    - name: Test with unittest
+    - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
@@ -318,16 +372,22 @@ jobs:
         run: |
           ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   test_freebsd_13_4:  # currently uses zfs-2.1.15
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_freebsd_13_4' || contains(github.event.inputs.job_names, 'test_freebsd_13_4')
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
+      fail-fast: false
     timeout-minutes: 100
     steps:
     - uses: actions/checkout@v4
-    - name: Test with unittest
+    - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
@@ -335,17 +395,23 @@ jobs:
         run: |
           ./.github-workflow-scripts/test_freebsd_13_3.sh
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   test_solaris_11_4:
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4'
+    needs: create_iteration_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.name == 'test_solaris_11_4' || contains(github.event.inputs.job_names, 'test_solaris_11_4')
 #    if: false  # job currently disabled
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_matrix.outputs.iteration_matrix_output) }}
+      fail-fast: false
     timeout-minutes: 140
     steps:
     - uses: actions/checkout@v4
-    - name: Test with unittest
+    - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       id: test
       uses: vmactions/solaris-vm@v1  # see https://github.com/vmactions/solaris-vm
       with:
@@ -355,10 +421,12 @@ jobs:
         run: |
           ./.github-workflow-scripts/test_solaris_11_4.sh
     - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
   combine_coverage_reports:
+    if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
     runs-on: ubuntu-24.04
     needs:
       - test_ubuntu_24_04_zfs_latest
