@@ -4279,6 +4279,11 @@ def replace_in_lines(lines: List[str], old: str, new: str) -> None:
         lines[i] = lines[i].replace(old, new)
 
 
+def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
+    """case-insensitive sort (A < a < B < b and so on)."""
+    return sorted(iterable, key=str.casefold, reverse=reverse)
+
+
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
     """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
     else False. A regex that starts with a `!` is a negation - the regex matches if the regex without the
@@ -4348,11 +4353,6 @@ def getenv_bool(key: str, default: bool = False) -> bool:
     return getenv_any(key, str(default).lower()).strip().lower() == "true"
 
 
-def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
-    """case-insensitive sort (A < a < B < b and so on)."""
-    return sorted(iterable, key=str.casefold, reverse=reverse)
-
-
 def xappend(lst, *items) -> List[str]:
     """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
     If an item is an iterable does so recursively, flattening the output."""
@@ -4363,28 +4363,6 @@ def xappend(lst, *items) -> List[str]:
         else:
             xappend(lst, *item)
     return lst
-
-
-def human_readable_float(number: float) -> str:
-    """If the number has one digit before the decimal point (0 <= abs(number) < 10):
-      Round and use two decimals after the decimal point (e.g., 3.14559 --> "3.15").
-
-    If the number has two digits before the decimal point (10 <= abs(number) < 100):
-      Round and use one decimal after the decimal point (e.g., 12.36 --> "12.4").
-
-    If the number has three or more digits before the decimal point (abs(number) >= 100):
-      Round and use zero decimals after the decimal point (e.g., 123.556 --> "124").
-
-    Ensure no unnecessary trailing zeroes are retained: Example: 1.500 --> "1.5", 1.00 --> "1"
-    """
-    abs_number = abs(number)
-    precision = 2 if abs_number < 10 else 1 if abs_number < 100 else 0
-    if precision == 0:
-        return str(round(number))
-    result = f"{number:.{precision}f}"
-    assert "." in result
-    result = result.rstrip("0").rstrip(".")  # Remove trailing zeros and trailing decimal point if empty
-    return "0" if result == "-0" else result
 
 
 def human_readable_bytes(size: float, separator=" ", long=False) -> str:
@@ -4418,6 +4396,28 @@ def human_readable_duration(duration: float, unit="ns", separator=" ", long=Fals
             t /= 24
             i += 1
     return f"{sign}{human_readable_float(t)}{separator}{units[i]}{long_form}"
+
+
+def human_readable_float(number: float) -> str:
+    """If the number has one digit before the decimal point (0 <= abs(number) < 10):
+      Round and use two decimals after the decimal point (e.g., 3.14559 --> "3.15").
+
+    If the number has two digits before the decimal point (10 <= abs(number) < 100):
+      Round and use one decimal after the decimal point (e.g., 12.36 --> "12.4").
+
+    If the number has three or more digits before the decimal point (abs(number) >= 100):
+      Round and use zero decimals after the decimal point (e.g., 123.556 --> "124").
+
+    Ensure no unnecessary trailing zeroes are retained: Example: 1.500 --> "1.5", 1.00 --> "1"
+    """
+    abs_number = abs(number)
+    precision = 2 if abs_number < 10 else 1 if abs_number < 100 else 0
+    if precision == 0:
+        return str(round(number))
+    result = f"{number:.{precision}f}"
+    assert "." in result
+    result = result.rstrip("0").rstrip(".")  # Remove trailing zeros and trailing decimal point if empty
+    return "0" if result == "-0" else result
 
 
 def get_home_directory() -> str:
@@ -4467,6 +4467,21 @@ def unlink_missing_ok(file: str) -> None:  # workaround for compat with python <
         Path(file).unlink()
     except FileNotFoundError:
         pass
+
+
+def unixtime_fromisoformat(datetime_str: str) -> int:
+    """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds. If the datetime string does not
+    contain time zone info then it is assumed to be in the local time zone."""
+    return int(datetime.fromisoformat(datetime_str).timestamp())
+
+
+def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
+    """Converts a UTC Unix time in integer seconds into an ISO 8601 datetime string in the local time zone.
+    Example: 2024-09-03_12:26:15"""
+    tz = timezone.utc  # outputs time in UTC
+    tz = None  # outputs time in local time zone
+    dt = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
+    return dt.isoformat(sep="_", timespec="seconds")
 
 
 def terminate_process_group(except_current_process=False):
@@ -4840,21 +4855,6 @@ def validate_log_config_variable_name(name: str):
     if any(char.isspace() for char in name):
         return "Invalid log config variable name. Name must not contain whitespace: " + name
     return None
-
-
-def unixtime_fromisoformat(datetime_str: str) -> int:
-    """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds. If the datetime string does not
-    contain time zone info then it is assumed to be in the local time zone."""
-    return int(datetime.fromisoformat(datetime_str).timestamp())
-
-
-def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
-    """Converts a UTC Unix time in integer seconds into an ISO 8601 datetime string in the local time zone.
-    Example: 2024-09-03_12:26:15"""
-    tz = timezone.utc  # outputs time in UTC
-    tz = None  # outputs time in local time zone
-    dt = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
-    return dt.isoformat(sep="_", timespec="seconds")
 
 
 #############################################################################
