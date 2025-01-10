@@ -4387,7 +4387,7 @@ def human_readable_float(number: float) -> str:
     return "0" if result == "-0" else result
 
 
-def human_readable_bytes(size: int, separator=" ", long=False) -> str:
+def human_readable_bytes(size: float, separator=" ", long=False) -> str:
     sign = "-" if size < 0 else ""
     s = abs(size)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
@@ -4399,7 +4399,7 @@ def human_readable_bytes(size: int, separator=" ", long=False) -> str:
     return f"{sign}{human_readable_float(s)}{separator}{units[i]}{long_form}"
 
 
-def human_readable_duration(duration: int, unit="ns", separator=" ", long=False) -> str:
+def human_readable_duration(duration: float, unit="ns", separator=" ", long=False) -> str:
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
