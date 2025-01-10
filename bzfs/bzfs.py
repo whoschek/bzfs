@@ -4116,7 +4116,8 @@ class ConnectionPool:
     def shutdown(self, msg_prefix: str) -> None:
         conn = self._pop()
         while conn is not None:
-            conn.shutdown(msg_prefix, self.remote.params)
+            if self.remote.reuse_ssh_connection:
+                conn.shutdown(msg_prefix, self.remote.params)
             conn = self._pop()
 
     def __repr__(self) -> str:
