@@ -1693,12 +1693,12 @@ class Job:
     def print_replication_stats(self, start_time_nanos: int):
         p, log = self.params, self.params.log
         elapsed_nanos = time.time_ns() - start_time_nanos
-        m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
+        msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
             sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
             sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
-            m += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
-        log.info("%s", m)
+            msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
+        log.info("%s", msg)
 
     def validate_once(self) -> None:
         p = self.params
@@ -1892,7 +1892,7 @@ class Job:
             to_delete: Set[str] = set()
             for dst_dataset in reversed(dst_datasets):
                 if children[dst_dataset].issubset(to_delete):
-                    to_delete.add(dst_dataset)  # all children are deletable so the dataset itself is deletable too
+                    to_delete.add(dst_dataset)  # all children are deletable, thus the dataset itself is deletable too
             to_delete = to_delete.difference(
                 {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in src_datasets}
             )
@@ -1967,9 +1967,9 @@ class Job:
                 p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and self.are_bookmarks_enabled(dst)
             )
 
-            # Compute the direct children of each NON-FILTERED dataset. Thus, no excluded dataset and no ancestor of
-            # an excluded dataset will ever be added to the "orphan" set. In other words, this treats excluded dataset
-            # subtrees as if they all had snapshots, so excluded dataset subtrees and their ancestors are guaranteed
+            # Compute the direct children of each NON-FILTERED dataset. Thus, no non-selected dataset and no ancestor of a
+            # non-selected dataset will ever be added to the "orphan" set. In other words, this treats non-selected dataset
+            # subtrees as if they all had snapshots, so non-selected dataset subtrees and their ancestors are guaranteed
             # to not get deleted.
             children = defaultdict(set)
             for dst_dataset in basis_dst_datasets:
@@ -1988,7 +1988,7 @@ class Job:
                 orphans: Set[str] = set()
                 for dst_dataset in reversed(dst_datasets):
                     if children[dst_dataset].issubset(orphans):
-                        # all children turned out to be orphans so the dataset itself could be an orphan
+                        # all children turned out to be orphans, thus the dataset itself could be an orphan
                         if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
                             orphans.add(dst_dataset)
                 if run == 0:
