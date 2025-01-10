@@ -557,9 +557,9 @@ usage: bzfs [-h] [--recursive]
 
 **--recursive**, **-r**
 
-*  During replication and deletion, also consider descendant datasets,
-    i.e. datasets within the dataset tree, including children, and
-    children of children, etc.
+*  During replication, deletion and comparison, also consider
+    descendant datasets, i.e. datasets within the dataset tree,
+    including children, and children of children, etc.
 
 <!-- -->
 
@@ -567,13 +567,13 @@ usage: bzfs [-h] [--recursive]
 
 **--include-dataset** *DATASET [DATASET ...]*
 
-*  During replication and deletion, select any ZFS dataset (and its
-    descendants) that is contained within SRC_DATASET (DST_DATASET in
-    case of deletion) if its dataset name is one of the given include
-    dataset names but none of the exclude dataset names. If a dataset is
-    excluded its descendants are automatically excluded too, and this
-    decision is never reconsidered even for the descendants because
-    exclude takes precedence over include.
+*  During replication, deletion and comparison, select any ZFS dataset
+    (and its descendants) that is contained within SRC_DATASET
+    (DST_DATASET in case of deletion) if its dataset name is one of the
+    given include dataset names but none of the exclude dataset names.
+    If a dataset is excluded its descendants are automatically excluded
+    too, and this decision is never reconsidered even for the
+    descendants because exclude takes precedence over include.
 
     A dataset name is absolute if the specified dataset is prefixed by
     `/`, e.g. `/tank/baz/tmp`. Otherwise the dataset name is
@@ -606,15 +606,15 @@ usage: bzfs [-h] [--recursive]
 
 **--include-dataset-regex** *REGEX [REGEX ...]*
 
-*  During replication (and deletion), select any ZFS dataset (and its
-    descendants) that is contained within SRC_DATASET (DST_DATASET in
-    case of deletion) if its relative dataset path (e.g. `baz/tmp`)
-    wrt. SRC_DATASET (DST_DATASET in case of deletion) matches at least
-    one of the given include regular expressions but none of the exclude
-    regular expressions. If a dataset is excluded its descendants are
-    automatically excluded too, and this decision is never reconsidered
-    even for the descendants because exclude takes precedence over
-    include.
+*  During replication (and deletion) and comparison, select any ZFS
+    dataset (and its descendants) that is contained within SRC_DATASET
+    (DST_DATASET in case of deletion) if its relative dataset path (e.g.
+    `baz/tmp`) wrt. SRC_DATASET (DST_DATASET in case of deletion)
+    matches at least one of the given include regular expressions but
+    none of the exclude regular expressions. If a dataset is excluded
+    its descendants are automatically excluded too, and this decision is
+    never reconsidered even for the descendants because exclude takes
+    precedence over include.
 
     This option can be specified multiple times. A leading `!`
     character indicates logical negation, i.e. the regex matches if the
@@ -675,11 +675,12 @@ usage: bzfs [-h] [--recursive]
 
 **--include-snapshot-regex** *REGEX [REGEX ...]*
 
-*  During replication and deletion, select any source ZFS snapshot that
-    has a name (i.e. the part after the '@') that matches at least one
-    of the given include regular expressions but none of the exclude
-    regular expressions. If a snapshot is excluded this decision is
-    never reconsidered because exclude takes precedence over include.
+*  During replication, deletion and comparison, select any source ZFS
+    snapshot that has a name (i.e. the part after the '@') that
+    matches at least one of the given include regular expressions but
+    none of the exclude regular expressions. If a snapshot is excluded
+    this decision is never reconsidered because exclude takes precedence
+    over include.
 
     This option can be specified multiple times. A leading `!`
     character indicates logical negation, i.e. the regex matches if the

@@ -321,12 +321,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "option (see below).\n\n")
     parser.add_argument(
         "--recursive", "-r", action="store_true",
-        help="During replication and deletion, also consider descendant datasets, i.e. datasets within the dataset "
-             "tree, including children, and children of children, etc.\n\n")
+        help="During replication, deletion and comparison, also consider descendant datasets, i.e. datasets within "
+             "the dataset tree, including children, and children of children, etc.\n\n")
     parser.add_argument(
         "--include-dataset", action=FileOrLiteralAction, nargs="+", default=[], metavar="DATASET",
-        help="During replication and deletion, select any ZFS dataset (and its descendants) that is contained within "
-             "SRC_DATASET (DST_DATASET in case of deletion) if its dataset name is one of the given include dataset "
+        help="During replication, deletion and comparison, select any ZFS dataset (and its descendants) that is contained "
+             "within SRC_DATASET (DST_DATASET in case of deletion) if its dataset name is one of the given include dataset "
              "names but none of the exclude dataset names. If a dataset is excluded its descendants are automatically "
              "excluded too, and this decision is never reconsidered even for the descendants because exclude takes "
              "precedence over include.\n\n"
@@ -345,9 +345,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--exclude-dataset-regex (see below).\n\n")
     parser.add_argument(
         "--include-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help="During replication (and deletion), select any ZFS dataset (and its descendants) that is contained "
-             "within SRC_DATASET (DST_DATASET in case of deletion) if its relative dataset path (e.g. `baz/tmp`) wrt. "
-             "SRC_DATASET (DST_DATASET in case of deletion) matches at least one of the given include regular "
+        help="During replication (and deletion) and comparison, select any ZFS dataset (and its descendants) that is "
+             "contained within SRC_DATASET (DST_DATASET in case of deletion) if its relative dataset path (e.g. `baz/tmp`) "
+             "wrt. SRC_DATASET (DST_DATASET in case of deletion) matches at least one of the given include regular "
              "expressions but none of the exclude regular expressions. "
              "If a dataset is excluded its descendants are automatically excluded too, and this decision is never "
              "reconsidered even for the descendants because exclude takes precedence over include.\n\n"
@@ -379,8 +379,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "and/or --include/exclude-dataset to achieve the same or better outcome.\n\n")
     parser.add_argument(
         "--include-snapshot-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
-        help="During replication and deletion, select any source ZFS snapshot that has a name (i.e. the part after "
-             "the '@') that matches at least one of the given include regular expressions but none of the "
+        help="During replication, deletion and comparison, select any source ZFS snapshot that has a name (i.e. the part "
+             "after the '@') that matches at least one of the given include regular expressions but none of the "
              "exclude regular expressions. If a snapshot is excluded this decision is never reconsidered because "
              "exclude takes precedence over include.\n\n"
              "This option can be specified multiple times. "
