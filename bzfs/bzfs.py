@@ -1286,12 +1286,10 @@ class Params:
         self.zpool_program: str = self.program_name(args.zpool_program)
 
         # no point creating complex shell pipeline commands for tiny data transfers:
-        self.min_pipe_transfer_size: int = int(getenv_any("min_pipe_transfer_size", 1024 * 1024))
-        self.max_datasets_per_batch_on_list_snaps = int(getenv_any("max_datasets_per_batch_on_list_snaps", 1024))
-        self.max_datasets_per_minibatch_on_list_snaps = int(getenv_any("max_datasets_per_minibatch_on_list_snaps", -1))
-        self.max_snapshots_per_minibatch_on_delete_snaps = int(
-            getenv_any("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
-        )
+        self.min_pipe_transfer_size: int = getenv_int("min_pipe_transfer_size", 1024 * 1024)
+        self.max_datasets_per_batch_on_list_snaps = getenv_int("max_datasets_per_batch_on_list_snaps", 1024)
+        self.max_datasets_per_minibatch_on_list_snaps = getenv_int("max_datasets_per_minibatch_on_list_snaps", -1)
+        self.max_snapshots_per_minibatch_on_delete_snaps = getenv_int("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
         self.dedicated_tcp_connection_per_zfs_send = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         self.threads: Tuple[int, bool] = args.threads
         self.no_estimate_send_size: bool = args.no_estimate_send_size
@@ -1758,13 +1756,13 @@ class Job:
                     f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
                 )
 
-        suffx = self.re_suffix  # also match descendants of a matching dataset
+        suffix = self.re_suffix  # also match descendants of a matching dataset
         p.exclude_dataset_regexes, p.include_dataset_regexes = (
-            p.tmp_exclude_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_exclude_datasets), suffix=suffx),
-            p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=suffx),
+            p.tmp_exclude_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_exclude_datasets), suffix=suffix),
+            p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=suffix),
         )
         if len(p.include_dataset_regexes) == 0:
-            p.include_dataset_regexes = compile_regexes([".*"], suffix=suffx)
+            p.include_dataset_regexes = compile_regexes([".*"], suffix=suffix)
 
         self.detect_available_programs()
 
@@ -2017,7 +2015,7 @@ class Job:
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        retrycount = retry.count
+        retry_count = retry.count
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
         log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
@@ -2075,10 +2073,7 @@ class Job:
                     oldest_src_snapshot = snapshot
         if len(src_snapshots_with_guids) == 0:
             if p.skip_missing_snapshots == "fail":
-                die(
-                    f"Found source dataset that includes no snapshot: {src_dataset}. Consider "
-                    "using --skip-missing-snapshots=dataset"
-                )
+                die(f"Source dataset includes no snapshot: {src_dataset}. Consider using --skip-missing-snapshots=dataset")
             elif p.skip_missing_snapshots == "dataset":
                 log.warning("Skipping source dataset because it includes no snapshot: %s", src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and p.recursive:
@@ -2136,13 +2131,11 @@ class Job:
                     p.force.value = False
                     p.force_rollback_to_latest_common_snapshot.value = False
                 log.info(
-                    p.dry(f"{tid} Rolling back destination to most recent common snapshot: %s"),
-                    latest_common_dst_snapshot,
+                    p.dry(f"{tid} Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 cmd = p.split_args(
-                    f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}",
-                    latest_common_dst_snapshot,
+                    f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}", latest_common_dst_snapshot
                 )
                 self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
 
@@ -2198,7 +2191,7 @@ class Job:
                         if dst_dataset_parent != "":
                             self.create_filesystem(dst_dataset_parent)
 
-                recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retrycount)
+                recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
                 curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
                 humansize = format_size(curr_size)
                 if recv_resume_token:
@@ -2211,9 +2204,7 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
-                log.info(
-                    p.dry(f"{tid} Full send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({humansize.strip()}) ..."
-                )
+                log.info(p.dry(f"{tid} Full send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({humansize.strip()}) ...")
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                 dry_run_no_send = dry_run_no_send or p.dry_run_no_send
                 self.maybe_inject_params(error_trigger="full_zfs_send_params")
@@ -2228,7 +2219,7 @@ class Job:
                     self.num_snapshots_replicated += 1
                 self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
                 self.zfs_set(set_opts, dst, dst_dataset)
-                retrycount = 0
+                retry_count = 0
 
         # endif not latest_common_src_snapshot
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
@@ -2268,7 +2259,7 @@ class Job:
                 # bookmark whose snapshot has been deleted on src.
                 return True  # nothing more tbd
 
-            recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retrycount)
+            recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
             recv_opts = p.zfs_recv_program_opts.copy() + recv_resume_opts
             recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
             if p.no_stream:
@@ -2294,7 +2285,7 @@ class Job:
             for i, (incr_flag, from_snap, to_snap, curr_num_snapshots) in enumerate(steps_todo):
                 curr_size = estimate_send_sizes[i]
                 humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
-                humannum = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
+                human_num = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
                 else:
@@ -2303,10 +2294,10 @@ class Job:
                 recv_cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
                 )
-                densesize = p.two_or_more_spaces_regex.sub("", humansize.strip())
+                dense_size = p.two_or_more_spaces_regex.sub("", humansize.strip())
                 log.info(
                     p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-                    f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({densesize}) ({humannum}) ...",
+                    f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
@@ -2487,9 +2478,7 @@ class Job:
 
     def clear_resumable_recv_state_if_necessary(self, dst_dataset: str, stderr: str) -> bool:
         def clear_resumable_recv_state() -> bool:
-            log.warning(
-                p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset
-            )
+            log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
             cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
             self.try_ssh_command(p.dst, log_trace, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
             log.trace(p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
@@ -2535,7 +2524,7 @@ class Job:
 
         return False
 
-    def _recv_resume_token(self, dst_dataset: str, retrycount: int) -> Tuple[Optional[str], List[str], List[str]]:
+    def _recv_resume_token(self, dst_dataset: str, retry_count: int) -> Tuple[Optional[str], List[str], List[str]]:
         """Get recv_resume_token ZFS property from dst_dataset and return corresponding opts to use for send+recv"""
         p, log = self.params, self.params.log
         if not p.resume_recv:
@@ -2700,10 +2689,9 @@ class Job:
             ssh_cmd = conn.ssh_cmd
             ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
             ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
-            dvnul = DEVNULL
             # extend lifetime of ssh master by $control_persist_secs via 'ssh -O check' if master is still running.
             # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
-            if subprocess.run(ssh_socket_cmd, stdin=dvnul, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+            if subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
                 log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
             else:  # ssh master is not alive; start a new master:
                 log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
@@ -2801,9 +2789,7 @@ class Job:
                 continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
             skip_dataset = DONT_SKIP_DATASET
             # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
-            cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset
-            )
+            cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset)
             self.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
             property_value = self.try_ssh_command(remote, log_trace, cmd=cmd)
             if property_value is None:
@@ -3104,27 +3090,27 @@ class Job:
         """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
         log = self.params.log
         max_sleep_mark = policy.min_sleep_nanos
-        retrycount = 0
+        retry_count = 0
         start_time_nanos = time.time_ns()
         while True:
             try:
-                return fn(*args, **kwargs, retry=Retry(retrycount))  # Call the target function with provided args
+                return fn(*args, **kwargs, retry=Retry(retry_count))  # Call the target function with provided args
             except RetryableError as retryable_error:
                 elapsed_nanos = time.time_ns() - start_time_nanos
-                if retrycount < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
-                    retrycount += 1
-                    if retryable_error.no_sleep and retrycount <= 1:
-                        log.info(f"Retrying [{retrycount}/{policy.retries}] immediately ...")
+                if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
+                    retry_count += 1
+                    if retryable_error.no_sleep and retry_count <= 1:
+                        log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
                         continue
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                     sleep_nanos = random.randint(policy.min_sleep_nanos, max_sleep_mark)
-                    log.info(f"Retrying [{retrycount}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
+                    log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
                     if policy.retries > 0:
                         log.error(
-                            f"Giving up because the last [{retrycount}/{policy.retries}] retries across "
+                            f"Giving up because the last [{retry_count}/{policy.retries}] retries across "
                             f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )
@@ -3291,9 +3277,7 @@ class Job:
                     sys_propnames = ",".join([name for name in props.keys() if ":" not in name])
                     props = self.zfs_get(p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
                     for propnames in user_propnames:
-                        props.update(
-                            self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache)
-                        )
+                        props.update(self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache))
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                     raise RetryableError("Subprocess failed") from e
                 for propname in sorted(props.keys()):
@@ -3651,7 +3635,7 @@ class Job:
 
             failed = False
             while submit_datasets():
-                done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # block
+                done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                 for done_future in done_futures:
                     _, dataset, children = done_future.node
                     try:
@@ -4346,6 +4330,10 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
 def getenv_any(key: str, default=None) -> str:
     """All shell environment variable names used for configuration start with this prefix."""
     return os.getenv(env_var_prefix + key, default)
+
+
+def getenv_int(key: str, default: int) -> int:
+    return int(getenv_any(key, default))
 
 
 def getenv_bool(key: str, default: bool = False) -> bool:

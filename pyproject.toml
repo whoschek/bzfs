@@ -87,5 +87,5 @@ path = "bzfs/bzfs.py"
 pattern = "^__version__ = ['\"](?P<version>[^'\"]+)['\"]$"
 
 [tool.black]
-line_length = 120
+line_length = 125
 target_version = ["py37", "py38", "py39", "py310", "py311", "py312", "py313"]

@@ -376,9 +376,7 @@ class BZFSTestCase(ParametrizedTestCase):
                 src_permissions += ",destroy,mount"
             optional_dst_permissions = ",canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize"
             optional_dst_permissions = (
-                ",keylocation,compression"
-                if not is_solaris_zfs()
-                else ",keysource,encryption,salt,compression,checksum"
+                ",keylocation,compression" if not is_solaris_zfs() else ",keysource,encryption,salt,compression,checksum"
             )
             dst_permissions = "mount,create,receive,rollback,destroy" + optional_dst_permissions
             cmd = f"sudo zfs allow -u {os_username()} {src_permissions}".split(" ") + [src_pool_name]
@@ -749,9 +747,7 @@ class TestSSHLatency(BZFSTestCase):
         for mode in range(0, 2):
             with stop_on_failure_subtest(i=mode):
                 control_persist = 2 if mode == 0 else 2  # seconds
-                master_cmd = p.split_args(
-                    f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit"
-                )
+                master_cmd = p.split_args(f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit")
                 check_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O check 127.0.0.1")
                 echo_cmd = "echo hello"
                 list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
@@ -796,9 +792,7 @@ class TestSSHLatency(BZFSTestCase):
                                         result = self.run_latency_cmd(cmd, close_fds=close_fds)
                                         # log.info(f"cmd result: {result}")
                                     t = bzfs.human_readable_duration((time.time_ns() - start_time_nanos) / iters)
-                                    log.info(
-                                        f"time/iter: {t}, check: {check}, close_fds: {close_fds}, cmd: {' '.join(cmd)}"
-                                    )
+                                    log.info(f"time/iter: {t}, check: {check}, close_fds: {close_fds}, cmd: {' '.join(cmd)}")
                 except subprocess.CalledProcessError as e:
                     log.error(f"error: {(e.stdout, e.stderr)}")
                     raise e
@@ -907,9 +901,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_pool, fix("p1"))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                if (
-                    i > 0 and self.is_no_privilege_elevation()
-                ):  # maybe related: https://github.com/openzfs/zfs/issues/10461
+                if i > 0 and self.is_no_privilege_elevation():  # maybe related: https://github.com/openzfs/zfs/issues/10461
                     self.skipTest("'cannot unmount '/wb_dest': permission denied' error on zfs receive -F -u wb_dest")
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0))
                 if i == 0:
@@ -1010,9 +1002,7 @@ class LocalTestCase(BZFSTestCase):
 
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(
-                    src_root_dataset, dst_root_dataset, "--skip-parent", "--delete-dst-datasets", dry_run=(i == 0)
-                )
+                self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-parent", "--delete-dst-datasets", dry_run=(i == 0))
                 self.assertSnapshots(src_root_dataset, 3, "s")
                 self.assertTrue(dataset_exists(dst_root_dataset))
                 self.assertSnapshots(dst_root_dataset, 0)
@@ -1727,9 +1717,7 @@ class LocalTestCase(BZFSTestCase):
     def test_check_zfs_dataset_busy_with_force(self):
         self.setup_basic()
         inject_params = {"is_zfs_dataset_busy": True}
-        self.run_bzfs(
-            src_root_dataset, dst_root_dataset, "--force", expected_status=die_status, inject_params=inject_params
-        )
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--force", expected_status=die_status, inject_params=inject_params)
 
     def test_periodic_job_locking(self):
         if is_solaris_zfs():
@@ -2475,9 +2463,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assertSnapshotNames(
                     dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t11"]
                 )  # nothing has changed
-                self.assertBookmarkNames(
-                    src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"]
-                )  # nothing has changed
+                self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])  # nothing has changed
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
         take_snapshot(src_foo, fix("t12"))
@@ -2714,9 +2700,7 @@ class LocalTestCase(BZFSTestCase):
                     if i > 0:
                         self.tearDownAndSetup()
                         os.environ[param_name] = "0"
-                    job = self.run_bzfs(
-                        src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists"
-                    )
+                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--compare-snapshot-lists")
                     n_src, n_dst, n_all = stats(job)
                     self.assertEqual(0, n_src)
                     self.assertEqual(0, n_dst)
@@ -3305,14 +3289,10 @@ class LocalTestCase(BZFSTestCase):
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s2", "s3"])
                 for snapshot in snapshots(src_root_dataset) + snapshots(dst_root_dataset):
                     destroy(snapshot)
-                self.run_bzfs(
-                    src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks"
-                )
+                self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
 
-                self.run_bzfs(
-                    src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks"
-                )
+                self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
                 self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
 
                 for bookmark in bookmarks(src_root_dataset):
@@ -3849,9 +3829,7 @@ class LocalTestCase(BZFSTestCase):
     def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self):
         if not self.param or self.param.get("ssh_mode", "local") == "local" or ssh_program != "ssh":
             self.skipTest("ssh is only required in nonlocal mode")
-        self.run_bzfs(
-            src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs.disable_prg, expected_status=die_status
-        )
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs.disable_prg, expected_status=die_status)
 
 
 #############################################################################
@@ -3929,9 +3907,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         LocalTestCase(param=self.param).test_basic_replication_dataset_with_spaces()
 
     def test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive(self):
-        LocalTestCase(
-            param=self.param
-        ).test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive()
+        LocalTestCase(param=self.param).test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive()
 
     def test_zfs_set(self):
         LocalTestCase(param=self.param).test_zfs_set()

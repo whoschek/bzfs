@@ -70,9 +70,7 @@ def suite():
 
 
 def argparser_parse_args(args):
-    return bzfs.argument_parser().parse_args(
-        args + ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
-    )
+    return bzfs.argument_parser().parse_args(args + ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")])
 
 
 #############################################################################
@@ -663,16 +661,10 @@ class TestParseDatasetLocator(unittest.TestCase):
         )
         self.run_test("tank1/foo/bar", "", "", "tank1/foo/bar", "", False)
         self.run_test("-:tank1/foo/bar:baz:boo", "", "", "tank1/foo/bar:baz:boo", "", False)
-        self.run_test(
-            "host.example.com:tank1/foo/bar", "", "host.example.com", "tank1/foo/bar", "host.example.com", False
-        )
-        self.run_test(
-            "root@host.example.com:tank1", "root", "host.example.com", "tank1", "root@host.example.com", False
-        )
+        self.run_test("host.example.com:tank1/foo/bar", "", "host.example.com", "tank1/foo/bar", "host.example.com", False)
+        self.run_test("root@host.example.com:tank1", "root", "host.example.com", "tank1", "root@host.example.com", False)
         self.run_test("192.168.1.1:tank1/foo/bar", "", "192.168.1.1", "tank1/foo/bar", "192.168.1.1", False)
-        self.run_test(
-            "user@192.168.1.1:tank1/foo/bar", "user", "192.168.1.1", "tank1/foo/bar", "user@192.168.1.1", False
-        )
+        self.run_test("user@192.168.1.1:tank1/foo/bar", "user", "192.168.1.1", "tank1/foo/bar", "user@192.168.1.1", False)
         self.run_test(
             "user@host_2024-01-02:a3:04:56:tank1/foo/bar",
             "user",
@@ -736,12 +728,8 @@ class TestParseDatasetLocator(unittest.TestCase):
         self.run_test("user@l`ocalhost:tank1/foo/bar", "user", "l`ocalhost", "tank1/foo/bar", "user@l`ocalhost", True)
         self.run_test("user@l'ocalhost:tank1/foo/bar", "user", "l'ocalhost", "tank1/foo/bar", "user@l'ocalhost", True)
         self.run_test('user@l"ocalhost:tank1/foo/bar', "user", 'l"ocalhost', "tank1/foo/bar", 'user@l"ocalhost', True)
-        self.run_test(
-            "user@host.ex.com:tank1/foo@bar", "user", "host.ex.com", "tank1/foo@bar", "user@host.ex.com", True
-        )
-        self.run_test(
-            "user@host.ex.com:tank1/foo#bar", "user", "host.ex.com", "tank1/foo#bar", "user@host.ex.com", True
-        )
+        self.run_test("user@host.ex.com:tank1/foo@bar", "user", "host.ex.com", "tank1/foo@bar", "user@host.ex.com", True)
+        self.run_test("user@host.ex.com:tank1/foo#bar", "user", "host.ex.com", "tank1/foo#bar", "user@host.ex.com", True)
         self.run_test(
             "whitespace user@host.ex.com:tank1/foo/bar",
             "whitespace user",
@@ -758,15 +746,9 @@ class TestParseDatasetLocator(unittest.TestCase):
             "user@whitespace\thost",
             True,
         )
-        self.run_test(
-            "user@host:tank1/foo/whitespace\tbar", "user", "host", "tank1/foo/whitespace\tbar", "user@host", True
-        )
-        self.run_test(
-            "user@host:tank1/foo/whitespace\nbar", "user", "host", "tank1/foo/whitespace\nbar", "user@host", True
-        )
-        self.run_test(
-            "user@host:tank1/foo/whitespace\rbar", "user", "host", "tank1/foo/whitespace\rbar", "user@host", True
-        )
+        self.run_test("user@host:tank1/foo/whitespace\tbar", "user", "host", "tank1/foo/whitespace\tbar", "user@host", True)
+        self.run_test("user@host:tank1/foo/whitespace\nbar", "user", "host", "tank1/foo/whitespace\nbar", "user@host", True)
+        self.run_test("user@host:tank1/foo/whitespace\rbar", "user", "host", "tank1/foo/whitespace\rbar", "user@host", True)
         self.run_test("user@host:tank1/foo/space bar", "user", "host", "tank1/foo/space bar", "user@host", False)
         self.run_test("user@||1:tank1/foo/space bar", "user", "::1", "tank1/foo/space bar", "user@::1", False)
         self.run_test("user@::1:tank1/foo/space bar", "", "user@", ":1:tank1/foo/space bar", "user@", True)
@@ -1350,9 +1332,7 @@ class TestTimeRangeAction(unittest.TestCase):
 
 
 def filter_snapshots_by_times_and_rank(snapshots, timerange, ranks=[]):
-    args = argparser_parse_args(
-        args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"]
-    )
+    args = argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"])
     log_params = bzfs.LogParams(args)
     try:
         job = bzfs.Job()
