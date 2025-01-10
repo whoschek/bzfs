@@ -1696,10 +1696,9 @@ class Job:
         elapsed_nanos = time.time_ns() - start_time_nanos
         m = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
-            total_sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
-            sent_bytes_per_sec = round(1_000_000_000 * total_sent_bytes / elapsed_nanos)
-            m += f" zfs sent {human_readable_bytes(total_sent_bytes)} "
-            m += f"[{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
+            sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
+            sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
+            m += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
         log.info("%s", m)
 
     def validate_once(self) -> None:
