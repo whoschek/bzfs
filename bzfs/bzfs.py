@@ -1456,10 +1456,9 @@ class Remote:
         if self.ssh_port:
             ssh_cmd += ["-p", str(self.ssh_port)]
         if self.reuse_ssh_connection:
-            # performance: reuse ssh connection for low latency startup of frequent ssh invocations
-            # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-            # and https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
-            # generate unique private socket file name in user's home dir
+            # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
+            # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
+            # Generate unique private Unix domain socket file name in user's home dir and pass it to 'ssh -S /path/to/socket'
             def sanitize(name: str) -> str:
                 name = self.sanitize1_regex.sub("~", name)  # replace whitespace, /, $, \, @ with a ~ tilde char
                 name = self.sanitize2_regex.sub("", name)  # Remove chars not in the allowed set
@@ -2680,12 +2679,11 @@ class Job:
             die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
         if not remote.reuse_ssh_connection:
             return
+        # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
+        # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
         control_persist_limit_nanos = (self.control_persist_secs - self.control_persist_margin_secs) * 1_000_000_000
         now = time.time_ns()  # no real need to compute this inside the critical section of conn.lock
         with conn.lock:
-            # performance: reuse ssh connection for low latency startup of frequent ssh invocations
-            # see https://www.cyberciti.biz/faq/linux-unix-reuse-openssh-connection/
-            # and https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
             if now - conn.last_refresh_time.value < control_persist_limit_nanos:
                 return  # ssh master is alive, reuse its TCP connection (this is the common case & the ultra-fast path)
             ssh_cmd = conn.ssh_cmd
