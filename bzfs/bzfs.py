@@ -1782,7 +1782,7 @@ class Job:
             bs = max(1, p.max_datasets_per_batch_on_list_snaps)  # 1024 by default
             max_datasets_per_minibatch = p.max_datasets_per_minibatch_on_list_snaps
             if max_datasets_per_minibatch <= 0:
-                max_datasets_per_minibatch = max(1, bs // cpus if r.ssh_user_host else bs // cpus // 8)
+                max_datasets_per_minibatch = max(1, bs // cpus)
             max_datasets_per_minibatch = min(bs, max_datasets_per_minibatch)
             self.max_datasets_per_minibatch_on_list_snaps[r.location] = max_datasets_per_minibatch
             log.trace(
@@ -3932,7 +3932,13 @@ class Job:
                 lambda batch: executor.submit(
                     lambda cmd, lst: (self.try_ssh_command(r, log_trace, cmd=cmd + lst) or "").splitlines(), cmd, batch
                 ),
-                self.max_datasets_per_minibatch_on_list_snaps[r.location],
+                max_batch_items=min(
+                    self.max_datasets_per_minibatch_on_list_snaps[r.location],
+                    max(
+                        len(datasets) // (max_workers if r.ssh_user_host else max_workers * 8),
+                        max_workers if r.ssh_user_host else 1,
+                    ),
+                ),
             )
             # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
             fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))
