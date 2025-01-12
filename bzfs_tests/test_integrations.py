@@ -731,7 +731,7 @@ class TestSSHLatency(BZFSTestCase):
         p = bzfs.Params(args, log_params=bzfs.LogParams(args))
 
         ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
-        ssh_opts += ["-S", os.path.join(p.src.socket_dir, "bzfs_test_ssh_socket")]
+        ssh_opts += ["-S", os.path.join(p.src.ssh_socket_dir, "bzfs_test_ssh_socket")]
         ssh_opts += ["-p", getenv_any("test_ssh_port", "22")]
 
         private_key_file2 = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/testid_rsa"

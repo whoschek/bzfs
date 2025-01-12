@@ -1418,11 +1418,11 @@ class Remote:
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
-            self.socket_dir = os.path.join(get_home_directory(), ".ssh", "bzfs")
-            os.makedirs(os.path.dirname(self.socket_dir), exist_ok=True)
-            os.makedirs(self.socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+            self.ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs")
+            os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
+            os.makedirs(self.ssh_socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             self.socket_prefix = "s"
-            delete_stale_files(self.socket_dir, self.socket_prefix)
+            delete_stale_files(self.ssh_socket_dir, self.socket_prefix)
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex = re.compile(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]")  # Remove chars not in the allowed set
 
@@ -1466,7 +1466,7 @@ class Remote:
 
             unique = f"{os.getpid()}@{time.time_ns()}@{random.SystemRandom().randint(0, 999_999_999_999)}"
             socket_name = f"{self.socket_prefix}{unique}@{sanitize(self.ssh_host)[:45]}@{sanitize(self.ssh_user)}"
-            socket_file = os.path.join(self.socket_dir, socket_name)[: max(100, len(self.socket_dir) + 10)]
+            socket_file = os.path.join(self.ssh_socket_dir, socket_name)[: max(100, len(self.ssh_socket_dir) + 10)]
             ssh_cmd += ["-S", socket_file]
         ssh_cmd += [self.ssh_user_host]
         return ssh_cmd
@@ -1742,19 +1742,14 @@ class Job:
         self.dst_dataset_exists = SynchronizedDict(self.all_dst_dataset_exists[dst.ssh_user_host])
 
         if src.ssh_host == dst.ssh_host:
+            msg = f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
             if src.root_dataset == dst.root_dataset:
-                die(
-                    "Source and destination dataset must not be the same! "
-                    f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
-                )
+                die(f"Source and destination dataset must not be the same! {msg}")
             if p.recursive and (
                 is_descendant(src.root_dataset, of_root_dataset=dst.root_dataset)
                 or is_descendant(dst.root_dataset, of_root_dataset=src.root_dataset)
             ):
-                die(
-                    "Source and destination dataset trees must not overlap! "
-                    f"src: {src.basis_root_dataset}, dst: {dst.basis_root_dataset}"
-                )
+                die(f"Source and destination dataset trees must not overlap! {msg}")
 
         suffix = self.re_suffix  # also match descendants of a matching dataset
         p.exclude_dataset_regexes, p.include_dataset_regexes = (
@@ -1825,25 +1820,21 @@ class Job:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
-
-        # find src dataset or all datasets in src dataset tree (with --recursive)
-        cmd = p.split_args(
-            f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name -s name {p.recursive_flag}",
-            src.root_dataset,
-        )
-        src_datasets_with_sizes = []
-        if not self.is_dummy_src(src):
-            src_datasets_with_sizes = (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines()
-        src_datasets = []
-        src_properties = {}
-        for line in src_datasets_with_sizes:
-            volblocksize, recordsize, src_dataset = line.split("\t", 2)
-            src_properties[src_dataset] = {"recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize)}
-            src_datasets.append(src_dataset)
-        self.src_properties = src_properties
-        src_datasets_with_sizes = None  # help gc
-        selected_src_datasets = None
         failed = False
+        selected_src_datasets = None
+        src_datasets = []
+        self.src_properties = {}
+        if not self.is_dummy_src(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
+            cmd = p.split_args(
+                f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name {p.recursive_flag}",
+                src.root_dataset,
+            )
+            for line in (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines():
+                volblocksize, recordsize, src_dataset = line.split("\t", 2)
+                self.src_properties[src_dataset] = {
+                    "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize)
+                }
+                src_datasets.append(src_dataset)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
@@ -1975,12 +1966,11 @@ class Job:
                 parent = os.path.dirname(dst_dataset)
                 children[parent].add(dst_dataset)
 
-            # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of
-            # one filter run is an optimization. The first run only computes candidate orphans, without incurring I/O,
-            # to reduce the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from
-            # dst_datasets to a subset of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this
-            # eliminates the I/O to list snapshots for ancestors of excluded datasets. The second run computes the
-            # real orphans.
+            # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of one
+            # filter run is an optimization. The first run only computes candidate orphans, without incurring I/O, to reduce
+            # the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from dst_datasets to a subset
+            # of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this eliminates the I/O to list
+            # snapshots for ancestors of excluded datasets. The second run computes the real orphans.
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
             dst_datasets_having_snapshots: Set[str] = set()
             for run in range(0, 2):
@@ -2024,14 +2014,13 @@ class Job:
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
-        # Note: A snapshot and its ZFS bookmarks always have the same GUID, creation time and transaction group.
-        # A snapshot changes its transaction group but retains its creation time and GUID on 'zfs receive' on another
-        # pool, i.e. comparing createtxg is only meaningful within a single pool, not across pools from src to dst.
-        # Comparing creation time remains meaningful across pools from src to dst. Creation time is a UTC Unix time
-        # in integer seconds.
-        # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not
-        # contain a '#' char, bookmark names must not contain a '@' char, and dataset names must not
-        # contain a '#' or '@' char. GUID and creation time also do not contain a '#' or '@' char.
+        # Note: A snapshot and its ZFS bookmarks always have the same GUID, creation time and transaction group. A snapshot
+        # changes its transaction group but retains its creation time and GUID on 'zfs receive' on another pool, i.e.
+        # comparing createtxg is only meaningful within a single pool, not across pools from src to dst. Comparing creation
+        # time remains meaningful across pools from src to dst. Creation time is a UTC Unix time in integer seconds.
+        # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not contain a '#'
+        # char, bookmark names must not contain a '@' char, and dataset names must not contain a '#' or '@' char.
+        # GUID and creation time also do not contain a '#' or '@' char.
         filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
         types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
@@ -2171,11 +2160,10 @@ class Job:
                 else:
                     self.delete_snapshots(dst, dst_dataset, snapshot_tags=["%"])  # delete all dst snapshots in a batch
                 if p.dry_run:
-                    # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really
-                    # executed: "no common snapshot was found. delete all dst snapshots". In turn, this would cause the
-                    # subsequent 'zfs receive -n' to fail with "cannot receive new filesystem stream: destination has
-                    # snapshots; must destroy them to overwrite it". So we skip the zfs send/receive step and keep on
-                    # trucking.
+                    # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really executed:
+                    # "no common snapshot was found. delete all dst snapshots". In turn, this would cause the subsequent
+                    # 'zfs receive -n' to fail with "cannot receive new filesystem stream: destination has snapshots; must
+                    # destroy them to overwrite it". So we skip the zfs send/receive step and keep on trucking.
                     dry_run_no_send = True
 
             # to start with, fully replicate oldest snapshot, which in turn creates a common snapshot
@@ -3254,9 +3242,8 @@ class Job:
     def add_recv_property_options(
         self, full_send: bool, recv_opts: List[str], dataset: str, cache: Dict[Tuple[str, str, str], Dict[str, str]]
     ) -> Tuple[List[str], List[str]]:
-        """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according
-        to CLI params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes
-        successfully."""
+        """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according to CLI
+        params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
         p = self.params
         set_opts = []
         ox_names = p.zfs_recv_ox_names.copy()
@@ -3264,11 +3251,10 @@ class Job:
             if len(config.include_regexes) == 0:
                 continue  # this is the default - it's an instant noop
             if (full_send and "full" in config.targets) or (not full_send and "incremental" in config.targets):
-                # 'zfs get' uses newline as record separator and tab as separator between output columns. A ZFS user
-                # property may contain newline and tab characters (indeed anything). Together, this means that there
-                # is no reliable way to determine where a record ends and the next record starts when listing multiple
-                # arbitrary records in a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for
-                # each ZFS user property.
+                # 'zfs get' uses newline as record separator and tab as separator between output columns. A ZFS user property
+                # may contain newline and tab characters (indeed anything). Together, this means that there is no reliable
+                # way to determine where a record ends and the next record starts when listing multiple arbitrary records in
+                # a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for each ZFS user property.
                 # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
                 try:
                     props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
@@ -3318,12 +3304,11 @@ class Job:
         cols: List[str] = field(compare=False)
 
     def run_compare_snapshot_lists(self, src_datasets: List[str], dst_datasets: List[str]) -> None:
-        """Compares source and destination dataset trees recursively wrt. snapshots, for example to check if all
-        recently taken snapshots have been successfully replicated by a periodic job. Lists snapshots only contained in
-        source (tagged with 'src'), only contained in destination (tagged with 'dst'), and contained in both source
-        and destination (tagged with 'all'), in the form of a TSV file, along with other snapshot metadata.
-        Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and
-        any number of snapshots."""
+        """Compares source and destination dataset trees recursively wrt. snapshots, for example to check if all recently
+        taken snapshots have been successfully replicated by a periodic job. Lists snapshots only contained in source
+        (tagged with 'src'), only contained in destination (tagged with 'dst'), and contained in both source and destination
+        (tagged with 'all'), in the form of a TSV file, along with other snapshot metadata. Implemented with a time and
+        space efficient streaming algorithm; easily scales to millions of datasets and any number of snapshots."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         task = src.root_dataset + " vs. " + dst.root_dataset
@@ -3353,7 +3338,7 @@ class Job:
         def snapshot_iterator(
             root_dataset: str, sorted_itr: Generator[str, None, None]
         ) -> Generator[Job.ComparableSnapshot, None, None]:
-            """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that two
+            """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two
             snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges
             src snapshots and dst snapshots."""
             # streaming group by dataset name (consumes constant memory only)
@@ -3439,8 +3424,8 @@ class Job:
             msgs = []
             msgs.append(f"{prefix} of {task}")
             msgs.append(
-                f"{prefix} Q: No src snapshots are missing on dst, and no dst snapshots are missing "
-                f"on src, and there is a common snapshot? A: "
+                f"{prefix} Q: No src snapshots are missing on dst, and no dst snapshots are missing on src, "
+                "and there is a common snapshot? A: "
                 + (
                     "n/a"
                     if not is_src_dst_all
@@ -3511,8 +3496,7 @@ class Job:
                 loc = "src" if rel_dataset in src_only else "dst" if rel_dataset in dst_only else "all"
                 src_dataset = src.root_dataset + rel_dataset if rel_dataset not in dst_only else ""
                 dst_dataset = dst.root_dataset + rel_dataset if rel_dataset not in src_only else ""
-                row = loc, rel_dataset, src_dataset, dst_dataset
-                # Example: all /foo/bar tank1/src/foo/bar tank2/dst/foo/bar
+                row = loc, rel_dataset, src_dataset, dst_dataset  # Example: all /foo/bar tank1/src/foo/bar tank2/dst/foo/bar
                 if not p.dry_run:
                     fd.write("\t".join(row) + "\n")
         os.rename(tmp_tsv_file, tsv_file)
@@ -3573,6 +3557,23 @@ class Job:
                         yield choices[n], src_next
                 src_next = next(src_itr, None)
 
+    @staticmethod
+    def build_dataset_tree(sorted_datasets: List[str]) -> Tree:
+        """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names,
+        in the form of nested dicts."""
+        tree: Tree = {}
+        for dataset in sorted_datasets:
+            current = tree
+            components = dataset.split("/")
+            n = len(components) - 1
+            for i, component in enumerate(components):
+                child = current.get(component, None)
+                if child is None:
+                    child = {} if i < n else None  # perf: use None to indicate empty leaf dictionary
+                    current[component] = child
+                current = child
+        return tree
+
     def process_datasets_in_parallel_and_fault_tolerant(
         self,
         datasets: List[str],
@@ -3588,7 +3589,6 @@ class Job:
         from the datasets that are currently available for start of processing. Initially, only the roots of the
         selected dataset subtrees are available for start of processing."""
         p, log = self.params, self.params.log
-        log.trace("Retry policy: %s", p.retry_policy)
 
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.time_ns()
@@ -3600,7 +3600,7 @@ class Job:
 
         def build_dataset_tree_and_find_roots() -> List[Tuple[str, str, Tree]]:
             """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
-            tree: Tree = build_dataset_tree(datasets)  # tree consists of nested dictionaries
+            tree: Tree = self.build_dataset_tree(datasets)  # tree consists of nested dictionaries
             skip_dataset = DONT_SKIP_DATASET
             roots = []
             for dataset in datasets:
@@ -3615,6 +3615,7 @@ class Job:
 
         priority_queue: List[Tuple[str, str, Tree]] = build_dataset_tree_and_find_roots()
         heapq.heapify(priority_queue)  # same order as isorted(), i.e. sorted by dataset.casefold()
+        log.trace("Retry policy: %s", p.retry_policy)
         max_workers = min(self.max_workers[p.src.location], self.max_workers[p.dst.location])
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
@@ -3686,9 +3687,7 @@ class Job:
             self.detect_zpool_features(r)
             self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
             self.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
-                p.connection_pools[loc],
-                available_programs[loc],
-                p.zpool_features[loc],
+                p.connection_pools[loc], available_programs[loc], p.zpool_features[loc]
             )
             if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
                 die(
@@ -4192,24 +4191,6 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     return lst
 
 
-def build_dataset_tree(sorted_datasets: List[str]) -> Tree:
-    """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names,
-    in the form of nested dicts."""
-    tree: Tree = {}
-    for dataset in sorted_datasets:
-        current = tree
-        components = dataset.split("/")
-        i = len(components)
-        for component in components:
-            i -= 1
-            child = current.get(component, None)
-            if child is None:
-                child = {} if i > 0 else None  # perf: use None to indicate empty leaf dictionary
-                current[component] = child
-            current = child
-    return tree
-
-
 def delete_stale_files(root_dir: str, prefix: str, secs: int = 30 * 24 * 60 * 60, dirs=False, exclude=None) -> None:
     """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
     now = time.time()
@@ -4315,8 +4296,7 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     Example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\()'
     Aka replaces brace '(' followed by a char other than question mark '?', but not preceded by a backslash
     with the replacement string '(?:'
-    Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups
-    """
+    Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups"""
     # pattern = re.compile(r'(?<!\\)\((?!\?)')
     # return pattern.sub('(?:', regex)
     i = len(regex) - 2
