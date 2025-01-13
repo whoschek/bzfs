@@ -4494,7 +4494,6 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int)
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
 
     def parse_line(line: str) -> int:
-        line = line.rstrip()
         if ":" in line:
             col = line.split(":", 1)[1].strip()
             tail.append(col)
