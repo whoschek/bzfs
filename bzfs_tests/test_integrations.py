@@ -765,7 +765,7 @@ class TestSSHLatency(BZFSTestCase):
                             stdout, stderr = self.run_latency_cmd(check_cmd)
                             log.info(f"check result: {(stdout, stderr)}")
                             self.assertIn("Master running", stderr)
-                        log.info(f"now waiting for expiration of master ...")
+                        log.info("now waiting for expiration of master ...")
                         time.sleep(control_persist + 1)
                         with self.assertRaises(subprocess.CalledProcessError) as e:
                             self.run_latency_cmd(check_cmd)
