@@ -128,7 +128,7 @@ jobs:
         flake8 . --count --ignore=E203,W503 --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
 
-  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.0rc5
+  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.0
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 3 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_latest')
     runs-on: ubuntu-24.04
