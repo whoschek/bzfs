@@ -87,8 +87,8 @@ has_netcat_prog = shutil.which("nc") is not None
 ssh_program = getenv_any("test_ssh_program", "ssh")  # also works with "hpnssh"
 sudo_cmd = []
 if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.system() == "SunOS"):
-    sudo_cmd = ["sudo"]
-    set_sudo_cmd(["sudo"])
+    sudo_cmd = ["sudo", "-n"]
+    set_sudo_cmd(["sudo", "-n"])
 
 
 def suite():
@@ -379,10 +379,10 @@ class BZFSTestCase(ParametrizedTestCase):
                 ",keylocation,compression" if not is_solaris_zfs() else ",keysource,encryption,salt,compression,checksum"
             )
             dst_permissions = "mount,create,receive,rollback,destroy" + optional_dst_permissions
-            cmd = f"sudo zfs allow -u {os_username()} {src_permissions}".split(" ") + [src_pool_name]
+            cmd = f"sudo -n zfs allow -u {os_username()} {src_permissions}".split(" ") + [src_pool_name]
             if dataset_exists(src_pool_name):
                 run_cmd(cmd)
-            cmd = f"sudo zfs allow -u {os_username()} {dst_permissions}".split(" ") + [dst_pool_name]
+            cmd = f"sudo -n zfs allow -u {os_username()} {dst_permissions}".split(" ") + [dst_pool_name]
             if dataset_exists(dst_pool_name):
                 run_cmd(cmd)
 
@@ -475,10 +475,10 @@ class BZFSTestCase(ParametrizedTestCase):
         finally:
             if self.is_no_privilege_elevation():
                 # revoke all ZFS delegation permissions
-                cmd = f"sudo zfs unallow -r -u {os_username()}".split(" ") + [src_pool_name]
+                cmd = f"sudo -n zfs unallow -r -u {os_username()}".split(" ") + [src_pool_name]
                 if dataset_exists(src_pool_name):
                     run_cmd(cmd)
-                cmd = f"sudo zfs unallow -r -u {os_username()}".split(" ") + [dst_pool_name]
+                cmd = f"sudo -n zfs unallow -r -u {os_username()}".split(" ") + [dst_pool_name]
                 if dataset_exists(dst_pool_name):
                     run_cmd(cmd)
 
@@ -547,7 +547,7 @@ class BZFSTestCase(ParametrizedTestCase):
 
     def generate_recv_resume_token(self, from_snapshot, to_snapshot, dst_dataset):
         snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
-        send = f"sudo zfs send --props --raw --compressed -v {snapshot_opts}"
+        send = f"sudo -n zfs send --props --raw --compressed -v {snapshot_opts}"
         c = bzfs.inject_dst_pipe_fail_kbytes
         cmd = ["sh", "-c", f"{send} | dd bs=1024 count={c} 2>/dev/null | sudo zfs receive -v -F -u -s {dst_dataset}"]
         try:
@@ -604,7 +604,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[0]}"
-        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[0]])
         self.run_bzfs(src_foo, dst_foo, "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
@@ -615,7 +615,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[0]}"
-        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[0]])
         if are_bookmarks_enabled("src"):
@@ -634,7 +634,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
-        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
         self.run_bzfs(
@@ -653,7 +653,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
-        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
         self.run_bzfs(
@@ -671,7 +671,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
-        cmd = f"sudo zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
+        cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
         self.assertSnapshotNames(dst_foo, [expected_results[1]])
         self.run_bzfs(
@@ -1876,7 +1876,7 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive")
         dst_foo = dst_root_dataset + "/foo"
         dst_foo_a = dst_foo + "/a"
-        run_cmd(["sudo", "zfs", "mount", dst_foo])
+        run_cmd(["sudo", "-n", "zfs", "mount", dst_foo])
         # run_cmd(['sudo', 'zfs', 'mount', dst_foo_a])
         take_snapshot(dst_foo, fix("x1"))  # --force will need to rollback that dst snap
         take_snapshot(dst_foo_a, fix("y1"))  # --force will need to rollback that dst snap
@@ -2493,12 +2493,12 @@ class LocalTestCase(BZFSTestCase):
     @staticmethod
     def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024):
         """large enough to be interruptable and resumable. interacts with bzfs.py/inject_dst_pipe_fail"""
-        run_cmd(f"sudo zfs mount {src_root_dataset}".split())
+        run_cmd(f"sudo -n zfs mount {src_root_dataset}".split())
         for j in range(lo, hi):
             tmp_file = "/" + src_root_dataset + "/tmpfile"
-            run_cmd(f"sudo dd if=/dev/urandom of={tmp_file} bs={size_in_bytes} count=1".split())
+            run_cmd(f"sudo -n dd if=/dev/urandom of={tmp_file} bs={size_in_bytes} count=1".split())
             take_snapshot(src_root_dataset, fix(f"s{j}"))
-        run_cmd(f"sudo zfs unmount {src_root_dataset}".split())
+        run_cmd(f"sudo -n zfs unmount {src_root_dataset}".split())
 
     def test_all_snapshots_are_fully_replicated_even_though_every_recv_is_interrupted_and_resumed(self):
         if not is_zpool_recv_resume_feature_enabled_or_active():

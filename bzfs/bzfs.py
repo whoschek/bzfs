@@ -3868,7 +3868,7 @@ class Job:
         cmd = p.split_args(f"{p.ps_program} -Ao args")
         procs = (self.try_ssh_command(remote, log_trace, cmd=cmd) or "").splitlines()
         if self.inject_params.get("is_zfs_dataset_busy", False):
-            procs += ["sudo zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
+            procs += ["sudo -n zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
         if not self.is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send):
             return True
         op = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
@@ -3878,7 +3878,7 @@ class Job:
             log.warning("%s", str(e))
             raise RetryableError("dst currently busy with zfs mutation op") from e
 
-    zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas) )?([^ ]*?/)?zfs (receive|recv"
+    zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
     zfs_dataset_busy_if_mods = re.compile((zfs_dataset_busy_prefix + ") .*").replace("(", "(?:"))
     zfs_dataset_busy_if_send = re.compile((zfs_dataset_busy_prefix + "|send) .*").replace("(", "(?:"))
 
