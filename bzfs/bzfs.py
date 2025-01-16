@@ -1826,7 +1826,7 @@ class Job:
         self.src_properties = {}
         if not self.is_dummy_src(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
             cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -Hp -o volblocksize,recordsize,name {p.recursive_flag}",
+                f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o volblocksize,recordsize,name {p.recursive_flag}",
                 src.root_dataset,
             )
             for line in (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines():
@@ -1862,7 +1862,9 @@ class Job:
         ):
             return
         log.info("Listing dst datasets: %s", task_description)
-        cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o name", p.recursive_flag, dst.root_dataset)
+        cmd = p.split_args(
+            f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o name", p.recursive_flag, dst.root_dataset
+        )
         basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
         if basis_dst_datasets is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
