@@ -4509,7 +4509,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int)
     files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
     files = [file for file in files if os.path.isfile(file)]
     for file in sorted(files, key=lambda file: os.stat(file).st_mtime):
-        with open(file, newline="", encoding="utf-8") as fd:
+        with open(file, mode="r", newline="", encoding="utf-8") as fd:
             tail = deque(maxlen=maxlen)
             line = None
             for line in fd:
