@@ -574,13 +574,16 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(1024**3, bzfs.pv_size_to_bytes("8 Gib"))
         self.assertEqual(1000**3, bzfs.pv_size_to_bytes("8 Gb"))
         self.assertEqual(1024**4, bzfs.pv_size_to_bytes("1 TiB"))
-        self.assertEqual(1024**5, bzfs.pv_size_to_bytes("1 EiB"))
-        self.assertEqual(1024**6, bzfs.pv_size_to_bytes("1 ZiB"))
-        self.assertEqual(1024**7, bzfs.pv_size_to_bytes("1 YiB"))
+        self.assertEqual(1024**5, bzfs.pv_size_to_bytes("1 PiB"))
+        self.assertEqual(1024**6, bzfs.pv_size_to_bytes("1 EiB"))
+        self.assertEqual(1024**7, bzfs.pv_size_to_bytes("1 ZiB"))
+        self.assertEqual(1024**8, bzfs.pv_size_to_bytes("1 YiB"))
         with self.assertRaises(ValueError):
             bzfs.pv_size_to_bytes("foo")
         with self.assertRaises(ValueError):
             bzfs.pv_size_to_bytes("46-2GiB")
+        with self.assertRaises(ValueError):
+            bzfs.pv_size_to_bytes("4.12 KiB/s")
 
     def test_count_num_bytes_transferred_by_zfs_send(self):
         for i in range(0, 2):

@@ -4476,16 +4476,18 @@ def terminate_process_group(except_current_process=False):
 
 
 arabic_decimal_separator = "\u066B"  # "٫"
-pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTEZY]?)(i?)([Bb]).*")
+pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZY]?)(i?)([Bb])(.*)")
 
 
 def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     match = pv_size_to_bytes_regex.fullmatch(size)
     if match:
         number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
-        i = "KMGTEZY".index(match.group(2)) if match.group(2) else -1
+        i = "KMGTPEZY".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
         b = 1 if match.group(4) == "B" else 8
+        if match.group(5) and match.group(5).startswith("/s"):
+            raise ValueError("Invalid pv_size: " + size)  # stems from 'pv --rate' or 'pv --average-rate'
         size_in_bytes = round(number * (m ** (i + 1)) / b)
         return size_in_bytes
     else:
