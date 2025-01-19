@@ -523,7 +523,9 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("1 EiB", bzfs.human_readable_bytes(1 * 1024**6))
         self.assertEqual("1 ZiB", bzfs.human_readable_bytes(1 * 1024**7))
         self.assertEqual("1 YiB", bzfs.human_readable_bytes(1 * 1024**8))
-        self.assertEqual("1024 YiB", bzfs.human_readable_bytes(1 * 1024**9))
+        self.assertEqual("1 RiB", bzfs.human_readable_bytes(1 * 1024**9))
+        self.assertEqual("1 QiB", bzfs.human_readable_bytes(1 * 1024**10))
+        self.assertEqual("1024 QiB", bzfs.human_readable_bytes(1 * 1024**11))
         self.assertEqual("3 B", bzfs.human_readable_bytes(2.567, precision=0))
         self.assertEqual("2.6 B", bzfs.human_readable_bytes(2.567, precision=1))
         self.assertEqual("2.57 B", bzfs.human_readable_bytes(2.567, precision=2))
@@ -604,6 +606,8 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(1024**6, pv_size_to_bytes("1 EiB"))
         self.assertEqual(1024**7, pv_size_to_bytes("1 ZiB"))
         self.assertEqual(1024**8, pv_size_to_bytes("1 YiB"))
+        self.assertEqual(1024**9, pv_size_to_bytes("1 RiB"))
+        self.assertEqual(1024**10, pv_size_to_bytes("1 QiB"))
         with self.assertRaises(ValueError):
             pv_size_to_bytes("foo")
         with self.assertRaises(ValueError):

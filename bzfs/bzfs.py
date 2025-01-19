@@ -4608,7 +4608,7 @@ def xappend(lst, *items) -> List[str]:
 def human_readable_bytes(size: float, separator=" ", precision=None, long=False) -> str:
     sign = "-" if size < 0 else ""
     s = abs(size)
-    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
+    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
     i = 0
     long_form = f" ({size} bytes)" if long else ""
     while s >= 1024 and i < len(units) - 1:
@@ -4742,14 +4742,14 @@ def terminate_process_group(except_current_process=False):
 
 
 arabic_decimal_separator = "\u066B"  # "٫"
-pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZY]?)(i?)([Bb])(.*)")
+pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
 
 
 def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     match = pv_size_to_bytes_regex.fullmatch(size)
     if match:
         number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
-        i = "KMGTPEZY".index(match.group(2)) if match.group(2) else -1
+        i = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
         b = 1 if match.group(4) == "B" else 8
         line_tail = match.group(5)
