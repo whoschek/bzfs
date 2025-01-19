@@ -2,7 +2,22 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.0] - TBD
+## [1.9.0] - January 20, 2025
+
+This release contains performance and documentation enhancements as well as bug fixes and new features, including ...
+
+- For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but 
+not to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent 
+aggregates over the parallel replication tasks. Example console status line:
+```
+2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08
+```
+- Fix shutdown for the case where bzfs_reuse_ssh_connection=false
+- --delete-dst-datasets: With --recursive, never delete non-selected dataset subtrees or their ancestors.
+- Improved latency if there's only a single dataset to replicate over SSH
+- Parallel performance: use better heuristic to choose num-datasets-per-thread
+- Also run nightly tests with final release of zfs-2.3.0
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.8.0...v1.9.0
 
 ## [1.8.0] - January 4, 2025
 
