@@ -512,6 +512,23 @@ class TestHelperFunctions(unittest.TestCase):
         self.assert_human_readable_float(10.35 + eps, "10.4")
         self.assert_human_readable_float(10.45, "10.4")
 
+    def test_human_readable_bytes(self):
+        self.assertEqual("0 B", bzfs.human_readable_bytes(0))
+        self.assertEqual("581 B", bzfs.human_readable_bytes(0.567 * 1024**1))
+        self.assertEqual("2 KiB", bzfs.human_readable_bytes(2 * 1024**1))
+        self.assertEqual("1 MiB", bzfs.human_readable_bytes(1 * 1024**2))
+        self.assertEqual("1 GiB", bzfs.human_readable_bytes(1 * 1024**3))
+        self.assertEqual("1 TiB", bzfs.human_readable_bytes(1 * 1024**4))
+        self.assertEqual("1 PiB", bzfs.human_readable_bytes(1 * 1024**5))
+        self.assertEqual("1 EiB", bzfs.human_readable_bytes(1 * 1024**6))
+        self.assertEqual("1 ZiB", bzfs.human_readable_bytes(1 * 1024**7))
+        self.assertEqual("1 YiB", bzfs.human_readable_bytes(1 * 1024**8))
+        self.assertEqual("1024 YiB", bzfs.human_readable_bytes(1 * 1024**9))
+        self.assertEqual("3 B", bzfs.human_readable_bytes(2.567, precision=0))
+        self.assertEqual("2.6 B", bzfs.human_readable_bytes(2.567, precision=1))
+        self.assertEqual("2.57 B", bzfs.human_readable_bytes(2.567, precision=2))
+        self.assertEqual("2.57 B", bzfs.human_readable_bytes(2.567, precision=None))
+
     def test_human_readable_duration(self):
         ms = 1000_000
         self.assertEqual("0 ns", bzfs.human_readable_duration(0, long=False))
@@ -550,6 +567,11 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3, unit="ms", long=True))
         self.assertEqual("-3 ms (0 seconds)", bzfs.human_readable_duration(-3 * 1000 * 1000, long=True))
 
+        self.assertEqual("3 ns", bzfs.human_readable_duration(2.567, precision=0))
+        self.assertEqual("2.6 ns", bzfs.human_readable_duration(2.567, precision=1))
+        self.assertEqual("2.57 ns", bzfs.human_readable_duration(2.567, precision=2))
+        self.assertEqual("2.57 ns", bzfs.human_readable_duration(2.567, precision=None))
+
     def test_pv_cmd(self):
         args = argparser_parse_args(args=["src", "dst"])
         log_params = bzfs.LogParams(args)
@@ -562,28 +584,32 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.reset_logger()
 
     def test_pv_size_to_bytes(self):
-        self.assertEqual(800, bzfs.pv_size_to_bytes("800B foo"))
-        self.assertEqual(1, bzfs.pv_size_to_bytes("8b"))
-        self.assertEqual(round(4.12 * 1024), bzfs.pv_size_to_bytes("4.12 KiB"))
-        self.assertEqual(round(46.2 * 1024**3), bzfs.pv_size_to_bytes("46,2GiB"))
-        self.assertEqual(round(46.2 * 1024**3), bzfs.pv_size_to_bytes("46.2GiB"))
-        self.assertEqual(round(46.2 * 1024**3), bzfs.pv_size_to_bytes("46" + bzfs.arabic_decimal_separator + "2GiB"))
-        self.assertEqual(2 * 1024**2, bzfs.pv_size_to_bytes("2 MiB"))
-        self.assertEqual(1000**2, bzfs.pv_size_to_bytes("1 MB"))
-        self.assertEqual(1024**3, bzfs.pv_size_to_bytes("1 GiB"))
-        self.assertEqual(1024**3, bzfs.pv_size_to_bytes("8 Gib"))
-        self.assertEqual(1000**3, bzfs.pv_size_to_bytes("8 Gb"))
-        self.assertEqual(1024**4, bzfs.pv_size_to_bytes("1 TiB"))
-        self.assertEqual(1024**5, bzfs.pv_size_to_bytes("1 PiB"))
-        self.assertEqual(1024**6, bzfs.pv_size_to_bytes("1 EiB"))
-        self.assertEqual(1024**7, bzfs.pv_size_to_bytes("1 ZiB"))
-        self.assertEqual(1024**8, bzfs.pv_size_to_bytes("1 YiB"))
+        def pv_size_to_bytes(line):
+            num_bytes, _ = bzfs.pv_size_to_bytes(line)
+            return num_bytes
+
+        self.assertEqual(800, pv_size_to_bytes("800B foo"))
+        self.assertEqual(1, pv_size_to_bytes("8b"))
+        self.assertEqual(round(4.12 * 1024), pv_size_to_bytes("4.12 KiB"))
+        self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46,2GiB"))
+        self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46.2GiB"))
+        self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46" + bzfs.arabic_decimal_separator + "2GiB"))
+        self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiB"))
+        self.assertEqual(1000**2, pv_size_to_bytes("1 MB"))
+        self.assertEqual(1024**3, pv_size_to_bytes("1 GiB"))
+        self.assertEqual(1024**3, pv_size_to_bytes("8 Gib"))
+        self.assertEqual(1000**3, pv_size_to_bytes("8 Gb"))
+        self.assertEqual(1024**4, pv_size_to_bytes("1 TiB"))
+        self.assertEqual(1024**5, pv_size_to_bytes("1 PiB"))
+        self.assertEqual(1024**6, pv_size_to_bytes("1 EiB"))
+        self.assertEqual(1024**7, pv_size_to_bytes("1 ZiB"))
+        self.assertEqual(1024**8, pv_size_to_bytes("1 YiB"))
         with self.assertRaises(ValueError):
-            bzfs.pv_size_to_bytes("foo")
+            pv_size_to_bytes("foo")
         with self.assertRaises(ValueError):
-            bzfs.pv_size_to_bytes("46-2GiB")
+            pv_size_to_bytes("46-2GiB")
         with self.assertRaises(ValueError):
-            bzfs.pv_size_to_bytes("4.12 KiB/s")
+            pv_size_to_bytes("4.12 KiB/s")
 
     def test_count_num_bytes_transferred_by_zfs_send(self):
         for i in range(0, 2):
@@ -607,6 +633,120 @@ class TestHelperFunctions(unittest.TestCase):
                     os.remove(pv1)
                     os.remove(pv2)
                     shutil.rmtree(pv3)
+
+    def test_progress_reporter_parse_pv_line(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        p = bzfs.Params(args)
+        reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None)
+        curr_time_nanos = 123
+        eols = ["", "\n", "\r", "\r\n"]
+        for eol in eols:
+            with stop_on_failure_subtest(i=eols.index(eol)):
+                # normal intermediate line
+                line = "125 GiB: 2,71GiB 0:00:08 [98,8MiB/s] [ 341MiB/s] [>                ]  2% ETA 0:06:03 ETA 17:27:49"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(2.71 * 1024**3), num_bytes)
+                self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
+                self.assertEqual("[>                ]  2% ETA 0:06:03 ETA 17:27:49", line_tail)
+
+                # intermediate line with duration ETA that contains days
+                line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 0:12:12 [ 185MiB/s] [ 130MiB/s] [==>  ] 94% ETA 2+0:00:39 ETA 17:55:48"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(93.1 * 1024**3), num_bytes)
+                self.assertEqual(curr_time_nanos + 1_000_000_000 * (2 * 86400 + 39), eta_timestamp_nanos)
+                self.assertEqual("[==>  ] 94% ETA 2+0:00:39 ETA 17:55:48", line_tail)
+
+                # final line on transfer completion does not contain duration ETA
+                line = "98 GiB/ 0 B/  98 GiB: 98,1GiB 0:12:39 [ 132MiB/s] [ 132MiB/s] [=====>] 100%             ETA 17:55:37"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(98.1 * 1024**3), num_bytes)
+                self.assertEqual(curr_time_nanos, eta_timestamp_nanos)
+                self.assertEqual("[=====>] 100%             ETA 17:55:37", line_tail)
+
+                # final line on transfer completion does not contain duration ETA
+                line = "12.6KiB: 44.2KiB 0:00:00 [3.14MiB/s] [3.14MiB/s] [===================] 350%             ETA 14:48:27"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(44.2 * 1024), num_bytes)
+                self.assertEqual(curr_time_nanos, eta_timestamp_nanos)
+                self.assertEqual("[===================] 350%             ETA 14:48:27", line_tail)
+
+                # missing from --pv--program-opts: --timer, --rate, --average-rate
+                line = "125 GiB: 2.71GiB[ >                    ]  2% ETA 0:06:03 ETA 17:27:49"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(2.71 * 1024**3), num_bytes)
+                self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
+                self.assertEqual("[ >                    ]  2% ETA 0:06:03 ETA 17:27:49", line_tail)
+
+                # missing from --pv--program-opts: --rate, --average-rate
+                line = "125 GiB: 2.71GiB 0:00:08 [ >                    ]  2% ETA 0:06:03 ETA 17:27:49"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(2.71 * 1024**3), num_bytes)
+                self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
+                self.assertEqual("0:00:08 [ >                    ]  2% ETA 0:06:03 ETA 17:27:49", line_tail)
+
+                # intermediate line with square brackets after the first ETA (not sure if this actually occurs in the wild)
+                line = "125 GiB: 2,71GiB 0:00:08 [98,8MiB/s] [ 341MiB/s] [>            ]  2% ETA 0:06:03 ] [ ETA 17:27:49]"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(2.71 * 1024**3), num_bytes)
+                self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), eta_timestamp_nanos)
+                self.assertEqual("[>            ]  2% ETA 0:06:03 ] [ ETA 17:27:49]", line_tail)
+
+                for line in eols:
+                    num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                    self.assertEqual(0, num_bytes)
+                    self.assertEqual(curr_time_nanos, eta_timestamp_nanos)
+                    self.assertEqual("", line_tail)
+
+    def test_progress_reporter_update_transfer_stat(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        p = bzfs.Params(args)
+        curr_time_nanos = 123
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None)
+                stat = bzfs.ProgressReporter.TransferStat()
+                stat.bytes_in_flight = 789
+                line = "125 GiB: 2,71GiB 0:00:08 [98,8MiB/s] [ 341MiB/s] [>                   ]  2% ETA 0:06:03 ETA 17:27:49"
+                expected_bytes = round(2.71 * 1024**3)
+                if i > 0:
+                    line = line + "\r"
+                num_bytes = reporter.update_transfer_stat(line, stat, curr_time_nanos)
+                if i == 0:
+                    self.assertEqual(expected_bytes, num_bytes)
+                    self.assertEqual(0, stat.bytes_in_flight)
+                else:
+                    self.assertEqual(0, num_bytes)
+                    self.assertEqual(expected_bytes, stat.bytes_in_flight)
+                self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), stat.eta.timestamp_nanos)
+                self.assertEqual("[>                   ]  2% ETA 0:06:03 ETA 17:27:49", stat.eta.line_tail)
+
+    def test_progress_reporter_stop(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        log_params = bzfs.LogParams(args)
+        try:
+            p = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None)
+            reporter.stop()
+            reporter.stop()  # test stopping more than once is ok
+            reporter.exception = ValueError()
+            with self.assertRaises(ValueError):
+                reporter.stop()
+            self.assertIsInstance(reporter.exception, ValueError)
+            with self.assertRaises(ValueError):
+                reporter.stop()
+            self.assertIsInstance(reporter.exception, ValueError)
+
+            reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None, fail=True)
+            reporter._run()
+            self.assertIsInstance(reporter.exception, ValueError)
+            with self.assertRaises(ValueError):
+                reporter.stop()
+            self.assertIsInstance(reporter.exception, ValueError)
+            with self.assertRaises(ValueError):
+                reporter.stop()
+            self.assertIsInstance(reporter.exception, ValueError)
+        finally:
+            bzfs.reset_logger()
 
 
 #############################################################################
@@ -2292,6 +2432,20 @@ class TestSynchronizedBool(unittest.TestCase):
 
         b.value = False
         self.assertFalse(bool(b))
+
+    def test_get_and_set(self):
+        b = bzfs.SynchronizedBool(True)
+        self.assertTrue(b.get_and_set(False))
+        self.assertFalse(b.value)
+
+    def test_compare_and_set(self):
+        b = bzfs.SynchronizedBool(True)
+        self.assertTrue(b.compare_and_set(True, False))
+        self.assertFalse(b.value)
+
+        b = bzfs.SynchronizedBool(True)
+        self.assertFalse(b.compare_and_set(False, False))
+        self.assertTrue(b.value)
 
     def test_str_and_repr(self):
         b = bzfs.SynchronizedBool(True)

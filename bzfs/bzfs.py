@@ -53,6 +53,7 @@ import pprint
 import pwd
 import re
 import random
+import selectors
 import shlex
 import shutil
 import signal
@@ -63,6 +64,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from argparse import Namespace
 from collections import defaultdict, deque, Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
@@ -74,8 +76,8 @@ from logging import Logger
 from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import Iterable, Deque, Dict, List, Set, Tuple, Any, Callable, Generator, Generic, ItemsView, Optional
-from typing import TypeVar, Union
+from typing import Iterable, Deque, Dict, List, Sequence, Set, Tuple, Any, Callable, Generator, Generic, ItemsView, Optional
+from typing import TextIO, TypeVar, Union
 
 __version__ = "1.9.0-dev"
 prog_name = "bzfs"
@@ -1223,6 +1225,7 @@ class Params:
         self.dry_run_no_send: bool = args.dryrun == "send"
         self.verbose_zfs: bool = args.verbose >= 2
         self.verbose_destroy: str = "" if args.quiet else "-v"
+        self.quiet: bool = args.quiet
 
         self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
@@ -1275,6 +1278,7 @@ class Params:
         self.ps_program: str = self.program_name(args.ps_program)
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
+        self.isatty: bool = getenv_isatty()
         if args.bwlimit:
             self.pv_program_opts += [f"--rate-limit={self.validate_arg(args.bwlimit)}"]
         self.shell_program_local: str = "sh"
@@ -1561,9 +1565,15 @@ class Job:
         self.num_snapshots_replicated: int = 0
         self.control_persist_secs: int = 60
         self.control_persist_margin_secs: int = 2
+        self.progress_reporter: ProgressReporter = None
+        self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
+        self.replication_start_time_nanos: int = time.time_ns()
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix = ""  # for testing only
+        self.isatty: Optional[bool] = None  # for testing only
+        self.use_select: bool = False  # for testing only
+        self.progress_update_intervals: Optional[Tuple[float, float]] = None  # for testing only
         self.error_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.delete_injection_triggers: Dict[str, Counter] = {}  # for testing only
         self.param_injection_triggers: Dict[str, Dict[str, bool]] = {}  # for testing only
@@ -1635,29 +1645,34 @@ class Job:
             self.all_exceptions_count = 0
             self.first_exception = None
             self.remote_conf_cache = {}
-            start_time_nanos = time.time_ns()
-            src, dst = p.src, p.dst
-            for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
-                src.root_dataset = src.basis_root_dataset = src_root_dataset
-                dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
-                p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
-                task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
-                if len(p.root_dataset_pairs) > 1:
-                    log.info("Starting task: %s", task_description + " ...")
-                try:
+            self.isatty = self.isatty if self.isatty is not None else p.isatty
+            self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
+            self.replication_start_time_nanos = time.time_ns()
+            try:
+                src, dst = p.src, p.dst
+                for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
+                    src.root_dataset = src.basis_root_dataset = src_root_dataset
+                    dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
+                    p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
+                    task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
+                    if len(p.root_dataset_pairs) > 1:
+                        log.info("Starting task: %s", task_description + " ...")
                     try:
-                        self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
-                        self.validate_task()
-                        self.run_task()
-                    except RetryableError as retryable_error:
-                        raise retryable_error.__cause__
-                except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                    log.error("%s", str(e))
-                    if p.skip_on_error == "fail":
-                        raise
-                    self.append_exception(e, "task", task_description)
+                        try:
+                            self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
+                            self.validate_task()
+                            self.run_task()
+                        except RetryableError as retryable_error:
+                            raise retryable_error.__cause__
+                    except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                        log.error("%s", str(e))
+                        if p.skip_on_error == "fail":
+                            raise
+                        self.append_exception(e, "task", task_description)
+            finally:
+                self.progress_reporter.stop()
             if not p.skip_replication:
-                self.print_replication_stats(start_time_nanos)
+                self.print_replication_stats(self.replication_start_time_nanos)
             error_count = self.all_exceptions_count
             if error_count > 0:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
@@ -1697,7 +1712,7 @@ class Job:
             sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
             sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
-        log.info("%s", msg)
+        log.info("%s", msg.ljust(terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
     def validate_once(self) -> None:
         p = self.params
@@ -1726,6 +1741,16 @@ class Job:
             compile_regexes(exclude_regexes + self.dataset_regexes(rel_exclude_datasets), suffix=self.re_suffix),
             compile_regexes(include_regexes + self.dataset_regexes(rel_include_datasets), suffix=self.re_suffix),
         )
+
+        if p.pv_program != disable_prg:
+            pv_program_opts_set = set(p.pv_program_opts)
+            if all(arg not in pv_program_opts_set for arg in ["--bytes", "-b", "--bits", "-8"]):
+                die("--pv-program-opts must contain one of --bytes or --bits for progress metrics to function.")
+            if self.isatty:
+                if all(arg not in pv_program_opts_set for arg in ["--eta", "-e"]):
+                    die("--pv-program-opts must contain --eta for progress report line to function.")
+                if all(arg not in pv_program_opts_set for arg in ["--average-rate", "-a"]):
+                    die("--pv-program-opts must contain --average-rate for progress report line to function.")
 
     def validate_task(self) -> None:
         p, log = self.params, self.params.log
@@ -2600,7 +2625,16 @@ class Job:
                 worker = int(match.group(1))
                 if worker > 0:
                     pv_log_file += pv_file_thread_separator + f"{worker:03}"
-            return f"{p.pv_program} {' '.join(p.pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
+            if self.is_first_replication_task.get_and_set(False):
+                if self.isatty and not p.quiet:
+                    self.progress_reporter.start()
+                self.replication_start_time_nanos = time.time_ns()
+            if self.isatty and not p.quiet:
+                self.progress_reporter.enqueue_pv_log_file(pv_log_file)
+            pv_program_opts = p.pv_program_opts
+            if self.progress_update_intervals is not None:  # for testing
+                pv_program_opts = pv_program_opts + [f"--interval={self.progress_update_intervals[0]}"]
+            return f"{p.pv_program} {' '.join(pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
         else:
             return "cat"
 
@@ -4155,6 +4189,229 @@ class ConnectionPools:
 
 
 #############################################################################
+class ProgressReporter:
+    """Periodically prints progress updates to the same console status line, which is helpful if the program runs in an
+    interactive Unix terminal session. Tails the 'pv' output log files that are being written to by (parallel) replication,
+    and extracts aggregate progress and throughput metrics from them, such as MB, MB/s, ETA, etc. Periodically prints these
+    metrics to the console status line (but not to the log file), and in doing so "visually overwrites" the previous status
+    line, via appending a \r carriage return control char rather than a \n newline char. Does not print a status line if the
+    Unix environment var 'bzfs_isatty' is set to 'false', in order not to confuse programs that scrape redirected stdout.
+    Example console status line:
+    2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08"""
+
+    def __init__(self, p: Params, use_select: bool, progress_update_intervals: Optional[Tuple[float, float]], fail=False):
+        # immutable variables:
+        self.params: Params = p
+        self.use_select: bool = use_select
+        self.progress_update_intervals = progress_update_intervals
+        self.inject_error: bool = fail  # for testing only
+
+        # mutable variables:
+        self.thread: threading.Thread = None
+        self.exception: BaseException = None
+        self.lock: threading.Lock = threading.Lock()
+        self.sleeper: InterruptibleSleep = InterruptibleSleep(self.lock)  # sleeper shares lock with reporter
+        self.file_name_queue: Set[str] = set()
+        self.file_name_set: Set[str] = set()
+
+    def start(self) -> None:
+        with self.lock:
+            assert self.thread is None
+            self.thread = threading.Thread(target=lambda: self._run(), name="progress_reporter", daemon=True)
+            self.thread.start()
+
+    def stop(self) -> None:
+        """Blocks until reporter is stopped, then reraises any exception that may have happened during log processing."""
+        self.sleeper.interrupt()
+        t = self.thread
+        if t is not None:
+            t.join()
+        e = self.exception
+        if e is not None:
+            raise e  # reraise exception in current thread
+
+    def enqueue_pv_log_file(self, pv_log_file: str) -> None:
+        with self.lock:
+            if not self.sleeper.is_stopping and pv_log_file not in self.file_name_set:
+                self.file_name_queue.add(pv_log_file)
+
+    def _run(self) -> None:
+        log = self.params.log
+        try:
+            fds: List[TextIO] = []
+            try:
+                selector = selectors.SelectSelector() if self.use_select else selectors.PollSelector()
+                try:
+                    self._run_internal(fds, selector)
+                finally:
+                    selector.close()
+            finally:
+                for fd in fds:
+                    fd.close()
+        except BaseException as e:
+            self.exception = e
+            log.error("%s%s", "ProgressReporter:\n", "".join(traceback.TracebackException.from_exception(e).format()))
+
+    @dataclass
+    class TransferStat:
+        @dataclass(order=True)
+        class ETA:  # Estimated time of arrival
+            timestamp_nanos: int  # future time at which current zfs send/recv transfer is estimated to complete
+            line_tail: str  # trailing portion of pv log line containing progress bar and duration ETA and timestamp ETA
+
+        bytes_in_flight: int = field(default=0)
+        eta: ETA = field(default=None)
+
+    def _run_internal(self, fds: List[TextIO], selector: selectors.BaseSelector) -> None:
+
+        @dataclass
+        class Sample:
+            sent_bytes: int
+            timestamp_nanos: int
+
+        update_interval_secs, sliding_window_secs = (
+            self.progress_update_intervals if self.progress_update_intervals is not None else self.get_update_intervals()
+        )
+        update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
+        sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
+        sleep_nanos = round(update_interval_nanos / 2.5)
+        total_bytes, last_status_len = 0, 0
+        stats = defaultdict(self.TransferStat)
+        num_lines, num_readables = 0, 0
+        start_time_nanos = time.time_ns()
+        next_update_nanos = start_time_nanos + update_interval_nanos
+        latest_samples: Deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window containing recent measurements
+        while True:
+            with self.lock:
+                if self.sleeper.is_stopping:
+                    return
+                for pv_log_file in self.file_name_queue:
+                    assert pv_log_file not in self.file_name_set
+                    Path(pv_log_file).touch()
+                    fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
+                    fds.append(fd)
+                    selector.register(fd, selectors.EVENT_READ, data=iter(fd))
+                    self.file_name_set.add(pv_log_file)
+                self.file_name_queue.clear()
+
+            readables = selector.select(timeout=0)  # 0 indicates "don't block"
+            has_line = False
+            curr_time_nanos = time.time_ns()
+            for selector_key, _ in readables:  # for each file that's ready for non-blocking read
+                num_readables += 1
+                key: selectors.SelectorKey = selector_key
+                for line in key.data:  # aka iter(fd)
+                    total_bytes += self.update_transfer_stat(line, stats[key.fileobj.name], curr_time_nanos)
+                    num_lines += 1
+                    has_line = True
+            if curr_time_nanos >= next_update_nanos:
+                elapsed_nanos = curr_time_nanos - start_time_nanos
+                sent_bytes = total_bytes + sum(s.bytes_in_flight for s in stats.values())
+                msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since program start time
+                msg1 = self.format_duration(elapsed_nanos)  # duration since program start time
+                first: Sample = latest_samples[0]  # throughput etc, over sliding window
+                _, msg2 = self.format_sent_bytes(sent_bytes - first.sent_bytes, curr_time_nanos - first.timestamp_nanos)
+                msg4 = max(s.eta for s in stats.values()).line_tail if len(stats) > 0 else ""  # progress bar, ETAs
+                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
+                status_line = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}"
+                status_line = status_line.ljust(last_status_len)  # "overwrite" trailing chars of previous status with spaces
+
+                # The Unix console skips back to the beginning of the console line when it sees this \r control char:
+                sys.stdout.write(f"{status_line}\r")
+                sys.stdout.flush()
+
+                # log.trace("\nnum_lines: %s, num_readables: %s", num_lines, num_readables)
+                last_status_len = len(status_line.rstrip())
+                next_update_nanos += update_interval_nanos
+                latest_samples.append(Sample(sent_bytes, curr_time_nanos))
+                if elapsed_nanos >= sliding_window_nanos:
+                    latest_samples.popleft()  # slide the sliding window containing recent measurements
+            elif not has_line:
+                # Avoid burning CPU busily spinning on I/O readiness as fds are almost always ready for non-blocking
+                # read even if no new pv log line has been written. Yet retain ability to wake up immediately on stop().
+                self.sleeper.sleep(min(sleep_nanos, next_update_nanos - curr_time_nanos))
+            if self.inject_error:
+                raise ValueError("Injected ProgressReporter error")  # for testing only
+
+    def update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
+        num_bytes, eta_timestamp_nanos, line_tail = self.parse_pv_line(line, curr_time_nanos)
+        if line.endswith("\r"):
+            s.bytes_in_flight = num_bytes  # intermediate status update of each transfer
+            num_bytes = 0
+        else:
+            s.bytes_in_flight = 0  # most recent status update of each transfer
+        s.eta = self.TransferStat.ETA(eta_timestamp_nanos, line_tail)
+        return num_bytes
+
+    no_rates_regex = re.compile(r".*/s\s*]?\s*")  # matches until end of last pv rate, e.g. 834MiB/s]
+    # time remaining --eta (\d+\+)? days plus HH:MM:SS, followed by trailing --fineta timestamp ETA
+    time_remaining_eta_regex = re.compile(r".*?ETA\s*((\d+)\+)?(\d\d?):(\d\d):(\d\d).*ETA.*")
+
+    @staticmethod
+    def parse_pv_line(line: str, curr_time_nanos: int) -> Tuple[int, int, str]:
+        assert isinstance(line, str)
+        if ":" in line:
+            line = line.split(":", 1)[1].strip()
+            sent_bytes, line = pv_size_to_bytes(line)
+            line = ProgressReporter.no_rates_regex.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
+            match = ProgressReporter.time_remaining_eta_regex.fullmatch(line)  # extract pv --eta duration
+            if match:
+                days_sec = 86400 * (int(match.group(2)) if match.group(2) else 0)
+                time_remaining_secs = days_sec + int(match.group(3)) * 3600 + int(match.group(4)) * 60 + int(match.group(5))
+                curr_time_nanos += time_remaining_secs * 1_000_000_000  # ETA timestamp = now + time remaining duration
+            return sent_bytes, curr_time_nanos, line
+        return 0, curr_time_nanos, ""
+
+    @staticmethod
+    def format_sent_bytes(num_bytes: int, duration_nanos: int) -> Tuple[str, str]:
+        bytes_per_sec = round(1_000_000_000 * num_bytes / max(1, duration_nanos))
+        return f"{human_readable_bytes(num_bytes, precision=2)}", f"[{human_readable_bytes(bytes_per_sec, precision=2)}/s]"
+
+    @staticmethod
+    def format_duration(duration_nanos: int) -> str:
+        total_seconds = round(duration_nanos / 1_000_000_000)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+    def get_update_intervals(self) -> Tuple[float, float]:
+        parser = argparse.ArgumentParser(allow_abbrev=False)
+        parser.add_argument("--interval", "-i", type=float, default=1)
+        parser.add_argument("--average-rate-window", "-m", type=float, default=30)
+        args, _ = parser.parse_known_args(args=self.params.pv_program_opts)
+        interval = min(60 * 60, max(args.interval, 1))
+        return interval, min(60 * 60, max(args.average_rate_window, interval))
+
+
+#############################################################################
+class InterruptibleSleep:
+    """Provides a sleep(timeout) function that can be interrupted by another thread."""
+
+    def __init__(self, lock=None):
+        self.is_stopping: bool = False
+        self._lock = lock if lock is not None else threading.Lock()
+        self._condition = threading.Condition(self._lock)
+
+    def sleep(self, duration_nanos: int) -> None:
+        """Delays the current thread by the given number of nanoseconds."""
+        end_time_nanos = time.time_ns() + duration_nanos
+        with self._lock:
+            while not self.is_stopping:
+                duration_nanos = end_time_nanos - time.time_ns()
+                if duration_nanos <= 0:
+                    return
+                self._condition.wait(timeout=duration_nanos / 1_000_000_000)  # release, then block until notified or timeout
+
+    def interrupt(self) -> None:
+        """Wakes up currently sleeping threads and makes any future sleep()s a noop."""
+        with self._lock:
+            if not self.is_stopping:
+                self.is_stopping = True
+                self._condition.notify_all()
+
+
+#############################################################################
 def fix_send_recv_opts(
     opts: List[str],
     exclude_long_opts: Set[str],
@@ -4329,6 +4586,13 @@ def getenv_bool(key: str, default: bool = False) -> bool:
     return getenv_any(key, str(default).lower()).strip().lower() == "true"
 
 
+def getenv_isatty() -> bool:
+    return getenv_bool("isatty", True)
+
+
+terminal_columns: int = getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
+
+
 def xappend(lst, *items) -> List[str]:
     """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
     If an item is an iterable does so recursively, flattening the output."""
@@ -4341,7 +4605,7 @@ def xappend(lst, *items) -> List[str]:
     return lst
 
 
-def human_readable_bytes(size: float, separator=" ", long=False) -> str:
+def human_readable_bytes(size: float, separator=" ", precision=None, long=False) -> str:
     sign = "-" if size < 0 else ""
     s = abs(size)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
@@ -4350,10 +4614,11 @@ def human_readable_bytes(size: float, separator=" ", long=False) -> str:
     while s >= 1024 and i < len(units) - 1:
         s /= 1024
         i += 1
-    return f"{sign}{human_readable_float(s)}{separator}{units[i]}{long_form}"
+    formatted_num = human_readable_float(s) if precision is None else f"{s:.{precision}f}"
+    return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
 
 
-def human_readable_duration(duration: float, unit="ns", separator=" ", long=False) -> str:
+def human_readable_duration(duration: float, unit="ns", separator=" ", precision=None, long=False) -> str:
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
@@ -4371,7 +4636,8 @@ def human_readable_duration(duration: float, unit="ns", separator=" ", long=Fals
         while t >= 24 and i < len(units) - 1:
             t /= 24
             i += 1
-    return f"{sign}{human_readable_float(t)}{separator}{units[i]}{long_form}"
+    formatted_num = human_readable_float(t) if precision is None else f"{t:.{precision}f}"
+    return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
 
 
 def human_readable_float(number: float) -> str:
@@ -4412,7 +4678,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
-def tail(file, n: int):
+def tail(file, n: int) -> Sequence[str]:
     if not os.path.isfile(file):
         return []
     with open(file, "r", encoding="utf-8") as fd:
@@ -4479,17 +4745,18 @@ arabic_decimal_separator = "\u066B"  # "٫"
 pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZY]?)(i?)([Bb])(.*)")
 
 
-def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
+def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     match = pv_size_to_bytes_regex.fullmatch(size)
     if match:
         number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
         i = "KMGTPEZY".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
         b = 1 if match.group(4) == "B" else 8
-        if match.group(5) and match.group(5).startswith("/s"):
+        line_tail = match.group(5)
+        if line_tail and line_tail.startswith("/s"):
             raise ValueError("Invalid pv_size: " + size)  # stems from 'pv --rate' or 'pv --average-rate'
         size_in_bytes = round(number * (m ** (i + 1)) / b)
-        return size_in_bytes
+        return size_in_bytes, line_tail
     else:
         raise ValueError("Invalid pv_size: " + size)
 
@@ -4497,11 +4764,12 @@ def pv_size_to_bytes(size: str) -> int:  # example inputs: "800B", "4.12 KiB", "
 def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int) -> Tuple[int, List[Deque[str]]]:
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
 
-    def parse_line(line: str) -> int:
+    def parse_pv_line(line: str) -> int:
         if ":" in line:
             col = line.split(":", 1)[1].strip()
             tail.append(col)
-            return pv_size_to_bytes(col)
+            num_bytes, _ = pv_size_to_bytes(col)
+            return num_bytes
         return 0
 
     total_bytes = 0
@@ -4515,10 +4783,10 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int)
             for line in fd:
                 if line.endswith("\r"):
                     continue  # skip all but the most recent status update of each transfer
-                total_bytes += parse_line(line)
+                total_bytes += parse_pv_line(line)
                 line = None
             if line is not None:
-                total_bytes += parse_line(line)
+                total_bytes += parse_pv_line(line)
             tails.append(tail)
     return total_bytes, tails
 
@@ -4717,6 +4985,7 @@ def get_default_log_formatter(prefix: str = "") -> logging.Formatter:
     }
     _log_stderr = log_stderr
     _log_stdout = log_stdout
+    terminal_cols = terminal_columns if getenv_isatty() else 0
 
     class DefaultLogFormatter(logging.Formatter):
         def format(self, record) -> str:
@@ -4732,8 +5001,10 @@ def get_default_log_formatter(prefix: str = "") -> logging.Formatter:
                     msg = msg[0:i].ljust(54) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
                 if record.args:
                     msg = msg % record.args
-                return prefix + msg
-            return prefix + super().format(record)
+                msg = prefix + msg
+            else:
+                msg = prefix + super().format(record)
+            return msg.ljust(terminal_cols)  # w/ progress line, "overwrite" trailing chars of previous msg with spaces
 
     return DefaultLogFormatter()
 
@@ -5278,6 +5549,19 @@ class SynchronizedBool:
     def value(self, new_value: bool) -> None:
         with self._lock:
             self._value = new_value
+
+    def get_and_set(self, new_value: bool) -> bool:
+        with self._lock:
+            old_value = self._value
+            self._value = new_value
+            return old_value
+
+    def compare_and_set(self, expected_value: bool, new_value: bool) -> bool:
+        with self._lock:
+            eq = self._value == expected_value
+            if eq:
+                self._value = new_value
+            return eq
 
     def __bool__(self) -> bool:
         return self.value

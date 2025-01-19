@@ -302,6 +302,9 @@ class BZFSTestCase(ParametrizedTestCase):
         max_exceptions_to_summarize=None,
         max_datasets_per_minibatch_on_list_snaps=None,
         control_persist_margin_secs=None,
+        isatty=None,
+        progress_update_intervals=None,
+        use_select=None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -460,6 +463,15 @@ class BZFSTestCase(ParametrizedTestCase):
 
         if control_persist_margin_secs is not None:
             job.control_persist_margin_secs = control_persist_margin_secs
+
+        if isatty is not None:
+            job.isatty = isatty
+
+        if use_select is not None:
+            job.use_select = use_select
+
+        if progress_update_intervals is not None:
+            job.progress_update_intervals = progress_update_intervals
 
         returncode = 0
         try:
@@ -694,25 +706,19 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
             expected_results = testcase["d"]
             # logging.info(f"input   : {','.join(testcase[None])}")
             # logging.info(f"expected: {','.join(expected_results)}")
-            for i in range(0, 2):
-                with stop_on_failure_subtest(i=i):
-                    self.run_bzfs(
-                        src_foo,
-                        dst_foo,
-                        "--skip-missing-snapshots=continue",
-                        "--include-snapshot-regex",
-                        "d.*",
-                        "--exclude-snapshot-regex",
-                        "h.*",
-                        dry_run=(i == 0),
-                    )
-                    if i == 0:
-                        self.assertFalse(dataset_exists(dst_foo))
-                    else:
-                        if len(expected_results) > 0:
-                            self.assertSnapshotNames(dst_foo, expected_results)
-                        else:
-                            self.assertFalse(dataset_exists(dst_foo))
+            self.run_bzfs(
+                src_foo,
+                dst_foo,
+                "--skip-missing-snapshots=continue",
+                "--include-snapshot-regex",
+                "d.*",
+                "--exclude-snapshot-regex",
+                "h.*",
+            )
+            if len(expected_results) > 0:
+                self.assertSnapshotNames(dst_foo, expected_results)
+            else:
+                self.assertFalse(dataset_exists(dst_foo))
 
 
 #############################################################################
@@ -831,6 +837,50 @@ class LocalTestCase(BZFSTestCase):
                     self.assertTrue(job.is_program_available("mbuffer", loc))
                     self.assertTrue(job.is_program_available("pv", loc))
                     self.assertTrue(job.is_program_available("ps", loc))
+
+    def test_basic_replication_flat_simple_with_progress_reporter(self):
+        for pv_program in ["pv", bzfs.disable_prg]:
+            for i in range(0, 3):
+                with stop_on_failure_subtest(i=i):
+                    self.tearDownAndSetup()
+                    n = 10
+                    self.create_resumable_snapshots(1, n + 1)
+                    self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        f"--pv-program={pv_program}",
+                        isatty=i > 0,
+                        use_select=(i % 2 == 1),
+                        progress_update_intervals=(0.01, 0.015),
+                    )
+                    self.assertSnapshots(dst_root_dataset, n, "s")
+
+    def test_progress_reporter_validation(self):
+        self.setup_basic()
+
+        # --pv-program-opts must contain one of --bytes or --bits for progress metrics to function
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--pv-program-opts=", expected_status=die_status)
+        self.assertSnapshots(dst_root_dataset, 0)
+
+        # --pv-program-opts must contain --eta for progress report line to function
+        self.run_bzfs(
+            src_root_dataset, dst_root_dataset, "--pv-program-opts=--bytes", isatty=True, expected_status=die_status
+        )
+        self.assertSnapshots(dst_root_dataset, 0)
+
+        # --pv-program-opts must contain --average-rate for progress report line to function
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--pv-program-opts=--bytes --eta",
+            isatty=True,
+            expected_status=die_status,
+        )
+        self.assertSnapshots(dst_root_dataset, 0)
+
+        # normal config passes
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--pv-program-opts=--bytes --eta --average-rate", isatty=True)
+        self.assertSnapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_recursive1_with_volume(self):
         self.test_basic_replication_recursive1(volume=True)

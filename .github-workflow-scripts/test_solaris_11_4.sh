@@ -75,7 +75,7 @@ tuser=test
 thome=/home/$tuser
 userdel -r $tuser || true
 useradd -d $thome -m $tuser
-echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool)" >> /etc/sudoers
+echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool),$(command -v dd)" >> /etc/sudoers
 supath=$(grep "^SUPATH=" /etc/default/login | cut -d'=' -f2)
 echo "PATH=$supath" >> /etc/default/login  # ensure zstd, mbuffer, etc are on the PATH via ssh
 
