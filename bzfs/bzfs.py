@@ -79,7 +79,7 @@ from subprocess import CalledProcessError, TimeoutExpired
 from typing import Iterable, Deque, Dict, List, Sequence, Set, Tuple, Any, Callable, Generator, Generic, ItemsView, Optional
 from typing import TextIO, TypeVar, Union
 
-__version__ = "1.9.0"
+__version__ = "1.9.1-dev"
 prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
