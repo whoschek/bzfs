@@ -922,7 +922,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
-             "throughput at 100 MB/sec. Default is unlimited. Also see https://linux.die.net/man/1/pv\n\n")
+             "throughput at 100 MB/sec. Default is unlimited. Also see "
+             "https://manpages.ubuntu.com/manpages/latest/en/man1/pv.1.html\n\n")
     parser.add_argument(
         "--no-estimate-send-size", action="store_true",
         help=argparse.SUPPRESS)
@@ -4321,8 +4322,8 @@ class ProgressReporter:
             if curr_time_nanos >= next_update_nanos:
                 elapsed_nanos = curr_time_nanos - start_time_nanos
                 sent_bytes = total_bytes + sum(s.bytes_in_flight for s in stats.values())
-                msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since program start time
-                msg1 = self.format_duration(elapsed_nanos)  # duration since program start time
+                msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since replication start time
+                msg1 = self.format_duration(elapsed_nanos)  # duration since replication start time
                 first: Sample = latest_samples[0]  # throughput etc, over sliding window
                 _, msg2 = self.format_sent_bytes(sent_bytes - first.sent_bytes, curr_time_nanos - first.timestamp_nanos)
                 msg4 = max(s.eta for s in stats.values()).line_tail if len(stats) > 0 else ""  # progress bar, ETAs
@@ -4799,8 +4800,8 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int)
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
-    def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator
-        return hostname.replace("|", ":")
+    def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator ...
+        return hostname.replace("|", ":")  # ... and any colons that may be part of a (valid) ZFS dataset name
 
     user_undefined = user is None
     if user is None:
@@ -5003,7 +5004,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
         def format(self, record) -> str:
             levelno = record.levelno
             if levelno != _log_stderr and levelno != _log_stdout:  # emit stdout and stderr "as-is" (no formatting)
-                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")
+                timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
                 ts_level = f"{timestamp} {level_prefixes.get(levelno, '')} "
                 msg = record.msg
                 i = msg.find("%s")

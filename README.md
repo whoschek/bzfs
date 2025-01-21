@@ -416,7 +416,8 @@ sudo ls
 # export bzfs_test_ssh_port=12345
 # export bzfs_test_ssh_port=22
 
-# verify user can ssh in passwordless via loopback interface and private key
+# verify user can ssh in passwordless via loopback interface and private key;
+# you should not be asked for a password
 ssh -p $bzfs_test_ssh_port 127.0.0.1 echo hello
 
 # verify zfs is on PATH
@@ -1721,7 +1722,8 @@ usage: bzfs [-h] [--recursive]
 
 *  Sets 'pv' bandwidth rate limit for zfs send/receive data transfer
     (optional). Example: `100m` to cap throughput at 100 MB/sec.
-    Default is unlimited. Also see https://linux.die.net/man/1/pv
+    Default is unlimited. Also see
+    https://manpages.ubuntu.com/manpages/latest/en/man1/pv.1.html
 
 <!-- -->
 
