@@ -1855,8 +1855,8 @@ class Job:
         src, dst = p.src, p.dst
         task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
         failed = False
-        selected_src_datasets = None
-        src_datasets = []
+        src_datasets = None
+        basis_src_datasets = []
         self.src_properties = {}
         if not self.is_dummy_src(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
             cmd = p.split_args(
@@ -1868,22 +1868,22 @@ class Job:
                 self.src_properties[src_dataset] = {
                     "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize)
                 }
-                src_datasets.append(src_dataset)
+                basis_src_datasets.append(src_dataset)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
             log.info("Starting replication task: %s", task_description)
-            if len(src_datasets) == 0:
+            if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            selected_src_datasets = isorted(self.filter_datasets(src, src_datasets))  # apply include/exclude policy
+            src_datasets = isorted(self.filter_datasets(src, basis_src_datasets))  # apply include/exclude policy
             self.dedicated_tcp_connection_per_zfs_send = (
                 p.dedicated_tcp_connection_per_zfs_send
-                and len(selected_src_datasets) > 1
+                and len(src_datasets) > 1
                 and min(self.max_workers[p.src.location], self.max_workers[p.dst.location]) > 1
             )
             # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
             failed = self.process_datasets_in_parallel_and_fault_tolerant(
-                selected_src_datasets,
+                src_datasets,
                 process_dataset=self.replicate_dataset,  # lambda
                 skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
                     replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
@@ -1920,7 +1920,7 @@ class Job:
                 if children[dst_dataset].issubset(to_delete):
                     to_delete.add(dst_dataset)  # all children are deletable, thus the dataset itself is deletable too
             to_delete = to_delete.difference(
-                {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in src_datasets}
+                {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
             )
             self.delete_datasets(dst, to_delete)
             dst_datasets = isorted(set(dst_datasets).difference(to_delete))
@@ -1934,11 +1934,11 @@ class Job:
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-            src_datasets_set = set(src_datasets)
+            basis_src_datasets_set = set(basis_src_datasets)
 
             def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
+                if src_dataset in basis_src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
                     src_kind = kind
                     if not p.delete_dst_snapshots_no_crosscheck:
                         src_kind = "snapshot,bookmark" if self.are_bookmarks_enabled(src) else "snapshot"
@@ -2030,11 +2030,11 @@ class Job:
 
         if p.compare_snapshot_lists and not failed:
             log.info("--compare-snapshot-lists: %s", task_description)
-            if len(src_datasets) == 0 and not self.is_dummy_src(src):
+            if len(basis_src_datasets) == 0 and not self.is_dummy_src(src):
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            if selected_src_datasets is None:
-                selected_src_datasets = self.filter_datasets(src, src_datasets)  # apply include/exclude policy
-            self.run_compare_snapshot_lists(selected_src_datasets, dst_datasets)
+            if src_datasets is None:
+                src_datasets = self.filter_datasets(src, basis_src_datasets)  # apply include/exclude policy
+            self.run_compare_snapshot_lists(src_datasets, dst_datasets)
 
     def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
