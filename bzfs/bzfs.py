@@ -1720,7 +1720,7 @@ class Job:
         if self.is_program_available("pv", "local"):
             sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
             sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
-            msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
+            msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
         log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
     def validate_once(self) -> None:
@@ -2622,9 +2622,9 @@ class Job:
         """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
         p = self.params
-        if size_estimate_bytes >= p.min_pipe_transfer_size and self.is_program_available("pv", loc):
+        if self.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
-            if disable_progress_bar:
+            if disable_progress_bar or size_estimate_bytes == 0:
                 size = ""
             readable = shlex.quote(size_estimate_human)
             pv_log_file = p.log_params.pv_log_file
