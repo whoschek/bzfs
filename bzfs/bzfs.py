@@ -1178,6 +1178,7 @@ class LogParams:
         os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
         os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
         delete_stale_files(dot_current_dir, prefix="", secs=60, dirs=True, exclude=os.path.basename(current_dir))
+        self.params: Params = None
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -1278,7 +1279,7 @@ class Params:
         self.ps_program: str = self.program_name(args.ps_program)
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
-        self.isatty: bool = getenv_isatty()
+        self.isatty: bool = getenv_bool("isatty", True)
         if args.bwlimit:
             self.pv_program_opts += [f"--rate-limit={self.validate_arg(args.bwlimit)}"]
         self.shell_program_local: str = "sh"
@@ -1297,6 +1298,12 @@ class Params:
         self.dedicated_tcp_connection_per_zfs_send = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         self.threads: Tuple[int, bool] = args.threads
         self.no_estimate_send_size: bool = args.no_estimate_send_size
+
+        self.terminal_columns: int = (
+            getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
+            if self.isatty and self.pv_program != disable_prg and not self.quiet
+            else 0
+        )
 
         self.os_cpu_count: int = os.cpu_count()
         self.os_geteuid: int = os.geteuid()
@@ -1608,6 +1615,7 @@ class Job:
             except SystemExit as e:
                 log.error("%s", str(e))
                 raise
+            log_params.params = p
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
                 with redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
                     lock_file = p.lock_file_name()
@@ -1712,7 +1720,7 @@ class Job:
             sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
             sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s] per pv."
-        log.info("%s", msg.ljust(terminal_columns - len("2024-01-01 23:58:45 [I] ")))
+        log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
     def validate_once(self) -> None:
         p = self.params
@@ -4592,13 +4600,6 @@ def getenv_bool(key: str, default: bool = False) -> bool:
     return getenv_any(key, str(default).lower()).strip().lower() == "true"
 
 
-def getenv_isatty() -> bool:
-    return getenv_bool("isatty", True)
-
-
-terminal_columns: int = getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
-
-
 def xappend(lst, *items) -> List[str]:
     """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
     If an item is an iterable does so recursively, flattening the output."""
@@ -4946,7 +4947,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
 
     if not any(isinstance(h, logging.StreamHandler) and h.stream in [sys.stdout, sys.stderr] for h in sublog.handlers):
         handler = logging.StreamHandler(stream=sys.stdout)
-        handler.setFormatter(get_default_log_formatter())
+        handler.setFormatter(get_default_log_formatter(log_params=log_params))
         handler.setLevel(log_params.log_level)
         log.addHandler(handler)
 
@@ -4980,7 +4981,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     return log
 
 
-def get_default_log_formatter(prefix: str = "") -> logging.Formatter:
+def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) -> logging.Formatter:
     level_prefixes = {
         logging.CRITICAL: "[C] CRITICAL:",
         logging.ERROR: "[E] ERROR:",
@@ -4991,7 +4992,12 @@ def get_default_log_formatter(prefix: str = "") -> logging.Formatter:
     }
     _log_stderr = log_stderr
     _log_stdout = log_stdout
-    terminal_cols = terminal_columns if getenv_isatty() else 0
+
+    class IntHolder:
+        def __init__(self, value: int):
+            self.value: int = value
+
+    terminal_cols = IntHolder(0 if log_params is None else None)  # 'None' indicates "configure value later"
 
     class DefaultLogFormatter(logging.Formatter):
         def format(self, record) -> str:
@@ -5010,7 +5016,25 @@ def get_default_log_formatter(prefix: str = "") -> logging.Formatter:
                 msg = prefix + msg
             else:
                 msg = prefix + super().format(record)
-            return msg.ljust(terminal_cols)  # w/ progress line, "overwrite" trailing chars of previous msg with spaces
+
+            cols = terminal_cols.value
+            if cols is None:
+                cols = self.ljust_cols()
+            msg = msg.ljust(cols)  # w/ progress line, "overwrite" trailing chars of previous msg with spaces
+            return msg
+
+        @staticmethod
+        def ljust_cols() -> int:
+            # lock-free yet thread-safe late configuration-based init for prettier ProgressReporter output
+            # log_params.params and available_programs are not fully initialized yet before detect_available_programs() ends
+            cols = 0
+            p = log_params.params
+            if p is not None and "local" in p.available_programs:
+                if "pv" in p.available_programs["local"]:
+                    cols = p.terminal_columns
+                    assert cols is not None
+                terminal_cols.value = cols  # finally, resolve to use this specific value henceforth
+            return cols
 
     return DefaultLogFormatter()
 
