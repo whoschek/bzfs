@@ -4231,6 +4231,7 @@ class ProgressReporter:
             raise e  # reraise exception in current thread
 
     def enqueue_pv_log_file(self, pv_log_file: str) -> None:
+        """Tells progress reporter thread to also monitor and tail the given pv log file."""
         with self.lock:
             if not self.sleeper.is_stopping and pv_log_file not in self.file_name_set:
                 self.file_name_queue.add(pv_log_file)
@@ -4282,17 +4283,22 @@ class ProgressReporter:
         next_update_nanos = start_time_nanos + update_interval_nanos
         latest_samples: Deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window containing recent measurements
         while True:
+            empty_file_name_queue: Set[str] = set()
             with self.lock:
                 if self.sleeper.is_stopping:
                     return
-                for pv_log_file in self.file_name_queue:
-                    assert pv_log_file not in self.file_name_set
-                    Path(pv_log_file).touch()
-                    fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
-                    fds.append(fd)
-                    selector.register(fd, selectors.EVENT_READ, data=iter(fd))
-                    self.file_name_set.add(pv_log_file)
-                self.file_name_queue.clear()
+                # progress reporter thread picks up pv log files that so far aren't being tailed
+                n = len(self.file_name_queue)
+                m = len(self.file_name_set)
+                self.file_name_set.update(self.file_name_queue)  # union
+                assert len(self.file_name_set) == n + m  # aka assert (previous) file_name_set.isdisjoint(file_name_queue)
+                local_file_name_queue = self.file_name_queue
+                self.file_name_queue = empty_file_name_queue  # exchange buffers
+            for pv_log_file in local_file_name_queue:
+                Path(pv_log_file).touch()
+                fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
+                fds.append(fd)
+                selector.register(fd, selectors.EVENT_READ, data=iter(fd))
 
             readables = selector.select(timeout=0)  # 0 indicates "don't block"
             has_line = False
