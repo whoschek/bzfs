@@ -309,6 +309,13 @@ delete mode.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
 deletes (or compares) snapshots of multiple datasets in parallel.
+* For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not 
+to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates 
+over the parallel replication tasks. 
+Example console status line:
+```
+2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08
+```
 * Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
 files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.
 * Stays true to the ZFS send/receive spirit. Retains the ability to use ZFS CLI options for fine tuning. Does not
@@ -353,13 +360,6 @@ completion yet.
 integration.
 * Codebase is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
-* For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not 
-to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates 
-over the parallel replication tasks. 
-Example console status line:
-```
-2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08
-```
 * It's fast!
 
 
@@ -931,9 +931,9 @@ usage: bzfs [-h] [--recursive]
 
 *  Before replication, delete destination ZFS snapshots that are more
     recent than the most recent common snapshot selected on the source
-    ('conflicting snapshots'), via 'zfs rollback'. Abort with an
-    error if no common snapshot is selected but the destination already
-    contains a snapshot.
+    ('conflicting snapshots'), via 'zfs rollback'. Instead, abort
+    with an error if no common snapshot is selected but the destination
+    already contains a snapshot.
 
 <!-- -->
 
