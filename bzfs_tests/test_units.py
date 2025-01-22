@@ -660,6 +660,13 @@ class TestHelperFunctions(unittest.TestCase):
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (2 * 86400 + 39), eta_timestamp_nanos)
                 self.assertEqual("[==>  ] 94% ETA 2+0:00:39 ETA 17:55:48", line_tail)
 
+                # intermediate line with duration ETA that contains other days syntax and timestamp ETA that contains days
+                line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 0:12:12 [ 185MiB/s] [ 130MiB/s] [==>  ] ETA 1:00:07:16 ETA 2025-01-23 14:06:02"
+                num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
+                self.assertEqual(round(93.1 * 1024**3), num_bytes)
+                self.assertEqual(curr_time_nanos + 1_000_000_000 * (1 * 86400 + 7 * 60 + 16), eta_timestamp_nanos)
+                self.assertEqual("[==>  ] ETA 1:00:07:16 ETA 2025-01-23 14:06:02", line_tail)
+
                 # final line on transfer completion does not contain duration ETA
                 line = "98 GiB/ 0 B/  98 GiB: 98,1GiB 0:12:39 [ 132MiB/s] [ 132MiB/s] [=====>] 100%             ETA 17:55:37"
                 num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)

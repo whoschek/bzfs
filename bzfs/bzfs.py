@@ -4370,8 +4370,8 @@ class ProgressReporter:
         return num_bytes
 
     no_rates_regex = re.compile(r".*/s\s*]?\s*")  # matches until end of last pv rate, e.g. 834MiB/s]
-    # time remaining --eta (\d+\+)? days plus HH:MM:SS, followed by trailing --fineta timestamp ETA
-    time_remaining_eta_regex = re.compile(r".*?ETA\s*((\d+)\+)?(\d\d?):(\d\d):(\d\d).*ETA.*")
+    # time remaining --eta "ETA 00:00:39" or "ETA 2+0:00:39" or "ETA 2:0:00:39", followed by trailing --fineta timestamp ETA
+    time_remaining_eta_regex = re.compile(r".*?ETA\s*((\d+)[+:])?(\d\d?):(\d\d):(\d\d).*ETA.*")
 
     @staticmethod
     def parse_pv_line(line: str, curr_time_nanos: int) -> Tuple[int, int, str]:
@@ -4382,8 +4382,8 @@ class ProgressReporter:
             line = ProgressReporter.no_rates_regex.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
             match = ProgressReporter.time_remaining_eta_regex.fullmatch(line)  # extract pv --eta duration
             if match:
-                days_sec = 86400 * (int(match.group(2)) if match.group(2) else 0)
-                time_remaining_secs = days_sec + int(match.group(3)) * 3600 + int(match.group(4)) * 60 + int(match.group(5))
+                days_secs = 86400 * (int(match.group(2)) if match.group(2) else 0)
+                time_remaining_secs = days_secs + int(match.group(3)) * 3600 + int(match.group(4)) * 60 + int(match.group(5))
                 curr_time_nanos += time_remaining_secs * 1_000_000_000  # ETA timestamp = now + time remaining duration
             return sent_bytes, curr_time_nanos, line
         return 0, curr_time_nanos, ""
