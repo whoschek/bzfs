@@ -1829,9 +1829,18 @@ class Job:
         log.trace("Validated Param values: %s", pretty_print_formatter(self.params))
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
+        p = self.params
+        assert isinstance(ssh_user_host, str)
+        p.validate_arg(ssh_user_host)
+        assert isinstance(ssh_user, str)
+        validate_user_name(ssh_user, ssh_user_host)
+        assert isinstance(p.sudo_program, str)
+        p.program_name(p.sudo_program)  # validate
+        assert isinstance(p.enable_privilege_elevation, bool)
+
         is_root = True
         if ssh_user_host != "":
-            if not ssh_user:
+            if ssh_user == "":
                 if os.geteuid() != 0:
                     is_root = False
             elif ssh_user != "root":
@@ -1843,10 +1852,12 @@ class Job:
             sudo = ""  # using sudo in an attempt to make ZFS operations work even if we are not root user?
             use_zfs_delegation = False  # or instead using 'zfs allow' delegation?
             return sudo, use_zfs_delegation
-        elif self.params.enable_privilege_elevation:
-            if self.params.sudo_program == disable_prg:
+        elif p.enable_privilege_elevation:
+            if p.sudo_program == disable_prg:
                 die(f"sudo CLI is not available on host: {ssh_user_host or 'localhost'}")
-            return self.params.sudo_program + " -n", False
+            # The '-n' option makes 'sudo' safer and more fail-fast. It avoids having sudo prompt the user for input of any
+            # kind. If a password is required for the sudo command to run, sudo will display an error message and exit.
+            return p.sudo_program + " -n", False
         else:
             return "", True
 
