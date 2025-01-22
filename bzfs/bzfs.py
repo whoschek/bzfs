@@ -4369,9 +4369,9 @@ class ProgressReporter:
         s.eta = self.TransferStat.ETA(eta_timestamp_nanos, line_tail)
         return num_bytes
 
-    no_rates_regex = re.compile(r".*/s\s*]?\s*")  # matches until end of last pv rate, e.g. 834MiB/s]
+    no_rates_regex = re.compile(r".*/s\s*[)\]]?\s*")  # matches until end of last pv rate, e.g. "834MiB/s]" or "834MiB/s)"
     # time remaining --eta "ETA 00:00:39" or "ETA 2+0:00:39" or "ETA 2:0:00:39", followed by trailing --fineta timestamp ETA
-    time_remaining_eta_regex = re.compile(r".*?ETA\s*((\d+)[+:])?(\d\d?):(\d\d):(\d\d).*ETA.*")
+    time_remaining_eta_regex = re.compile(r".*?ETA\s*((\d+)[+:])?(\d\d?):(\d\d):(\d\d).*(ETA|FIN).*")
 
     @staticmethod
     def parse_pv_line(line: str, curr_time_nanos: int) -> Tuple[int, int, str]:
