@@ -4,7 +4,10 @@ inputs:
   python-version:
     required: true
     type: string
-
+  install-zfs:
+    required: false
+    type: boolean
+    default: true
 runs:
   using: 'composite'
   steps:
@@ -21,11 +24,16 @@ runs:
       python -m pip install --upgrade pip
       pip install --upgrade "coverage==7.*"
       if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-  - name: Install zfs + ssh + other dependencies
+  - name: Install ssh + other dependencies
     shell: bash
     run: |
-      sudo apt-get -y install zfsutils-linux zstd pv mbuffer netcat-openbsd
+      sudo apt-get -y install zstd pv mbuffer netcat-openbsd
       mkdir -p $HOME/.ssh
       rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
       ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key
       cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+  - name: Install zfs
+    if: ${{ inputs.install-zfs == 'true' }}
+    shell: bash
+    run: |
+      sudo apt-get -y install zfsutils-linux
