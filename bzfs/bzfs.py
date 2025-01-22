@@ -2644,7 +2644,7 @@ class Job:
             if match:
                 worker = int(match.group(1))
                 if worker > 0:
-                    pv_log_file += pv_file_thread_separator + f"{worker:03}"
+                    pv_log_file += pv_file_thread_separator + f"{worker:04}"
             if self.is_first_replication_task.get_and_set(False):
                 if self.isatty and not p.quiet:
                     self.progress_reporter.start()
@@ -4396,9 +4396,8 @@ class ProgressReporter:
     @staticmethod
     def format_duration(duration_nanos: int) -> str:
         total_seconds = round(duration_nanos / 1_000_000_000)
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
         return f"{hours}:{minutes:02d}:{seconds:02d}"
 
     def get_update_intervals(self) -> Tuple[float, float]:
