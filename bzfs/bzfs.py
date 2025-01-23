@@ -4355,8 +4355,8 @@ class ProgressReporter:
                 if elapsed_nanos >= sliding_window_nanos:
                     latest_samples.popleft()  # slide the sliding window containing recent measurements
             elif not has_line:
-                # Avoid burning CPU busily spinning on I/O readiness as fds are almost always ready for non-blocking
-                # read even if no new pv log line has been written. Yet retain ability to wake up immediately on stop().
+                # Avoid burning CPU busily spinning on I/O readiness as fds are almost always ready for non-blocking read
+                # even if no new pv log line has been written. Yet retain ability to wake up immediately on reporter.stop().
                 self.sleeper.sleep(min(sleep_nanos, next_update_nanos - curr_time_nanos))
             if self.inject_error:
                 raise ValueError("Injected ProgressReporter error")  # for testing only
