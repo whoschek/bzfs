@@ -868,7 +868,7 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertSnapshots(dst_root_dataset, 0)
 
-        # --pv-program-opts must contain --average-rate for progress report line to function
+        # --pv-program-opts must contain --eta --fineta --average-rate for progress report line to function
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
@@ -878,8 +878,20 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertSnapshots(dst_root_dataset, 0)
 
+        # --pv-program-opts must contain --eta --fineta --average-rate for progress report line to function
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--pv-program-opts=--bytes --eta --average-rate",
+            isatty=True,
+            expected_status=die_status,
+        )
+        self.assertSnapshots(dst_root_dataset, 0)
+
         # normal config passes
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--pv-program-opts=--bytes --eta --average-rate", isatty=True)
+        self.run_bzfs(
+            src_root_dataset, dst_root_dataset, "--pv-program-opts=--bytes --eta --fineta --average-rate", isatty=True
+        )
         self.assertSnapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_recursive1_with_volume(self):

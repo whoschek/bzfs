@@ -1753,13 +1753,12 @@ class Job:
 
         if p.pv_program != disable_prg:
             pv_program_opts_set = set(p.pv_program_opts)
-            if all(arg not in pv_program_opts_set for arg in ["--bytes", "-b", "--bits", "-8"]):
+            if pv_program_opts_set.isdisjoint({"--bytes", "-b", "--bits", "-8"}):
                 die("--pv-program-opts must contain one of --bytes or --bits for progress metrics to function.")
-            if self.isatty:
-                if all(arg not in pv_program_opts_set for arg in ["--eta", "-e"]):
-                    die("--pv-program-opts must contain --eta for progress report line to function.")
-                if all(arg not in pv_program_opts_set for arg in ["--average-rate", "-a"]):
-                    die("--pv-program-opts must contain --average-rate for progress report line to function.")
+            if self.isatty and not p.quiet:
+                for opts in [["--eta", "-e"], ["--fineta", "-I"], ["--average-rate", "-a"]]:
+                    if pv_program_opts_set.isdisjoint(opts):
+                        die(f"--pv-program-opts must contain one of {', '.join(opts)} for progress report line to function.")
 
     def validate_task(self) -> None:
         p, log = self.params, self.params.log
