@@ -1647,16 +1647,19 @@ class Job:
             reset_logger()
 
     def run_tasks(self) -> None:
+        def log_error_on_exit(error, status_code):
+            log.error("%s%s", f"Exiting {prog_name} with status code {status_code}. Cause: ", error)
+
         p, log = self.params, self.params.log
         try:
-            self.validate_once()
             self.all_exceptions = []
             self.all_exceptions_count = 0
             self.first_exception = None
             self.remote_conf_cache = {}
             self.isatty = self.isatty if self.isatty is not None else p.isatty
-            self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
+            self.validate_once()
             self.replication_start_time_nanos = time.time_ns()
+            self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
             try:
                 src, dst = p.src, p.dst
                 for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
@@ -1674,9 +1677,9 @@ class Job:
                         except RetryableError as retryable_error:
                             raise retryable_error.__cause__
                     except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                        log.error("%s", str(e))
                         if p.skip_on_error == "fail":
                             raise
+                        log.error("%s", str(e))
                         self.append_exception(e, "task", task_description)
             finally:
                 self.progress_reporter.stop()
@@ -1688,16 +1691,16 @@ class Job:
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                 raise self.first_exception  # reraise first swallowed exception
         except subprocess.CalledProcessError as e:
-            log.error("Exiting with status code: %s", e.returncode)
+            log_error_on_exit(e, e.returncode)
             raise
         except SystemExit as e:
-            log.error("Exiting with status code: %s", e.code)
+            log_error_on_exit(e, e.code)
             raise
         except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-            log.error("Exiting with status code: %s", die_status)
+            log_error_on_exit(e, die_status)
             raise SystemExit(die_status) from e
         except re.error as e:
-            log.error("%s within regex %s", e, e.pattern)
+            log_error_on_exit(f"{e} within regex '{e.pattern}'", die_status)
             raise SystemExit(die_status) from e
         finally:
             log.info("%s", "Log file was: " + p.log_params.log_file)
@@ -3152,7 +3155,7 @@ class Job:
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
                     if policy.retries > 0:
-                        log.error(
+                        log.warning(
                             f"Giving up because the last [{retry_count}/{policy.retries}] retries across "
                             f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
@@ -3713,7 +3716,7 @@ class Job:
             return failed
 
     def is_program_available(self, program: str, location: str) -> bool:
-        return program in self.params.available_programs[location]
+        return program in self.params.available_programs.get(location, {})
 
     def detect_available_programs(self) -> None:
         p = params = self.params
