@@ -2115,7 +2115,7 @@ class Job:
             elif p.skip_missing_snapshots == "dataset":
                 log.warning("Skipping source dataset because it includes no snapshot: %s", src_dataset)
                 if not self.dst_dataset_exists[dst_dataset] and p.recursive:
-                    log.warning("Also skipping descendant datasets as dst dataset does not exist:%s", src_dataset)
+                    log.warning("Also skipping descendant datasets as dst dataset does not exist for %s", src_dataset)
                 return self.dst_dataset_exists[dst_dataset]
 
         log.debug("latest_src_snapshot: %s", latest_src_snapshot)
@@ -3783,6 +3783,12 @@ class Job:
                     log.trace(f"available_programs[{key}][uname]: %s", uname)
                     available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
                     log.trace(f"available_programs[{key}][os]: %s", available_programs[key]["os"])
+                elif program.startswith("default_shell-"):
+                    available_programs[key].pop(program)
+                    default_shell = program[len("default_shell-") :]
+                    available_programs[key]["default_shell"] = default_shell
+                    log.trace(f"available_programs[{key}][default_shell]: %s", default_shell)
+                    self.validate_default_shell(default_shell, r)
                 elif program.startswith("getconf_cpu_count-"):
                     available_programs[key].pop(program)
                     getconf_cpu_count = program[len("getconf_cpu_count-") :]
@@ -3801,21 +3807,25 @@ class Job:
             self.params.available_programs[location].pop(program, None)
 
     def find_available_programs(self) -> str:
-        params = self.params
-        return f"""
-        command -v echo > /dev/null && echo echo
-        command -v {params.zpool_program} > /dev/null && echo zpool
-        command -v {params.ssh_program} > /dev/null && echo ssh
-        command -v {params.shell_program} > /dev/null && echo sh
-        command -v {params.sudo_program} > /dev/null && echo sudo
-        command -v {params.compression_program} > /dev/null && echo zstd
-        command -v {params.mbuffer_program} > /dev/null && echo mbuffer
-        command -v {params.pv_program} > /dev/null && echo pv
-        command -v {params.ps_program} > /dev/null && echo ps
-        command -v {params.psrinfo_program} > /dev/null && printf getconf_cpu_count- && {params.psrinfo_program} -p  # print num CPUs on Solaris
-        ! command -v {params.psrinfo_program} && command -v {params.getconf_program} > /dev/null && printf getconf_cpu_count- && {params.getconf_program} _NPROCESSORS_ONLN  # print num CPUs on POSIX except Solaris
-        command -v {params.uname_program} > /dev/null && printf uname- && {params.uname_program} -a || true
-        """
+        p = self.params
+        cmds = []
+        cmds.append(f"command -v echo > /dev/null && echo echo")
+        cmds.append(f"command -v echo > /dev/null && echo default_shell-$SHELL")
+        cmds.append(f"command -v {p.zpool_program} > /dev/null && echo zpool")
+        cmds.append(f"command -v {p.ssh_program} > /dev/null && echo ssh")
+        cmds.append(f"command -v {p.shell_program} > /dev/null && echo sh")
+        cmds.append(f"command -v {p.sudo_program} > /dev/null && echo sudo")
+        cmds.append(f"command -v {p.compression_program} > /dev/null && echo zstd")
+        cmds.append(f"command -v {p.mbuffer_program} > /dev/null && echo mbuffer")
+        cmds.append(f"command -v {p.pv_program} > /dev/null && echo pv")
+        cmds.append(f"command -v {p.ps_program} > /dev/null && echo ps")
+        # print num CPUs on Solaris:
+        cmds.append(f"command -v {p.psrinfo_program} > /dev/null && printf getconf_cpu_count- && {p.psrinfo_program} -p")
+        cmds.append(  # print num CPUs on POSIX except Solaris
+            f"! command -v {p.psrinfo_program} && command -v {p.getconf_program} > /dev/null && printf getconf_cpu_count- && {p.getconf_program} _NPROCESSORS_ONLN"
+        )
+        cmds.append(f"command -v {p.uname_program} > /dev/null && printf uname- && {p.uname_program} -a || true")
+        return "; ".join(cmds)
 
     def detect_available_programs_remote(self, remote: Remote, available_programs: Dict, ssh_user_host: str) -> None:
         p, log = self.params, self.params.log
@@ -3910,6 +3920,16 @@ class Job:
         return self.is_zpool_feature_enabled_or_active(
             remote, "feature@bookmark_v2"
         ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
+
+    @staticmethod
+    def validate_default_shell(default_shell: str, r: Remote) -> None:
+        if default_shell.endswith("/csh") or default_shell.endswith("/tcsh"):
+            # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
+            die(
+                f"Cowardly refusing to continue because {prog_name} is not compatible with csh-style quoting of special "
+                "characters. The safe workaround is to set 'sh' as the default shell of the Unix user on "
+                f"{r.location} host: {r.ssh_user_host or 'localhost'}, like so: chsh -s /bin/sh YOURUSERNAME"
+            )
 
     def check_zfs_dataset_busy(self, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
         """Decline to start a state changing ZFS operation that may conflict with other currently running processes.

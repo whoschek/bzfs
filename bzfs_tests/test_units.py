@@ -439,6 +439,17 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.unlink_missing_ok(tmp_file)
         self.assertFalse(os.path.exists(tmp_file))
 
+    def test_validate_default_shell(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        p = bzfs.Params(args)
+        remote = bzfs.Remote("src", args, p)
+        bzfs.Job().validate_default_shell("/bin/sh", remote)
+        bzfs.Job().validate_default_shell("/bin/bash", remote)
+        with self.assertRaises(SystemExit):
+            bzfs.Job().validate_default_shell("/bin/csh", remote)
+        with self.assertRaises(SystemExit):
+            bzfs.Job().validate_default_shell("/bin/tcsh", remote)
+
     def test_is_zfs_dataset_busy_match(self):
         def is_busy(proc, dataset, busy_if_send: bool = True):
             return bzfs.Job().is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
