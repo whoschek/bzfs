@@ -33,13 +33,22 @@ ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and pu
 cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
 ls -al $HOME $HOME/.ssh/testid_rsa
 
+cat /etc/shells
+my_user=root
+echo "Default shell of $my_user before change:"
+getent passwd $my_user | cut -d: -f7
+echo "Setting the default shell of $my_user to sh because csh quoting of special characters is not compatible with bzfs ..."
+chsh -s /bin/sh $my_user
+echo "Default shell of $my_user after change:"
+getent passwd $my_user | cut -d: -f7
+
 echo "Now running tests as root user"; ./test.sh
 echo "Now running coverage"; ./coverage.sh
 
 echo "Now running tests as non-root user:"
 tuser=test
 thome=/home/$tuser
-#pw userdel -n $tuser || true
+pw userdel -n $tuser || true
 pw useradd $tuser -d $thome -m
 echo "$tuser ALL=NOPASSWD:$(command -v zfs),$(command -v zpool),$(command -v dd)" >> /usr/local/etc/sudoers
 
@@ -47,8 +56,16 @@ mkdir -p $thome/.ssh
 cp -p $HOME/.ssh/testid_rsa $HOME/.ssh/testid_rsa.pub $HOME/.ssh/authorized_keys $thome/.ssh/
 chmod go-rwx "$thome/.ssh/authorized_keys"
 chown -R "$tuser" "$thome/.ssh"
-
 cp -R . "$thome/bzfs"
 chown -R "$tuser" "$thome/bzfs"
+
+my_user=$tuser
+echo "Default shell of $my_user before change:"
+getent passwd $my_user | cut -d: -f7
+echo "Setting the default shell of $my_user to sh because csh quoting of special characters is not compatible with bzfs ..."
+chsh -s /bin/sh $my_user
+echo "Default shell of $my_user after change:"
+getent passwd $my_user | cut -d: -f7
+
 sudo -u $tuser sh -c "cd $thome/bzfs; ./test.sh"
 echo "bzfs-testrun-success"
