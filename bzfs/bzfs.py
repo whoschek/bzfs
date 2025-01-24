@@ -4276,7 +4276,7 @@ class ProgressReporter:
     def enqueue_pv_log_file(self, pv_log_file: str) -> None:
         """Tells progress reporter thread to also monitor and tail the given pv log file."""
         with self.lock:
-            if not self.sleeper.is_stopping and pv_log_file not in self.file_name_set:
+            if pv_log_file not in self.file_name_set:
                 self.file_name_queue.add(pv_log_file)
 
     def _run(self) -> None:
@@ -5022,12 +5022,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
     }
     _log_stderr = log_stderr
     _log_stdout = log_stdout
-
-    class IntHolder:
-        def __init__(self, value: int):
-            self.value: int = value
-
-    terminal_cols = IntHolder(0 if log_params is None else None)  # 'None' indicates "configure value later"
+    terminal_cols = [0 if log_params is None else None]  # 'None' indicates "configure value later"
 
     class DefaultLogFormatter(logging.Formatter):
         def format(self, record) -> str:
@@ -5047,7 +5042,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
             else:
                 msg = prefix + super().format(record)
 
-            cols = terminal_cols.value
+            cols = terminal_cols[0]
             if cols is None:
                 cols = self.ljust_cols()
             msg = msg.ljust(cols)  # w/ progress line, "overwrite" trailing chars of previous msg with spaces
@@ -5063,7 +5058,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
                 if "pv" in p.available_programs["local"]:
                     cols = p.terminal_columns
                     assert cols is not None
-                terminal_cols.value = cols  # finally, resolve to use this specific value henceforth
+                terminal_cols[0] = cols  # finally, resolve to use this specific value henceforth
             return cols
 
     return DefaultLogFormatter()
