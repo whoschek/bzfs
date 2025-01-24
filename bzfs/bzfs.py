@@ -1721,7 +1721,7 @@ class Job:
         elapsed_nanos = time.time_ns() - start_time_nanos
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
-            sent_bytes, tails = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file, maxlen=0)
+            sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
         log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
@@ -4802,34 +4802,30 @@ def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "
         raise ValueError("Invalid pv_size: " + size)
 
 
-def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str, maxlen: int) -> Tuple[int, List[Deque[str]]]:
+def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
 
     def parse_pv_line(line: str) -> int:
         if ":" in line:
             col = line.split(":", 1)[1].strip()
-            tail.append(col)
             num_bytes, _ = pv_size_to_bytes(col)
             return num_bytes
         return 0
 
     total_bytes = 0
-    tails = []
     files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
-    files = [file for file in files if os.path.isfile(file)]
-    for file in sorted(files, key=lambda file: os.stat(file).st_mtime):
-        with open(file, mode="r", newline="", encoding="utf-8") as fd:
-            tail = deque(maxlen=maxlen)
-            line = None
-            for line in fd:
-                if line.endswith("\r"):
-                    continue  # skip all but the most recent status update of each transfer
-                total_bytes += parse_pv_line(line)
+    for file in files:
+        if os.path.isfile(file):
+            with open(file, mode="r", newline="", encoding="utf-8") as fd:
                 line = None
-            if line is not None:
-                total_bytes += parse_pv_line(line)
-            tails.append(tail)
-    return total_bytes, tails
+                for line in fd:
+                    if line.endswith("\r"):
+                        continue  # skip all but the most recent status update of each transfer
+                    total_bytes += parse_pv_line(line)
+                    line = None
+                if line is not None:
+                    total_bytes += parse_pv_line(line)
+    return total_bytes
 
 
 def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
