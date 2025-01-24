@@ -627,6 +627,7 @@ class TestHelperFunctions(unittest.TestCase):
             pv_size_to_bytes("4.12 KiB/s")
 
     def test_count_num_bytes_transferred_by_zfs_send(self):
+        self.assertEqual(0, bzfs.count_num_bytes_transferred_by_zfs_send("/tmp/nonexisting_bzfs_test_file"))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 pv1_fd, pv1 = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
@@ -642,7 +643,7 @@ class TestHelperFunctions(unittest.TestCase):
                 pv3 = pv1 + bzfs.pv_file_thread_separator + "002"
                 os.makedirs(pv3, exist_ok=True)
                 try:
-                    num_bytes, tails = bzfs.count_num_bytes_transferred_by_zfs_send(pv1, 10)
+                    num_bytes = bzfs.count_num_bytes_transferred_by_zfs_send(pv1)
                     self.assertEqual(800 + 300 * 1000 + 600000 * 1000, num_bytes)
                 finally:
                     os.remove(pv1)
