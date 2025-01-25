@@ -736,17 +736,18 @@ class TestHelperFunctions(unittest.TestCase):
             with stop_on_failure_subtest(i=i):
                 reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None)
                 stat = bzfs.ProgressReporter.TransferStat()
-                stat.bytes_in_flight = 789
+                bytes_in_flight = 789
+                stat.bytes_in_flight = bytes_in_flight
                 line = "125 GiB: 2,71GiB 0:00:08 [98,8MiB/s] [ 341MiB/s] [>                   ]  2% ETA 0:06:03 ETA 17:27:49"
                 expected_bytes = round(2.71 * 1024**3)
                 if i > 0:
                     line = line + "\r"
                 num_bytes = reporter.update_transfer_stat(line, stat, curr_time_nanos)
                 if i == 0:
-                    self.assertEqual(expected_bytes, num_bytes)
+                    self.assertEqual(expected_bytes - bytes_in_flight, num_bytes)
                     self.assertEqual(0, stat.bytes_in_flight)
                 else:
-                    self.assertEqual(0, num_bytes)
+                    self.assertEqual(expected_bytes - bytes_in_flight, num_bytes)
                     self.assertEqual(expected_bytes, stat.bytes_in_flight)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), stat.eta.timestamp_nanos)
                 self.assertEqual("[>                   ]  2% ETA 0:06:03 ETA 17:27:49", stat.eta.line_tail)

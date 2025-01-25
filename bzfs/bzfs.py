@@ -4305,7 +4305,7 @@ class ProgressReporter:
                     has_line = True
             if curr_time_nanos >= next_update_nanos:
                 elapsed_nanos = curr_time_nanos - start_time_nanos
-                sent_bytes = total_bytes + sum(s.bytes_in_flight for s in stats.values())
+                sent_bytes = total_bytes
                 msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since replication start time
                 msg1 = self.format_duration(elapsed_nanos)  # duration since replication start time
                 first: Sample = latest_samples[0]  # throughput etc, over sliding window
@@ -4334,13 +4334,13 @@ class ProgressReporter:
 
     def update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
         num_bytes, eta_timestamp_nanos, line_tail = self.parse_pv_line(line, curr_time_nanos)
+        bytes_in_flight = s.bytes_in_flight
         if line.endswith("\r"):
             s.bytes_in_flight = num_bytes  # intermediate status update of each transfer
-            num_bytes = 0
         else:
             s.bytes_in_flight = 0  # most recent status update of each transfer
         s.eta = self.TransferStat.ETA(eta_timestamp_nanos, line_tail)
-        return num_bytes
+        return num_bytes - bytes_in_flight
 
     no_rates_regex = re.compile(r".*/s\s*[)\]]?\s*")  # matches until end of last pv rate, e.g. "834MiB/s]" or "834MiB/s)"
     # time remaining --eta "ETA 00:00:39" or "ETA 2+0:00:39" or "ETA 2:0:00:39", followed by trailing --fineta timestamp ETA
