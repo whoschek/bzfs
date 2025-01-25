@@ -28,7 +28,7 @@ import sys
 import tempfile
 import time
 import unittest
-from collections import defaultdict, Counter
+from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -36,7 +36,7 @@ from typing import Sequence, Callable, Optional, TypeVar, Union, Dict
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
-from bzfs.bzfs import getenv_any
+from bzfs.bzfs import getenv_any, Remote
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
@@ -51,6 +51,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBuildTree))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSmallPriorityQueue))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedBool))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedDict))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
@@ -2005,16 +2006,13 @@ class TestConnectionPool(unittest.TestCase):
         self.remote = bzfs.Remote("src", args, p)
         self.src2 = bzfs.Remote("src", args, p)
 
-    def assert_priority_queue(self, cpool, queuelen, replaced, dirty=None):
-        if dirty is None:
-            self.assertTupleEqual((len(cpool.priority_queue), cpool.replaced), (queuelen, replaced))
-        else:
-            self.assertTupleEqual((len(cpool.priority_queue), cpool.replaced, cpool.dirty), (queuelen, replaced, dirty))
-        pass
+    def assert_priority_queue(self, cpool, queuelen):
+        self.assertEqual(len(cpool.priority_queue), queuelen)
 
     def assert_equal_connections(self, conn, donn):
         self.assertTupleEqual((conn.cid, conn.ssh_cmd), (donn.cid, donn.ssh_cmd))
         self.assertEqual(conn.free, donn.free)
+        self.assertEqual(conn.last_modified, donn.last_modified)
 
     def get_connection(self, cpool, dpool):
         conn = cpool.get_connection()
@@ -2033,7 +2031,6 @@ class TestConnectionPool(unittest.TestCase):
         counter1b = itertools.count()
         self.src.local_ssh_command = lambda: [str(next(counter1a))]
         self.src2.local_ssh_command = lambda: [str(next(counter1b))]
-        initial_last_modified = 0
 
         with self.assertRaises(AssertionError):
             bzfs.ConnectionPool(self.src, 0)
@@ -2041,16 +2038,14 @@ class TestConnectionPool(unittest.TestCase):
         capacity = 2
         cpool = bzfs.ConnectionPool(self.src, capacity)
         dpool = SlowButCorrectConnectionPool(self.src2, capacity)
-        self.assert_priority_queue(cpool, 0, 0, 0)
+        self.assert_priority_queue(cpool, 0)
         self.assertIsNotNone(repr(cpool))
         self.assertIsNotNone(str(cpool))
         cpool.shutdown("foo")
 
         conn1, donn1 = self.get_connection(cpool, dpool)
-        self.assert_priority_queue(cpool, 1, 0, 0)
-        self.assertEqual(conn1.free, (capacity - 1) * -1)
-        self.assertEqual(conn1.last_modified, initial_last_modified)
-        self.assertIsNone(conn1.replacement)
+        self.assert_priority_queue(cpool, 1)
+        self.assertEqual(conn1.free, (capacity - 1) * 1)
         i = [str(next(counter2a))]
         self.assertEqual(conn1.ssh_cmd, i)
         self.assertEqual(conn1.ssh_cmd_quoted, i)
@@ -2058,40 +2053,22 @@ class TestConnectionPool(unittest.TestCase):
         self.assertIsNotNone(str(conn1))
 
         self.return_connection(cpool, conn1, dpool, donn1)
-        self.assert_priority_queue(cpool, 2, 1, 1)
-        self.assertIsNotNone(conn1.replacement)
-        self.assertEqual(conn1.last_modified, initial_last_modified)
+        self.assert_priority_queue(cpool, 1)
 
         conn2, donn2 = self.get_connection(cpool, dpool)
-        self.assert_priority_queue(cpool, 2, 1, 1)
-        self.assertIsNot(conn1, conn2)
-        self.assertEqual(conn2.free, (capacity - 1) * -1)
-        self.assertNotEqual(conn2.last_modified, initial_last_modified)
-        self.assertIsNone(conn2.replacement)
-        self.assertIsNotNone(conn1.replacement)
+        self.assert_priority_queue(cpool, 1)
+        self.assertIs(conn1, conn2)
+        self.assertEqual(conn2.free, (capacity - 1) * 1)
 
         conn3, donn3 = self.get_connection(cpool, dpool)
-        self.assert_priority_queue(cpool, 2, 1, 1)
+        self.assert_priority_queue(cpool, 1)
         self.assertIs(conn2, conn3)
-        self.assertEqual(conn3.free, (capacity - 2) * -1)
-        self.assertNotEqual(conn3.last_modified, initial_last_modified)
-        self.assertIsNone(conn3.replacement)
-        self.assertIsNotNone(conn1.replacement)
-        self.assertIsNone(conn2.replacement)
 
         self.return_connection(cpool, conn2, dpool, donn2)
-        self.assert_priority_queue(cpool, 1, 0, 0)
-        self.assertIsNotNone(conn2.replacement)
-        self.assertIsNotNone(conn1.replacement)
-        self.assertIsNotNone(conn3.replacement)
-        self.assertNotEqual(conn2.last_modified, initial_last_modified)
+        self.assert_priority_queue(cpool, 1)
 
         self.return_connection(cpool, conn3, dpool, donn3)
-        self.assert_priority_queue(cpool, 2, 1, 1)
-        self.assertIsNotNone(conn1.replacement)
-        self.assertIsNotNone(conn2.replacement)
-        self.assertIsNotNone(conn3.replacement)
-        self.assertNotEqual(conn3.last_modified, initial_last_modified)
+        self.assert_priority_queue(cpool, 1)
 
         with self.assertRaises(AssertionError):
             cpool.return_connection(None)
@@ -2105,65 +2082,65 @@ class TestConnectionPool(unittest.TestCase):
         cpool = bzfs.ConnectionPool(self.remote, capacity)
 
         conn1 = cpool.get_connection()
-        self.assertEqual(conn1.free, (capacity - 1) * -1)
+        self.assertEqual(conn1.free, (capacity - 1) * 1)
         conn2 = cpool.get_connection()
         self.assertIs(conn1, conn2)
-        self.assertEqual(conn2.free, (capacity - 2) * -1)
-        self.assert_priority_queue(cpool, 1, 0, 0)
+        self.assertEqual(conn2.free, (capacity - 2) * 1)
+        self.assert_priority_queue(cpool, 1)
 
         conn3 = cpool.get_connection()
         self.assertIsNot(conn2, conn3)
-        self.assertEqual(conn3.free, (capacity - 1) * -1)
-        self.assertEqual(conn2.free, (capacity - 2) * -1)
-        self.assert_priority_queue(cpool, 2, 0, 0)
+        self.assertEqual(conn3.free, (capacity - 1) * 1)
+        self.assertEqual(conn2.free, (capacity - 2) * 1)
+        self.assert_priority_queue(cpool, 2)
         conn4 = cpool.get_connection()
         self.assertIs(conn3, conn4)
-        self.assertEqual(conn4.free, (capacity - 2) * -1)
-        self.assert_priority_queue(cpool, 2, 0, 0)
+        self.assertEqual(conn4.free, (capacity - 2) * 1)
+        self.assert_priority_queue(cpool, 2)
 
         conn5 = cpool.get_connection()
         self.assertIsNot(conn4, conn5)
-        self.assertEqual(conn5.free, (capacity - 1) * -1)
-        self.assertEqual(conn4.free, (capacity - 2) * -1)
-        self.assert_priority_queue(cpool, 3, 0, 0)
+        self.assertEqual(conn5.free, (capacity - 1) * 1)
+        self.assertEqual(conn4.free, (capacity - 2) * 1)
+        self.assert_priority_queue(cpool, 3)
 
         cpool.return_connection(conn3)
-        self.assert_priority_queue(cpool, 4, 1, 1)
+        self.assert_priority_queue(cpool, 3)
         cpool.return_connection(conn4)
         t4 = cpool.last_modified
-        self.assert_priority_queue(cpool, 5, 2, 2)
+        self.assert_priority_queue(cpool, 3)
 
         cpool.return_connection(conn2)
-        self.assert_priority_queue(cpool, 6, 3, 3)
+        self.assert_priority_queue(cpool, 3)
         cpool.return_connection(conn1)
         t2 = cpool.last_modified
-        self.assert_priority_queue(cpool, 3, 0, 0)
+        self.assert_priority_queue(cpool, 3)
 
         cpool.return_connection(conn5)
         t5 = cpool.last_modified
-        self.assert_priority_queue(cpool, 4, 1, 1)
+        self.assert_priority_queue(cpool, 3)
 
         # assert sort order evens out the number of concurrent sessions among the TCP connections
         conn5a = cpool.get_connection()
-        self.assertEqual(conn5a.free, (capacity - 1) * -1)
+        self.assertEqual(conn5a.free, (capacity - 1) * 1)
 
         conn2a = cpool.get_connection()
-        self.assertEqual(conn2a.free, (capacity - 1) * -1)
+        self.assertEqual(conn2a.free, (capacity - 1) * 1)
 
         conn4a = cpool.get_connection()
-        self.assertEqual(conn4a.free, (capacity - 1) * -1)
+        self.assertEqual(conn4a.free, (capacity - 1) * 1)
 
         # assert tie-breaker in favor of most recently returned TCP connection
         conn6 = cpool.get_connection()
-        self.assertEqual(conn6.free, (capacity - 2) * -1)
+        self.assertEqual(conn6.free, (capacity - 2) * 1)
         self.assertEqual(abs(conn6.last_modified), t5)
 
         conn1a = cpool.get_connection()
-        self.assertEqual(conn1a.free, (capacity - 2) * -1)
+        self.assertEqual(conn1a.free, (capacity - 2) * 1)
         self.assertEqual(abs(conn1a.last_modified), t2)
 
         conn4a = cpool.get_connection()
-        self.assertEqual(conn4a.free, (capacity - 2) * -1)
+        self.assertEqual(conn4a.free, (capacity - 2) * 1)
         self.assertEqual(abs(conn4a.last_modified), t4)
 
         cpool.shutdown("foo")
@@ -2204,16 +2181,13 @@ class TestConnectionPool(unittest.TestCase):
         num_steps = 1000 if not is_adhoc_test and not is_functional_test else 75
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
-        total_returns = 0
-        total_return_iters_sum = 0
-        total_return_iters = Counter()
         for maxsessions in range(1, 10 + 1):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
                 self.src.local_ssh_command = lambda: [str(next(counter1a))]
                 self.src2.local_ssh_command = lambda: [str(next(counter1b))]
-                cpool = bzfs.ConnectionPool(self.src, maxsessions, is_trace=True)
+                cpool = bzfs.ConnectionPool(self.src, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = bzfs.ConnectionPool(self.src2, maxsessions)
                 rng = random.Random(12345)
@@ -2251,32 +2225,25 @@ class TestConnectionPool(unittest.TestCase):
                     raise
                 log.log(loglevel, "cpool: %s", cpool)
                 # log.log(bzfs.log_debug, "cpool: %s", cpool)
-                total_returns += cpool.returns
-                total_return_iters_sum += cpool.return_iters_sum
-                total_return_iters.update(cpool.return_iters)
         elapsed_secs = (time.time_ns() - start_time_nanos) / 1000_000_000
         log.info("random_walk took %s secs", elapsed_secs)
-        s = sum(total_return_iters.values())
-        total_return_iters = {key: value for key, value in sorted(total_return_iters.items())}
-        percentage_iters = {key: 100 * value / s for key, value in total_return_iters.items()}
-        log.info(
-            "%stotal_returns: %s, total_return_iters_sum: %s, total_return_iters: %s, %s",
-            "",
-            total_returns,
-            total_return_iters_sum,
-            total_return_iters,
-            percentage_iters,
-        )
 
 
 #############################################################################
 class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better implementation against this baseline
+
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection):
+        super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection)
+        self.priority_queue = []
+
     def get_connection(self) -> bzfs.Connection:
         with self._lock:
             self.priority_queue.sort()
-            conn = self.priority_queue[0] if self.priority_queue else None
+            conn = self.priority_queue[-1] if self.priority_queue else None
             if conn is None or conn.is_full():
                 conn = bzfs.Connection(self.remote, self.capacity, self.cid)
+                self.last_modified += 1
+                conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self.cid += 1
                 self.priority_queue.append(conn)
             conn.increment_free(-1)
@@ -2429,6 +2396,136 @@ class TestIncrementalSendSteps(unittest.TestCase):
             is_resume=is_resume,
             force_convert_I_to_i=force_convert_I_to_i,
         )
+
+
+#############################################################################
+class TestSmallPriorityQueue(unittest.TestCase):
+    def setUp(self):
+        self.pq = bzfs.SmallPriorityQueue()
+        self.pq_reverse = bzfs.SmallPriorityQueue(reverse=True)
+
+    def test_basic(self):
+        self.assertEqual(0, len(self.pq))
+        self.assertTrue(len(str(self.pq)) > 0)
+        self.pq.push(2)
+        self.assertEqual(1, len(self.pq))
+        self.pq.push(1)
+        self.assertEqual(2, len(self.pq))
+        self.assertTrue(2 in self.pq)
+        self.assertTrue(1 in self.pq)
+        self.assertFalse(0 in self.pq)
+        self.pq.clear()
+        self.assertEqual(len(self.pq), 0)
+
+    def test_push_and_pop(self):
+        self.pq.push(3)
+        self.pq.push(1)
+        self.pq.push(2)
+        self.assertEqual(self.pq._lst, [1, 2, 3])
+        self.assertEqual(self.pq.pop(), 1)
+        self.assertEqual(self.pq._lst, [2, 3])
+
+    def test_pop_empty(self):
+        with self.assertRaises(IndexError):  # Generic IndexError from list.pop()
+            self.pq.pop()
+
+    def test_remove(self):
+        self.pq.push(3)
+        self.pq.push(1)
+        self.pq.push(2)
+        self.pq.remove(2)
+        self.assertEqual(self.pq._lst, [1, 3])
+        with self.assertRaises(AssertionError):
+            self.pq.remove(0, assert_is_contained=True)
+        self.pq.remove(1, assert_is_contained=True)
+        self.assertEqual(self.pq._lst, [3])
+
+    def test_remove_nonexistent_element(self):
+        self.pq.push(1)
+        self.pq.push(3)
+        self.pq.push(2)
+
+        # Attempt to remove an element that doesn't exist (should raise IndexError)
+        with self.assertRaises(IndexError):
+            self.pq.remove(4)
+
+    def test_peek(self):
+        self.pq.push(3)
+        self.pq.push(1)
+        self.pq.push(2)
+        self.assertEqual(self.pq.peek(), 1)
+        self.assertEqual(self.pq._lst, [1, 2, 3])
+        self.pq_reverse.push(3)
+        self.pq_reverse.push(1)
+        self.pq_reverse.push(2)
+        self.assertEqual(self.pq_reverse.peek(), 3)
+        self.assertEqual(self.pq_reverse._lst, [1, 2, 3])
+
+    def test_peek_empty(self):
+        with self.assertRaises(IndexError):  # Generic IndexError from list indexing
+            self.pq.peek()
+
+        with self.assertRaises(IndexError):  # Generic IndexError from list indexing
+            self.pq_reverse.peek()
+
+    def test_reverse_order(self):
+        self.pq_reverse.push(1)
+        self.pq_reverse.push(3)
+        self.pq_reverse.push(2)
+        self.assertEqual(self.pq_reverse.pop(), 3)
+        self.assertEqual(self.pq_reverse._lst, [1, 2])
+
+    def test_iter(self):
+        self.pq.push(3)
+        self.pq.push(1)
+        self.pq.push(2)
+        self.assertListEqual([1, 2, 3], list(iter(self.pq)))
+        self.assertEqual("[1, 2, 3]", str(self.pq))
+        self.pq_reverse.push(1)
+        self.pq_reverse.push(3)
+        self.pq_reverse.push(2)
+        self.assertListEqual([3, 2, 1], list(iter(self.pq_reverse)))
+        self.assertEqual("[3, 2, 1]", str(self.pq_reverse))
+
+    def test_duplicates(self):
+        self.pq.push(2)
+        self.pq.push(2)
+        self.pq.push(1)
+        self.assertEqual(self.pq._lst, [1, 2, 2])
+
+        # Pop should remove the smallest duplicate first
+        self.assertEqual(self.pq.pop(), 1)
+        self.assertEqual(self.pq._lst, [2, 2])
+
+        # Remove one duplicate, leaving another
+        self.pq.remove(2)
+        self.assertEqual(self.pq._lst, [2])
+
+        # Peek and pop should now work on the remaining duplicate
+        self.assertEqual(self.pq.peek(), 2)
+        self.assertEqual(self.pq.pop(), 2)
+        self.assertEqual(len(self.pq), 0)
+
+    def test_reverse_with_duplicates(self):
+        self.pq_reverse.push(2)
+        self.pq_reverse.push(2)
+        self.pq_reverse.push(3)
+        self.pq_reverse.push(1)
+        self.assertEqual(self.pq_reverse._lst, [1, 2, 2, 3])
+
+        # Pop the largest first in reverse order
+        self.assertEqual(self.pq_reverse.pop(), 3)
+        self.assertEqual(self.pq_reverse._lst, [1, 2, 2])
+
+        # Remove a duplicate
+        self.pq_reverse.remove(2)
+        self.assertEqual(self.pq_reverse._lst, [1, 2])
+
+        # Peek and pop the remaining elements
+        self.assertEqual(self.pq_reverse.peek(), 2)
+        self.assertEqual(self.pq_reverse.pop(), 2)
+        self.assertEqual(self.pq_reverse.pop(), 1)
+        self.assertEqual(len(self.pq_reverse), 0)
 
 
 #############################################################################

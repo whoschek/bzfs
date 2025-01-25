@@ -33,6 +33,7 @@ Simply run that script whenever you change or add ArgumentParser help text.
 """
 
 import argparse
+import bisect
 import collections
 import concurrent
 import copy
@@ -76,8 +77,9 @@ from logging import Logger
 from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
-from typing import Iterable, Deque, Dict, List, Sequence, Set, Tuple, Any, Callable, Generator, Generic, ItemsView, Optional
-from typing import TextIO, TypeVar, Union
+from typing import Deque, Dict, Iterable, Iterator, List, Sequence, Set, Tuple
+from typing import Any, Callable, Generator, Generic, Optional
+from typing import ItemsView, TextIO, TypeVar, Union
 
 __version__ = "1.10.0-dev"
 prog_name = "bzfs"
@@ -4081,28 +4083,27 @@ class Connection:
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
-        self.free: int = -max_concurrent_ssh_sessions_per_tcp_connection  # reverse sort order
+        self.free: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.last_modified: int = 0
         self.cid: int = cid
-        self.replacement: Optional[Connection] = None
         self.ssh_cmd: List[str] = remote.local_ssh_command()
         self.ssh_cmd_quoted: List[str] = [shlex.quote(item) for item in self.ssh_cmd]
         self.lock: threading.Lock = threading.Lock()  # shared across all shallow copies
         self.last_refresh_time: Connection.IntHolder = Connection.IntHolder()  # shared across all shallow copies
 
     def __repr__(self) -> str:
-        return str({"free": abs(self.free), "cid": self.cid, "removed": self.replacement is not None})
+        return str({"free": self.free, "cid": self.cid})
 
     def increment_free(self, value: int) -> None:
-        self.free += -value  # use reverse sort order
-        assert self.free <= 0
-        assert self.free >= -self.capacity
+        self.free += value
+        assert self.free >= 0
+        assert self.free <= self.capacity
 
     def is_full(self) -> bool:
-        return self.free >= 0  # use reverse sort order
+        return self.free <= 0
 
     def update_last_modified(self, last_modified: int) -> None:
-        self.last_modified = -last_modified  # use reverse sort order
+        self.last_modified = last_modified
 
     def shutdown(self, msg_prefix: str, p: Params) -> None:
         ssh_cmd = self.ssh_cmd
@@ -4117,103 +4118,50 @@ class Connection:
 
 #############################################################################
 class ConnectionPool:
-    """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse.
-    Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers or using an
-    indexed priority queue via https://github.com/nvictus/pqdict but, to avoid an external dependency, is actually
-    implemented using a simple yet effective (thread-safe) priority queue that can handle updates to the priority of
-    items that are already contained in the queue. This is done by retaining inside the queue both the item before the
-    update, as well as the item after the update, such that the item-before-the-update is tagged with an auxiliary
-    pointer to the updated shallow copy that is the item-after-the-update aka the replacement for the item. Items that
-    are tagged like that are garbage and are skipped on reads. They are also periodically garbage collected, i.e.
-    deleted from the queue to free up memory, in a way that retains amortized O(log N) time complexity."""
+    """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse."""
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, is_trace: bool = False):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
-        self.priority_queue: List[Connection] = []  # sorted by number of free slots (desc), and by timestamp (desc)
-        self.replaced: int = 0
-        self.dirty: int = 0
+        self.priority_queue: SmallPriorityQueue = SmallPriorityQueue(reverse=True)  # sorted by #free slots and timestamp
         self.last_modified: int = 0  # monotonically increasing sequence number
         self.cid: int = 0  # monotonically increasing connection number
         self._lock: threading.Lock = threading.Lock()
-        self.returns: int = 0
-        self.return_iters_sum: int = 0
-        self.return_iters: Counter = Counter()
-        self.is_trace: bool = is_trace
-
-    def _pop(self) -> Connection:
-        """Returns the "smallest" item wrt. sort order from the priority queue."""
-        conn = None
-        while conn is None and self.priority_queue:
-            conn = heapq.heappop(self.priority_queue)
-            if conn.replacement is not None:  # skip garbage that was replaced by a shallow copy with updated priority
-                conn = None
-                self.replaced -= 1
-                assert self.replaced >= 0
-        return conn
 
     def get_connection(self) -> Connection:
         with self._lock:
-            conn = self._pop()
+            conn = self.priority_queue.pop() if len(self.priority_queue) > 0 else None
             if conn is None or conn.is_full():
                 if conn is not None:
-                    assert conn.replacement is None
-                    heapq.heappush(self.priority_queue, conn)
+                    self.priority_queue.push(conn)
                 conn = Connection(self.remote, self.capacity, self.cid)  # add a new connection
+                self.last_modified += 1
+                conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self.cid += 1
-            assert conn.replacement is None
             conn.increment_free(-1)
-            heapq.heappush(self.priority_queue, conn)
+            self.priority_queue.push(conn)
             return conn
 
-    def return_connection(self, old_conn: Connection) -> None:
-        assert old_conn is not None
+    def return_connection(self, conn: Connection) -> None:
+        assert conn is not None
         with self._lock:
-            i = 0
-            new_conn = copy.copy(old_conn)  # shallow copy
-            next_conn = old_conn
-            while next_conn is not None:
-                # Typically, loops only once or not at all. Only a very small number of updates actually pile up in a
-                # replacement chain. Long-running operations (zfs send/receive) have their own dedicated TCP connection.
-                curr_conn = next_conn
-                next_conn = next_conn.replacement
-                curr_conn.replacement = new_conn  # tag garbage with ptr to the updated shallow copy that replaces it
-                i += 1
-            self.returns += 1
-            self.return_iters_sum += i
-            if self.is_trace:
-                self.return_iters[i] += 1
-            new_conn.replacement = None
-            new_conn.free = curr_conn.free
-            new_conn.increment_free(1)
+            self.priority_queue.remove(conn, assert_is_contained=True)
+            conn.increment_free(1)
             self.last_modified += 1
-            new_conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
-            heapq.heappush(self.priority_queue, new_conn)
-
-            # gc: periodically delete replaced entries to free up memory, yet retain amortized O(log N) time complexity
-            self.replaced += 1
-            self.dirty += 1
-            if self.dirty > len(self.priority_queue) - self.replaced:
-                self.priority_queue = [conn for conn in self.priority_queue if conn.replacement is None]
-                heapq.heapify(self.priority_queue)
-                self.replaced = 0
-                self.dirty = 0
+            conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
+            self.priority_queue.push(conn)
 
     def shutdown(self, msg_prefix: str) -> None:
-        conn = self._pop()
-        while conn is not None:
-            if self.remote.reuse_ssh_connection:
+        if self.remote.reuse_ssh_connection:
+            for conn in self.priority_queue:
                 conn.shutdown(msg_prefix, self.remote.params)
-            conn = self._pop()
+        self.priority_queue.clear()
 
     def __repr__(self) -> str:
         with self._lock:
-            # fmt: off
-            return str({"capacity": self.capacity, "replaced": self.replaced, "queue_len": len(self.priority_queue),
-                        "cid": self.cid, "returns": self.returns, "return_iters_sum": self.return_iters_sum,
-                        "queue": self.priority_queue, "dirty": self.dirty})
-            # fmt: on
+            queue = self.priority_queue
+            return str({"capacity": self.capacity, "queue_len": len(queue), "cid": self.cid, "queue": queue})
 
 
 #############################################################################
@@ -5589,6 +5537,61 @@ class CheckPercentRange(CheckRange):
             parser.error(f"{option_string}: Invalid percentage or number: {original}")
         super().__call__(parser, namespace, values, option_string=option_string)
         setattr(namespace, self.dest, (getattr(namespace, self.dest), is_percent))
+
+
+#############################################################################
+T = TypeVar("T")  # Generic type variable for elements stored in a SmallPriorityQueue
+
+
+class SmallPriorityQueue(Generic[T]):
+    """A priority queue that can handle updates to the priority of any element that is already contained in the queue, and
+    does so very efficiently if there are a small number of elements in the queue (no more than thousands), as is the case
+    for us. Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers or using an
+    indexed priority queue via https://github.com/nvictus/pqdict but, to avoid an external dependency, is actually
+    implemented using a simple yet effective binary search-based sorted list that can handle updates to the priority of
+    elements that are already contained in the queue, via removal of the element, followed by update of the element, followed
+    by (re)insertion. Do not underestimate the real-world performance of an optimized memmove() and optimized binary search.
+    Note: Duplicate elements (if any) are maintained in their order of insertion relative to other duplicates."""
+
+    def __init__(self, reverse: bool = False) -> None:
+        self._lst: List[T] = []
+        self._reverse: bool = reverse
+
+    def clear(self) -> None:
+        self._lst.clear()
+
+    def push(self, element: T) -> None:
+        bisect.insort(self._lst, element)
+
+    def pop(self) -> T:
+        """Removes and return the smallest (or highest priority if reverse == True) element from the queue."""
+        return self._lst.pop() if self._reverse else self._lst.pop(0)
+
+    def peek(self) -> T:
+        """Returns the smallest (or highest priority if reverse == True) element without removing it."""
+        return self._lst[-1] if self._reverse else self._lst[0]
+
+    def remove(self, element: T, assert_is_contained: bool = False) -> None:
+        """Removes the first occurrence of the specified element from the queue. The element must be contained."""
+        lst = self._lst
+        i = bisect.bisect_left(lst, element)
+        if assert_is_contained:
+            assert i < len(lst) and lst[i] == element
+        del lst[i]  # do not underestimate the real-world performance of an optimized memmove()
+
+    def __len__(self) -> int:
+        return len(self._lst)
+
+    def __contains__(self, element: T) -> bool:
+        lst = self._lst
+        i = bisect.bisect_left(lst, element)
+        return i < len(lst) and lst[i] == element
+
+    def __iter__(self) -> Iterator[T]:
+        return reversed(self._lst) if self._reverse else iter(self._lst)
+
+    def __repr__(self) -> str:
+        return repr(list(reversed(self._lst))) if self._reverse else repr(self._lst)
 
 
 #############################################################################
