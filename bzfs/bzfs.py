@@ -5503,7 +5503,7 @@ class LogConfigVariablesAction(argparse.Action):
 
 
 #############################################################################
-# Copied from https://gist.github.com/dmitriykovalev/2ab1aa33a8099ef2d514925d84aa89e7/30961300d3f8192f775709c06ff9a5b777475adf
+# class CheckRange is copied from https://gist.github.com/dmitriykovalev/2ab1aa33a8099ef2d514925d84aa89e7/30961300d3f8192f775709c06ff9a5b777475adf
 # Written by Dmitriy Kovalev
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
