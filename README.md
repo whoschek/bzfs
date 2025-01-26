@@ -184,6 +184,11 @@ replicated regardless of creation time:
 --include-snapshot-regex '.*_daily'
 --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
 
+Note: The example above compares the specified times against the
+standard ZFS 'creation' time property of the snapshots (which is a UTC
+Unix time in integer seconds), rather than against a timestamp that may
+be part of the snapshot name.
+
 * Delete all daily snapshots older than 7 days, but ensure that the
 latest 7 daily snapshots (per dataset) are retained regardless of
 creation time:
