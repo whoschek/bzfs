@@ -735,9 +735,9 @@ class TestHelperFunctions(unittest.TestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None)
-                stat = bzfs.ProgressReporter.TransferStat()
+                eta = bzfs.ProgressReporter.TransferStat.ETA(timestamp_nanos=0, seq_nr=0, line_tail="")
                 bytes_in_flight = 789
-                stat.bytes_in_flight = bytes_in_flight
+                stat = bzfs.ProgressReporter.TransferStat(bytes_in_flight=bytes_in_flight, eta=eta)
                 line = "125 GiB: 2,71GiB 0:00:08 [98,8MiB/s] [ 341MiB/s] [>                   ]  2% ETA 0:06:03 ETA 17:27:49"
                 expected_bytes = round(2.71 * 1024**3)
                 if i > 0:

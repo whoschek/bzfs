@@ -4250,11 +4250,12 @@ class ProgressReporter:
     class TransferStat:
         @dataclass(order=True)
         class ETA:  # Estimated time of arrival
-            timestamp_nanos: int  # future time at which current zfs send/recv transfer is estimated to complete
-            line_tail: str  # trailing portion of pv log line containing progress bar and duration ETA and timestamp ETA
+            timestamp_nanos: int  # sorted by future time at which current zfs send/recv transfer is estimated to complete
+            seq_nr: int  # tiebreaker wrt. sort order
+            line_tail: str = field(compare=False)  # trailing pv log line part w/ progress bar, duration ETA, timestamp ETA
 
-        bytes_in_flight: int = field(default=0)
-        eta: ETA = field(default=None)
+        bytes_in_flight: int
+        eta: ETA
 
     def _run_internal(self, fds: List[TextIO], selector: selectors.BaseSelector) -> None:
 
@@ -4269,12 +4270,12 @@ class ProgressReporter:
         update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
         sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
         sleep_nanos = round(update_interval_nanos / 2.5)
-        total_bytes, last_status_len = 0, 0
-        stats = defaultdict(self.TransferStat)
+        sent_bytes, last_status_len = 0, 0
         num_lines, num_readables = 0, 0
         start_time_nanos = time.time_ns()
         next_update_nanos = start_time_nanos + update_interval_nanos
         latest_samples: Deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window containing recent measurements
+        etas: List = []
         while True:
             empty_file_name_queue: Set[str] = set()
             with self.lock:
@@ -4291,26 +4292,27 @@ class ProgressReporter:
                 Path(pv_log_file).touch()
                 fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
                 fds.append(fd)
-                selector.register(fd, selectors.EVENT_READ, data=iter(fd))
-
+                eta = self.TransferStat.ETA(timestamp_nanos=0, seq_nr=-len(fds), line_tail="")
+                selector.register(fd, selectors.EVENT_READ, data=(iter(fd), self.TransferStat(bytes_in_flight=0, eta=eta)))
+                etas.append(eta)
             readables = selector.select(timeout=0)  # 0 indicates "don't block"
             has_line = False
             curr_time_nanos = time.time_ns()
             for selector_key, _ in readables:  # for each file that's ready for non-blocking read
                 num_readables += 1
                 key: selectors.SelectorKey = selector_key
-                for line in key.data:  # aka iter(fd)
-                    total_bytes += self.update_transfer_stat(line, stats[key.fileobj.name], curr_time_nanos)
+                iter_fd, s = key.data
+                for line in iter_fd:  # aka iter(fd)
+                    sent_bytes += self.update_transfer_stat(line, s, curr_time_nanos)
                     num_lines += 1
                     has_line = True
             if curr_time_nanos >= next_update_nanos:
                 elapsed_nanos = curr_time_nanos - start_time_nanos
-                sent_bytes = total_bytes
                 msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since replication start time
                 msg1 = self.format_duration(elapsed_nanos)  # duration since replication start time
                 first: Sample = latest_samples[0]  # throughput etc, over sliding window
                 _, msg2 = self.format_sent_bytes(sent_bytes - first.sent_bytes, curr_time_nanos - first.timestamp_nanos)
-                msg4 = max(s.eta for s in stats.values()).line_tail if len(stats) > 0 else ""  # progress bar, ETAs
+                msg4 = max(etas).line_tail if len(etas) > 0 else ""  # progress bar, ETAs
                 timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
                 status_line = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}"
                 status_line = status_line.ljust(last_status_len)  # "overwrite" trailing chars of previous status with spaces
@@ -4333,13 +4335,9 @@ class ProgressReporter:
                 raise ValueError("Injected ProgressReporter error")  # for testing only
 
     def update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
-        num_bytes, eta_timestamp_nanos, line_tail = self.parse_pv_line(line, curr_time_nanos)
+        num_bytes, s.eta.timestamp_nanos, s.eta.line_tail = self.parse_pv_line(line, curr_time_nanos)
         bytes_in_flight = s.bytes_in_flight
-        if line.endswith("\r"):
-            s.bytes_in_flight = num_bytes  # intermediate status update of each transfer
-        else:
-            s.bytes_in_flight = 0  # most recent status update of each transfer
-        s.eta = self.TransferStat.ETA(eta_timestamp_nanos, line_tail)
+        s.bytes_in_flight = num_bytes if line.endswith("\r") else 0  # intermediate vs. final status update of each transfer
         return num_bytes - bytes_in_flight
 
     no_rates_regex = re.compile(r".*/s\s*[)\]]?\s*")  # matches until end of last pv rate, e.g. "834MiB/s]" or "834MiB/s)"
@@ -4378,7 +4376,7 @@ class ProgressReporter:
         parser.add_argument("--interval", "-i", type=float, default=1)
         parser.add_argument("--average-rate-window", "-m", type=float, default=30)
         args, _ = parser.parse_known_args(args=self.params.pv_program_opts)
-        interval = min(60 * 60, max(args.interval, 1))
+        interval = min(60 * 60, max(args.interval, 0.1))
         return interval, min(60 * 60, max(args.average_rate_window, interval))
 
 
