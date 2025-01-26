@@ -2735,7 +2735,7 @@ class Job:
         control_persist_limit_nanos = (self.control_persist_secs - self.control_persist_margin_secs) * 1_000_000_000
         now = time.time_ns()  # no real need to compute this inside the critical section of conn.lock
         with conn.lock:
-            if now - conn.last_refresh_time.value < control_persist_limit_nanos:
+            if now - conn.last_refresh_time < control_persist_limit_nanos:
                 return  # ssh master is alive, reuse its TCP connection (this is the common case & the ultra-fast path)
             ssh_cmd = conn.ssh_cmd
             ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
@@ -2757,7 +2757,7 @@ class Job:
                         f"first, considering diagnostic log file output from running {prog_name} with: "
                         "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                     )
-            conn.last_refresh_time.value = time.time_ns()
+            conn.last_refresh_time = time.time_ns()
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
@@ -4072,12 +4072,8 @@ class Job:
 class Connection:
     """Represents the ability to multiplex N=capacity concurrent SSH sessions over the same TCP connection."""
 
-    free: int = field(default=0)  # sort order evens out the number of concurrent sessions among the TCP connections
-    last_modified: int = field(default=0)  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot
-
-    class IntHolder:
-        def __init__(self):
-            self.value: int = 0
+    free: int  # sort order evens out the number of concurrent sessions among the TCP connections
+    last_modified: int  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int):
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
@@ -4087,8 +4083,8 @@ class Connection:
         self.cid: int = cid
         self.ssh_cmd: List[str] = remote.local_ssh_command()
         self.ssh_cmd_quoted: List[str] = [shlex.quote(item) for item in self.ssh_cmd]
-        self.lock: threading.Lock = threading.Lock()  # shared across all shallow copies
-        self.last_refresh_time: Connection.IntHolder = Connection.IntHolder()  # shared across all shallow copies
+        self.lock: threading.Lock = threading.Lock()
+        self.last_refresh_time: int = 0
 
     def __repr__(self) -> str:
         return str({"free": self.free, "cid": self.cid})
@@ -4112,7 +4108,7 @@ class Connection:
             is_trace and p.log.trace(f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
-                is_trace and p.log.trace("%s", process.stderr.rstrip())
+                p.log.trace("%s", process.stderr.rstrip())
 
 
 #############################################################################
@@ -4123,7 +4119,7 @@ class ConnectionPool:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
-        self.priority_queue: SmallPriorityQueue = SmallPriorityQueue(reverse=True)  # sorted by #free slots and timestamp
+        self.priority_queue: SmallPriorityQueue = SmallPriorityQueue(reverse=True)  # sorted by #free slots and last_modified
         self.last_modified: int = 0  # monotonically increasing sequence number
         self.cid: int = 0  # monotonically increasing connection number
         self._lock: threading.Lock = threading.Lock()
@@ -4145,6 +4141,7 @@ class ConnectionPool:
     def return_connection(self, conn: Connection) -> None:
         assert conn is not None
         with self._lock:
+            # update priority = remove conn from queue, update priority, finally reinsert updated conn into queue
             self.priority_queue.remove(conn, assert_is_contained=True)
             conn.increment_free(1)
             self.last_modified += 1
@@ -4243,7 +4240,7 @@ class ProgressReporter:
                 for fd in fds:
                     fd.close()
         except BaseException as e:
-            self.exception = e
+            self.exception = e  # will be reraised in stop()
             log.error("%s%s", "ProgressReporter:\n", "".join(traceback.TracebackException.from_exception(e).format()))
 
     @dataclass
@@ -4353,7 +4350,7 @@ class ProgressReporter:
             line = ProgressReporter.no_rates_regex.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
             match = ProgressReporter.time_remaining_eta_regex.fullmatch(line)  # extract pv --eta duration
             if match:
-                days_secs = 86400 * (int(match.group(2)) if match.group(2) else 0)
+                days_secs = 86400 * int(match.group(2)) if match.group(2) else 0
                 time_remaining_secs = days_secs + int(match.group(3)) * 3600 + int(match.group(4)) * 60 + int(match.group(5))
                 curr_time_nanos += time_remaining_secs * 1_000_000_000  # ETA timestamp = now + time remaining duration
             return sent_bytes, curr_time_nanos, line
