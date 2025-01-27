@@ -239,7 +239,7 @@ Note: The example above compares the specified times against the standard ZFS 'c
 regardless of creation time:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7'
 --include-snapshot-times-and-ranks '*..7 days ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
@@ -247,7 +247,7 @@ regardless of creation time. Additionally, only delete a snapshot if no correspo
 the source dataset (same as above except replace the 'dummy' source with 'tank1/foo/bar'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7'
 --include-snapshot-times-and-ranks '*..7 days ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
@@ -255,14 +255,14 @@ regardless of creation time. Additionally, only delete a snapshot if no correspo
 dataset (same as above except append 'no-crosscheck'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7'
 --include-snapshot-times-and-ranks '*..7 days ago' --delete-dst-snapshots-no-crosscheck`
 
 * Delete all daily bookmarks older than 90 days, but retain the latest 200 daily bookmarks (per dataset) regardless
 of creation time:
 
 `   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 200..latest 100%'
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 200'
 --include-snapshot-times-and-ranks '*..90 days ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
@@ -423,7 +423,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "<b>*Deletion Example (no UNION):* </b>\n\n"
              "Specify to delete all daily snapshots older than 7 days, but ensure that the "
              "latest 7 daily snapshots (per dataset) are retained regardless of creation time, like so: "
-             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'latest 7..latest 100%%' "
+             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7' "
              "--include-snapshot-times-and-ranks '*..7 days ago'`"
              "\n\n"
              "This helps to safely cope with irregular scenarios where no snapshots were created or received within "
@@ -461,20 +461,25 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Specifies to include the N (or N%%) oldest snapshots or latest snapshots, and exclude all other "
              "snapshots (default: include no snapshots). Snapshots are sorted by creation time (actually, by the "
              "'createtxg' ZFS property, which serves the same purpose but is more precise). The rank position of a "
-             "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consist of "
-             "the word 'oldest' or 'latest', followed by a non-negative integer, followed by an optional '%%' percent "
-             "sign. A rank range consists of a lower rank, followed by a '..' separator, followed by a higher rank. "
+             "snapshot is the zero-based integer position of the snapshot within that sorted list. A rank consists of the "
+             "optional words 'all except' (followed by an optional space), followed by the word 'oldest' or 'latest', "
+             "followed by a non-negative integer, followed by an optional '%%' percent sign. A rank range consists of a "
+             "lower rank, followed by a '..' separator, followed by a higher rank. "
              "If the optional lower rank is missing it is assumed to be 0. Examples:\n\n"
              "* 'oldest 10%%' aka 'oldest 0..oldest 10%%' (include the oldest 10%% of all snapshots)\n\n"
              "* 'latest 10%%' aka 'latest 0..latest 10%%' (include the latest 10%% of all snapshots)\n\n"
+             "* 'all except latest 10%%' aka 'oldest 90%%' aka 'oldest 0..oldest 90%%' (include all snapshots except the "
+             "latest 10%% of all snapshots)\n\n"
              "* 'oldest 90' aka 'oldest 0..oldest 90' (include the oldest 90 snapshots)\n\n"
              "* 'latest 90' aka 'latest 0..latest 90' (include the latest 90 snapshots)\n\n"
-             "* 'oldest 90..oldest 100%%' (include all snapshots except the oldest 90 snapshots)\n\n"
-             "* 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)\n\n"
+             "* 'all except oldest 90' aka 'oldest 90..oldest 100%%' (include all snapshots except the oldest 90 snapshots)"
+             "\n\n"
+             "* 'all except latest 90' aka 'latest 90..latest 100%%' (include all snapshots except the latest 90 snapshots)"
+             "\n\n"
              "* 'latest 1' aka 'latest 0..latest 1' (include the latest snapshot)\n\n"
-             "* 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
+             "* 'all except latest 1' aka 'latest 1..latest 100%%' (include all snapshots except the latest snapshot)\n\n"
              "* 'oldest 2' aka 'oldest 0..oldest 2' (include the oldest 2 snapshots)\n\n"
-             "* 'oldest 2..oldest 100%%' (include all snapshots except the oldest 2 snapshots)\n\n"
+             "* 'all except oldest 2' aka 'oldest 2..oldest 100%%' (include all snapshots except the oldest 2 snapshots)\n\n"
              "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
              "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
              "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
@@ -828,7 +833,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "As an example starting point, here is a command that deletes all bookmarks older than "
              "90 days, but retains the latest 200 bookmarks (per dataset) regardless of creation time: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
-             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks '0..0' 'latest 200..latest 100%%' "
+             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks '0..0' 'all except latest 200' "
              "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
@@ -5250,7 +5255,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             "days": 86400,
             "weeks": 7 * 86400,
         }
-        match = re.fullmatch(r"(\d+) ?(secs|seconds|mins|minutes|hours|days|weeks) ?ago", duration)
+        match = re.fullmatch(r"(\d+)\s*(secs|seconds|mins|minutes|hours|days|weeks)\s*ago", duration)
         if not match:
             raise ValueError("Invalid duration format")
         quantity = int(match.group(1))
@@ -5278,30 +5283,50 @@ class TimeRangeAndRankRangeAction(argparse.Action):
     def parse_rankranges(parser, values, option_string=None) -> List[RankRange]:
         def parse_rank(spec):
             spec = spec.strip()
-            match = re.fullmatch(r"(oldest|latest) ?(\d+)%?", spec)
+            match = re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)
             if not match:
                 parser.error(f"{option_string}: Invalid rank format: {spec}")
-            kind = match.group(1)
-            num = int(match.group(2))
+            is_except = bool(match.group(1))
+            kind = match.group(2)
+            num = int(match.group(3))
             is_percent = spec.endswith("%")
             if is_percent and num > 100:
                 parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
-            return kind, num, is_percent
+            return is_except, kind, num, is_percent
 
         rankranges = []
         for value in values:
             value = value.strip()
             if ".." in value:
-                lo, hi = value.split("..", 1)
-                lo, hi = [parse_rank(spec) for spec in [lo, hi]]
-                if lo[0] != hi[0]:
-                    # Example: latest10..oldest10 and oldest10..latest10 may be somewhat unambigous if there are 40
+                lo_split, hi_split = value.split("..", 1)
+                lo = parse_rank(lo_split)
+                hi = parse_rank(hi_split)
+                if lo[0] or hi[0]:
+                    # Example: 'all except latest 90..except latest 95' or 'all except latest 90..latest 95'
+                    parser.error(f"{option_string}: Invalid rank range: {value}")
+                if lo[1] != hi[1]:
+                    # Example: 'latest10..oldest10' and 'oldest10..latest10' may be somewhat unambigous if there are 40
                     # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
                     parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
             else:
                 hi = parse_rank(value)
-                lo = parse_rank(hi[0] + "0")
-            rankranges.append((lo, hi))
+                is_except, kind, num, is_percent = hi
+                if is_except:
+                    if is_percent:
+                        # 'all except latest 10%' aka 'oldest 90%' aka 'oldest 0..oldest 90%'
+                        # 'all except oldest 10%' aka 'latest 90%' aka 'latest 0..oldest 90%'
+                        negated_kind = "oldest" if kind == "latest" else "latest"
+                        lo = parse_rank(f"{negated_kind}0")
+                        hi = parse_rank(f"{negated_kind}{100-num}%")
+                    else:
+                        # 'all except latest 90' aka 'latest 90..latest 100%'
+                        # 'all except oldest 90' aka 'oldest 90..oldest 100%'
+                        lo = parse_rank(f"{kind}{num}")
+                        hi = parse_rank(f"{kind}100%")
+                else:
+                    # 'latest 90' aka 'latest 0..latest 90'
+                    lo = parse_rank(f"{kind}0")
+            rankranges.append((lo[1:], hi[1:]))
         return rankranges
 
 

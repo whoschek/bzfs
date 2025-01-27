@@ -1407,9 +1407,6 @@ class TestTimeRangeAction(unittest.TestCase):
             self.parse_duration("10x")  # Invalid unit
 
         with self.assertRaises(SystemExit):
-            self.parse_duration("10   weeks")  # spaces
-
-        with self.assertRaises(SystemExit):
             self.parse_duration("-5mins")  # Negative number
 
         with self.assertRaises(SystemExit):
@@ -1536,6 +1533,12 @@ class TestRankRangeAction(unittest.TestCase):
 
     def test_invalid_ranks(self):
         with self.assertRaises(SystemExit):
+            self.parse_args("all except oldest0..all except oldest10")  # Range partitioning not yet implemented
+
+        with self.assertRaises(SystemExit):
+            self.parse_args("all except oldest0..oldest10")  # Range partitioning not yet implemented
+
+        with self.assertRaises(SystemExit):
             self.parse_args("oldest0..10")  # missing kind
 
         with self.assertRaises(SystemExit):
@@ -1615,8 +1618,11 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest 0%"]))
 
         self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["latest1..latest100%"]))
+        self.assertListEqual(["\td@0", "\td@1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["all except latest1"]))
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest0%..latest100%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["all except latest0%"]))
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest0%..oldest100%"]))
+        self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["all except oldest0%"]))
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest100%..oldest0%"]))
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["latest100%..latest0%"]))
 
@@ -1627,11 +1633,16 @@ class TestRankRangeAction(unittest.TestCase):
 
         lst2 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2"]]
         self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, ["oldest 51%"]))
+        self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, ["all except latest 49%"]))
         self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst2, ["oldest 49%"]))
+        self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst2, ["all except latest 51%"]))
         self.assertListEqual(["\td@1", "\td@2"], self.filter_snapshots_by_rank(lst2, ["latest 51%"]))
+        self.assertListEqual(["\td@1", "\td@2"], self.filter_snapshots_by_rank(lst2, ["all except oldest 49%"]))
         self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst2, ["latest 49%"]))
+        self.assertListEqual(["\td@2"], self.filter_snapshots_by_rank(lst2, ["all except oldest 51%"]))
         self.assertListEqual([], self.filter_snapshots_by_rank(lst2, ["latest 0%"]))
         self.assertListEqual(lst2, self.filter_snapshots_by_rank(lst2, ["latest 100%"]))
+        self.assertListEqual([], self.filter_snapshots_by_rank(lst2, ["all except oldest 100%"]))
 
         self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest1"]))
         self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, ["latest100%..latest1"]))
