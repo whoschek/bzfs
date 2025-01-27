@@ -2377,7 +2377,7 @@ class Job:
         else:  # no compression is used if source and destination do not both support compression
             _compress_cmd, _decompress_cmd = "cat", "cat"
 
-        recordsize = max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"]))
+        recordsize = abs(self.src_properties[src_dataset]["recordsize"])
         src_buffer = self.mbuffer_cmd("src", size_estimate_bytes, recordsize)
         dst_buffer = self.mbuffer_cmd("dst", size_estimate_bytes, recordsize)
         local_buffer = self.mbuffer_cmd("local", size_estimate_bytes, recordsize)
@@ -2606,6 +2606,7 @@ class Job:
             )
             and self.is_program_available("mbuffer", loc)
         ):
+            recordsize = max(recordsize, 128 * 1024 if self.is_solaris_zfs_location(loc) else 2 * 1024 * 1024)
             return f"{p.mbuffer_program} {' '.join(['-s', str(recordsize)] + p.mbuffer_program_opts)}"
         else:
             return "cat"
@@ -3885,7 +3886,12 @@ class Job:
         available_programs[location].update(available_programs_minimum)
 
     def is_solaris_zfs(self, remote: Remote) -> bool:
-        return self.params.available_programs[remote.location].get("zfs") == "notOpenZFS"
+        return self.is_solaris_zfs_location(remote.location)
+
+    def is_solaris_zfs_location(self, location: str) -> bool:
+        if location == "local":
+            return platform.system() == "SunOS"
+        return self.params.available_programs[location].get("zfs") == "notOpenZFS"
 
     @staticmethod
     def is_dummy_src(r: Remote) -> bool:
