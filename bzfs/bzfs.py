@@ -2380,7 +2380,7 @@ class Job:
         else:  # no compression is used if source and destination do not both support compression
             _compress_cmd, _decompress_cmd = "cat", "cat"
 
-        recordsize = max(128 * 1024, abs(self.src_properties[src_dataset]["recordsize"]))
+        recordsize = max(2 * 1024 * 1024, abs(self.src_properties[src_dataset]["recordsize"]))
         src_buffer = self.mbuffer_cmd("src", size_estimate_bytes, recordsize)
         dst_buffer = self.mbuffer_cmd("dst", size_estimate_bytes, recordsize)
         local_buffer = self.mbuffer_cmd("local", size_estimate_bytes, recordsize)
