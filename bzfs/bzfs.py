@@ -4068,13 +4068,13 @@ class Job:
             return max_bytes
 
     @staticmethod
-    def validate_default_shell(default_shell: str, r: Remote) -> None:
-        if default_shell.endswith("/csh") or default_shell.endswith("/tcsh"):
+    def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
+        if path_to_default_shell.endswith("/csh") or path_to_default_shell.endswith("/tcsh"):
             # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
             die(
                 f"Cowardly refusing to continue because {prog_name} is not compatible with csh-style quoting of special "
-                f"characters. The safe workaround is to first manually set 'sh' instead of '{default_shell}' as the default "
-                f"shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
+                f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
+                f"the default shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
                 "chsh -s /bin/sh YOURUSERNAME"
             )
 
