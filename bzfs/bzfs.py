@@ -5592,11 +5592,11 @@ class SmallPriorityQueue(Generic[T]):
         bisect.insort(self._lst, element)
 
     def pop(self) -> T:
-        """Removes and return the smallest (or highest priority if reverse == True) element from the queue."""
+        """Removes and return the smallest (or largest if reverse == True) element from the queue."""
         return self._lst.pop() if self._reverse else self._lst.pop(0)
 
     def peek(self) -> T:
-        """Returns the smallest (or highest priority if reverse == True) element without removing it."""
+        """Returns the smallest (or largest if reverse == True) element without removing it."""
         return self._lst[-1] if self._reverse else self._lst[0]
 
     def remove(self, element: T, assert_is_contained: bool = False) -> None:
