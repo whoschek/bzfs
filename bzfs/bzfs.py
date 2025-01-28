@@ -230,7 +230,7 @@ tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly
 snapshots (per dataset) are replicated regardless of creation time:
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
+--include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'`
 
 Note: The example above compares the specified times against the standard ZFS 'creation' time property of the snapshots 
 (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be part of the snapshot name.
@@ -239,31 +239,31 @@ Note: The example above compares the specified times against the standard ZFS 'c
 regardless of creation time:
 
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7'
---include-snapshot-times-and-ranks '*..7 days ago'`
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
+--include-snapshot-times-and-ranks 'anytime..7 days ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
 regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot or bookmark exists in
 the source dataset (same as above except replace the 'dummy' source with 'tank1/foo/bar'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7'
---include-snapshot-times-and-ranks '*..7 days ago'`
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
+--include-snapshot-times-and-ranks '7 days ago..anytime'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
 regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot exists in the source
 dataset (same as above except append 'no-crosscheck'):
 
 `   {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7'
---include-snapshot-times-and-ranks '*..7 days ago' --delete-dst-snapshots-no-crosscheck`
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
+--include-snapshot-times-and-ranks 'anytime..7 days ago' --delete-dst-snapshots-no-crosscheck`
 
 * Delete all daily bookmarks older than 90 days, but retain the latest 200 daily bookmarks (per dataset) regardless
 of creation time:
 
 `   {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 200'
---include-snapshot-times-and-ranks '*..90 days ago'`
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 200'
+--include-snapshot-times-and-ranks 'anytime..90 days ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
 
@@ -293,7 +293,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 
 `   {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 --exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*'
---include-snapshot-times-and-ranks '7 days ago..*' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
+--include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
 --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
 --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' --ssh-dst-private-key /root/.ssh/id_rsa`
 """, formatter_class=argparse.RawTextHelpFormatter)
@@ -413,18 +413,18 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="This option takes as input parameters a time range filter and an optional rank range filter. It "
              "separately computes the results for each filter and selects the UNION of both results. "
              "To instead use a pure rank range filter (no UNION), or a pure time range filter (no UNION), simply "
-             "use '0..0' to indicate an empty time range, or omit the rank range, respectively. "
+             "use 'notime' aka '0..0' to indicate an empty time range, or omit the rank range, respectively. "
              "This option can be specified multiple times.\n\n"
              "<b>*Replication Example (UNION):* </b>\n\n"
              "Specify to replicate all daily snapshots created during the last 7 days, "
              "and at the same time ensure that the latest 7 daily snapshots (per dataset) are replicated regardless "
              "of creation time, like so: "
-             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`\n\n"
+             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'`\n\n"
              "<b>*Deletion Example (no UNION):* </b>\n\n"
              "Specify to delete all daily snapshots older than 7 days, but ensure that the "
              "latest 7 daily snapshots (per dataset) are retained regardless of creation time, like so: "
-             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except latest 7' "
-             "--include-snapshot-times-and-ranks '*..7 days ago'`"
+             "`--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7' "
+             "--include-snapshot-times-and-ranks 'anytime..7 days ago'`"
              "\n\n"
              "This helps to safely cope with irregular scenarios where no snapshots were created or received within "
              "the last 7 days, or where more than 7 daily snapshots were created within the last 7 days. It can also "
@@ -433,12 +433,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "<b>*TIMERANGE:* </b>\n\n"
              "The ZFS 'creation' time of a snapshot (and bookmark) must fall into this time range in order for the "
              "snapshot to be included. The time range consists of a 'start' time, followed by a '..' separator, "
-             "followed by an 'end' time. For example '2024-01-01..2024-04-01' or `*..*` aka all times. Only "
-             "snapshots (and bookmarks) in the half-open time range [start, end) are included; other snapshots "
-             "(and bookmarks) are excluded. If a snapshot is excluded this decision is never reconsidered because "
-             "exclude takes precedence over include. Each of the two specified times can take any of the following "
-             "forms:\n\n"
-             "* a) a `*` wildcard character representing negative or positive infinity.\n\n"
+             "followed by an 'end' time. For example '2024-01-01..2024-04-01', or 'anytime..anytime' aka `*..*` aka all "
+             "times, or 'notime' aka '0..0' aka empty time range. Only snapshots (and bookmarks) in the half-open time "
+             "range [start, end) are included; other snapshots (and bookmarks) are excluded. If a snapshot is excluded "
+             "this decision is never reconsidered because exclude takes precedence over include. Each of the two specified "
+             "times can take any of the following forms:\n\n"
+             "* a) `anytime` aka `*` wildcard; represents negative or positive infinity.\n\n"
              "* b) a non-negative integer representing a UTC Unix time in seconds. Example: 1728109805\n\n"
              "* c) an ISO 8601 datetime string with or without timezone. Examples: '2024-10-05', "
              "'2024-10-05T14:48:55', '2024-10-05T14:48:55+02', '2024-10-05T14:48:55-04:30'. If the datetime string "
@@ -833,8 +833,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "As an example starting point, here is a command that deletes all bookmarks older than "
              "90 days, but retains the latest 200 bookmarks (per dataset) regardless of creation time: "
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
-             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks '0..0' 'all except latest 200' "
-             "--include-snapshot-times-and-ranks '*..90 days ago'`\n\n")
+             "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except latest 200' "
+             "--include-snapshot-times-and-ranks 'anytime..90 days ago'`\n\n")
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=f"For increased safety, in normal replication operation {prog_name} also looks for bookmarks (in addition "
@@ -5221,7 +5221,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         def parse_time(time_spec):
             time_spec = time_spec.strip()
-            if time_spec == "*":
+            if time_spec == "*" or time_spec == "anytime":
                 return None
             if time_spec.isdigit():
                 return int(time_spec)  # Input is a Unix time in integer seconds
@@ -5236,6 +5236,8 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         assert isinstance(values, list)
         assert len(values) > 0
         value = values[0].strip()
+        if value == "notime":
+            value = "0..0"
         if ".." not in value:
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
         timerange = [parse_time(time_spec) for time_spec in value.split("..", 1)]

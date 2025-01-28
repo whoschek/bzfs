@@ -182,7 +182,8 @@ replicated regardless of creation time:
 
 ` bzfs tank1/foo/bar tank2/boo/bar --recursive
 --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'`
+--include-snapshot-times-and-ranks '7 days ago..anytime' 'latest
+7'`
 
 Note: The example above compares the specified times against the
 standard ZFS 'creation' time property of the snapshots (which is a UTC
@@ -195,8 +196,8 @@ creation time:
 
 ` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks '0..0' 'all except latest 7'
---include-snapshot-times-and-ranks '*..7 days ago'`
+--include-snapshot-times-and-ranks notime 'all except latest 7'
+--include-snapshot-times-and-ranks 'anytime..7 days ago'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the
 latest 7 daily snapshots (per dataset) are retained regardless of
@@ -206,8 +207,8 @@ replace the 'dummy' source with 'tank1/foo/bar'):
 
 ` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
-'.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except
-latest 7' --include-snapshot-times-and-ranks '*..7 days ago'`
+'.*_daily' --include-snapshot-times-and-ranks notime 'all except
+latest 7' --include-snapshot-times-and-ranks '7 days ago..anytime'`
 
 * Delete all daily snapshots older than 7 days, but ensure that the
 latest 7 daily snapshots (per dataset) are retained regardless of
@@ -217,8 +218,8 @@ snapshot exists in the source dataset (same as above except append
 
 ` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
-'.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except
-latest 7' --include-snapshot-times-and-ranks '*..7 days ago'
+'.*_daily' --include-snapshot-times-and-ranks notime 'all except
+latest 7' --include-snapshot-times-and-ranks 'anytime..7 days ago'
 --delete-dst-snapshots-no-crosscheck`
 
 * Delete all daily bookmarks older than 90 days, but retain the latest
@@ -226,8 +227,9 @@ latest 7' --include-snapshot-times-and-ranks '*..7 days ago'
 
 ` bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots=bookmarks --include-snapshot-regex
-'.*_daily' --include-snapshot-times-and-ranks '0..0' 'all except
-latest 200' --include-snapshot-times-and-ranks '*..90 days ago'`
+'.*_daily' --include-snapshot-times-and-ranks notime 'all except
+latest 200' --include-snapshot-times-and-ranks 'anytime..90 days
+ago'`
 
 * Delete all tmp datasets within tank2/boo/bar:
 
@@ -270,7 +272,7 @@ missing on dst, etc.
 ` bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 --exclude-snapshot-regex '.*_(hourly|frequent)'
 --exclude-snapshot-regex 'test_.*'
---include-snapshot-times-and-ranks '7 days ago..*' 'latest 7'
+--include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'
 --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset
 /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
 --exclude-dataset-regex
@@ -733,9 +735,9 @@ usage: bzfs [-h] [--recursive]
     optional rank range filter. It separately computes the results for
     each filter and selects the UNION of both results. To instead use a
     pure rank range filter (no UNION), or a pure time range filter (no
-    UNION), simply use '0..0' to indicate an empty time range, or omit
-    the rank range, respectively. This option can be specified multiple
-    times.
+    UNION), simply use 'notime' aka '0..0' to indicate an empty time
+    range, or omit the rank range, respectively. This option can be
+    specified multiple times.
 
     <b>*Replication Example (UNION):* </b>
 
@@ -743,7 +745,7 @@ usage: bzfs [-h] [--recursive]
     days, and at the same time ensure that the latest 7 daily snapshots
     (per dataset) are replicated regardless of creation time, like so:
     `--include-snapshot-regex '.*_daily'
-    --include-snapshot-times-and-ranks '7 days ago..*' 'latest
+    --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest
     7'`
 
     <b>*Deletion Example (no UNION):* </b>
@@ -751,9 +753,9 @@ usage: bzfs [-h] [--recursive]
     Specify to delete all daily snapshots older than 7 days, but ensure
     that the latest 7 daily snapshots (per dataset) are retained
     regardless of creation time, like so: `--include-snapshot-regex
-    '.*_daily' --include-snapshot-times-and-ranks '0..0' 'all
-    except latest 7' --include-snapshot-times-and-ranks '*..7 days
-    ago'`
+    '.*_daily' --include-snapshot-times-and-ranks notime 'all
+    except latest 7' --include-snapshot-times-and-ranks 'anytime..7
+    days ago'`
 
     This helps to safely cope with irregular scenarios where no
     snapshots were created or received within the last 7 days, or where
@@ -767,15 +769,16 @@ usage: bzfs [-h] [--recursive]
     into this time range in order for the snapshot to be included. The
     time range consists of a 'start' time, followed by a '..'
     separator, followed by an 'end' time. For example
-    '2024-01-01..2024-04-01' or `*..*` aka all times. Only
+    '2024-01-01..2024-04-01', or 'anytime..anytime' aka `*..*`
+    aka all times, or 'notime' aka '0..0' aka empty time range. Only
     snapshots (and bookmarks) in the half-open time range [start, end)
     are included; other snapshots (and bookmarks) are excluded. If a
     snapshot is excluded this decision is never reconsidered because
     exclude takes precedence over include. Each of the two specified
     times can take any of the following forms:
 
-    * a) a `*` wildcard character representing negative or positive
-    infinity.
+    * a) `anytime` aka `*` wildcard; represents negative or
+    positive infinity.
 
     * b) a non-negative integer representing a UTC Unix time in
     seconds. Example: 1728109805
@@ -1499,8 +1502,8 @@ usage: bzfs [-h] [--recursive]
     bookmarks (per dataset) regardless of creation time: `bzfs dummy
     tank2/boo/bar --dryrun --recursive --skip-replication
     --delete-dst-snapshots=bookmarks
-    --include-snapshot-times-and-ranks '0..0' 'all except latest
-    200' --include-snapshot-times-and-ranks '*..90 days ago'`
+    --include-snapshot-times-and-ranks notime 'all except latest 200'
+    --include-snapshot-times-and-ranks 'anytime..90 days ago'`
 
 <!-- -->
 
