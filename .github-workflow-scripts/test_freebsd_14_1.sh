@@ -33,6 +33,7 @@ ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and pu
 cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
 ls -al $HOME $HOME/.ssh/testid_rsa
 
+cat /etc/shells
 my_user=root
 echo "Default shell of $my_user before change:"
 getent passwd $my_user | cut -d: -f7

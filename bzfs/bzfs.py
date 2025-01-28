@@ -3935,8 +3935,8 @@ class Job:
             # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
             die(
                 f"Cowardly refusing to continue because {prog_name} is not compatible with csh-style quoting of special "
-                "characters. The safe workaround is to set 'sh' as the default shell of the Unix user on "
-                f"{r.location} host: {r.ssh_user_host or 'localhost'}, like so: chsh -s /bin/sh YOURUSERNAME"
+                f"characters. The safe workaround is to set 'sh' instead of '{default_shell}' as the default shell of the "
+                f"Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: chsh -s /bin/sh YOURUSERNAME"
             )
 
     def check_zfs_dataset_busy(self, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
