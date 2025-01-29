@@ -1876,6 +1876,58 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_no_common_snapshot_basic(self):
+        self.setup_basic()
+        self.run_bzfs(
+            src_root_dataset + "/foo",
+            dst_root_dataset + "/foo",
+            "--recursive",
+            no_create_bookmark=True,
+        )
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assertSnapshots(dst_root_dataset, 0, "s")
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--force",
+            "--f1",
+            no_create_bookmark=True,
+        )
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
+
+    def test_no_common_snapshot_with_conflicting_dst_snapshot(self):
+        self.setup_basic()
+        self.run_bzfs(
+            src_root_dataset + "/foo",
+            dst_root_dataset + "/foo",
+            "--recursive",
+            no_create_bookmark=True,
+        )
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assertSnapshots(dst_root_dataset, 0, "s")
+        take_snapshot(dst_root_dataset, fix("w1"))
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            no_create_bookmark=True,
+            expected_status=die_status,
+        )
+        self.assertSnapshots(dst_root_dataset, 1, "w")
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--force",
+            "--f1",
+            no_create_bookmark=True,
+        )
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
+
     def test_basic_replication_with_injected_dataset_deletes(self):
         destroy(dst_root_dataset)
         self.setup_basic()
