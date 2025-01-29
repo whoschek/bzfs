@@ -2212,12 +2212,7 @@ class Job:
                 if p.force_once:
                     p.force.value = False
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
-                if self.is_solaris_zfs(dst):
-                    self.delete_snapshots(
-                        dst, dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids)
-                    )  # solaris-11.4 has no wildcard syntax to delete all snapshots in a single CLI invocation
-                else:
-                    self.delete_snapshots(dst, dst_dataset, snapshot_tags=["%"])  # delete all dst snapshots in a batch
+                self.delete_snapshots(dst, dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids))
                 if p.dry_run:
                     # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really executed:
                     # "no common snapshot was found. delete all dst snapshots". In turn, this would cause the subsequent
@@ -2992,8 +2987,6 @@ class Job:
             # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
             for snapshot_tag in snapshot_tags:
                 self.delete_snapshot(remote, dataset, f"{dataset}@{snapshot_tag}")
-        elif snapshot_tags == ["%"]:
-            self.delete_snapshot(remote, dataset, f"{dataset}@%")  # delete all dst snapshots in a batch
         else:  # delete snapshots in batches without creating a command line that's too big for the OS to handle
             self.run_ssh_cmd_batched(
                 remote,
@@ -4319,8 +4312,8 @@ class ProgressReporter:
                 elapsed_nanos = curr_time_nanos - start_time_nanos
                 msg0, msg3 = self.format_sent_bytes(sent_bytes, elapsed_nanos)  # throughput etc since replication start time
                 msg1 = self.format_duration(elapsed_nanos)  # duration since replication start time
-                first: Sample = latest_samples[0]  # throughput etc, over sliding window
-                _, msg2 = self.format_sent_bytes(sent_bytes - first.sent_bytes, curr_time_nanos - first.timestamp_nanos)
+                oldest: Sample = latest_samples[0]  # throughput etc, over sliding window
+                _, msg2 = self.format_sent_bytes(sent_bytes - oldest.sent_bytes, curr_time_nanos - oldest.timestamp_nanos)
                 msg4 = max(etas).line_tail if len(etas) > 0 else ""  # progress bar, ETAs
                 timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
                 status_line = f"{timestamp} [I] zfs sent {msg0} {msg1} {msg2} {msg3} {msg4}"
