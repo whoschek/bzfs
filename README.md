@@ -943,9 +943,8 @@ usage: bzfs [-h] [--recursive]
 
 *  Before replication, delete destination ZFS snapshots that are more
     recent than the most recent common snapshot selected on the source
-    ('conflicting snapshots'), via 'zfs rollback'. Instead, abort
-    with an error if no common snapshot is selected but the destination
-    already contains a snapshot.
+    ('conflicting snapshots'), via 'zfs rollback'. Do no rollback if
+    no common snapshot is selected.
 
 <!-- -->
 
