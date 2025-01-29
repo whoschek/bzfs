@@ -534,13 +534,16 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "error when encountering a conflicting snapshot.\n\n"
              "Analogy: --force-rollback-to-latest-snapshot is a tiny hammer, whereas "
              "--force-rollback-to-latest-common-snapshot is a medium sized hammer, --force is a large hammer, and "
-             "--force-hard is a very large hammer. "
+             "--force-destroy-dependents is a very large hammer. "
              "Consider using the smallest hammer that can fix the problem. No hammer is ever used by default.\n\n")
     parser.add_argument(
-        "--force-hard", action="store_true",
+        "--force-destroy-dependents", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot and --delete-* will add the "
              "'-R' flag to their use of 'zfs rollback' and 'zfs destroy', causing them to delete dependents such as "
              "clones and bookmarks. This can be very destructive and is rarely advisable.\n\n")
+    parser.add_argument(
+        "--force-hard", action="store_true",  # deprecated; was renamed to --force-destroy-dependents
+        help=argparse.SUPPRESS)
     parser.add_argument(
         "--force-unmount", action="store_true",
         help="On destination, --force and --force-rollback-to-latest-common-snapshot will add the '-f' flag to their "
@@ -1256,7 +1259,8 @@ class Params:
         self.force: SynchronizedBool = SynchronizedBool(args.force)
         self.force_once: bool = args.force_once
         self.force_unmount: str = "-f" if args.force_unmount else ""
-        self.force_hard: str = "-R" if args.force_hard else ""
+        self.force_hard: str = "-R" if args.force_destroy_dependents else ""
+        self.force_hard: str = "-R" if args.force_hard else self.force_hard  # --force-hard is deprecated
 
         self.skip_parent: bool = args.skip_parent
         self.skip_missing_snapshots: str = args.skip_missing_snapshots
