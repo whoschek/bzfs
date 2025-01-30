@@ -444,12 +444,12 @@ class TestHelperFunctions(unittest.TestCase):
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         remote = bzfs.Remote("src", args, p)
-        bzfs.Job().validate_default_shell("/bin/sh", remote)
-        bzfs.Job().validate_default_shell("/bin/bash", remote)
+        bzfs.validate_default_shell("/bin/sh", remote)
+        bzfs.validate_default_shell("/bin/bash", remote)
         with self.assertRaises(SystemExit):
-            bzfs.Job().validate_default_shell("/bin/csh", remote)
+            bzfs.validate_default_shell("/bin/csh", remote)
         with self.assertRaises(SystemExit):
-            bzfs.Job().validate_default_shell("/bin/tcsh", remote)
+            bzfs.validate_default_shell("/bin/tcsh", remote)
 
     def test_is_zfs_dataset_busy_match(self):
         def is_busy(proc, dataset, busy_if_send: bool = True):

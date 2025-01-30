@@ -3796,7 +3796,7 @@ class Job:
                     default_shell = program[len("default_shell-") :]
                     available_programs[key]["default_shell"] = default_shell
                     log.trace(f"available_programs[{key}][default_shell]: %s", default_shell)
-                    self.validate_default_shell(default_shell, r)
+                    validate_default_shell(default_shell, r)
                 elif program.startswith("getconf_cpu_count-"):
                     available_programs[key].pop(program)
                     getconf_cpu_count = program[len("getconf_cpu_count-") :]
@@ -4063,17 +4063,6 @@ class Job:
             return self.max_command_line_bytes  # for testing only
         else:
             return max_bytes
-
-    @staticmethod
-    def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
-        if path_to_default_shell.endswith("/csh") or path_to_default_shell.endswith("/tcsh"):
-            # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
-            die(
-                f"Cowardly refusing to continue because {prog_name} is not compatible with csh-style quoting of special "
-                f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
-                f"the default shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
-                "chsh -s /bin/sh YOURUSERNAME"
-            )
 
 
 #############################################################################
@@ -4867,6 +4856,17 @@ def validate_port(port: int, message: str) -> None:
         port = str(port)
     if port and not port.isdigit():
         die(message + f"must be empty or a positive integer: '{port}'")
+
+
+def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
+    if path_to_default_shell.endswith("/csh") or path_to_default_shell.endswith("/tcsh"):
+        # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
+        die(
+            f"Cowardly refusing to proceed because {prog_name} is not compatible with csh-style quoting of special "
+            f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
+            f"the default shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
+            "chsh -s /bin/sh YOURUSERNAME"
+        )
 
 
 def list_formatter(iterable: Iterable, separator=" ", lstrip=False):  # For lazy/noop evaluation in disabled log levels
