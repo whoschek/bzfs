@@ -4359,8 +4359,8 @@ class ProgressReporter:
             line = ProgressReporter.no_rates_regex.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
             match = ProgressReporter.time_remaining_eta_regex.fullmatch(line)  # extract pv --eta duration
             if match:
-                days_secs = 86400 * int(match.group(2)) if match.group(2) else 0
-                time_remaining_secs = days_secs + int(match.group(3)) * 3600 + int(match.group(4)) * 60 + int(match.group(5))
+                _, days, hours, minutes, secs, _ = match.groups()
+                time_remaining_secs = (86400 * int(days) if days else 0) + int(hours) * 3600 + int(minutes) * 60 + int(secs)
                 curr_time_nanos += time_remaining_secs * 1_000_000_000  # ETA timestamp = now + time remaining duration
             return sent_bytes, curr_time_nanos, line
         return 0, curr_time_nanos, ""
