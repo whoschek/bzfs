@@ -2987,18 +2987,14 @@ class Job:
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
         if len(snapshot_tags) == 0:
             return
-        if self.is_solaris_zfs(remote):
-            # solaris-11.4 has no syntax to delete multiple snapshots in a single CLI invocation
-            for snapshot_tag in snapshot_tags:
-                self.delete_snapshot(remote, dataset, f"{dataset}@{snapshot_tag}")
-        else:  # delete snapshots in batches without creating a command line that's too big for the OS to handle
-            self.run_ssh_cmd_batched(
-                remote,
-                self.delete_snapshot_cmd(remote, dataset + "@"),
-                snapshot_tags,
-                lambda batch: self.delete_snapshot(remote, dataset, dataset + "@" + ",".join(batch)),
-                max_batch_items=self.params.max_snapshots_per_minibatch_on_delete_snaps,
-            )
+        # delete snapshots in batches without creating a command line that's too big for the OS to handle
+        self.run_ssh_cmd_batched(
+            remote,
+            self.delete_snapshot_cmd(remote, dataset + "@"),
+            snapshot_tags,
+            lambda batch: self.delete_snapshot(remote, dataset, dataset + "@" + ",".join(batch)),
+            max_batch_items=1 if self.is_solaris_zfs(remote) else self.params.max_snapshots_per_minibatch_on_delete_snaps,
+        )
 
     def delete_snapshot(self, r: Remote, dataset: str, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
