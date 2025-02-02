@@ -706,9 +706,9 @@ usage: bzfs [-h] [--recursive]
     *Note:* All --include/exclude-snapshot-* CLI option groups are
     combined into a mini filter pipeline. A filter pipeline is executed
     in the order given on the command line, left to right. For example
-    if --include-snapshot-ranks (see below) is specified on the command
-    line before --include/exclude-snapshot-regex, then
-    --include-snapshot-ranks will be applied before
+    if --include-snapshot-times-and-ranks (see below) is specified on
+    the command line before --include/exclude-snapshot-regex, then
+    --include-snapshot-times-and-ranks will be applied before
     --include/exclude-snapshot-regex. The pipeline results would not
     always be the same if the order were reversed. Order matters.
 

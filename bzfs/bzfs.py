@@ -397,8 +397,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Examples: `test_.*`, `!prod_.*`, `.*_(hourly|frequent)`, `!.*_(weekly|daily)`\n\n"
              "*Note:* All --include/exclude-snapshot-* CLI option groups are combined into a mini filter pipeline. "
              "A filter pipeline is executed in the order given on the command line, left to right. For example if "
-             "--include-snapshot-ranks (see below) is specified on the command line before "
-             "--include/exclude-snapshot-regex, then --include-snapshot-ranks will be applied before "
+             "--include-snapshot-times-and-ranks (see below) is specified on the command line before "
+             "--include/exclude-snapshot-regex, then --include-snapshot-times-and-ranks will be applied before "
              "--include/exclude-snapshot-regex. The pipeline results would not always be the same if the order were "
              "reversed. Order matters.\n\n"
              "*Note:* During replication, bookmarks are always retained aka selected in order to help find common "
@@ -1725,7 +1725,7 @@ class Job:
 
     def append_exception(self, e: Exception, task_name: str, task_description: str) -> None:
         self.first_exception = self.first_exception or e
-        if len(self.all_exceptions) < self.max_exceptions_to_summarize:
+        if len(self.all_exceptions) < self.max_exceptions_to_summarize:  # cap max memory consumption
             self.all_exceptions.append(str(e))
         self.all_exceptions_count += 1
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
@@ -1974,7 +1974,7 @@ class Job:
                     src_cmd = None
                 dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
-                src_snaps_with_guids, dst_snaps_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
+                src_snaps_with_guids, dst_snaps_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
                     lambda: set(self.run_ssh_command(src, log_trace, cmd=src_cmd).splitlines() if src_cmd else []),
                     lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd),
                 )
@@ -2048,7 +2048,7 @@ class Job:
                     cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
                     for datasets_having_snapshots in self.itr_ssh_command_parallel(dst, cmd, isorted(orphans)):
                         if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
-                            replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snaps
+                            replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
                         datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
                         dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
                 else:
@@ -2089,7 +2089,7 @@ class Job:
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
         src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
-        src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snaps in parallel
+        src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
             lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
         )
@@ -2193,7 +2193,7 @@ class Job:
                     self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                     no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, e.stderr)
-                    # op isn't idempotent so retries regather current state from the start
+                    # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                     raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
@@ -2589,7 +2589,7 @@ class Job:
         return False
 
     def _recv_resume_token(self, dst_dataset: str, retry_count: int) -> Tuple[Optional[str], List[str], List[str]]:
-        """Get recv_resume_token ZFS property from dst_dataset and return corresponding opts to use for send+recv"""
+        """Gets recv_resume_token ZFS property from dst_dataset and returns corresponding opts to use for send+recv."""
         p, log = self.params, self.params.log
         if not p.resume_recv:
             return None, [], []
@@ -3442,11 +3442,11 @@ class Job:
                     if written == "snapshot":
                         written = "-"  # sanitize solaris-11.4 work-around (solaris-11.4 also has no bookmark feature)
                         cols = [creation, guid, createtxg, written, snapshot_name]
-                    key = (rel_dataset, guid)  # ensures src snaps and dst snaps with the same GUID will be adjacent
+                    key = (rel_dataset, guid)  # ensures src snapshots and dst snapshots with the same GUID will be adjacent
                     yield Job.ComparableSnapshot(key, cols)
 
         def print_dataset(rel_dataset: str, entries: Iterable[Tuple[str, Job.ComparableSnapshot]]) -> None:
-            entries = sorted(  # fetch all snaps of current dataset and sort em by creation, createtxg, snapshot_tag
+            entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
                 entries,
                 key=lambda entry: (
                     int(entry[1].cols[0]),
@@ -3991,7 +3991,7 @@ class Job:
     def itr_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29
     ) -> Generator[Any, None, None]:
-        """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle"""
+        """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
         fsenc = sys.getfilesystemencoding()
         conn_pool: ConnectionPool = self.params.connection_pools[r.location].pool(SHARED)
