@@ -3275,18 +3275,20 @@ class Job:
 
     def zfs_set(self, properties: List[str], remote: Remote, dataset: str) -> None:
         """Applies the given property key=value pairs via 'zfs set' CLI to the given dataset on the given remote."""
-
-        def run_zfs_set(props: List[str]) -> None:
-            p, log = self.params, self.params.log
-            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} set") + props + [dataset]
-            self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-
-        if len(properties) > 0:
-            if not self.is_solaris_zfs(remote):
-                run_zfs_set(properties)  # send all properties in a batch
-            else:
-                for prop in properties:  # solaris-11.4 does not accept multiple properties per 'zfs set' CLI call
-                    run_zfs_set([prop])
+        p, log = self.params, self.params.log
+        if len(properties) == 0:
+            return
+        # set properties in batches without creating a command line that's too big for the OS to handle
+        cmd = p.split_args(f"{remote.sudo} {p.zfs_program} set")
+        self.run_ssh_cmd_batched(
+            remote,
+            cmd,
+            properties,
+            lambda batch: self.run_ssh_command(
+                remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
+            ),
+            max_batch_items=1 if self.is_solaris_zfs(remote) else 2**29,  # solaris-11.4 CLI doesn't accept multiple props
+        )
 
     def zfs_get(
         self,
