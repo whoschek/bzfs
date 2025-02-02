@@ -2189,7 +2189,12 @@ class Job:
                 cmd = p.split_args(
                     f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}", latest_common_dst_snapshot
                 )
-                self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                try:
+                    self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                    no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, e.stderr)
+                    # op isn't idempotent so retries regather current state from the start
+                    raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
                 log.info(f"{tid} Already up-to-date: %s", dst_dataset)
@@ -2563,9 +2568,22 @@ class Job:
         # interrupted 'zfs receive -s'. The fix used here is to delete the partially received state of said
         # 'zfs receive -s' via 'zfs receive -A', followed by an automatic retry, which will now succeed to delete the
         # snapshot without user intervention.
-        markers = ["cannot destroy", "snapshot has dependent clone", "use '-R' to destroy the following dataset"]
-        markers += [f"\n{dst_dataset}/%recv\n"]
-        if all(marker in stderr for marker in markers):
+        elif (
+            "cannot destroy" in stderr
+            and "snapshot has dependent clone" in stderr
+            and "use '-R' to destroy the following dataset" in stderr
+            and f"\n{dst_dataset}/%recv\n" in stderr
+        ):
+            return clear_resumable_recv_state()
+
+        # Same cause as above, except that this error can occur during 'zfs rollback'
+        # Also see https://github.com/openzfs/zfs/blob/master/cmd/zfs/zfs_main.c
+        elif (
+            "cannot rollback to" in stderr
+            and "clones of previous snapshots exist" in stderr
+            and "use '-R' to force deletion of the following clones and dependents" in stderr
+            and f"\n{dst_dataset}/%recv\n" in stderr
+        ):
             return clear_resumable_recv_state()
 
         return False

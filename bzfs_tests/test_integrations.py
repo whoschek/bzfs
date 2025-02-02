@@ -3554,6 +3554,27 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, counter["zfs_list_delete_dst_snapshots"])
         self.assertFalse(dataset_exists(dst_root_dataset))
 
+    def test_rollback_dst_snapshots_flat_with_injected_recv_token1(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("No recv resume zfs feature is available")
+        take_snapshot(src_root_dataset, fix("s1"))
+        take_snapshot(src_root_dataset, fix("s2"))
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-use-bookmark", "--no-create-bookmark")
+        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.create_resumable_snapshots(3, 4)
+        self.generate_recv_resume_token(src_root_dataset + "@s2", src_root_dataset + "@s3", dst_root_dataset)
+        self.assertSnapshots(dst_root_dataset, 2, "s")
+        destroy_snapshots(src_root_dataset, snapshots(src_root_dataset)[1:2])
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--force-rollback-to-latest-common-snapshot",
+            "--no-use-bookmark",
+            "--no-create-bookmark",
+            retries=1,
+        )
+        self.assertSnapshotNames(dst_root_dataset, ["s1", "s3"])
+
     def test_delete_dst_snapshots_flat_with_injected_recv_token1(self):
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
