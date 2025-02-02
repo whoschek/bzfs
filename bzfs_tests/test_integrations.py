@@ -940,6 +940,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     f"--threads={threads}",
                     f"--max-concurrent-ssh-sessions-per-tcp-connection={maxsessions}",
+                    "--mbuffer-program-opts=-q -m 16M",
                 )
                 self.assertSnapshots(dst_root_dataset, 3, "s")
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
