@@ -2192,7 +2192,8 @@ class Job:
                 try:
                     self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-                    no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, e.stderr)
+                    stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+                    no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
                     # op isn't idempotent so retries regather current state from the start of replicate_dataset()
                     raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
@@ -3023,7 +3024,8 @@ class Job:
             self.maybe_inject_error(cmd=cmd, error_trigger="zfs_delete_snapshot")
             self.run_ssh_command(r, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-            no_sleep = self.clear_resumable_recv_state_if_necessary(dataset, e.stderr)
+            stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+            no_sleep = self.clear_resumable_recv_state_if_necessary(dataset, stderr)
             # op isn't idempotent so retries regather current state from the start
             raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
