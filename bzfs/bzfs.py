@@ -3724,7 +3724,7 @@ class Job:
                 for done_future in done_futures:
                     _, dataset, children = done_future.node
                     try:
-                        no_skip = done_future.result()  # does not block as processing has already completed
+                        no_skip: bool = done_future.result()  # does not block as processing has already completed
                     except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                         failed = True
                         if p.skip_on_error == "fail":
