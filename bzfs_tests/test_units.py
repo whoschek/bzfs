@@ -440,6 +440,16 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.unlink_missing_ok(tmp_file)
         self.assertFalse(os.path.exists(tmp_file))
 
+    def test_has_siblings(self):
+        self.assertFalse(bzfs.has_siblings([]))
+        self.assertFalse(bzfs.has_siblings(["a"]))
+        self.assertFalse(bzfs.has_siblings(["a", "a/b"]))
+        self.assertFalse(bzfs.has_siblings(["a", "a/b", "a/b/c"]))
+        self.assertTrue(bzfs.has_siblings(["a", "b"]))
+        self.assertTrue(bzfs.has_siblings(["a", "a/b", "a/d"]))
+        self.assertTrue(bzfs.has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
+        self.assertTrue(bzfs.has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
+
     def test_validate_default_shell(self):
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)

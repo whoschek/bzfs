@@ -1903,10 +1903,11 @@ class Job:
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = isorted(self.filter_datasets(src, basis_src_datasets))  # apply include/exclude policy
+            # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
             self.dedicated_tcp_connection_per_zfs_send = (
                 p.dedicated_tcp_connection_per_zfs_send
-                and len(src_datasets) > 1
                 and min(self.max_workers[p.src.location], self.max_workers[p.dst.location]) > 1
+                and has_siblings(src_datasets)  # siblings can be replicated in parallel
             )
             # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
             failed = self.process_datasets_in_parallel_and_fault_tolerant(
@@ -4496,6 +4497,23 @@ def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List
         return [line[line.index(separator) + 1 :] for line in lines]
     else:
         raise ValueError("Unsupported parameter value")
+
+
+def has_siblings(sorted_datasets: List[str]) -> bool:
+    skip_dataset = DONT_SKIP_DATASET
+    parents: Set[str] = set()
+    for dataset in sorted_datasets:
+        assert dataset
+        parent = os.path.dirname(dataset)
+        if parent in parents:
+            return True  # I have a sibling if my parent already has another child
+        parents.add(parent)
+        if is_descendant(dataset, of_root_dataset=skip_dataset):
+            continue
+        if skip_dataset != DONT_SKIP_DATASET:
+            return True  # I have a sibling if I am a root dataset and another root dataset already exists
+        skip_dataset = dataset
+    return False
 
 
 def is_descendant(dataset: str, of_root_dataset: str) -> bool:
