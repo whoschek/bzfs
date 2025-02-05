@@ -52,8 +52,8 @@ import os
 import platform
 import pprint
 import pwd
-import re
 import random
+import re
 import selectors
 import shlex
 import shutil
