@@ -319,7 +319,7 @@ to the log file), which is helpful if the program runs in an interactive termina
 over the parallel replication tasks. 
 Example console status line:
 ```
-2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08
+2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] 80% ETA 0:00:04 ETA 01:23:08
 ```
 * Simple and straightforward: Can be installed in less than a minute. Can be fully scripted without configuration
 files, or scheduled via cron or similar. Does not require a daemon other than ubiquitous sshd.
