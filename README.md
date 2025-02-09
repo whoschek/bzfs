@@ -199,6 +199,9 @@ creation time:
 --include-snapshot-times-and-ranks notime 'all except latest 7'
 --include-snapshot-times-and-ranks 'anytime..7 days ago'`
 
+Note: This also prints how many GB of disk space in total would be freed
+if the command were to be run for real without the --dryrun flag.
+
 * Delete all daily snapshots older than 7 days, but ensure that the
 latest 7 daily snapshots (per dataset) are retained regardless of
 creation time. Additionally, only delete a snapshot if no corresponding
@@ -347,6 +350,8 @@ or where more than 7 daily snapshots were created or received within the last 7 
 snapshots regardless of creation time. It can help to avoid accidental pruning of the last snapshot that source and
 destination have in common.
     * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
+    * Prints how many GB of disk space in total would be freed if the delete command were to be run for real without the 
+--dryrun flag.
 * Compare source and destination dataset trees recursively, in combination with snapshot filters and dataset filters.
 * Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
 * Efficiently supports complex replication policies with multiple sources and multiple destinations for each source.

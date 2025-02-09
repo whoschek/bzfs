@@ -242,6 +242,9 @@ regardless of creation time:
 --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
 --include-snapshot-times-and-ranks 'anytime..7 days ago'`
 
+Note: This also prints how many GB of disk space in total would be freed if the command were to be run for real without 
+the --dryrun flag.
+
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
 regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot or bookmark exists in
 the source dataset (same as above except replace the 'dummy' source with 'tank1/foo/bar'):
