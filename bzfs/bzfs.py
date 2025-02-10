@@ -1881,6 +1881,9 @@ class Job:
             return "", True
 
     def run_task(self) -> None:
+        def filter_src_datasets() -> List[str]:  # apply --{include|exclude}-dataset policy
+            return isorted(self.filter_datasets(src, basis_src_datasets)) if src_datasets is None else src_datasets
+
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
@@ -1899,13 +1902,14 @@ class Job:
                     "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize)
                 }
                 basis_src_datasets.append(src_dataset)
+            basis_src_datasets = isorted(basis_src_datasets)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
             log.info("Starting replication task: %s", task_description)
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            src_datasets = isorted(self.filter_datasets(src, basis_src_datasets))  # apply include/exclude policy
+            src_datasets = filter_src_datasets()  # apply include/exclude policy
             # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
             self.dedicated_tcp_connection_per_zfs_send = (
                 p.dedicated_tcp_connection_per_zfs_send
@@ -1934,7 +1938,7 @@ class Job:
         if basis_dst_datasets is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
             basis_dst_datasets = ""
-        basis_dst_datasets = basis_dst_datasets.splitlines()
+        basis_dst_datasets = isorted(basis_dst_datasets.splitlines())
         dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
@@ -1955,7 +1959,7 @@ class Job:
             )
             self.delete_datasets(dst, to_delete)
             dst_datasets = isorted(set(dst_datasets).difference(to_delete))
-            basis_dst_datasets = set(basis_dst_datasets).difference(to_delete)
+            basis_dst_datasets = isorted(set(basis_dst_datasets).difference(to_delete))
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
@@ -2063,8 +2067,7 @@ class Job:
             log.info("--compare-snapshot-lists: %s", task_description)
             if len(basis_src_datasets) == 0 and not self.is_dummy_src(src):
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            if src_datasets is None:
-                src_datasets = self.filter_datasets(src, basis_src_datasets)  # apply include/exclude policy
+            src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.run_compare_snapshot_lists(src_datasets, dst_datasets)
 
     def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
@@ -2854,6 +2857,13 @@ class Job:
         is_debug = p.log.isEnabledFor(log_debug)
         for dataset in results:
             is_debug and log.debug(f"Finally included {remote.location} dataset: %s", dataset)
+        if self.is_test_mode:
+            # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
+            # decision is never reconsidered even for the descendants because exclude takes precedence over include.
+            resultset = set(results)
+            root_datasets = [dataset for dataset in results if os.path.dirname(dataset) not in resultset]  # have no parent
+            for dataset in results:  # each dataset belongs to a subtree rooted at one of the roots
+                assert any(is_descendant(dataset, of_root_dataset=root) for root in root_datasets)
         return results
 
     def filter_datasets_by_exclude_property(self, remote: Remote, datasets: List[str]) -> List[str]:

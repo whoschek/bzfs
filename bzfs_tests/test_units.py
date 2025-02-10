@@ -461,6 +461,19 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.validate_default_shell("/bin/tcsh", remote)
 
+    def test_filter_datasets_with_test_mode_is_false(self):
+        # test with Job.is_test_mode == False for coverage with the assertion therein disabled
+        args = argparser_parse_args(args=["src", "dst"])
+        p = bzfs.Params(args)
+        log_params = bzfs.LogParams(args)
+        try:
+            job = bzfs.Job()
+            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            src = bzfs.Remote("src", args, p)
+            job.filter_datasets(src, ["dataset1"])
+        finally:
+            bzfs.reset_logger()
+
     def test_is_zfs_dataset_busy_match(self):
         def is_busy(proc, dataset, busy_if_send: bool = True):
             return bzfs.Job().is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
