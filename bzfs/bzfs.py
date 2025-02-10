@@ -2132,7 +2132,7 @@ class Job:
                 die(f"Source dataset includes no snapshot: {src_dataset}. Consider using --skip-missing-snapshots=dataset")
             elif p.skip_missing_snapshots == "dataset":
                 log.warning("Skipping source dataset because it includes no snapshot: %s", src_dataset)
-                if not self.dst_dataset_exists[dst_dataset] and p.recursive:
+                if p.recursive and not self.dst_dataset_exists[dst_dataset]:
                     log.warning("Also skipping descendant datasets as dst dataset does not exist for %s", src_dataset)
                 return self.dst_dataset_exists[dst_dataset]
 
@@ -4764,7 +4764,7 @@ def terminate_process_group(except_current_process=False):
         signal.signal(signum, old_signal_handler)  # reenable and restore original handler
 
 
-arabic_decimal_separator = "\u066B"  # "٫"
+arabic_decimal_separator = "\u066b"  # "٫"
 pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
 
 
