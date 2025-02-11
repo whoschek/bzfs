@@ -1057,12 +1057,15 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "`while true; do clear; for f in $(realpath $HOME/bzfs-logs/current/current.pv)*; "
              "do tac -s $(printf '\\r') $f | tr '\\r' '\\n' | grep -m1 -v '^$'; done; sleep 1; done`\n\n")
     h_fix = ("The path name of the log file on local host is "
-             "`${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-suffix}-<random>.log`. "
-             "Example: `--log-file-prefix=zrun_ --log-file-suffix=_daily` will generate log file names such as "
-             "`zrun_2024-09-03_12:26:15_daily-bl4i1fth.log`\n\n")
+             "`${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`. "
+             "Example: `--log-file-prefix=zrun_ --log-file-infix=_us-west-1 --log-file-suffix=_daily` will generate log "
+             "file names such as `zrun_2024-09-03_12:26:15_us-west-1_daily-bl4i1fth.log`\n\n")
     parser.add_argument(
         "--log-file-prefix", default="zrun_", action=SafeFileNameAction, metavar="STRING",
         help="Default is zrun_. " + h_fix)
+    parser.add_argument(
+        "--log-file-infix", default="", action=SafeFileNameAction, metavar="STRING",
+        help="Default is the empty string. " + h_fix)
     parser.add_argument(
         "--log-file-suffix", default="", action=SafeFileNameAction, metavar="STRING",
         help="Default is the empty string. " + h_fix)
@@ -1226,9 +1229,12 @@ class LogParams:
         self.log_dir: str = os.path.join(log_parent_dir, self.timestamp[0 : self.timestamp.index("_")])  # 2024-09-03
         os.makedirs(self.log_dir, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
+        self.log_file_infix = args.log_file_infix
         self.log_file_suffix = args.log_file_suffix
         fd, self.log_file = tempfile.mkstemp(
-            suffix=".log", prefix=f"{self.log_file_prefix}{self.timestamp}{self.log_file_suffix}-", dir=self.log_dir
+            suffix=".log",
+            prefix=f"{self.log_file_prefix}{self.timestamp}{self.log_file_infix}{self.log_file_suffix}-",
+            dir=self.log_dir,
         )
         os.close(fd)
         self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
