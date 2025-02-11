@@ -57,6 +57,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNewSnapshotFilterGroupAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
@@ -1356,6 +1357,22 @@ class TestFileOrLiteralAction(unittest.TestCase):
 
 
 #############################################################################
+class TestNewSnapshotFilterGroupAction(unittest.TestCase):
+
+    def setUp(self):
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--new-snapshot-filter-group", action=bzfs.NewSnapshotFilterGroupAction, nargs=0)
+
+    def test_basic0(self):
+        args = self.parser.parse_args(["--new-snapshot-filter-group"])
+        self.assertListEqual([[]], getattr(args, bzfs.snapshot_filters_var))
+
+    def test_basic1(self):
+        args = self.parser.parse_args(["--new-snapshot-filter-group", "--new-snapshot-filter-group"])
+        self.assertListEqual([[]], getattr(args, bzfs.snapshot_filters_var))
+
+
+#############################################################################
 class TestTimeRangeAction(unittest.TestCase):
     def setUp(self):
         self.parser = argparse.ArgumentParser()
@@ -1483,39 +1500,39 @@ class TestTimeRangeAction(unittest.TestCase):
 
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
-        self.assertListEqual([], p.snapshot_filters)
+        self.assertListEqual([[]], p.snapshot_filters)
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
         p = bzfs.Params(args)
-        self.assertListEqual([], p.snapshot_filters)
+        self.assertListEqual([[]], p.snapshot_filters)
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "anytime..anytime"])
         p = bzfs.Params(args)
-        self.assertListEqual([], p.snapshot_filters)
+        self.assertListEqual([[]], p.snapshot_filters)
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
+        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0].timerange)
+        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0].timerange[0], delta=2)
-        self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0].timerange[1], delta=2)
+        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0][0].timerange[0], delta=2)
+        self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0][0].timerange[1], delta=2)
 
         for wildcard in wildcards:
             args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
             p = bzfs.Params(args)
-            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[0])
-            self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0].timerange[1])
+            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0][0].timerange[0])
+            self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0][0].timerange[1])
 
             args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + wildcard + "..2024-01-01"])
             p = bzfs.Params(args)
-            self.assertEqual(0, p.snapshot_filters[0].timerange[0])
-            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0].timerange[1])
+            self.assertEqual(0, p.snapshot_filters[0][0].timerange[0])
+            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0][0].timerange[1])
 
     def test_filter_snapshots_by_times(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
@@ -1713,7 +1730,7 @@ class TestRankRangeAction(unittest.TestCase):
     @staticmethod
     def get_snapshot_filters(cli):
         args = argparser_parse_args(args=["src", "dst", *cli])
-        return bzfs.Params(args).snapshot_filters
+        return bzfs.Params(args).snapshot_filters[0]
 
     def test_merge_adjacent_snapshot_regexes_and_filters0(self):
         ranks = "--include-snapshot-times-and-ranks"

@@ -240,6 +240,42 @@ ago'`
 --delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*'
 --exclude-dataset-regex '!.*'`
 
+* Delete all secondly snapshots older than 150 seconds, but ensure that
+the latest 150 secondly snapshots (per dataset) are retained regardless
+of creation time. Additionally, delete all minutely snapshots older than
+90 minutes, but ensure that the latest 90 minutely snapshots (per
+dataset) are retained regardless of creation time. Additionally, delete
+all hourly snapshots older than 48 hours, but ensure that the latest 48
+hourly snapshots (per dataset) are retained regardless of creation time.
+Additionally, delete all daily snapshots older than 31 days, but ensure
+that the latest 31 daily snapshots (per dataset) are retained regardless
+of creation time. Additionally, delete all weekly snapshots older than
+26 weeks, but ensure that the latest 26 weekly snapshots (per dataset)
+are retained regardless of creation time. Additionally, delete all
+monthly snapshots older than 365 days, but ensure that the latest 12
+monthly snapshots (per dataset) are retained regardless of creation time
+(same as above except insert --new-snapshot-filter-group separators):
+
+` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
+--delete-dst-snapshots --include-snapshot-regex '.*_secondly'
+--include-snapshot-times-and-ranks notime 'all except latest 150'
+--include-snapshot-times-and-ranks 'anytime..150 seconds ago'
+--new-snapshot-filter-group --include-snapshot-regex '.*_minutely'
+--include-snapshot-times-and-ranks notime 'all except latest 90'
+--include-snapshot-times-and-ranks 'anytime..90 minutes ago'
+--new-snapshot-filter-group --include-snapshot-regex '.*_hourly'
+--include-snapshot-times-and-ranks notime 'all except latest 48'
+--include-snapshot-times-and-ranks 'anytime..48 hours ago'
+--new-snapshot-filter-group --include-snapshot-regex '.*_daily'
+--include-snapshot-times-and-ranks notime 'all except latest 31'
+--include-snapshot-times-and-ranks 'anytime..31 days ago'
+--new-snapshot-filter-group --include-snapshot-regex '.*_weekly'
+--include-snapshot-times-and-ranks notime 'all except latest 26'
+--include-snapshot-times-and-ranks 'anytime..26 weeks ago'
+--new-snapshot-filter-group --include-snapshot-regex '.*_monthly'
+--include-snapshot-times-and-ranks notime 'all except latest 12'
+--include-snapshot-times-and-ranks 'anytime..365 days ago'`
+
 * Compare source and destination dataset trees recursively, for example
 to check if all recently taken snapshots have been successfully
 replicated by a periodic job. List snapshots only contained in src
@@ -467,6 +503,7 @@ usage: bzfs [-h] [--recursive]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
             [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
+            [--new-snapshot-filter-group]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -886,6 +923,38 @@ usage: bzfs [-h] [--recursive]
 
     *Note:* If a snapshot is excluded this decision is never
     reconsidered because exclude takes precedence over include.
+
+<!-- -->
+
+<div id="--new-snapshot-filter-group"></div>
+
+**--new-snapshot-filter-group**
+
+*  Starts a new snapshot filter group containing separate
+    --{include|exclude}-snapshot-* filter options. The program
+    separately computes the results for each filter group and selects
+    the UNION of all results. This option can be specified multiple
+    times and serves as a separator between groups. Example:
+
+    Delete all minutely snapshots older than 90 minutes, but ensure that
+    the latest 90 minutely snapshots (per dataset) are retained
+    regardless of creation time. Additionally, delete all hourly
+    snapshots older than 48 hours, but ensure that the latest 48 hourly
+    snapshots (per dataset) are retained regardless of creation time.
+    Additionally, delete all daily snapshots older than 31 days, but
+    ensure that the latest 31 daily snapshots (per dataset) are retained
+    regardless of creation time: `bzfs dummy tank2/boo/bar --dryrun
+    --recursive --skip-replication --delete-dst-snapshots
+    --include-snapshot-regex '.*_minutely'
+    --include-snapshot-times-and-ranks notime 'all except latest 90'
+    --include-snapshot-times-and-ranks 'anytime..90 minutes ago'
+    --new-snapshot-filter-group --include-snapshot-regex
+    '.*_hourly' --include-snapshot-times-and-ranks notime 'all
+    except latest 48' --include-snapshot-times-and-ranks 'anytime..48
+    hours ago' --new-snapshot-filter-group --include-snapshot-regex
+    '.*_daily' --include-snapshot-times-and-ranks notime 'all
+    except latest 31' --include-snapshot-times-and-ranks 'anytime..31
+    days ago'`
 
 <!-- -->
 

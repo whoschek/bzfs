@@ -1241,6 +1241,25 @@ class LocalTestCase(BZFSTestCase):
         self.run_snapshot_filters(ranks_filter1, regex_filter_daily, ranks_filter2)
         self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
 
+    def test_snapshot_filter_groups(self):
+        for snap in ["2024-01-01d", "2024-01-02h", "2024-01-03d", "2024-01-04dt"]:
+            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
+
+        snapshot_filter = [
+            "--include-snapshot-regex=.*01d",
+            "--include-snapshot-times-and-ranks=2024-01-01..2024-01-02",
+            "--new-snapshot-filter-group",
+            "--include-snapshot-regex=.*02h",
+            "--include-snapshot-times-and-ranks=2024-01-02..2024-01-03",
+            "--new-snapshot-filter-group",
+            "--include-snapshot-regex=.*04dt",
+            "--include-snapshot-times-and-ranks=2024-01-04..2024-01-05",
+        ]
+        dataset_exists(dst_root_dataset) and destroy(dst_root_dataset, recursive=True)
+        self.run_bzfs(src_root_dataset, dst_root_dataset, *snapshot_filter, creation_prefix=creation_prefix)
+        self.assertSnapshotNames(dst_root_dataset, ["2024-01-01d", "2024-01-02h", "2024-01-04dt"])
+
     def test_nostream(self):
         self.setup_basic()
         for i in range(0, 3):

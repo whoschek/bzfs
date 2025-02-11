@@ -273,6 +273,39 @@ of creation time:
 `   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
 --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'`
 
+* Delete all secondly snapshots older than 150 seconds, but ensure that the latest 150 secondly snapshots (per dataset) are 
+retained regardless of creation time. 
+Additionally, delete all minutely snapshots older than 90 minutes, but ensure that the latest 90 minutely snapshots (per 
+dataset) are retained regardless of creation time. 
+Additionally, delete all hourly snapshots older than 48 hours, but ensure that the latest 48 hourly snapshots (per dataset)
+are retained regardless of creation time. 
+Additionally, delete all daily snapshots older than 31 days, but ensure that the latest 31 daily snapshots (per dataset) 
+are retained regardless of creation time. 
+Additionally, delete all weekly snapshots older than 26 weeks, but ensure that the latest 26 weekly snapshots (per dataset) 
+are retained regardless of creation time. 
+Additionally, delete all monthly snapshots older than 365 days, but ensure that the latest 12 monthly snapshots (per dataset)
+are retained regardless of creation time 
+(same as above except insert --new-snapshot-filter-group separators):
+
+`   {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+--include-snapshot-regex '.*_secondly' --include-snapshot-times-and-ranks notime 'all except latest 150'
+--include-snapshot-times-and-ranks 'anytime..150 seconds ago'
+--new-snapshot-filter-group 
+--include-snapshot-regex '.*_minutely' --include-snapshot-times-and-ranks notime 'all except latest 90'
+--include-snapshot-times-and-ranks 'anytime..90 minutes ago'
+--new-snapshot-filter-group 
+--include-snapshot-regex '.*_hourly' --include-snapshot-times-and-ranks notime 'all except latest 48'
+--include-snapshot-times-and-ranks 'anytime..48 hours ago'
+--new-snapshot-filter-group 
+--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 31'
+--include-snapshot-times-and-ranks 'anytime..31 days ago' 
+--new-snapshot-filter-group 
+--include-snapshot-regex '.*_weekly' --include-snapshot-times-and-ranks notime 'all except latest 26'
+--include-snapshot-times-and-ranks 'anytime..26 weeks ago'
+--new-snapshot-filter-group 
+--include-snapshot-regex '.*_monthly' --include-snapshot-times-and-ranks notime 'all except latest 12'
+--include-snapshot-times-and-ranks 'anytime..365 days ago'`
+
 * Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
 been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'), 
 only contained in dst (tagged with 'dst'), and contained in both src and dst (tagged with 'all'), restricted to hourly 
@@ -495,6 +528,25 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots between source and destination. Bookmarks do not count towards N or N%% wrt. rank.\n\n"
              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
              "over include.\n\n")
+    parser.add_argument(
+        "--new-snapshot-filter-group", action=NewSnapshotFilterGroupAction, nargs=0,
+        help="Starts a new snapshot filter group containing separate --{include|exclude}-snapshot-* filter options. The "
+             "program separately computes the results for each filter group and selects the UNION of all results. "
+             "This option can be specified multiple times and serves as a separator between groups. Example:\n\n"
+             "Delete all minutely snapshots older than 90 minutes, but ensure that the latest 90 minutely snapshots (per "
+             "dataset) are retained regardless of creation time. Additionally, delete all hourly snapshots older than 48 "
+             "hours, but ensure that the latest 48 hourly snapshots (per dataset) are retained regardless of creation time. "
+             "Additionally, delete all daily snapshots older than 31 days, but ensure that the latest 31 daily snapshots "
+             "(per dataset) are retained regardless of creation time: "
+             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots "
+             "--include-snapshot-regex '.*_minutely' --include-snapshot-times-and-ranks notime 'all except latest 90' "
+             "--include-snapshot-times-and-ranks 'anytime..90 minutes ago' "
+             "--new-snapshot-filter-group "
+             "--include-snapshot-regex '.*_hourly' --include-snapshot-times-and-ranks notime 'all except latest 48' "
+             "--include-snapshot-times-and-ranks 'anytime..48 hours ago' "
+             "--new-snapshot-filter-group "
+             "--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 31' "
+             "--include-snapshot-times-and-ranks 'anytime..31 days ago'`\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -1331,8 +1383,8 @@ class Params:
         self.platform_platform: str = platform.platform()
 
         # mutable variables:
-        snapshot_filters = args.snapshot_filters_var if hasattr(args, snapshot_filters_var) else []
-        self.snapshot_filters: List[SnapshotFilter] = optimize_snapshot_filters(snapshot_filters)
+        snapshot_filters = args.snapshot_filters_var if hasattr(args, snapshot_filters_var) else [[]]
+        self.snapshot_filters: List[List[SnapshotFilter]] = [optimize_snapshot_filters(f) for f in snapshot_filters]
         self.exclude_dataset_property: Optional[str] = args.exclude_dataset_property
         self.exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
         self.include_dataset_regexes: RegexList = []  # deferred to validate_task() phase
@@ -1413,7 +1465,7 @@ class Params:
         key = (tuple(self.root_dataset_pairs), self.args.recursive, self.args.exclude_dataset_property,
                tuple(self.args.include_dataset), tuple(self.args.exclude_dataset),
                tuple(self.args.include_dataset_regex), tuple(self.args.exclude_dataset_regex),
-               tuple(self.snapshot_filters), self.args.skip_replication,
+               tuple(tuple(f) for f in self.snapshot_filters), self.args.skip_replication,
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_empty_dst_datasets,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
@@ -1746,11 +1798,12 @@ class Job:
     def validate_once(self) -> None:
         p = self.params
         p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
-        for _filter in p.snapshot_filters:
-            if _filter.name == snapshot_regex_filter_name:
-                exclude_snapshot_regexes = compile_regexes(_filter.options[0])
-                include_snapshot_regexes = compile_regexes(_filter.options[1] or [".*"])
-                _filter.options = (exclude_snapshot_regexes, include_snapshot_regexes)
+        for snapshot_filter in p.snapshot_filters:
+            for _filter in snapshot_filter:
+                if _filter.name == snapshot_regex_filter_name:
+                    exclude_snapshot_regexes = compile_regexes(_filter.options[0])
+                    include_snapshot_regexes = compile_regexes(_filter.options[1] or [".*"])
+                    _filter.options = (exclude_snapshot_regexes, include_snapshot_regexes)
 
         exclude_regexes = [exclude_dataset_regexes_default]
         if len(p.args.exclude_dataset_regex) > 0:  # some patterns don't exclude anything
@@ -2904,20 +2957,25 @@ class Job:
                     log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
-    def filter_snapshots(self, snapshots: List[str]) -> List[str]:
+    def filter_snapshots(self, basis_snapshots: List[str]) -> List[str]:
         """Returns all snapshots that pass all include/exclude policies."""
         p, log = self.params, self.params.log
-        for _filter in p.snapshot_filters:
-            name = _filter.name
-            if name == snapshot_regex_filter_name:
-                snapshots = self.filter_snapshots_by_regex(snapshots, regexes=_filter.options)
-            elif name == "include_snapshot_times":
-                snapshots = self.filter_snapshots_by_creation_time(snapshots, include_snapshot_times=_filter.timerange)
-            else:
-                assert name == "include_snapshot_times_and_ranks"
-                snapshots = self.filter_snapshots_by_creation_time_and_rank(
-                    snapshots, include_snapshot_times=_filter.timerange, include_snapshot_ranks=_filter.options
-                )
+        resultset = set()
+        for snapshot_filter in p.snapshot_filters:
+            snapshots = basis_snapshots
+            for _filter in snapshot_filter:
+                name = _filter.name
+                if name == snapshot_regex_filter_name:
+                    snapshots = self.filter_snapshots_by_regex(snapshots, regexes=_filter.options)
+                elif name == "include_snapshot_times":
+                    snapshots = self.filter_snapshots_by_creation_time(snapshots, include_snapshot_times=_filter.timerange)
+                else:
+                    assert name == "include_snapshot_times_and_ranks"
+                    snapshots = self.filter_snapshots_by_creation_time_and_rank(
+                        snapshots, include_snapshot_times=_filter.timerange, include_snapshot_ranks=_filter.options
+                    )
+            resultset.update(snapshots)  # union
+        snapshots = [line for line in basis_snapshots if line in resultset]
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
             is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -5238,6 +5296,15 @@ class SafeFileNameAction(argparse.Action):
 
 
 #############################################################################
+class NewSnapshotFilterGroupAction(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        if not hasattr(args, snapshot_filters_var):
+            args.snapshot_filters_var = [[]]
+        elif len(args.snapshot_filters_var[-1]) > 0:
+            args.snapshot_filters_var.append([])
+
+
+#############################################################################
 class FileOrLiteralAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         current_values = getattr(namespace, self.dest, None)
@@ -5388,8 +5455,8 @@ class SnapshotFilter:
 
 def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
     if not hasattr(args, snapshot_filters_var):
-        args.snapshot_filters_var = []
-    args.snapshot_filters_var.append(_filter)
+        args.snapshot_filters_var = [[]]
+    args.snapshot_filters_var[-1].append(_filter)
 
 
 def add_time_and_rank_snapshot_filter(args: Namespace, dst: str, timerange: UnixTimeRange, rankranges: List[RankRange]):
@@ -5400,9 +5467,9 @@ def add_time_and_rank_snapshot_filter(args: Namespace, dst: str, timerange: Unix
         add_snapshot_filter(args, SnapshotFilter(dst, timerange, rankranges))
 
 
-def has_timerange_filter(snapshot_filters: List[SnapshotFilter]) -> bool:
+def has_timerange_filter(snapshot_filters: List[List[SnapshotFilter]]) -> bool:
     """Interacts with add_time_and_rank_snapshot_filter() and optimize_snapshot_filters()"""
-    return any(f.timerange is not None for f in snapshot_filters)
+    return any(f.timerange is not None for snapshot_filter in snapshot_filters for f in snapshot_filter)
 
 
 def optimize_snapshot_filters(snapshot_filters: List[SnapshotFilter]) -> List[SnapshotFilter]:
