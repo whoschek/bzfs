@@ -58,7 +58,7 @@ Distribution = "https://pypi.org/project/bzfs"
 
 [project.optional-dependencies]
 dev = [  # for development only
-  "black>=24.10",
+  "black>=25.1",
   "coverage>=7.6",
   "mypy>=1.13",
   "argparse-manpage>=4.6",
