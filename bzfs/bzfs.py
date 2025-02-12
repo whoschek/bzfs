@@ -1439,6 +1439,7 @@ class Params:
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
         self.compare_snapshot_lists: Optional[str] = args.compare_snapshot_lists
+        self.daemon_lifetime_nanos: int = 1_000_000_000 * parse_duration_to_seconds(getenv_any("daemon_lifetime", "0 secs"))
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.resume_recv: bool = not args.no_resume_recv
@@ -1725,18 +1726,27 @@ class Retry:
 class CreateSrcSnapshotConfig:
     def __init__(self, args: argparse.Namespace, p: Params):
         """Option values for --create-src-snapshot*; reads from ArgumentParser via args."""
+
+        def suffix_to_duration(suffix: str, regex: re.Pattern) -> Tuple[int, str]:
+            match = regex.fullmatch(suffix)
+            if match:
+                duration_amount = int(match.group(1)) if match.group(1) else 1
+                if duration_amount != 0:
+                    duration_unit = match.group(2)
+                    return duration_amount, duration_unit
+            return 0, ""
+
         # immutable variables:
         self.skip_create_src_snapshot: bool = not args.create_src_snapshot
-        self.create_src_snapshot_even_if_not_due = args.create_src_snapshot_even_if_not_due
+        self.create_src_snapshot_even_if_not_due: bool = args.create_src_snapshot_even_if_not_due
         tz_spec: str = args.create_src_snapshot_timezone if args.create_src_snapshot_timezone else None
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
-        timeformat: str = args.create_src_snapshot_timeformat
-        timestamp: str = self.current_datetime.strftime(timeformat)
-        timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
+        self.timeformat: str = args.create_src_snapshot_timeformat
         prefixes: List[str] = args.create_src_snapshot_prefix or [create_src_snapshot_prefix_dflt]
         infixes: List[str] = args.create_src_snapshot_infix or [""]
         suffixes: List[str] = args.create_src_snapshot_suffix or [create_src_snapshot_suffix_dflt]
+
         suffix_seconds = {
             "yearly": 365 * 86400,
             "monthly": round(30.5 * 86400),
@@ -1746,32 +1756,30 @@ class CreateSrcSnapshotConfig:
             "minutely": 60,
             "secondly": 1,
         }
-        regx = re.compile(rf"_(\d*)({'|'.join(suffix_seconds.keys())})")
-        self.suffix_durations: Dict[str, Tuple[int, str]] = {sufx: self._suffix_to_duration(sufx, regx) for sufx in suffixes}
+        suffix_regex = re.compile(rf"_(\d*)({'|'.join(suffix_seconds.keys())})")
+        suffix_durations = {suffix: suffix_to_duration(suffix, suffix_regex) for suffix in suffixes}
 
         def suffix_key(s):
-            duration_amount, duration_unit = self.suffix_durations[s]
+            duration_amount, duration_unit = suffix_durations[s]
             return duration_amount * suffix_seconds.get(duration_unit, 0), s
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
-        self.snapshot_names = [
-            f"{prefix}{timestamp}{infix}{suffix}" for suffix in suffixes for infix in infixes for prefix in prefixes
+        self.suffix_durations: Dict[str, Tuple[int, str]] = {suffix: suffix_durations[suffix] for suffix in suffixes}  # sort
+        self._snapshot_components: List[Tuple[str, str, str, str]] = [
+            (prefix, "", infix, suffix) for suffix in suffixes for infix in infixes for prefix in prefixes
         ]
-        for snapshot_name in self.snapshot_names:
-            validate_dataset_name(snapshot_name, "--create-src-snapshot-*")
-        self.snapshot_components: List[Tuple[str, str, str, str]] = [
-            (prefix, timestamp, infix, suffix) for suffix in suffixes for infix in infixes for prefix in prefixes
-        ]
+        for component in self.snapshot_components():
+            validate_dataset_name("".join(component), "--create-src-snapshot-*")
 
-    @staticmethod
-    def _suffix_to_duration(suffix: str, regx: re.Pattern) -> Tuple[int, str]:
-        match = regx.fullmatch(suffix)
-        if match:
-            duration_amount = int(match.group(1)) if match.group(1) else 1
-            if duration_amount != 0:
-                duration_unit = match.group(2)
-                return duration_amount, duration_unit
-        return 0, ""
+    def snapshot_components(self) -> List[Tuple[str, str, str, str]]:
+        timestamp: str = self.current_datetime.strftime(self.timeformat)
+        timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
+        components = []
+        for component in self._snapshot_components:
+            prefix, _, infix, suffix = component
+            component = prefix, timestamp, infix, suffix
+            components.append(component)
+        return components
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -1809,7 +1817,7 @@ class Job:
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         self.stats_lock = threading.Lock()
         self.num_snapshots_replicated: int = 0
-        self.control_persist_secs: int = 60
+        self.control_persist_secs: int = 90
         self.control_persist_margin_secs: int = 2
         self.progress_reporter: ProgressReporter = None
         self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
@@ -1899,26 +1907,30 @@ class Job:
             self.replication_start_time_nanos = time.time_ns()
             self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
             try:
-                src, dst = p.src, p.dst
-                for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
-                    src.root_dataset = src.basis_root_dataset = src_root_dataset
-                    dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
-                    p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
-                    task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
-                    if len(p.root_dataset_pairs) > 1:
-                        log.info("Starting task: %s", task_description + " ...")
-                    try:
+                daemon_stoptime_nanos = time.time_ns() + p.daemon_lifetime_nanos
+                while True:
+                    src, dst = p.src, p.dst
+                    for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
+                        src.root_dataset = src.basis_root_dataset = src_root_dataset
+                        dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
+                        p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
+                        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
+                        if len(p.root_dataset_pairs) > 1:
+                            log.info("Starting task: %s", task_description + " ...")
                         try:
-                            self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
-                            self.validate_task()
-                            self.run_task()
-                        except RetryableError as retryable_error:
-                            raise retryable_error.__cause__
-                    except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                        if p.skip_on_error == "fail":
-                            raise
-                        log.error("%s", str(e))
-                        self.append_exception(e, "task", task_description)
+                            try:
+                                self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
+                                self.validate_task()
+                                self.run_task()
+                            except RetryableError as retryable_error:
+                                raise retryable_error.__cause__
+                        except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                            if p.skip_on_error == "fail":
+                                raise
+                            log.error("%s", str(e))
+                            self.append_exception(e, "task", task_description)
+                    if time.time_ns() >= daemon_stoptime_nanos or not self.wait_for_next_daemon_iteration():
+                        break
             finally:
                 self.progress_reporter.stop()
             if not p.skip_replication:
@@ -1953,6 +1965,19 @@ class Job:
             self.all_exceptions.append(str(e))
         self.all_exceptions_count += 1
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
+
+    def wait_for_next_daemon_iteration(self) -> bool:
+        p, log = self.params, self.params.log
+        config = p.create_src_snapshot_config
+        creation_dt = config.current_datetime
+        duration_amount, duration_unit = next(reversed(config.suffix_durations.values()))
+        threshold_dt = round_datetime_up_to_duration_multiple(creation_dt, duration_amount, duration_unit)
+        offset: timedelta = threshold_dt - datetime.now(config.tz)
+        offset_micros = max(0, (offset.days * 86400 + offset.seconds) * 1_000_000 + offset.microseconds)
+        log.info("Daemon sleeping for: %s%s", human_readable_duration(offset_micros, unit="μs"), " ...")
+        time.sleep(offset_micros / 1_000_000)
+        config.current_datetime = datetime.now(config.tz)
+        return True
 
     def print_replication_stats(self, start_time_nanos: int):
         p, log = self.params, self.params.log
@@ -3707,7 +3732,7 @@ class Job:
         if config.create_src_snapshot_even_if_not_due or all(
             duration_amount == 0 for duration_amount, duration_unit in config.suffix_durations.values()
         ):
-            return config.snapshot_components  # take snapshot regardless of the creation time of any existing snapshots
+            return config.snapshot_components()  # take snapshot regardless of the creation time of any existing snapshots
         components = {}
         cmd = p.split_args(
             f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -s creation -s name -Hp -o creation,name",
@@ -3730,7 +3755,7 @@ class Job:
         #         snapshots = sorted(snapshots, key=lambda s: (int(s[0]), int(s[1]), s[2]))
         #         src_snap_names = [snapshot[-1] for snapshot in snapshots]
 
-        for component in config.snapshot_components:
+        for component in config.snapshot_components():
             prefix, timestamp, infix, suffix = component
             end = infix + suffix
             min_len = len(prefix) + len(infix) + len(suffix)
@@ -5102,6 +5127,24 @@ def human_readable_float(number: float) -> str:
     return "0" if result == "-0" else result
 
 
+def parse_duration_to_seconds(duration: str, regex_suffix: str = "") -> int:
+    unit_seconds = {
+        "seconds": 1,
+        "secs": 1,
+        "minutes": 60,
+        "mins": 60,
+        "hours": 60 * 60,
+        "days": 86400,
+        "weeks": 7 * 86400,
+    }
+    match = re.fullmatch(r"(\d+)\s*(secs|seconds|mins|minutes|hours|days|weeks)" + regex_suffix, duration)
+    if not match:
+        raise ValueError("Invalid duration format")
+    quantity = int(match.group(1))
+    unit = match.group(2)
+    return quantity * unit_seconds[unit]
+
+
 def get_home_directory() -> str:
     """Reliably detects home dir without using HOME env var."""
     # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
@@ -5835,7 +5878,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             if time_spec.isdigit():
                 return int(time_spec)  # Input is a Unix time in integer seconds
             try:
-                return timedelta(seconds=self.parse_duration_to_seconds(time_spec))
+                return timedelta(seconds=parse_duration_to_seconds(time_spec, regex_suffix=r"\s*ago"))
             except ValueError:
                 try:  # If it's not a duration, try parsing as an ISO 8601 datetime
                     return unixtime_fromisoformat(time_spec)
@@ -5854,24 +5897,6 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         setattr(namespace, self.dest, [timerange] + rankranges)  # for testing only
         timerange = self.get_include_snapshot_times(timerange)
         add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
-
-    @staticmethod
-    def parse_duration_to_seconds(duration: str) -> int:
-        unit_seconds = {
-            "seconds": 1,
-            "secs": 1,
-            "minutes": 60,
-            "mins": 60,
-            "hours": 60 * 60,
-            "days": 86400,
-            "weeks": 7 * 86400,
-        }
-        match = re.fullmatch(r"(\d+)\s*(secs|seconds|mins|minutes|hours|days|weeks)\s*ago", duration)
-        if not match:
-            raise ValueError("Invalid duration format")
-        quantity = int(match.group(1))
-        unit = match.group(2)
-        return quantity * unit_seconds[unit]
 
     @staticmethod
     def get_include_snapshot_times(times) -> UnixTimeRange:
