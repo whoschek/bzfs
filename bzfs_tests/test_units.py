@@ -36,7 +36,7 @@ from typing import Sequence, Callable, Optional, TypeVar, Union, Dict
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
-from bzfs.bzfs import getenv_any, Remote
+from bzfs.bzfs import find_match, getenv_any, Remote
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
@@ -2716,51 +2716,6 @@ class TestPerformance(unittest.TestCase):
                     ).stdout
                 secs = (time.time_ns() - start_time_nanos) / 1000_000_000
                 print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
-
-
-#############################################################################
-T = TypeVar("T")
-
-
-def find_match(
-    seq: Sequence[T],
-    predicate: Callable[[T], bool],
-    start: Optional[int] = None,
-    end: Optional[int] = None,
-    reverse: bool = False,
-    raises: Union[bool, str, Callable[[], str]] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
-) -> int:
-    """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
-    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter,
-    which is a bool indicating whether to raise an error, or a string containing the error message, but can also be a
-    Callable/lambda in order to support efficient deferred generation of error messages.
-    Analog to str.find(), including slicing semantics with parameters start and end.
-    For example, seq can be a list, tuple or str.
-
-    Example usage:
-        lst = ["a", "b", "-c", "d"]
-        i = find_match(lst, lambda arg: arg.startswith("-"), start=1, end=3, reverse=True)
-        if i >= 0:
-            ...
-        i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
-        i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
-    """
-    offset = 0 if start is None else start if start >= 0 else len(seq) + start
-    if start is not None or end is not None:
-        seq = seq[start:end]
-    for i, item in enumerate(reversed(seq) if reverse else seq):
-        if predicate(item):
-            if reverse:
-                return len(seq) - i - 1 + offset
-            else:
-                return i + offset
-    if raises is False or raises is None:
-        return -1
-    if raises is True:
-        raise ValueError("No matching item found in sequence")
-    if callable(raises):
-        raises = raises()
-    raise ValueError(raises)
 
 
 @contextmanager

@@ -36,8 +36,8 @@ from collections import Counter
 from unittest.mock import patch
 
 from bzfs import bzfs
-from bzfs.bzfs import die_status, getenv_any, getenv_bool
-from bzfs_tests.test_units import TestIncrementalSendSteps, find_match, stop_on_failure_subtest
+from bzfs.bzfs import die_status, find_match, getenv_any, getenv_bool
+from bzfs_tests.test_units import TestIncrementalSendSteps, stop_on_failure_subtest
 from bzfs_tests.zfs_util import (
     bookmark_name,
     bookmarks,

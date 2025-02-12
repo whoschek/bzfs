@@ -20,7 +20,7 @@ import sys
 import subprocess
 
 from bzfs import bzfs
-from bzfs_tests.test_units import find_match
+from bzfs.bzfs import find_match
 
 
 def main():

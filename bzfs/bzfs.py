@@ -4690,6 +4690,50 @@ def getenv_bool(key: str, default: bool = False) -> bool:
     return getenv_any(key, str(default).lower()).strip().lower() == "true"
 
 
+P = TypeVar("P")
+
+
+def find_match(
+    seq: Sequence[P],
+    predicate: Callable[[P], bool],
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    reverse: bool = False,
+    raises: Union[bool, str, Callable[[], str]] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
+) -> int:
+    """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
+    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter,
+    which is a bool indicating whether to raise an error, or a string containing the error message, but can also be a
+    Callable/lambda in order to support efficient deferred generation of error messages.
+    Analog to str.find(), including slicing semantics with parameters start and end.
+    For example, seq can be a list, tuple or str.
+
+    Example usage:
+        lst = ["a", "b", "-c", "d"]
+        i = find_match(lst, lambda arg: arg.startswith("-"), start=1, end=3, reverse=True)
+        if i >= 0:
+            ...
+        i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
+        i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
+    """
+    offset = 0 if start is None else start if start >= 0 else len(seq) + start
+    if start is not None or end is not None:
+        seq = seq[start:end]
+    for i, item in enumerate(reversed(seq) if reverse else seq):
+        if predicate(item):
+            if reverse:
+                return len(seq) - i - 1 + offset
+            else:
+                return i + offset
+    if raises is False or raises is None:
+        return -1
+    if raises is True:
+        raise ValueError("No matching item found in sequence")
+    if callable(raises):
+        raises = raises()
+    raise ValueError(raises)
+
+
 def xappend(lst, *items) -> List[str]:
     """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
     If an item is an iterable does so recursively, flattening the output."""
