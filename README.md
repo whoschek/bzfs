@@ -48,22 +48,25 @@ that have been created on the source since the last run. Source ZFS
 snapshots older than the most recent common snapshot found on the
 destination are auto-skipped.
 
-bzfs does not create or delete ZFS snapshots on the source - it assumes
-you have a ZFS snapshot management tool to do so, for example
-policy-driven Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup,
-manual zfs snapshot/destroy, etc. bzfs treats the source as read-only,
-thus the source remains unmodified. With the --dryrun flag, bzfs also
-treats the destination as read-only. In normal operation, bzfs treats
-the destination as append-only. Optional CLI flags are available to
-delete destination snapshots and destination datasets as directed, for
-example to make the destination identical to the source if the two have
-somehow diverged in unforeseen ways. This easily enables
-(re)synchronizing the backup from the production state, as well as
-restoring the production state from backup.
+Unless bzfs is explicitly told to create snapshots on the source, it
+treats the source as read-only, thus the source remains unmodified. With
+the --dryrun flag, bzfs also treats the destination as read-only. In
+normal operation, bzfs treats the destination as append-only. Optional
+CLI flags are available to delete destination snapshots and destination
+datasets as directed, for example to make the destination identical to
+the source if the two have somehow diverged in unforeseen ways. This
+easily enables (re)synchronizing the backup from the production state,
+as well as restoring the production state from backup.
 
 In the spirit of rsync, bzfs supports a variety of powerful
 include/exclude filters that can be combined to select which datasets,
-snapshots and properties to replicate or delete or compare.
+snapshots and properties to create, replicate, delete or compare.
+
+All bzfs functions including snapshot creation, replication, deletion,
+comparison, etc. happily work with any snapshots in any format and with
+any naming convention, even created or managed by any third party ZFS
+snapshot management tool, for example Sanoid, zrepl, pyznap,
+zfs-auto-snapshot, zfs_autobackup, manual zfs snapshot/destroy, etc.
 
 The source 'pushes to' the destination whereas the destination 'pulls
 from' the source. bzfs is installed and executed on the 'initiator'
@@ -112,8 +115,47 @@ without the corresponding auxiliary feature.
 
 # Example Usage
 
-* Example in local mode (no network, no ssh) to replicate ZFS dataset
-tank1/foo/bar to tank2/boo/bar:
+* Create an adhoc snapshot without a schedule:
+
+
+```
+$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
+--create-src-snapshot-prefix test_ --create-src-snapshot-infix
+_us-west-1 --create-src-snapshot-suffix _adhoc
+--skip-replication
+```
+
+
+
+```
+$ zfs list -t snapshot tank1/foo/bar
+tank1/foo/bar@test_2024-11-06_08:30:05_us-west-1_adhoc 
+```
+
+
+* Create periodic snapshots on a schedule, every hour and every day. A
+periodic snapshot will only be taken if it is due per the schedule
+indicated by its --create-src-snapshot-suffix (unless the
+--create-src-snapshot-even-if-not-due flag is specified), so consider
+launching this from a periodic cron job, or similar:
+
+
+```
+$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
+--create-src-snapshot-suffix _hourly _daily --skip-replication
+```
+
+
+
+```
+$ zfs list -t snapshot tank1/foo/bar
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly 
+```
+
+
+* Replication example in local mode (no network, no ssh), to replicate
+ZFS dataset tank1/foo/bar to tank2/boo/bar:
 
 
 ```
@@ -124,12 +166,12 @@ $ bzfs tank1/foo/bar tank2/boo/bar
 
 ```
 $ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@test_2024-11-06_08:30:05_daily
-tank1/foo/bar@test_2024-11-06_08:30:05_hourly
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
 
 $ zfs list -t snapshot tank2/boo/bar
-tank2/boo/bar@test_2024-11-06_08:30:05_daily
-tank2/boo/bar@test_2024-11-06_08:30:05_hourly 
+tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
+tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly 
 ```
 
 
@@ -157,16 +199,16 @@ $ bzfs tank1/foo/bar tank2/boo/bar --recursive
 
 ```
 $ zfs list -t snapshot -r tank1/foo/bar
-tank1/foo/bar@test_2024-11-06_08:30:05_daily
-tank1/foo/bar@test_2024-11-06_08:30:05_hourly
-tank1/foo/bar/baz@test_2024-11-06_08:40:00_daily
-tank1/foo/bar/baz@test_2024-11-06_08:40:00_hourly
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
+tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_daily
+tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_hourly
 
 $ zfs list -t snapshot -r tank2/boo/bar
-tank2/boo/bar@test_2024-11-06_08:30:05_daily
-tank2/boo/bar@test_2024-11-06_08:30:05_hourly
-tank2/boo/bar/baz@test_2024-11-06_08:40:00_daily
-tank2/boo/bar/baz@test_2024-11-06_08:40:00_hourly 
+tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
+tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly
+tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_daily
+tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_hourly 
 ```
 
 
@@ -345,7 +387,7 @@ bzfs --help  # Run the CLI
 
 * Rsync'ish look and feel.
 * Supports a variety of powerful include/exclude filters that can be combined to select which datasets, snapshots and
-properties to replicate or delete or compare.
+properties to create, replicate, delete or compare.
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.
@@ -503,7 +545,13 @@ usage: bzfs [-h] [--recursive]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
             [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
-            [--new-snapshot-filter-group]
+            [--new-snapshot-filter-group] [--create-src-snapshot]
+            [--create-src-snapshot-prefix STRING [STRING ...]]
+            [--create-src-snapshot-infix STRING [STRING ...]]
+            [--create-src-snapshot-suffix STRING [STRING ...]]
+            [--create-src-snapshot-even-if-not-due]
+            [--create-src-snapshot-timeformat STRFTIME_SPEC]
+            [--create-src-snapshot-timezone TZ_SPEC]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -613,8 +661,8 @@ usage: bzfs [-h] [--recursive]
 
 **--recursive**, **-r**
 
-*  During replication, deletion and comparison, also consider
-    descendant datasets, i.e. datasets within the dataset tree,
+*  During snapshot creation, replication, deletion and comparison, also
+    consider descendant datasets, i.e. datasets within the dataset tree,
     including children, and children of children, etc.
 
 <!-- -->
@@ -623,13 +671,14 @@ usage: bzfs [-h] [--recursive]
 
 **--include-dataset** *DATASET [DATASET ...]*
 
-*  During replication, deletion and comparison, select any ZFS dataset
-    (and its descendants) that is contained within SRC_DATASET
-    (DST_DATASET in case of deletion) if its dataset name is one of the
-    given include dataset names but none of the exclude dataset names.
-    If a dataset is excluded its descendants are automatically excluded
-    too, and this decision is never reconsidered even for the
-    descendants because exclude takes precedence over include.
+*  During snapshot creation, replication, deletion and comparison,
+    select any ZFS dataset (and its descendants) that is contained
+    within SRC_DATASET (DST_DATASET in case of deletion) if its dataset
+    name is one of the given include dataset names but none of the
+    exclude dataset names. If a dataset is excluded its descendants are
+    automatically excluded too, and this decision is never reconsidered
+    even for the descendants because exclude takes precedence over
+    include.
 
     A dataset name is absolute if the specified dataset is prefixed by
     `/`, e.g. `/tank/baz/tmp`. Otherwise the dataset name is
@@ -662,15 +711,15 @@ usage: bzfs [-h] [--recursive]
 
 **--include-dataset-regex** *REGEX [REGEX ...]*
 
-*  During replication (and deletion) and comparison, select any ZFS
-    dataset (and its descendants) that is contained within SRC_DATASET
-    (DST_DATASET in case of deletion) if its relative dataset path (e.g.
-    `baz/tmp`) wrt. SRC_DATASET (DST_DATASET in case of deletion)
-    matches at least one of the given include regular expressions but
-    none of the exclude regular expressions. If a dataset is excluded
-    its descendants are automatically excluded too, and this decision is
-    never reconsidered even for the descendants because exclude takes
-    precedence over include.
+*  During snapshot creation, replication (and deletion) and comparison,
+    select any ZFS dataset (and its descendants) that is contained
+    within SRC_DATASET (DST_DATASET in case of deletion) if its relative
+    dataset path (e.g. `baz/tmp`) wrt. SRC_DATASET (DST_DATASET in
+    case of deletion) matches at least one of the given include regular
+    expressions but none of the exclude regular expressions. If a
+    dataset is excluded its descendants are automatically excluded too,
+    and this decision is never reconsidered even for the descendants
+    because exclude takes precedence over include.
 
     This option can be specified multiple times. A leading `!`
     character indicates logical negation, i.e. the regex matches if the
@@ -956,6 +1005,165 @@ usage: bzfs [-h] [--recursive]
     '.*_daily' --include-snapshot-times-and-ranks notime 'all
     except latest 31' --include-snapshot-times-and-ranks 'anytime..31
     days ago'`
+
+<!-- -->
+
+<div id="--create-src-snapshot"></div>
+
+**--create-src-snapshot**
+
+*  Do nothing if the --create-src-snapshot flag is missing. Otherwise,
+    before the replication step (see below), atomically create a new
+    snapshot of the source datasets selected via
+    --{include|exclude}-dataset* policy. The name of the snapshot can
+    be configured via --create-src-snapshot-* suboptions (see below).
+    To create snapshots only, without any other processing such as
+    replication, etc, consider using this flag together with the
+    --skip-replication flag.
+
+    The implementation attempts to fit as many datasets as possible into
+    a single (atomic) 'zfs snapshot' command line, using
+    case-insensitive sort order, and using 'zfs snapshot -r' to the
+    extent that this is compatible with the
+    --{include|exclude}-dataset* pruning policy. The snapshots of all
+    datasets that fit within the same single 'zfs snapshot' CLI
+    invocation will be taken within the same ZFS transaction group, and
+    correspondingly have identical 'createtxg' ZFS property (but not
+    necessarily identical 'creation' ZFS time property as ZFS actually
+    provides no such guarantee). Dataset names that can't fit into a
+    single command line are spread over multiple command line
+    invocations, respecting the limits that the operating system places
+    on the maximum length of a single command line, per `getconf
+    ARG_MAX`.
+
+    Note: All bzfs functions including snapshot creation, replication,
+    deletion, comparison, etc. happily work with any snapshots in any
+    format with anyand naming convention, even created or managed by any
+    third party ZFS snapshot management tool, including manual zfs
+    snapshot/destroy.
+
+<!-- -->
+
+<div id="--create-src-snapshot-prefix"></div>
+
+**--create-src-snapshot-prefix** *STRING [STRING ...]*
+
+*  Default is 'bzfs_'. This option can be specified multiple times
+    to create multiple snapshots of each source dataset, all containing
+    the same timestamp in the name.
+
+    The name of the snapshot created on the source is
+    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
+    Example: `--create-src-snapshot-prefix=bzfs_
+    --create-src-snapshot-infix=_us-west-1
+    --create-src-snapshot-suffix=_daily` will generate snapshot names
+    such as `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+
+<!-- -->
+
+<div id="--create-src-snapshot-infix"></div>
+
+**--create-src-snapshot-infix** *STRING [STRING ...]*
+
+*  Default is the empty string. This enables to include an optional
+    label in the snapshot name that identifies the intended snapshot
+    use, for example the hostname or cloud provider region code (e.g.
+    '_us-west-1') of the intended backup destination if replicating
+    to multiple independent backup destination sites. This option can be
+    specified multiple times to create multiple snapshots of each source
+    dataset, all containing the same timestamp in the name.
+
+    The name of the snapshot created on the source is
+    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
+    Example: `--create-src-snapshot-prefix=bzfs_
+    --create-src-snapshot-infix=_us-west-1
+    --create-src-snapshot-suffix=_daily` will generate snapshot names
+    such as `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+
+<!-- -->
+
+<div id="--create-src-snapshot-suffix"></div>
+
+**--create-src-snapshot-suffix** *STRING [STRING ...]*
+
+*  Default is '_adhoc'. Typical values are: '_secondly',
+    '_minutely', '_hourly', '_daily', '_weekly',
+    '_monthly', '_yearly', '_adhoc'. Can include an optional
+    positive integer immediately preceding the time period unit, for
+    example '_2secondly' or '_10minutely' to indicate that
+    snapshots are taken every 2 seconds, or every 10 minutes,
+    respectively. This option can be specified multiple times to create
+    multiple snapshots of each source dataset, all containing the same
+    timestamp in the name.
+
+    The name of the snapshot created on the source is
+    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
+    Example: `--create-src-snapshot-prefix=bzfs_
+    --create-src-snapshot-infix=_us-west-1
+    --create-src-snapshot-suffix=_daily` will generate snapshot names
+    such as `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+
+<!-- -->
+
+<div id="--create-src-snapshot-even-if-not-due"></div>
+
+**--create-src-snapshot-even-if-not-due**
+
+*  Take a snapshot regardless of the creation time of any existing
+    snapshots. Without this flag, a periodic snapshot will only be taken
+    if it is due per the schedule indicated by its
+    --create-src-snapshot-suffix.
+
+<!-- -->
+
+<div id="--create-src-snapshot-timeformat"></div>
+
+**--create-src-snapshot-timeformat** *STRFTIME_SPEC*
+
+*  Default is `%Y-%m-%d_%H:%M:%S`. For the strftime format, see
+    https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior.
+    Specify the empty string to create source snapshot names that do not
+    contain an auto-generated timestamp. Examples:
+    `%Y-%m-%d_%H:%M:%S.%f` (adds microsecond resolution),
+    `%Y-%m-%d_%H:%M:%S%z` (adds timezone offset),
+    `%Y-%m-%dT%H-%M-%S` (no colons).
+
+    The name of the snapshot created on the source is
+    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
+    Example: `--create-src-snapshot-prefix=bzfs_
+    --create-src-snapshot-infix=_us-west-1
+    --create-src-snapshot-suffix=_daily` will generate snapshot names
+    such as `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+
+<!-- -->
+
+<div id="--create-src-snapshot-timezone"></div>
+
+**--create-src-snapshot-timezone** *TZ_SPEC*
+
+*  Default is the local timezone of the system running bzfs. When
+    creating a new snapshot on the source, fetch the current time in the
+    specified timezone, and feed that time, and the value of
+    --create-src-snapshot-timeformat, into the standard strftime()
+    function to generate the timestamp portion of the snapshot name. The
+    TZ_SPEC input parameter is of the form 'UTC' or '+HHMM' or
+    '-HHMM' for fixed UTC offsets, or an IANA TZ identifier for
+    auto-adjustment to daylight savings time, or the empty string to use
+    the local timezone, for example '', 'UTC', '+0000', '+0530',
+    '-0400', 'America/Los_Angeles', 'Europe/Vienna'. For a list of
+    valid IANA TZ identifiers, see
+    https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
+
+    To change the timezone not only for snapshot name creation, but in
+    all respects for the entire program, use the standard 'TZ' Unix
+    environment variable, like so: `export TZ=UTC`.
+
+    The name of the snapshot created on the source is
+    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
+    Example: `--create-src-snapshot-prefix=bzfs_
+    --create-src-snapshot-infix=_us-west-1
+    --create-src-snapshot-suffix=_daily` will generate snapshot names
+    such as `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
 
 <!-- -->
 
@@ -1522,19 +1730,19 @@ usage: bzfs [-h] [--recursive]
 
 **--no-create-bookmark**
 
-*  For increased safety, in normal operation bzfs behaves as follows
-    wrt. ZFS bookmark creation, if it is autodetected that the source
-    ZFS pool support bookmarks: Whenever it has successfully completed
-    replication of the most recent source snapshot, bzfs creates a ZFS
-    bookmark of that snapshot and attaches it to the source dataset.
-    Bookmarks exist so an incremental stream can continue to be sent
-    from the source dataset without having to keep the already
-    replicated snapshot around on the source dataset until the next
-    upcoming snapshot has been successfully replicated. This way you can
-    send the snapshot from the source dataset to another host, then
-    bookmark the snapshot on the source dataset, then delete the
-    snapshot from the source dataset to save disk space, and then still
-    incrementally send the next upcoming snapshot from the source
+*  For increased safety, in normal operation bzfs replication behaves
+    as follows wrt. ZFS bookmark creation, if it is autodetected that
+    the source ZFS pool support bookmarks: Whenever it has successfully
+    completed replication of the most recent source snapshot, bzfs
+    creates a ZFS bookmark of that snapshot and attaches it to the
+    source dataset. Bookmarks exist so an incremental stream can
+    continue to be sent from the source dataset without having to keep
+    the already replicated snapshot around on the source dataset until
+    the next upcoming snapshot has been successfully replicated. This
+    way you can send the snapshot from the source dataset to another
+    host, then bookmark the snapshot on the source dataset, then delete
+    the snapshot from the source dataset to save disk space, and then
+    still incrementally send the next upcoming snapshot from the source
     dataset to the other host by referring to the bookmark.
 
     The --no-create-bookmark option disables this safety feature but is
@@ -1586,14 +1794,14 @@ usage: bzfs [-h] [--recursive]
 
 **--no-use-bookmark**
 
-*  For increased safety, in normal replication operation bzfs also
-    looks for bookmarks (in addition to snapshots) on the source dataset
-    in order to find the most recent common snapshot wrt. the
-    destination dataset, if it is auto-detected that the source ZFS pool
-    support bookmarks. The --no-use-bookmark option disables this
-    safety feature but is discouraged, because bookmarks help to ensure
-    that ZFS replication can continue even if source and destination
-    dataset somehow have no common snapshot anymore.
+*  For increased safety, in normal replication operation bzfs
+    replication also looks for bookmarks (in addition to snapshots) on
+    the source dataset in order to find the most recent common snapshot
+    wrt. the destination dataset, if it is auto-detected that the source
+    ZFS pool support bookmarks. The --no-use-bookmark option disables
+    this safety feature but is discouraged, because bookmarks help to
+    ensure that ZFS replication can continue even if source and
+    destination dataset somehow have no common snapshot anymore.
 
     Note that it does not matter whether a bookmark was created by bzfs
     or a third party script, as only the GUID of the bookmark and the

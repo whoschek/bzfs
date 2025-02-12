@@ -65,7 +65,7 @@ from bzfs_tests.zfs_util import (
 
 src_pool_name = "wb_src"
 dst_pool_name = "wb_dest"
-pool_size_bytes = 100 * 1024 * 1024
+pool_size_bytes_default = 100 * 1024 * 1024
 encryption_algo = "aes-256-gcm"
 afix = ""
 zpool_features = None
@@ -90,9 +90,10 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
     sudo_cmd = ["sudo", "-n"]
     set_sudo_cmd(["sudo", "-n"])
 
+test_mode = getenv_any("test_mode", "adhoc")  # Consider toggling this when testing isolated code changes
+
 
 def suite():
-    test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
     is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
@@ -198,7 +199,7 @@ class ParametrizedTestCase(unittest.TestCase):
 #############################################################################
 class BZFSTestCase(ParametrizedTestCase):
 
-    def setUp(self):
+    def setUp(self, pool_size_bytes=pool_size_bytes_default):
         global src_pool, dst_pool
         global src_root_dataset, dst_root_dataset
         global afix
@@ -372,7 +373,7 @@ class BZFSTestCase(ParametrizedTestCase):
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
             args = args + ["--no-privilege-elevation"]
-            src_permissions = "send"
+            src_permissions = "send,snapshot"
             if not is_solaris_zfs():
                 src_permissions += ",bookmark"
             if delete_injection_triggers is not None:
@@ -587,14 +588,23 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
-        LocalTestCase(param=self.param).test_zfs_recv_include_regex_with_duplicate_o_and_x_names()
+    def test_basic_snapshotting_flat_simple(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
 
-    def test_basic_replication_flat_simple(self):
-        FullRemoteTestCase(param=self.param).test_basic_replication_flat_simple()
+    def test_basic_snapshotting_recursive_simple(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
 
-    def test_zfs_set_via_recv_o(self):
-        FullRemoteTestCase(param=self.param).test_zfs_set_via_recv_o()
+    def test_basic_snapshotting_recursive_with_skip_parent(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
+
+    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
+
+    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
+
+    def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
+        LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
 
 
 #############################################################################
@@ -812,6 +822,202 @@ class TestSSHLatency(BZFSTestCase):
 
 #############################################################################
 class LocalTestCase(BZFSTestCase):
+
+    def test_basic_snapshotting_flat_simple(self):
+        destroy(dst_root_dataset, recursive=True)
+        self.assertSnapshots(src_root_dataset, 0)
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--create-src-snapshot",
+                    "--create-src-snapshot-prefix=s1",
+                    "--create-src-snapshot-suffix=",
+                    "--create-src-snapshot-timeformat=",
+                    dry_run=(i == 0),
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
+                if i == 0:
+                    self.assertSnapshots(src_root_dataset, 0)
+                else:
+                    self.assertSnapshots(src_root_dataset, 1, "s")
+
+    def test_basic_snapshotting_recursive_simple(self):
+        self.setup_basic()
+        destroy(dst_root_dataset, recursive=True)
+        n = 3
+        self.assertSnapshots(src_root_dataset, n, "s")
+        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--recursive",
+                    "--skip-replication",
+                    "--create-src-snapshot",
+                    "--create-src-snapshot-prefix=z",
+                    "--create-src-snapshot-suffix=",
+                    "--create-src-snapshot-timeformat=",
+                    dry_run=(i == 0),
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
+                if i == 0:
+                    self.assertEqual(n, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
+                else:
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(1, len(snapshots(src_root_dataset + "/foo/b")))
+                    self.assert_snapshotting_generates_identical_createtxg()
+
+    def test_basic_snapshotting_recursive_with_skip_parent(self):
+        self.setup_basic()
+        destroy(dst_root_dataset, recursive=True)
+        n = 3
+        self.assertSnapshots(src_root_dataset, n, "s")
+        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-parent",
+                    "--recursive",
+                    "--skip-replication",
+                    "--create-src-snapshot",
+                    "--create-src-snapshot-prefix=z",
+                    "--create-src-snapshot-suffix=",
+                    "--create-src-snapshot-timeformat=",
+                    dry_run=(i == 0),
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
+                if i == 0:
+                    self.assertEqual(n, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
+                else:
+                    self.assertEqual(n, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(1, len(snapshots(src_root_dataset + "/foo/b")))
+                    self.assert_snapshotting_generates_identical_createtxg()
+
+    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
+        self.setup_basic()
+        destroy(dst_root_dataset, recursive=True)
+        n = 3
+        self.assertSnapshots(src_root_dataset, n, "s")
+        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--exclude-dataset-regex=.*foo/a.*",
+                    "--recursive",
+                    "--skip-replication",
+                    "--create-src-snapshot",
+                    "--create-src-snapshot-prefix=z",
+                    "--create-src-snapshot-suffix=",
+                    "--create-src-snapshot-timeformat=",
+                    dry_run=(i == 0),
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
+                if i == 0:
+                    self.assertEqual(n, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
+                else:
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(1, len(snapshots(src_root_dataset + "/foo/b")))
+                    self.assert_snapshotting_generates_identical_createtxg()
+
+    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
+        self.setup_basic()
+        destroy(dst_root_dataset, recursive=True)
+        n = 3
+        self.assertSnapshots(src_root_dataset, n, "s")
+        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-parent",
+                    "--exclude-dataset-regex=.*foo/a.*",
+                    "--recursive",
+                    "--skip-replication",
+                    "--create-src-snapshot",
+                    "--create-src-snapshot-prefix=z",
+                    "--create-src-snapshot-suffix=",
+                    "--create-src-snapshot-timeformat=",
+                    dry_run=(i == 0),
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
+                if i == 0:
+                    self.assertEqual(n, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
+                else:
+                    self.assertEqual(n, len(snapshots(src_root_dataset)))
+                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo")))
+                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
+                    self.assertEqual(1, len(snapshots(src_root_dataset + "/foo/b")))
+                    self.assert_snapshotting_generates_identical_createtxg()
+
+    def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
+        if test_mode == "functional":
+            self.skipTest("Skipping slow test")
+        # k = 30
+        k = 1
+        n = 100 * k
+        self.setUp(pool_size_bytes=max(k * 50 * 1024 * 1024, pool_size_bytes_default))
+        print(f"Creating {n} filesystems which may take a while ...")
+        sys.stdout.flush()
+        create_filesystem(src_root_dataset, "xxx")
+        start_time_nanos = time.time_ns()
+        for i in range(0, n):
+            create_filesystem(src_root_dataset, f"foo{i}")
+        print(f"Creating {n} filesystems took {bzfs.human_readable_duration(time.time_ns() - start_time_nanos)}")
+        start_time_nanos = time.time_ns()
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--exclude-dataset-regex=.*xxx",  # induce incompatible pruning
+            "--recursive",
+            "--skip-replication",
+            "--create-src-snapshot",
+            "--create-src-snapshot-prefix=z",
+            "--create-src-snapshot-suffix=",
+            "--create-src-snapshot-timeformat=",
+        )
+        print(f"Snapshotting took {bzfs.human_readable_duration(time.time_ns() - start_time_nanos)}")
+        self.assert_snapshotting_generates_identical_createtxg()
+
+    def assert_snapshotting_generates_identical_createtxg(self):
+        if is_solaris_zfs():
+            return  # solaris 'zfs snapshot' CLI does not support multiple datasets
+        createtxgs = set()
+        creations = set()
+        for line in zfs_list([src_root_dataset], props=["name,createtxg,creation"], types=["snapshot"]):
+            name, createtxg, creation = line.split("\t", 2)
+            if "@z" in name:
+                createtxgs.add(createtxg)
+                creations.add(creation)
+        # the following assertions nomore hold if thousands of datasets get snapshotted together, which takes too long
+        # self.assertEqual(1, len(createtxgs))
+        # self.assertEqual(1, len(creations))
 
     def test_basic_replication_flat_simple(self):
         self.setup_basic()

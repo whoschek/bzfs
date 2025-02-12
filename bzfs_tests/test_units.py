@@ -30,13 +30,13 @@ import time
 import unittest
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Sequence, Callable, Optional, TypeVar, Union, Dict
+from typing import Sequence, Callable, Optional, TypeVar, Union, Dict, List
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
-from bzfs.bzfs import find_match, getenv_any, Remote
+from bzfs.bzfs import find_match, getenv_any, Remote, isorted, round_datetime_up_to_duration_multiple
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
@@ -51,6 +51,8 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBuildTree))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCurrentDateTime))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRoundDatetimeUpToDurationMultiple))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSmallPriorityQueue))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedBool))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedDict))
@@ -223,6 +225,23 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\tbaz"], params.split_args("foo", "bar\tbaz"))
         self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
+
+    def test_validate_setaction(self):
+        def create_parser():
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--prefix", nargs="+", default=[], action=bzfs.SetAction)
+            return parser
+
+        args = create_parser().parse_args([])
+        self.assertEqual(args.prefix, [])
+        args = create_parser().parse_args(["--prefix", "foo"])
+        self.assertEqual(args.prefix, ["foo"])
+        args = create_parser().parse_args(["--prefix", "foo", "bar"])
+        self.assertEqual(args.prefix, ["foo", "bar"])
+        args = create_parser().parse_args(["--prefix", "foo", "bar", "--prefix", "baz"])
+        self.assertEqual(args.prefix, ["foo", "bar", "baz"])
+        with self.assertRaises(SystemExit):
+            create_parser().parse_args(["--prefix", "foo", "foo"])
 
     def test_compile_regexes(self):
         def _assertFullMatch(text: str, regex: str, re_suffix="", expected=True):
@@ -804,6 +823,170 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             bzfs.reset_logger()
 
+    @staticmethod
+    def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
+        src_datasets: List[str], basis_src_datasets: List[str]
+    ) -> Optional[List[str]]:
+        # Assumes that src_datasets and basis_src_datasets are both sorted (and thus root_datasets is sorted too)
+        src_datasets_set = set(src_datasets)
+        root_datasets = bzfs.Job().find_root_datasets(src_datasets)
+        for basis_dataset in basis_src_datasets:
+            for root_dataset in root_datasets:
+                if bzfs.is_descendant(basis_dataset, of_root_dataset=root_dataset):
+                    if basis_dataset not in src_datasets_set:
+                        return None
+        return root_datasets
+
+    def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self):
+        def run_filter(src_datasets, basis_src_datasets):
+            assert set(src_datasets).issubset(set(basis_src_datasets))
+            src_datasets = list(isorted(src_datasets))
+            basis_src_datasets = list(isorted(basis_src_datasets))
+            expected = self.root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(
+                src_datasets, basis_src_datasets
+            )
+            actual = bzfs.Job().root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
+            if expected is not None:
+                self.assertListEqual(expected, actual)
+            self.assertEqual(expected, actual)
+            return actual
+
+        basis_src_datasets = ["a", "a/b", "a/b/c", "a/d"]
+        self.assertListEqual([], run_filter([], basis_src_datasets))
+        self.assertListEqual(["a"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "a/b", "a/b/c"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
+        self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
+        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
+        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
+        self.assertListEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
+
+        basis_src_datasets = ["a", "a/b", "a/b/c", "a/d", "e", "e/f"]
+        self.assertListEqual(["a", "e"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertIsNone(run_filter(["e"], basis_src_datasets))
+        self.assertListEqual(["e/f"], run_filter(["e/f"], basis_src_datasets))
+        self.assertListEqual(["a", "e/f"], run_filter(["a", "a/b", "a/b/c", "a/d", "e/f"], basis_src_datasets))
+        self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
+        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
+        self.assertListEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "a/b", "a/d"], basis_src_datasets))
+
+        basis_src_datasets = ["a", "e", "h"]
+        self.assertListEqual([], run_filter([], basis_src_datasets))
+        self.assertListEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertListEqual(["a", "e"], run_filter(["a", "e"], basis_src_datasets))
+        self.assertListEqual(["e", "h"], run_filter(["e", "h"], basis_src_datasets))
+        self.assertListEqual(["a", "h"], run_filter(["a", "h"], basis_src_datasets))
+        self.assertListEqual(["a"], run_filter(["a"], basis_src_datasets))
+        self.assertListEqual(["e"], run_filter(["e"], basis_src_datasets))
+        self.assertListEqual(["h"], run_filter(["h"], basis_src_datasets))
+
+        basis_src_datasets = ["a", "e", "e/f", "h", "h/g"]
+        self.assertListEqual([], run_filter([], basis_src_datasets))
+        self.assertListEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
+
+        self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
+        self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
+
+        basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "k", "k/l"]
+        self.assertListEqual([], run_filter([], basis_src_datasets))
+        self.assertListEqual(["a", "e", "h", "k"], run_filter(basis_src_datasets, basis_src_datasets))
+
+        self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
+        self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
+        self.assertIsNone(run_filter(["a", "k"], basis_src_datasets))
+        self.assertListEqual(["a", "k/l"], run_filter(["a", "k/l"], basis_src_datasets))
+
+        basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "k", "kk", "k/l", "kk/l"]
+        self.assertIsNone(run_filter(["a", "hh"], basis_src_datasets))
+        self.assertListEqual(["a", "hh/g"], run_filter(["a", "hh/g"], basis_src_datasets))
+        self.assertIsNone(run_filter(["kk"], basis_src_datasets))
+        self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
+        self.assertIsNone(run_filter(["k"], basis_src_datasets))
+        self.assertListEqual(["k/l"], run_filter(["k/l"], basis_src_datasets))
+        self.assertIsNone(run_filter(["h"], basis_src_datasets))
+        self.assertListEqual(["h/g"], run_filter(["h/g"], basis_src_datasets))
+
+        basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "kk", "kk/l"]
+        self.assertIsNone(run_filter(["kk"], basis_src_datasets))
+        self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
+        self.assertIsNone(run_filter(["hh"], basis_src_datasets))
+
+    def test_CreateSrcSnapshotConfig(self):
+        good_args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshot-prefix=",
+                "--create-src-snapshot-infix=",
+                "--create-src-snapshot-suffix=_adhoc",
+                "--create-src-snapshot-timeformat=xxx",
+            ]
+        )
+        config = bzfs.CreateSrcSnapshotConfig(good_args, p=None)
+        self.assertListEqual(["xxx_adhoc"], config.snapshot_names)
+
+        good_args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshot-prefix",
+                "foo_",
+                "bar_",
+                "--create-src-snapshot-infix",
+                "_us-west-1",
+                "--create-src-snapshot-suffix",
+                "_hourly",
+                "_weekly",
+                "_daily",
+                "_baz",
+                "--create-src-snapshot-timeformat=xxx",
+            ]
+        )
+        config = bzfs.CreateSrcSnapshotConfig(good_args, p=None)
+        self.assertListEqual(
+            [
+                "foo_xxx_us-west-1_weekly",
+                "bar_xxx_us-west-1_weekly",
+                "foo_xxx_us-west-1_daily",
+                "bar_xxx_us-west-1_daily",
+                "foo_xxx_us-west-1_hourly",
+                "bar_xxx_us-west-1_hourly",
+                "foo_xxx_us-west-1_baz",
+                "bar_xxx_us-west-1_baz",
+            ],
+            config.snapshot_names,
+        )
+
+        # Snapshot name generated by --create-src-snapshot-* options must be a valid ZFS snapshot name
+        bad_args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshot-prefix=..",
+                "--create-src-snapshot-infix=",
+                "--create-src-snapshot-suffix=_adhoc",
+                "--create-src-snapshot-timeformat=",
+            ]
+        )
+        with self.assertRaises(SystemExit):
+            bzfs.CreateSrcSnapshotConfig(bad_args, p=None)
+
+        # Snapshot name generated by --create-src-snapshot-* options must not be empty
+        bad_args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshot-prefix=",
+                "--create-src-snapshot-infix=",
+                "--create-src-snapshot-suffix=",
+                "--create-src-snapshot-timeformat=",
+            ]
+        )
+        with self.assertRaises(SystemExit):
+            bzfs.CreateSrcSnapshotConfig(bad_args, p=None)
+
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
@@ -1009,7 +1192,7 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 class TestBuildTree(unittest.TestCase):
     def assert_keys_sorted(self, tree: Dict[str, Optional[Dict]]):
         keys = list(tree.keys())
-        self.assertEqual(keys, bzfs.isorted(keys), f"Keys are not sorted: {keys}")
+        self.assertEqual(keys, isorted(keys), f"Keys are not sorted: {keys}")
         for value in tree.values():
             if isinstance(value, dict):
                 self.assert_keys_sorted(value)
@@ -1101,6 +1284,224 @@ class TestBuildTree(unittest.TestCase):
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
+
+
+#############################################################################
+class TestCurrentDateTime(unittest.TestCase):
+
+    def setUp(self):
+        self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)  # in no timezone
+
+    def test_now(self):
+        self.assertIsNotNone(bzfs.current_datetime(tz_spec=None, now_fn=None))
+        self.assertIsNotNone(bzfs.current_datetime(tz_spec="UTC", now_fn=None))
+        self.assertIsNotNone(bzfs.current_datetime(tz_spec="+0530", now_fn=None))
+        self.assertIsNotNone(bzfs.current_datetime(tz_spec="+05:30", now_fn=None))
+        self.assertIsNotNone(bzfs.current_datetime(tz_spec="-0430", now_fn=None))
+        self.assertIsNotNone(bzfs.current_datetime(tz_spec="-04:30", now_fn=None))
+
+    def test_local_timezone(self):
+        expected = self.fixed_datetime.astimezone(tz=None)
+        actual = bzfs.current_datetime(tz_spec=None, now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))
+        self.assertEqual(expected, actual)
+
+        # For the strftime format, see https://docs.python.org/3.12/library/datetime.html#strftime-strptime-behavior.
+        fmt = "%Y-%m-%dT%H:%M:%S"
+        self.assertEqual("2024-01-01T12:00:00", actual.strftime(fmt))
+        fmt = "%Y-%m-%d_%H:%M:%S"
+        self.assertEqual("2024-01-01_12:00:00", actual.strftime(fmt))
+        fmt = "%Y-%m-%d_%H:%M:%S_%Z"
+        expected_prefix = "2024-01-01_12:00:00_"
+        self.assertTrue(actual.strftime(fmt).startswith(expected_prefix))
+        suffix = actual.strftime(fmt)[len(expected_prefix) :]
+        self.assertGreater(len(suffix), 0)  # CET
+
+        fmt = "%Y-%m-%d_%H:%M:%S%z"
+        expected_prefix = "2024-01-01_12:00:00"
+        self.assertTrue(actual.strftime(fmt).startswith(expected_prefix))
+        suffix = actual.strftime(fmt)[len(expected_prefix) :]  # "+0100"
+        self.assertIn(suffix[0], ["+", "-"])
+        self.assertTrue(suffix[1:].isdigit())
+
+    def test_utc_timezone(self):
+        expected = self.fixed_datetime.astimezone(tz=timezone.utc)
+        actual = bzfs.current_datetime(tz_spec="UTC", now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))
+        self.assertEqual(expected, actual)
+
+    def test_tzoffset_positive(self):
+        tz_spec = "+0530"
+        tz = timezone(timedelta(hours=5, minutes=30))
+        expected = self.fixed_datetime.astimezone(tz=tz)
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+        self.assertEqual(expected, actual)
+
+    def test_tzoffset_negative(self):
+        tz_spec = "-0430"
+        tz = timezone(timedelta(hours=-4, minutes=-30))
+        expected = self.fixed_datetime.astimezone(tz=tz)
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+        self.assertEqual(expected, actual)
+
+    def test_iana_timezone(self):
+        if sys.version_info < (3, 9):
+            self.skipTest("ZoneInfo required python >= 3.9")
+        from zoneinfo import ZoneInfo  # requires python >= 3.9
+
+        tz_spec = "Asia/Tokyo"
+        self.assertIsNotNone(bzfs.current_datetime(tz_spec=tz_spec, now_fn=None))
+        tz = ZoneInfo(tz_spec)  # Standard IANA timezone. Example: "Europe/Vienna"
+        expected = self.fixed_datetime.astimezone(tz=tz)
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+        self.assertEqual(expected, actual)
+
+        fmt = "%Y-%m-%dT%H:%M:%S%z"
+        expected_prefix = "2024-01-01T20:00:00"
+        suffix = actual.strftime(fmt)[len(expected_prefix) :]  # "+0100"
+        self.assertIn(suffix[0], ["+", "-"])
+        self.assertTrue(suffix[1:].isdigit())
+
+    def test_invalid_timezone(self):
+        with self.assertRaises(ValueError) as context:
+            bzfs.current_datetime(tz_spec="INVALID")
+        self.assertIn("Invalid timezone specification", str(context.exception))
+
+    def test_invalid_timezone_format_missing_sign(self):
+        with self.assertRaises(ValueError):
+            bzfs.current_datetime(tz_spec="0400")
+
+
+class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
+    def setUp(self):
+        # Use a fixed timezone (e.g. Eastern Standard Time, UTC-5) for all tests.
+        self.tz = timezone(timedelta(hours=-5))
+
+    # Fixed-length durations: second, minute, hour, day, week.
+    def test_round_up_seconds_non_boundary(self):
+        """Rounding up to the next second when dt is not on a second boundary."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
+        expected = dt.replace(microsecond=0) + timedelta(seconds=1)
+        self.assertEqual(result, expected)
+        self.assertEqual(result.tzinfo, self.tz)
+
+    def test_round_up_seconds_boundary(self):
+        """Rounding up to the next second when dt is exactly on a second boundary returns dt."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
+        self.assertEqual(result, dt)
+
+    def test_round_up_minutes_non_boundary(self):
+        """Rounding up to the next minute when dt is not on a minute boundary."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, 500000, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
+        expected = dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
+        self.assertEqual(result, expected)
+
+    def test_round_up_minutes_boundary(self):
+        """Rounding up to the next minute when dt is exactly on a minute boundary returns dt."""
+        dt = datetime(2025, 2, 11, 14, 5, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
+        self.assertEqual(result, dt)
+
+    def test_round_up_hours_non_boundary(self):
+        """Rounding up to the next hour when dt is not on an hour boundary."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
+        expected = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        self.assertEqual(result, expected)
+
+    def test_round_up_hours_boundary(self):
+        """Rounding up to the next hour when dt is exactly on an hour boundary returns dt."""
+        dt = datetime(2025, 2, 11, 14, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
+        self.assertEqual(result, dt)
+
+    def test_round_up_days_non_boundary(self):
+        """Rounding up to the next day when dt is not on a day boundary."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
+        expected = dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        self.assertEqual(result, expected)
+
+    def test_round_up_days_boundary(self):
+        """Rounding up to the next day when dt is exactly at midnight returns dt."""
+        dt = datetime(2025, 2, 11, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
+        self.assertEqual(result, dt)
+
+    def test_round_up_weeks_non_boundary_monday(self):
+        # With is_week_starting_on_monday True, anchor is the most recent Monday midnight.
+        dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
+        # For Tuesday (weekday 1), anchor = dt - 1 day -> Monday midnight = 2025-02-10 00:00:00.
+        # Next boundary = anchor + 7 days = 2025-02-17 00:00:00.
+        expected = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=True)
+        self.assertEqual(result, expected)
+
+    def test_round_up_weeks_non_boundary_sunday(self):
+        # With is_week_starting_on_monday False, anchor is the most recent Sunday midnight.
+        dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
+        # For Tuesday (weekday 1), days_since_sunday = (1+1)%7 = 2,
+        # so anchor = dt - 2 days -> Sunday midnight = 2025-02-09 00:00:00.
+        # Next boundary = anchor + 7 days = 2025-02-16 00:00:00.
+        expected = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=False)
+        self.assertEqual(result, expected)
+
+    def test_round_up_weeks_boundary_monday(self):
+        # dt is exactly at Monday midnight.
+        dt = datetime(2025, 2, 10, 0, 0, 0, tzinfo=self.tz)  # Monday midnight
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=True)
+        self.assertEqual(result, dt)
+
+    def test_round_up_weeks_boundary_sunday(self):
+        # dt is exactly at Sunday midnight.
+        dt = datetime(2025, 2, 9, 0, 0, 0, tzinfo=self.tz)  # Sunday midnight
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=False)
+        self.assertEqual(result, dt)
+
+    # Variable-length durations: month and year.
+    def test_round_up_months_non_boundary(self):
+        """Rounding up to the next multiple of months when dt is not on a boundary."""
+        # For a 2-month step, using dt = March 15, 2025 should round up to May 1, 2025.
+        dt = datetime(2025, 3, 15, 10, 30, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
+        expected = datetime(2025, 5, 1, 0, 0, 0, tzinfo=self.tz)
+        self.assertEqual(result, expected)
+
+    def test_round_up_months_boundary(self):
+        """When dt is exactly on a month boundary that is a multiple, dt is returned unchanged."""
+        # March 1, 2025 is on a boundary for a 2-month step ((3-1) % 2 == 0).
+        dt = datetime(2025, 3, 1, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
+        self.assertEqual(result, dt)
+
+    def test_round_up_years_non_boundary(self):
+        """Rounding up to the next multiple of years when dt is not on a boundary."""
+        # For a 2-year step, using dt = Feb 11, 2025 should round up to Jan 1, 2027.
+        dt = datetime(2025, 2, 11, 14, 5, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly")
+        expected = datetime(2027, 1, 1, 0, 0, 0, tzinfo=self.tz)
+        self.assertEqual(result, expected)
+
+    def test_round_up_years_boundary(self):
+        """When dt is exactly on a year boundary that is a multiple, dt is returned unchanged."""
+        # January 1, 2025 is on a valid boundary if (2025-1) % 2 == 0.
+        dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly")
+        self.assertEqual(result, dt)
+
+    def test_invalid_unit(self):
+        """Passing an unsupported time unit should raise a ValueError."""
+        dt = datetime(2025, 2, 11, 14, 5, tzinfo=self.tz)
+        with self.assertRaises(ValueError):
+            round_datetime_up_to_duration_multiple(dt, 2, "fortnights")
+
+    def test_preserves_timezone(self):
+        """The returned datetime must have the same timezone as the input."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
+        self.assertEqual(result.tzinfo, dt.tzinfo)
 
 
 #############################################################################
