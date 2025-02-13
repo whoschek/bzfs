@@ -2173,15 +2173,20 @@ class Job:
                 if root_datasets is not None:
                     datasets_to_snapshot = root_datasets
                     cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
-            for component in self.find_components_to_snapshot(src_datasets):
-                # create snapshots in large batches, but without creating a command line that's too big for the OS to handle
-                self.run_ssh_cmd_batched(
+            # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
+            cmd_args_list = [
+                [f"{dataset}@{''.join(component)}" for dataset in datasets_to_snapshot]
+                for component in self.find_components_to_snapshot(src_datasets)
+            ]
+            drain(
+                self.itr_ssh_cmd_parallel(
                     src,
                     cmd,
-                    [f"{dataset}@{''.join(component)}" for dataset in datasets_to_snapshot],
-                    lambda batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
+                    cmd_args_list,
+                    fn=lambda batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
                     max_batch_items=1 if self.is_solaris_zfs(src) else 2**29,  # solaris CLI doesn't accept multiple datasets
                 )
+            )
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
@@ -2333,7 +2338,7 @@ class Job:
                 if run == 0:
                     # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
                     cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                    for datasets_having_snapshots in self.itr_ssh_command_parallel(dst, cmd, isorted(orphans)):
+                    for datasets_having_snapshots in self.list_snapshots_in_parallel(dst, cmd, isorted(orphans)):
                         if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                             replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
                         datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
@@ -3744,7 +3749,7 @@ class Job:
         # FIXME
         # src_root_datasets: List[str] = self.find_root_datasets(src_datasets)
         # cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o createtxg,creation,name")
-        # for src_snaps_with_creation in self.itr_ssh_command_parallel(src, cmd, src_root_datasets):
+        # for src_snaps_with_creation in self.list_snapshots_in_parallel(src, cmd, src_root_datasets):
         #     # streaming group by dataset name (consumes constant memory only)
         #     for dataset, group in groupby(
         #         src_snaps_with_creation, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]
@@ -3818,7 +3823,7 @@ class Job:
             if p.use_bookmark and r.location == "src" and self.are_bookmarks_enabled(r):
                 types = "snapshot,bookmark"
             cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
-            for lines in self.itr_ssh_command_parallel(r, cmd, sorted(datasets)):
+            for lines in self.list_snapshots_in_parallel(r, cmd, sorted(datasets)):
                 yield from lines
 
         def snapshot_iterator(
@@ -4390,7 +4395,7 @@ class Job:
     def run_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29
     ) -> None:
-        deque(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items), maxlen=0)
+        drain(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items))
 
     def itr_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29
@@ -4423,24 +4428,24 @@ class Job:
         if results is not None:
             yield results
 
-    def itr_ssh_command_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
+    def itr_ssh_cmd_parallel(
+        self,
+        r: Remote,
+        cmd: List[str],
+        cmd_args_list: List[List[str]],
+        fn: Callable[[List[str]], Any],
+        max_batch_items=2**29,
+    ) -> Generator:
         max_workers = self.max_workers[r.location]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            iterator = self.itr_ssh_cmd_batched(
-                r,
-                cmd,
-                datasets,
-                lambda batch: executor.submit(
-                    lambda cmd, lst: (self.try_ssh_command(r, log_trace, cmd=cmd + lst) or "").splitlines(), cmd, batch
-                ),
-                max_batch_items=min(
-                    self.max_datasets_per_minibatch_on_list_snaps[r.location],
-                    max(
-                        len(datasets) // (max_workers if r.ssh_user_host else max_workers * 8),
-                        max_workers if r.ssh_user_host else 1,
-                    ),
-                ),
-            )
+            iterators = [
+                self.itr_ssh_cmd_batched(
+                    r, cmd, cmd_args, lambda batch: executor.submit(fn, batch), max_batch_items=max_batch_items
+                )
+                for cmd_args in cmd_args_list
+            ]
+            iterator = itertools.chain(*iterators)
+
             # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
             fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))
 
@@ -4450,6 +4455,22 @@ class Job:
                 if next_future is not None:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
+
+    def list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
+        max_workers = self.max_workers[r.location]
+        return self.itr_ssh_cmd_parallel(
+            r,
+            cmd,
+            [datasets],
+            fn=lambda batch: (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines(),
+            max_batch_items=min(
+                self.max_datasets_per_minibatch_on_list_snaps[r.location],
+                max(
+                    len(datasets) // (max_workers if r.ssh_user_host else max_workers * 8),
+                    max_workers if r.ssh_user_host else 1,
+                ),
+            ),
+        )
 
     @staticmethod
     def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any]) -> Tuple[Any, Any]:
@@ -5192,6 +5213,10 @@ def unlink_missing_ok(file: str) -> None:  # workaround for compat with python <
         Path(file).unlink()
     except FileNotFoundError:
         pass
+
+
+def drain(iterable: Iterable) -> None:
+    deque(iterable, maxlen=0)
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
