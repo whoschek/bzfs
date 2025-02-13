@@ -1929,7 +1929,7 @@ class Job:
                                 raise
                             log.error("%s", str(e))
                             self.append_exception(e, "task", task_description)
-                    if time.time_ns() >= daemon_stoptime_nanos or not self.wait_for_next_daemon_iteration():
+                    if not self.sleep_until_next_daemon_iteration(daemon_stoptime_nanos):
                         break
             finally:
                 self.progress_reporter.stop()
@@ -1966,18 +1966,22 @@ class Job:
         self.all_exceptions_count += 1
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
 
-    def wait_for_next_daemon_iteration(self) -> bool:
+    def sleep_until_next_daemon_iteration(self, daemon_stoptime_nanos: int) -> bool:
+        sleep_nanos = daemon_stoptime_nanos - time.time_ns()
+        if sleep_nanos <= 0:
+            return False
         p, log = self.params, self.params.log
         config = p.create_src_snapshot_config
         creation_dt = config.current_datetime
         duration_amount, duration_unit = next(reversed(config.suffix_durations.values()))
         threshold_dt = round_datetime_up_to_duration_multiple(creation_dt, duration_amount, duration_unit)
         offset: timedelta = threshold_dt - datetime.now(config.tz)
-        offset_micros = max(0, (offset.days * 86400 + offset.seconds) * 1_000_000 + offset.microseconds)
-        log.info("Daemon sleeping for: %s%s", human_readable_duration(offset_micros, unit="μs"), " ...")
-        time.sleep(offset_micros / 1_000_000)
+        offset_nanos = max(0, (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000)
+        sleep_nanos = min(sleep_nanos, offset_nanos)
+        log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), " ...")
+        time.sleep(sleep_nanos / 1_000_000_000)
         config.current_datetime = datetime.now(config.tz)
-        return True
+        return daemon_stoptime_nanos - time.time_ns() > 0
 
     def print_replication_stats(self, start_time_nanos: int):
         p, log = self.params, self.params.log
