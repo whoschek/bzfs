@@ -1756,7 +1756,7 @@ class CreateSrcSnapshotConfig:
             "minutely": 60,
             "secondly": 1,
         }
-        suffix_regex = re.compile(rf"_(\d*)({'|'.join(suffix_seconds.keys())})")
+        suffix_regex = re.compile(rf"_([1-9]\d*)?({'|'.join(suffix_seconds.keys())})")
         suffix_durations = {suffix: suffix_to_duration(suffix, suffix_regex) for suffix in suffixes}
 
         def suffix_key(s):
@@ -1972,10 +1972,11 @@ class Job:
             return False
         p, log = self.params, self.params.log
         config = p.create_src_snapshot_config
-        creation_dt = config.current_datetime
-        duration_amount, duration_unit = next(reversed(config.suffix_durations.values()))
-        threshold_dt = round_datetime_up_to_duration_multiple(creation_dt, duration_amount, duration_unit)
-        offset: timedelta = threshold_dt - datetime.now(config.tz)
+        next_snapshotting_event_dt = min(
+            round_datetime_up_to_duration_multiple(config.current_datetime, duration_amount, duration_unit)
+            for duration_amount, duration_unit in config.suffix_durations.values()
+        )
+        offset: timedelta = next_snapshotting_event_dt - datetime.now(config.tz)
         offset_nanos = max(0, (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000)
         sleep_nanos = min(sleep_nanos, offset_nanos)
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), " ...")
@@ -3766,28 +3767,29 @@ class Job:
 
         for component in config.snapshot_components():
             prefix, timestamp, infix, suffix = component
+            duration_amount, duration_unit = config.suffix_durations[suffix]
+            if duration_amount == 0:
+                components[component] = None
+                continue
             end = infix + suffix
             min_len = len(prefix) + len(infix) + len(suffix)
             i = find_match(
-                src_snap_names, lambda s: len(s) >= min_len and s.endswith(end) and s.startswith(prefix), reverse=True
+                src_snap_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= min_len, reverse=True
             )
             if i < 0:
                 components[component] = None
-            else:
-                creation_unixtime = int(src_snaps_with_creation[i].split("\t", 1)[0])
-                # creation_unixtime = int(snapshots[i][1])  # FIXME
-                creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
-                duration_amount, duration_unit = config.suffix_durations[suffix]
-                if duration_amount == 0:
-                    components[component] = None
-                else:
-                    threshold_dt = round_datetime_up_to_duration_multiple(creation_dt, duration_amount, duration_unit)
-                    log.trace("Latest snapshot creation: %s for %s", creation_dt, "".join(component))
-                    msg = ""
-                    if config.current_datetime >= threshold_dt:
-                        components[component] = None
-                        msg = " has passed"
-                    log.info("Next scheduled snapshot time: %s for %s%s", threshold_dt, "".join(component), msg)
+                continue
+            creation_unixtime = int(src_snaps_with_creation[i].split("\t", 1)[0])
+            # creation_unixtime = int(snapshots[i][1])  # FIXME
+            creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
+            log.trace("Latest snapshot creation: %s for %s", creation_dt, "".join(component))
+            one_micros = timedelta(microseconds=1)
+            next_event_dt = round_datetime_up_to_duration_multiple(creation_dt + one_micros, duration_amount, duration_unit)
+            msg = ""
+            if config.current_datetime >= next_event_dt:
+                components[component] = None
+                msg = " has passed"
+            log.info("Next scheduled snapshot time: %s for %s%s", next_event_dt, "".join(component), msg)
             # FIXME
             # if len(components) == len(config.snapshot_components):
             #     return components.keys()  # perf: no need to scan any further
