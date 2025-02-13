@@ -4543,7 +4543,7 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     return lst
 
 
-def delete_stale_files(root_dir: str, prefix: str, secs: int = 30 * 24 * 60 * 60, dirs=False, exclude=None) -> None:
+def delete_stale_files(root_dir: str, prefix: str, secs: int = 31 * 24 * 60 * 60, dirs=False, exclude=None) -> None:
     """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
     now = time.time()
     for entry in os.scandir(root_dir):
