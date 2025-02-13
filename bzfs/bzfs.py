@@ -97,6 +97,7 @@ env_var_prefix = prog_name + "_"
 pv_file_thread_separator = "_"
 dummy_dataset = "dummy"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
+zfs_version_is_at_least_2_2_0 = "zfs>=2.2.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
 snapshot_regex_filter_name = "snapshot_regex"
@@ -1328,6 +1329,8 @@ class LogParams:
         self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.home_dir: str = get_home_directory()
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, prog_name + "-logs")
+        self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
+        os.makedirs(self.last_modified_cache_dir, exist_ok=True)
         self.log_dir: str = os.path.join(log_parent_dir, self.timestamp[0 : self.timestamp.index("_")])  # 2024-09-03
         os.makedirs(self.log_dir, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
@@ -2132,6 +2135,20 @@ class Job:
         else:
             return "", True
 
+    def zfs_get_snapshots_changed(self, remote: Remote, dataset: str) -> int:
+        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
+        See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
+        p, log = self.params, self.params.log
+        assert self.is_snapshots_changed_zfs_property_available(remote)
+        cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed", dataset)
+        snapshots_changed = self.run_ssh_command(remote, log_trace, cmd=cmd).rstrip()
+        if snapshots_changed == "-" or not snapshots_changed:
+            snapshots_changed = "0"
+        return int(snapshots_changed)
+
+    def cache_file(self, dataset: str) -> str:
+        return os.path.join(self.params.log_params.last_modified_cache_dir, dataset.replace("/", "___"))
+
     def run_task(self) -> None:
         def filter_src_datasets() -> List[str]:  # apply --{include|exclude}-dataset policy
             return isorted(self.filter_datasets(src, basis_src_datasets)) if src_datasets is None else src_datasets
@@ -2179,19 +2196,30 @@ class Job:
                     datasets_to_snapshot = root_datasets
                     cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
-            cmd_args_list = [
-                [f"{dataset}@{''.join(component)}" for dataset in datasets_to_snapshot]
-                for component in self.find_components_to_snapshot(src_datasets)
-            ]
+            components = self.find_components_to_snapshot(src_datasets)
             drain(
                 self.itr_ssh_cmd_parallel(
                     src,
                     cmd,
-                    cmd_args_list,
+                    [[f"{dataset}@{''.join(component)}" for dataset in datasets_to_snapshot] for component in components],
                     fn=lambda batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
                     max_batch_items=1 if self.is_solaris_zfs(src) else 2**29,  # solaris CLI doesn't accept multiple datasets
                 )
             )
+            # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
+            if len(src_datasets) > 0 and self.is_snapshots_changed_zfs_property_available(src):
+                src_dataset = src_datasets[-1]
+                snapshots_changed = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
+                cache_file = self.cache_file(src_dataset)
+                if not p.dry_run:
+                    Path(cache_file).touch()
+                    os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
+                for component in components:
+                    prefix, timestamp, infix, suffix = component
+                    cache_file = self.cache_file(f"{src_dataset}@{prefix}{infix}{suffix}")
+                    if not p.dry_run:
+                        Path(cache_file).touch()
+                        os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
@@ -3743,12 +3771,37 @@ class Job:
             duration_amount == 0 for duration_amount, duration_unit in config.suffix_durations.values()
         ):
             return config.snapshot_components()  # take snapshot regardless of the creation time of any existing snapshots
-        components = {}
-        cmd = p.split_args(
-            f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -s creation -s name -Hp -o creation,name",
-            src_datasets[-1],
-        )
-        src_snapshots_with_creation = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
+
+        def cached_src_snapshots_with_creation(dataset: str) -> List[str]:
+            if not self.is_snapshots_changed_zfs_property_available(src):
+                return None
+            actual_snapshots_changed = self.zfs_get_snapshots_changed(src, dataset)
+            cache_file = self.cache_file(dataset)
+            try:
+                cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
+            except FileNotFoundError:
+                return None
+            if actual_snapshots_changed != cached_snapshots_changed:
+                return None
+            snapshots_with_creation = []
+            for component in config.snapshot_components():
+                prefix, timestamp, infix, suffix = component
+                cache_file = self.cache_file(f"{dataset}@{prefix}{infix}{suffix}")
+                try:
+                    cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
+                except FileNotFoundError:
+                    return None
+                snapshots_with_creation.append(f"{cached_snapshots_changed}\t{dataset}@{prefix}{infix}{suffix}")
+            return snapshots_with_creation
+
+        src_dataset = src_datasets[-1]
+        src_snapshots_with_creation = cached_src_snapshots_with_creation(src_dataset)
+        if src_snapshots_with_creation is None:
+            cmd = p.split_args(
+                f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -s creation -s name -Hp -o creation,name",
+                src_dataset,
+            )
+            src_snapshots_with_creation = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
         src_snapshot_names = [line[line.index("@") + 1 :] for line in src_snapshots_with_creation]
 
         # FIXME
@@ -3765,6 +3818,7 @@ class Job:
         #         snapshots = sorted(snapshots, key=lambda s: (int(s[0]), int(s[1]), s[2]))
         #         src_snapshot_names = [snapshot[-1] for snapshot in snapshots]
 
+        components = {}
         for component in config.snapshot_components():
             prefix, timestamp, infix, suffix = component
             duration_amount, duration_unit = config.suffix_durations[suffix]
@@ -4301,6 +4355,8 @@ class Job:
             available_programs[location]["zfs"] = version
             if is_version_at_least(version, "2.1.0"):
                 available_programs[location][zfs_version_is_at_least_2_1_0] = True
+            if is_version_at_least(version, "2.2.0"):
+                available_programs[location][zfs_version_is_at_least_2_2_0] = True
         log.trace(f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
 
         if p.shell_program != disable_prg:
@@ -4364,6 +4420,11 @@ class Job:
         return self.is_zpool_feature_enabled_or_active(
             remote, "feature@bookmark_v2"
         ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
+
+    def is_snapshots_changed_zfs_property_available(self, remote: Remote) -> bool:
+        return self.is_program_available(
+            zfs_version_is_at_least_2_2_0, remote.location
+        ) and self.is_zpool_feature_enabled_or_active(remote, "feature@extensible_dataset")
 
     def check_zfs_dataset_busy(self, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
         """Decline to start a state changing ZFS operation that may conflict with other currently running processes.
