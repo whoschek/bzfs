@@ -1375,8 +1375,15 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Use a fixed timezone (e.g. Eastern Standard Time, UTC-5) for all tests.
         self.tz = timezone(timedelta(hours=-5))
 
+    def test_zero_duration_amount(self):
+        dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 0, "hourly")
+        expected = dt
+        self.assertEqual(result, expected)
+        self.assertEqual(result.tzinfo, self.tz)
+
     # Fixed-length durations: second, minute, hour, day, week.
-    def test_round_up_seconds_non_boundary(self):
+    def test_seconds_non_boundary(self):
         """Rounding up to the next second when dt is not on a second boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
@@ -1384,52 +1391,52 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(result, expected)
         self.assertEqual(result.tzinfo, self.tz)
 
-    def test_round_up_seconds_boundary(self):
+    def test_seconds_boundary(self):
         """Rounding up to the next second when dt is exactly on a second boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
         self.assertEqual(result, dt)
 
-    def test_round_up_minutes_non_boundary(self):
+    def test_minutes_non_boundary(self):
         """Rounding up to the next minute when dt is not on a minute boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 500000, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
         expected = dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
         self.assertEqual(result, expected)
 
-    def test_round_up_minutes_boundary(self):
+    def test_minutes_boundary(self):
         """Rounding up to the next minute when dt is exactly on a minute boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
         self.assertEqual(result, dt)
 
-    def test_round_up_hours_non_boundary(self):
+    def test_hours_non_boundary(self):
         """Rounding up to the next hour when dt is not on an hour boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         self.assertEqual(result, expected)
 
-    def test_round_up_hours_boundary(self):
+    def test_hours_boundary(self):
         """Rounding up to the next hour when dt is exactly on an hour boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         self.assertEqual(result, dt)
 
-    def test_round_up_days_non_boundary(self):
+    def test_days_non_boundary(self):
         """Rounding up to the next day when dt is not on a day boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
         expected = dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         self.assertEqual(result, expected)
 
-    def test_round_up_days_boundary(self):
+    def test_days_boundary(self):
         """Rounding up to the next day when dt is exactly at midnight returns dt."""
         dt = datetime(2025, 2, 11, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
         self.assertEqual(result, dt)
 
-    def test_round_up_weeks_non_boundary_monday(self):
+    def test_weeks_non_boundary_monday(self):
         # With is_week_starting_on_monday True, anchor is the most recent Monday midnight.
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         # For Tuesday (weekday 1), anchor = dt - 1 day -> Monday midnight = 2025-02-10 00:00:00.
@@ -1438,7 +1445,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=True)
         self.assertEqual(result, expected)
 
-    def test_round_up_weeks_non_boundary_sunday(self):
+    def test_weeks_non_boundary_sunday(self):
         # With is_week_starting_on_monday False, anchor is the most recent Sunday midnight.
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         # For Tuesday (weekday 1), days_since_sunday = (1+1)%7 = 2,
@@ -1448,20 +1455,20 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=False)
         self.assertEqual(result, expected)
 
-    def test_round_up_weeks_boundary_monday(self):
+    def test_weeks_boundary_monday(self):
         # dt is exactly at Monday midnight.
         dt = datetime(2025, 2, 10, 0, 0, 0, tzinfo=self.tz)  # Monday midnight
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=True)
         self.assertEqual(result, dt)
 
-    def test_round_up_weeks_boundary_sunday(self):
+    def test_weeks_boundary_sunday(self):
         # dt is exactly at Sunday midnight.
         dt = datetime(2025, 2, 9, 0, 0, 0, tzinfo=self.tz)  # Sunday midnight
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=False)
         self.assertEqual(result, dt)
 
     # Variable-length durations: month and year.
-    def test_round_up_months_non_boundary(self):
+    def test_months_non_boundary(self):
         """Rounding up to the next multiple of months when dt is not on a boundary."""
         # For a 2-month step, using dt = March 15, 2025 should round up to May 1, 2025.
         dt = datetime(2025, 3, 15, 10, 30, tzinfo=self.tz)
@@ -1469,14 +1476,14 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2025, 5, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(result, expected)
 
-    def test_round_up_months_boundary(self):
+    def test_months_boundary(self):
         """When dt is exactly on a month boundary that is a multiple, dt is returned unchanged."""
         # March 1, 2025 is on a boundary for a 2-month step ((3-1) % 2 == 0).
         dt = datetime(2025, 3, 1, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
         self.assertEqual(result, dt)
 
-    def test_round_up_years_non_boundary(self):
+    def test_years_non_boundary(self):
         """Rounding up to the next multiple of years when dt is not on a boundary."""
         # For a 2-year step, using dt = Feb 11, 2025 should round up to Jan 1, 2027.
         dt = datetime(2025, 2, 11, 14, 5, tzinfo=self.tz)
@@ -1484,7 +1491,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2027, 1, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(result, expected)
 
-    def test_round_up_years_boundary(self):
+    def test_years_boundary(self):
         """When dt is exactly on a year boundary that is a multiple, dt is returned unchanged."""
         # January 1, 2025 is on a valid boundary if (2025-1) % 2 == 0.
         dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=self.tz)

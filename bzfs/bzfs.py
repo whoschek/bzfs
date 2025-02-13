@@ -5296,6 +5296,8 @@ def round_datetime_up_to_duration_multiple(
     16:05:01, 2 hours --> 18:00:00
     23:55:01, 2 hours --> 00:00:00 on the next day
     """
+    if duration_amount == 0:
+        return dt  # dt is already on a multiple boundary
     if duration_unit in {"secondly", "minutely", "hourly", "daily", "weekly"}:
         if duration_unit == "secondly":
             duration_micros = duration_amount * 1_000_000
