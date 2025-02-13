@@ -3748,22 +3748,22 @@ class Job:
             f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -s creation -s name -Hp -o creation,name",
             src_datasets[-1],
         )
-        src_snaps_with_creation = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
-        src_snap_names = [line[line.index("@") + 1 :] for line in src_snaps_with_creation]
+        src_snapshots_with_creation = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
+        src_snapshot_names = [line[line.index("@") + 1 :] for line in src_snapshots_with_creation]
 
         # FIXME
         # src_root_datasets: List[str] = self.find_root_datasets(src_datasets)
         # cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o createtxg,creation,name")
-        # for src_snaps_with_creation in self.list_snapshots_in_parallel(src, cmd, src_root_datasets):
+        # for src_snapshots_with_creation in self.list_snapshots_in_parallel(src, cmd, src_root_datasets):
         #     # streaming group by dataset name (consumes constant memory only)
         #     for dataset, group in groupby(
-        #         src_snaps_with_creation, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]
+        #         src_snapshots_with_creation, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]
         #     ):
         #         snapshots = list(group)  # fetch all snapshots of current dataset
         #         snapshots = [snapshot.split("\t") for snapshot in snapshots]
         #         # sort by createtxg,creation,name
         #         snapshots = sorted(snapshots, key=lambda s: (int(s[0]), int(s[1]), s[2]))
-        #         src_snap_names = [snapshot[-1] for snapshot in snapshots]
+        #         src_snapshot_names = [snapshot[-1] for snapshot in snapshots]
 
         for component in config.snapshot_components():
             prefix, timestamp, infix, suffix = component
@@ -3774,12 +3774,12 @@ class Job:
             end = infix + suffix
             min_len = len(prefix) + len(infix) + len(suffix)
             i = find_match(
-                src_snap_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= min_len, reverse=True
+                src_snapshot_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= min_len, reverse=True
             )
             if i < 0:
                 components[component] = None
                 continue
-            creation_unixtime = int(src_snaps_with_creation[i].split("\t", 1)[0])
+            creation_unixtime = int(src_snapshots_with_creation[i].split("\t", 1)[0])
             # creation_unixtime = int(snapshots[i][1])  # FIXME
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.trace("Latest snapshot creation: %s for %s", creation_dt, "".join(component))
