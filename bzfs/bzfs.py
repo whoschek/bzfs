@@ -1360,8 +1360,11 @@ class LogParams:
         delete_stale_files(dot_current_dir, prefix="", secs=60, dirs=True, exclude=os.path.basename(current_dir))
         self.params: Params = None
 
-    def last_modified_cache_file(self, dataset: str) -> str:
-        return os.path.join(self.last_modified_cache_dir, dataset.replace("/", "~"))
+    def last_modified_cache_file(self, dataset_or_snapshot: str) -> str:
+        dataset_or_snapshot = dataset_or_snapshot.replace("/", "~")
+        i = dataset_or_snapshot.find("@")
+        dataset = dataset_or_snapshot if i < 0 else dataset_or_snapshot[0:i]
+        return os.path.join(self.last_modified_cache_dir, dataset, dataset_or_snapshot)
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -2918,17 +2921,6 @@ class Job:
         recv_resume_opts = ["-s"]
         return recv_resume_token, send_resume_opts, recv_resume_opts
 
-    def zfs_get_snapshots_changed(self, remote: Remote, dataset: str) -> int:
-        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
-        See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
-        p, log = self.params, self.params.log
-        assert self.is_snapshots_changed_zfs_property_available(remote)
-        cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed", dataset)
-        snapshots_changed = self.run_ssh_command(remote, log_trace, cmd=cmd).rstrip()
-        if snapshots_changed == "-" or not snapshots_changed:
-            return 0
-        return int(snapshots_changed)
-
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int, recordsize: int) -> str:
         """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
         smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
@@ -3764,21 +3756,18 @@ class Job:
         def cached_src_snapshots_with_creation(dataset: str) -> List[str]:
             if not self.is_snapshots_changed_zfs_property_available(src):
                 return None
-            actual_snapshots_changed = self.zfs_get_snapshots_changed(src, dataset)
-            cache_file = p.log_params.last_modified_cache_file(dataset)
-            try:
-                cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
-            except FileNotFoundError:
+            cached_snapshots_changed = self.cache_get_snapshots_changed(dataset)
+            if cached_snapshots_changed == 0:
                 return None
-            if actual_snapshots_changed != cached_snapshots_changed:
+            zfs_snapshots_changed = self.zfs_get_snapshots_changed(src, dataset)
+            if cached_snapshots_changed != zfs_snapshots_changed:
+                self.invalidate_last_modified_cache_dataset(dataset)
                 return None
             snapshots_with_creation = []
             for component in config.snapshot_components():
                 prefix, timestamp, infix, suffix = component
-                cache_file = p.log_params.last_modified_cache_file(f"{dataset}@{prefix}{infix}{suffix}")
-                try:
-                    cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
-                except FileNotFoundError:
+                cached_snapshots_changed = self.cache_get_snapshots_changed(f"{dataset}@{prefix}{infix}{suffix}")
+                if cached_snapshots_changed == 0:
                     return None
                 snapshots_with_creation.append(f"{cached_snapshots_changed}\t{dataset}@{prefix}{infix}{suffix}")
             return snapshots_with_creation
@@ -3837,6 +3826,15 @@ class Job:
             #     return components.keys()  # perf: no need to scan any further
         return components.keys()
 
+    def invalidate_last_modified_cache_dataset(self, dataset: str):
+        p, log = self.params, self.params.log
+        try:
+            for entry in os.scandir(os.path.dirname(p.log_params.last_modified_cache_file(dataset))):
+                if entry.is_file():
+                    os.utime(entry.path, times=(0, 0))
+        except FileNotFoundError:
+            pass  # harmless
+
     def update_last_modified_cache(self, src_datasets: List[str], components: List[Tuple]) -> None:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
         p, log = self.params, self.params.log
@@ -3844,18 +3842,43 @@ class Job:
         if len(src_datasets) > 0 and self.is_snapshots_changed_zfs_property_available(src):
             src_dataset = src_datasets[-1]  # same as in find_components_to_snapshot()
             snapshots_changed = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
-            os.makedirs(p.log_params.last_modified_cache_dir, exist_ok=True)
+            if snapshots_changed == 0:
+                self.invalidate_last_modified_cache_dataset(src_dataset)
+            else:
+                cache_dir = os.path.dirname(p.log_params.last_modified_cache_file(src_dataset))
+                os.makedirs(cache_dir, exist_ok=True)
 
-            def update_last_modified_cache(dataset: str) -> None:
-                cache_file = p.log_params.last_modified_cache_file(dataset)
-                if not p.dry_run:
-                    Path(cache_file).touch()
-                    os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
+                def update_last_modified_cache(dataset: str) -> None:
+                    cache_file = p.log_params.last_modified_cache_file(dataset)
+                    if not p.dry_run:
+                        ensure_file_exists(cache_file)
+                        os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
 
-            update_last_modified_cache(src_dataset)
-            for component in components:
-                prefix, timestamp, infix, suffix = component
-                update_last_modified_cache(f"{src_dataset}@{prefix}{infix}{suffix}")
+                update_last_modified_cache(src_dataset)
+                for component in components:
+                    prefix, timestamp, infix, suffix = component
+                    update_last_modified_cache(f"{src_dataset}@{prefix}{infix}{suffix}")
+
+    def zfs_get_snapshots_changed(self, remote: Remote, dataset: str) -> int:
+        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
+        See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
+        p, log = self.params, self.params.log
+        assert self.is_snapshots_changed_zfs_property_available(remote)
+        cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed", dataset)
+        snapshots_changed = self.run_ssh_command(remote, log_trace, cmd=cmd).rstrip()
+        if snapshots_changed == "-" or not snapshots_changed:
+            return 0
+        return int(snapshots_changed)
+
+    def cache_get_snapshots_changed(self, dataset) -> int:
+        """Same as zfs_get_snapshots_changed() expect it reads from the local cache."""
+        p, log = self.params, self.params.log
+        cache_file = p.log_params.last_modified_cache_file(dataset)
+        try:
+            cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
+        except FileNotFoundError:
+            return 0
+        return cached_snapshots_changed
 
     @dataclass(order=True)
     class ComparableSnapshot:
@@ -5288,6 +5311,12 @@ def unlink_missing_ok(file: str) -> None:  # workaround for compat with python <
         Path(file).unlink()
     except FileNotFoundError:
         pass
+
+
+def ensure_file_exists(self, path):
+    if not os.path.exists(path):
+        with open(path, "a"):
+            pass  # aka Path(path).touch()
 
 
 def drain(iterable: Iterable) -> None:
