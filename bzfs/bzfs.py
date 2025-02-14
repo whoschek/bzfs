@@ -1360,6 +1360,9 @@ class LogParams:
         delete_stale_files(dot_current_dir, prefix="", secs=60, dirs=True, exclude=os.path.basename(current_dir))
         self.params: Params = None
 
+    def last_modified_cache_file(self, dataset: str) -> str:
+        return os.path.join(self.last_modified_cache_dir, dataset.replace("/", "~"))
+
     def __repr__(self) -> str:
         return str(self.__dict__)
 
@@ -1975,13 +1978,14 @@ class Job:
             return False
         p, log = self.params, self.params.log
         config = p.create_src_snapshot_config
+        curr_datetime = config.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt = min(
-            round_datetime_up_to_duration_multiple(config.current_datetime, duration_amount, duration_unit)
+            round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit)
             for duration_amount, duration_unit in config.suffix_durations.values()
         )
         offset: timedelta = next_snapshotting_event_dt - datetime.now(config.tz)
-        offset_nanos = max(0, (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000)
-        sleep_nanos = min(sleep_nanos, offset_nanos)
+        offset_nanos = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
+        sleep_nanos = min(sleep_nanos, max(0, offset_nanos))
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), " ...")
         time.sleep(sleep_nanos / 1_000_000_000)
         config.current_datetime = datetime.now(config.tz)
@@ -2143,11 +2147,8 @@ class Job:
         cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed", dataset)
         snapshots_changed = self.run_ssh_command(remote, log_trace, cmd=cmd).rstrip()
         if snapshots_changed == "-" or not snapshots_changed:
-            snapshots_changed = "0"
+            return 0
         return int(snapshots_changed)
-
-    def cache_file(self, dataset: str) -> str:
-        return os.path.join(self.params.log_params.last_modified_cache_dir, dataset.replace("/", "___"))
 
     def run_task(self) -> None:
         def filter_src_datasets() -> List[str]:  # apply --{include|exclude}-dataset policy
@@ -2213,7 +2214,7 @@ class Job:
                 os.makedirs(p.log_params.last_modified_cache_dir, exist_ok=True)
 
                 def update_last_modified_cache(dataset: str) -> None:
-                    cache_file = self.cache_file(dataset)
+                    cache_file = p.log_params.last_modified_cache_file(dataset)
                     if not p.dry_run:
                         Path(cache_file).touch()
                         os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
@@ -3778,7 +3779,7 @@ class Job:
             if not self.is_snapshots_changed_zfs_property_available(src):
                 return None
             actual_snapshots_changed = self.zfs_get_snapshots_changed(src, dataset)
-            cache_file = self.cache_file(dataset)
+            cache_file = p.log_params.last_modified_cache_file(dataset)
             try:
                 cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
             except FileNotFoundError:
@@ -3788,7 +3789,7 @@ class Job:
             snapshots_with_creation = []
             for component in config.snapshot_components():
                 prefix, timestamp, infix, suffix = component
-                cache_file = self.cache_file(f"{dataset}@{prefix}{infix}{suffix}")
+                cache_file = p.log_params.last_modified_cache_file(f"{dataset}@{prefix}{infix}{suffix}")
                 try:
                     cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
                 except FileNotFoundError:
