@@ -2139,17 +2139,6 @@ class Job:
         else:
             return "", True
 
-    def zfs_get_snapshots_changed(self, remote: Remote, dataset: str) -> int:
-        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
-        See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
-        p, log = self.params, self.params.log
-        assert self.is_snapshots_changed_zfs_property_available(remote)
-        cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed", dataset)
-        snapshots_changed = self.run_ssh_command(remote, log_trace, cmd=cmd).rstrip()
-        if snapshots_changed == "-" or not snapshots_changed:
-            return 0
-        return int(snapshots_changed)
-
     def run_task(self) -> None:
         def filter_src_datasets() -> List[str]:  # apply --{include|exclude}-dataset policy
             return isorted(self.filter_datasets(src, basis_src_datasets)) if src_datasets is None else src_datasets
@@ -2197,7 +2186,7 @@ class Job:
                     datasets_to_snapshot = root_datasets
                     cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
-            components = self.find_components_to_snapshot(src_datasets)
+            components: List[Tuple] = self.find_components_to_snapshot(src_datasets)
             drain(
                 self.itr_ssh_cmd_parallel(
                     src,
@@ -2208,21 +2197,7 @@ class Job:
                 )
             )
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
-            if len(src_datasets) > 0 and self.is_snapshots_changed_zfs_property_available(src):
-                src_dataset = src_datasets[-1]
-                snapshots_changed = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
-                os.makedirs(p.log_params.last_modified_cache_dir, exist_ok=True)
-
-                def update_last_modified_cache(dataset: str) -> None:
-                    cache_file = p.log_params.last_modified_cache_file(dataset)
-                    if not p.dry_run:
-                        Path(cache_file).touch()
-                        os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
-
-                update_last_modified_cache(src_dataset)
-                for component in components:
-                    prefix, timestamp, infix, suffix = component
-                    update_last_modified_cache(f"{src_dataset}@{prefix}{infix}{suffix}")
+            self.update_last_modified_cache(src_datasets, components)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
@@ -2942,6 +2917,17 @@ class Job:
                 send_resume_opts += ["-t", recv_resume_token]
         recv_resume_opts = ["-s"]
         return recv_resume_token, send_resume_opts, recv_resume_opts
+
+    def zfs_get_snapshots_changed(self, remote: Remote, dataset: str) -> int:
+        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
+        See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
+        p, log = self.params, self.params.log
+        assert self.is_snapshots_changed_zfs_property_available(remote)
+        cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed", dataset)
+        snapshots_changed = self.run_ssh_command(remote, log_trace, cmd=cmd).rstrip()
+        if snapshots_changed == "-" or not snapshots_changed:
+            return 0
+        return int(snapshots_changed)
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int, recordsize: int) -> str:
         """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
@@ -3764,7 +3750,7 @@ class Job:
             root_datasets.append(dataset)
         return root_datasets
 
-    def find_components_to_snapshot(self, src_datasets: List[str]):
+    def find_components_to_snapshot(self, src_datasets: List[str]) -> List[Tuple]:
         p, log = self.params, self.params.log
         src = p.src
         config = p.create_src_snapshot_config
@@ -3797,7 +3783,7 @@ class Job:
                 snapshots_with_creation.append(f"{cached_snapshots_changed}\t{dataset}@{prefix}{infix}{suffix}")
             return snapshots_with_creation
 
-        src_dataset = src_datasets[-1]
+        src_dataset = src_datasets[-1]  # same as in update_last_modified_cache()
         src_snapshots_with_creation = cached_src_snapshots_with_creation(src_dataset)
         if src_snapshots_with_creation is None:
             cmd = p.split_args(
@@ -3850,6 +3836,26 @@ class Job:
             # if len(components) == len(config.snapshot_components):
             #     return components.keys()  # perf: no need to scan any further
         return components.keys()
+
+    def update_last_modified_cache(self, src_datasets: List[str], components: List[Tuple]) -> None:
+        """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+        if len(src_datasets) > 0 and self.is_snapshots_changed_zfs_property_available(src):
+            src_dataset = src_datasets[-1]  # same as in find_components_to_snapshot()
+            snapshots_changed = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
+            os.makedirs(p.log_params.last_modified_cache_dir, exist_ok=True)
+
+            def update_last_modified_cache(dataset: str) -> None:
+                cache_file = p.log_params.last_modified_cache_file(dataset)
+                if not p.dry_run:
+                    Path(cache_file).touch()
+                    os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
+
+            update_last_modified_cache(src_dataset)
+            for component in components:
+                prefix, timestamp, infix, suffix = component
+                update_last_modified_cache(f"{src_dataset}@{prefix}{infix}{suffix}")
 
     @dataclass(order=True)
     class ComparableSnapshot:
