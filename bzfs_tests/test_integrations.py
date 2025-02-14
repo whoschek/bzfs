@@ -204,6 +204,7 @@ class BZFSTestCase(ParametrizedTestCase):
         global src_root_dataset, dst_root_dataset
         global afix
 
+        shutil.rmtree(self.log_dir_opt()[-1], ignore_errors=True)
         for pool in src_pool_name, dst_pool_name:
             if dataset_exists(pool):
                 destroy_pool(pool)
@@ -532,6 +533,14 @@ class BZFSTestCase(ParametrizedTestCase):
         expected_names = [f"{snapshot_prefix}{i + 1 + offset}" for i in range(0, expected_num_snapshots)]
         self.assertSnapshotNames(dataset, expected_names)
 
+    def assertSnapshotNameRegexes(self, dataset, expected_names):
+        dataset = build(dataset)
+        snap_names = natsorted([snapshot_name(snapshot) for snapshot in snapshots(dataset)])
+        expected_names = [fix(name) for name in expected_names]
+        self.assertEqual(len(expected_names), len(snap_names), f"{expected_names} vs. {snap_names}")
+        for expected_name, snap_name in zip(expected_names, snap_names):
+            self.assertRegex(snap_name, expected_name, f"{expected_names} vs. {snap_names}")
+
     def assertBookmarkNames(self, dataset, expected_names):
         dataset = build(dataset)
         snap_names = natsorted([bookmark_name(bookmark) for bookmark in bookmarks(dataset)])
@@ -590,6 +599,12 @@ class AdhocTestCase(BZFSTestCase):
 
     def test_basic_snapshotting_flat_simple(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
+
+    def test_basic_snapshotting_flat_non_existing_root(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
+
+    def test_basic_snapshotting_flat_empty(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
 
     def test_basic_snapshotting_recursive_simple(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
@@ -826,7 +841,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_snapshotting_flat_simple(self):
         destroy(dst_root_dataset, recursive=True)
         self.assertSnapshots(src_root_dataset, 0)
-        for i in range(0, 2):
+        for i in range(0, 5):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -834,15 +849,57 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-replication",
                     "--create-src-snapshot",
                     "--create-src-snapshot-prefix=s1",
-                    "--create-src-snapshot-suffix=",
-                    "--create-src-snapshot-timeformat=",
+                    "--create-src-snapshot-suffix=" + ("_secondly" if i != 4 else "_daily"),
+                    "--create-src-snapshot-suffix=_hourly",
+                    "--create-src-snapshot-suffix=_adhoc",
+                    "--create-src-snapshot-timeformat=%Y-%m-%d_%H:%M:%S.%f",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
                 if i == 0:
                     self.assertSnapshots(src_root_dataset, 0)
+                elif i == 1:
+                    self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_adhoc", "s1.*_hourly", "s1.*_secondly"])
+                    time.sleep(1.1)
+                elif i == 2:
+                    self.assertSnapshotNameRegexes(
+                        src_root_dataset, ["s1.*_adhoc", "s1.*_hourly", "s1.*_secondly", "s1.*_adhoc", "s1.*_secondly"]
+                    )
+                    time.sleep(1.1)
+                    take_snapshot(src_root_dataset, fix("x1"))
+                elif i == 3:
+                    self.assertSnapshotNameRegexes(
+                        src_root_dataset,
+                        [
+                            "s1.*_adhoc",
+                            "s1.*_hourly",
+                            "s1.*_secondly",
+                            "s1.*_adhoc",
+                            "s1.*_secondly",
+                            "s1.*_adhoc",
+                            "s1.*_secondly",
+                            "x1",
+                        ],
+                    )
+                    # log_params = bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst"] + self.log_dir_opt()))
+                    # for file in glob.glob(log_params.last_modified_cache_dir + "/*@*"):
+                    #     os.remove(file)
                 else:
-                    self.assertSnapshots(src_root_dataset, 1, "s")
+                    self.assertSnapshotNameRegexes(
+                        src_root_dataset,
+                        [
+                            "s1.*_adhoc",
+                            "s1.*_hourly",
+                            "s1.*_secondly",
+                            "s1.*_adhoc",
+                            "s1.*_secondly",
+                            "s1.*_adhoc",
+                            "s1.*_secondly",
+                            "s1.*_adhoc",
+                            "s1.*_daily",
+                            "x1",
+                        ],
+                    )
 
     def test_basic_snapshotting_recursive_simple(self):
         self.setup_basic()
@@ -1018,6 +1075,36 @@ class LocalTestCase(BZFSTestCase):
         # the following assertions nomore hold if thousands of datasets get snapshotted together, which takes too long
         # self.assertEqual(1, len(createtxgs))
         # self.assertEqual(1, len(creations))
+
+    def test_basic_snapshotting_flat_empty(self):
+        destroy(dst_root_dataset, recursive=True)
+        self.assertSnapshots(src_root_dataset, 0)
+        for i in range(0, 1):
+            with stop_on_failure_subtest(i=i):
+                self.run_bzfs(
+                    src_root_dataset,
+                    dst_root_dataset,
+                    "--skip-replication",
+                    "--exclude-dataset-regex=.*",
+                    "--create-src-snapshot",
+                    "--create-src-snapshot-prefix=s1",
+                    "--create-src-snapshot-suffix=_secondly",
+                )
+                self.assertFalse(dataset_exists(dst_root_dataset))
+                self.assertSnapshots(src_root_dataset, 0)
+
+    def test_basic_snapshotting_flat_non_existing_root(self):
+        destroy(src_root_dataset, recursive=True)
+        destroy(dst_root_dataset, recursive=True)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--create-src-snapshot",
+            "--create-src-snapshot-prefix=s1",
+            "--create-src-snapshot-suffix=_secondly",
+            expected_status=die_status,
+        )
 
     def test_basic_replication_flat_simple(self):
         self.setup_basic()
