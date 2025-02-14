@@ -841,7 +841,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_snapshotting_flat_simple(self):
         destroy(dst_root_dataset, recursive=True)
         self.assertSnapshots(src_root_dataset, 0)
-        for i in range(0, 5):
+        for i in range(0, 6):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -853,7 +853,7 @@ class LocalTestCase(BZFSTestCase):
                     "--create-src-snapshot-suffix=_hourly",
                     "--create-src-snapshot-suffix=_adhoc",
                     "--create-src-snapshot-timeformat=%Y-%m-%d_%H:%M:%S.%f",
-                    dry_run=(i == 0),
+                    dry_run=(i == 0 or i == 5),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
                 if i == 0:

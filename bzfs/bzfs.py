@@ -3830,8 +3830,7 @@ class Job:
         p, log = self.params, self.params.log
         try:
             for entry in os.scandir(os.path.dirname(p.log_params.last_modified_cache_file(dataset))):
-                if entry.is_file():
-                    os.utime(entry.path, times=(0, 0))
+                os.utime(entry.path, times=(0, 0))
         except FileNotFoundError:
             pass  # harmless
 
@@ -5314,9 +5313,10 @@ def unlink_missing_ok(file: str) -> None:  # workaround for compat with python <
 
 
 def ensure_file_exists(path: str) -> None:
+    """Better suited than Path(path).touch() wrt. timestamp handling."""
     if not os.path.exists(path):
         with open(path, "a"):
-            pass  # aka Path(path).touch()
+            pass
 
 
 def drain(iterable: Iterable) -> None:
