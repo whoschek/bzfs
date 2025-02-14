@@ -1740,9 +1740,9 @@ class CreateSrcSnapshotConfig:
             match = regex.fullmatch(suffix)
             if match:
                 duration_amount = int(match.group(1)) if match.group(1) else 1
-                if duration_amount != 0:
-                    duration_unit = match.group(2)
-                    return duration_amount, duration_unit
+                assert duration_amount != 0
+                duration_unit = match.group(2)
+                return duration_amount, duration_unit
             return 0, ""
 
         # immutable variables:
@@ -1765,7 +1765,7 @@ class CreateSrcSnapshotConfig:
             "minutely": 60,
             "secondly": 1,
         }
-        suffix_regex = re.compile(rf"_([1-9]\d*)?({'|'.join(suffix_seconds.keys())})")
+        suffix_regex = re.compile(rf"_([1-9][0-9]*)?({'|'.join(suffix_seconds.keys())})")
         suffix_durations = {suffix: suffix_to_duration(suffix, suffix_regex) for suffix in suffixes}
 
         def suffix_key(s):
@@ -3756,10 +3756,10 @@ class Job:
         def cached_src_snapshots_with_creation(dataset: str) -> List[str]:
             if not self.is_snapshots_changed_zfs_property_available(src):
                 return None
+            zfs_snapshots_changed = self.zfs_get_snapshots_changed(src, dataset)
             cached_snapshots_changed = self.cache_get_snapshots_changed(dataset)
             if cached_snapshots_changed == 0:
                 return None
-            zfs_snapshots_changed = self.zfs_get_snapshots_changed(src, dataset)
             if cached_snapshots_changed != zfs_snapshots_changed:
                 self.invalidate_last_modified_cache_dataset(dataset)
                 return None
