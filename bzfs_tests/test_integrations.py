@@ -881,9 +881,6 @@ class LocalTestCase(BZFSTestCase):
                             "x1",
                         ],
                     )
-                    # log_params = bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst"] + self.log_dir_opt()))
-                    # for file in glob.glob(log_params.last_modified_cache_dir + "/*@*"):
-                    #     os.remove(file)
                 else:
                     self.assertSnapshotNameRegexes(
                         src_root_dataset,

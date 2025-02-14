@@ -2210,16 +2210,18 @@ class Job:
             if len(src_datasets) > 0 and self.is_snapshots_changed_zfs_property_available(src):
                 src_dataset = src_datasets[-1]
                 snapshots_changed = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
-                cache_file = self.cache_file(src_dataset)
-                if not p.dry_run:
-                    Path(cache_file).touch()
-                    os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
-                for component in components:
-                    prefix, timestamp, infix, suffix = component
-                    cache_file = self.cache_file(f"{src_dataset}@{prefix}{infix}{suffix}")
+                os.makedirs(p.log_params.last_modified_cache_dir, exist_ok=True)
+
+                def update_last_modified_cache(dataset: str) -> None:
+                    cache_file = self.cache_file(dataset)
                     if not p.dry_run:
                         Path(cache_file).touch()
                         os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
+
+                update_last_modified_cache(src_dataset)
+                for component in components:
+                    prefix, timestamp, infix, suffix = component
+                    update_last_modified_cache(f"{src_dataset}@{prefix}{infix}{suffix}")
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
@@ -3798,8 +3800,7 @@ class Job:
         src_snapshots_with_creation = cached_src_snapshots_with_creation(src_dataset)
         if src_snapshots_with_creation is None:
             cmd = p.split_args(
-                f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -s creation -s name -Hp -o creation,name",
-                src_dataset,
+                f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -s creation -s name -Hp -o creation,name", src_dataset
             )
             src_snapshots_with_creation = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
         src_snapshot_names = [line[line.index("@") + 1 :] for line in src_snapshots_with_creation]
