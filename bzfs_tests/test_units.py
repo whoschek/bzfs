@@ -1375,6 +1375,60 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Use a fixed timezone (e.g. Eastern Standard Time, UTC-5) for all tests.
         self.tz = timezone(timedelta(hours=-5))
 
+    def test_examples(self):
+        def make_dt(hour, minute, second):
+            return datetime(2024, 11, 29, hour, minute, second, 0, tzinfo=self.tz)
+
+        def round_up(dt, duration_amount):
+            return round_datetime_up_to_duration_multiple(dt, duration_amount, "hourly")
+
+        """
+        14:00:00, 1 hours --> 14:00:00
+        14:05:01, 1 hours --> 15:00:00
+        15:05:01, 1 hours --> 16:00:00
+        16:05:01, 1 hours --> 17:00:00
+        23:55:01, 1 hours --> 00:00:00 on the next day
+        14:05:01, 2 hours --> 16:00:00
+        15:00:00, 2 hours --> 16:00:00
+        15:05:01, 2 hours --> 16:00:00
+        16:00:00, 2 hours --> 16:00:00
+        16:05:01, 2 hours --> 18:00:00
+        23:55:01, 2 hours --> 00:00:00 on the next day
+        """
+
+        dt = make_dt(hour=14, minute=0, second=0)
+        self.assertEqual(dt, round_up(dt, duration_amount=1))
+
+        dt = make_dt(hour=14, minute=5, second=1)
+        self.assertEqual(dt.replace(hour=15, minute=0, second=0), round_up(dt, duration_amount=1))
+
+        dt = make_dt(hour=15, minute=5, second=1)
+        self.assertEqual(dt.replace(hour=16, minute=0, second=0), round_up(dt, duration_amount=1))
+
+        dt = make_dt(hour=16, minute=5, second=1)
+        self.assertEqual(dt.replace(hour=17, minute=0, second=0), round_up(dt, duration_amount=1))
+
+        dt = make_dt(hour=23, minute=55, second=1)
+        self.assertEqual(dt.replace(day=dt.day + 1, hour=0, minute=0, second=0), round_up(dt, duration_amount=1))
+
+        dt = make_dt(hour=14, minute=5, second=1)
+        self.assertEqual(dt.replace(hour=16, minute=0, second=0), round_up(dt, duration_amount=2))
+
+        dt = make_dt(hour=15, minute=0, second=0)
+        self.assertEqual(dt.replace(hour=16, minute=0, second=0), round_up(dt, duration_amount=2))
+
+        dt = make_dt(hour=15, minute=5, second=1)
+        self.assertEqual(dt.replace(hour=16, minute=0, second=0), round_up(dt, duration_amount=2))
+
+        dt = make_dt(hour=16, minute=0, second=0)
+        self.assertEqual(dt, round_up(dt, duration_amount=2))
+
+        dt = make_dt(hour=16, minute=5, second=1)
+        self.assertEqual(dt.replace(hour=18, minute=0, second=0), round_up(dt, duration_amount=2))
+
+        dt = make_dt(hour=23, minute=55, second=1)
+        self.assertEqual(dt.replace(day=dt.day + 1, hour=0, minute=0, second=0), round_up(dt, duration_amount=2))
+
     def test_zero_duration_amount(self):
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 0, "hourly")
