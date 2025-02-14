@@ -5313,7 +5313,7 @@ def unlink_missing_ok(file: str) -> None:  # workaround for compat with python <
         pass
 
 
-def ensure_file_exists(self, path):
+def ensure_file_exists(path: str) -> None:
     if not os.path.exists(path):
         with open(path, "a"):
             pass  # aka Path(path).touch()
