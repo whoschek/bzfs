@@ -92,6 +92,7 @@ if sys.version_info < min_python_version:
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 create_src_snapshot_prefix_dflt = prog_name + "_"
 create_src_snapshot_suffix_dflt = "_adhoc"
+cron_weekdays = {"sunday": 0, "monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4, "friday": 5, "saturday": 6}
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
 pv_file_thread_separator = "_"
@@ -650,6 +651,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "For a list of valid IANA TZ identifiers, see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List"
              "\n\nTo change the timezone not only for snapshot name creation, but in all respects for the entire program, "
              "use the standard 'TZ' Unix environment variable, like so: `export TZ=UTC`.\n\n" + h_fix)
+    weekday_choices = ([day.title() for day in cron_weekdays.keys()] + [day.title()[:3] for day in cron_weekdays.keys()] +
+                       [str(i) for i in range(8)])
+    parser.add_argument(
+        "--create-src-snapshot-weekly-weekday", choices=weekday_choices, default="Monday", nargs="?",
+        help="TODO.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -1751,6 +1757,7 @@ class CreateSrcSnapshotConfig:
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: str = args.create_src_snapshot_timeformat
+        self.weekly_weekday: int = parse_cron_weekday(args.create_src_snapshot_weekly_weekday)
         prefixes: List[str] = args.create_src_snapshot_prefix or [create_src_snapshot_prefix_dflt]
         infixes: List[str] = args.create_src_snapshot_infix or [""]
         suffixes: List[str] = args.create_src_snapshot_suffix or [create_src_snapshot_suffix_dflt]
@@ -1979,18 +1986,18 @@ class Job:
         if sleep_nanos <= 0:
             return False
         p, log = self.params, self.params.log
-        config = p.create_src_snapshot_config
-        curr_datetime = config.current_datetime + timedelta(microseconds=1)
+        conf = p.create_src_snapshot_config
+        curr_datetime = conf.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt = min(
-            round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit)
-            for duration_amount, duration_unit in config.suffix_durations.values()
+            round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, conf.weekly_weekday)
+            for duration_amount, duration_unit in conf.suffix_durations.values()
         )
-        offset: timedelta = next_snapshotting_event_dt - datetime.now(config.tz)
+        offset: timedelta = next_snapshotting_event_dt - datetime.now(conf.tz)
         offset_nanos = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
         sleep_nanos = min(sleep_nanos, max(0, offset_nanos))
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), " ...")
         time.sleep(sleep_nanos / 1_000_000_000)
-        config.current_datetime = datetime.now(config.tz)
+        conf.current_datetime = datetime.now(conf.tz)
         return daemon_stoptime_nanos - time.time_ns() > 0
 
     def print_replication_stats(self, start_time_nanos: int):
@@ -3812,8 +3819,9 @@ class Job:
             # creation_unixtime = int(snapshots[i][1])  # FIXME
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.trace("Latest snapshot creation: %s for %s", creation_dt, "".join(component))
-            one_micros = timedelta(microseconds=1)
-            next_event_dt = round_datetime_up_to_duration_multiple(creation_dt + one_micros, duration_amount, duration_unit)
+            next_event_dt = round_datetime_up_to_duration_multiple(
+                creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.weekly_weekday
+            )
             msg = ""
             if config.current_datetime >= next_event_dt:
                 components[component] = None
@@ -5365,15 +5373,49 @@ def get_timezone(tz_spec: str = None) -> tzinfo:
     return tz
 
 
+def parse_cron_weekday(weekday_spec: str) -> int:
+    normalized = weekday_spec.strip().lower()
+    if normalized.isdigit():
+        return int(normalized) % 7
+    if normalized not in cron_weekdays:
+        normalized = normalized[0:3]
+        if normalized not in cron_weekdays:
+            die("Invalid weekday: " + weekday_spec)
+    return cron_weekdays[normalized]
+
+
+@dataclass
+class Anchors:
+    yearly_month: int = field(default=1)
+    yearly_monthday: int = field(default=1)
+    yearly_hour: int = field(default=0)
+    yearly_minute: int = field(default=0)
+    yearly_second: int = field(default=0)
+    monthly_monthday: int = field(default=1)
+    monthly_hour: int = field(default=0)
+    monthly_minute: int = field(default=0)
+    monthly_second: int = field(default=0)
+    weekly_weekday: int = field(default=0)
+    weekly_hour: int = field(default=0)
+    weekly_minute: int = field(default=0)
+    weekly_second: int = field(default=0)
+    daily_hour: int = field(default=0)
+    daily_minute: int = field(default=0)
+    daily_second: int = field(default=0)
+    hourly_minute: int = field(default=0)
+    hourly_second: int = field(default=0)
+    minutely_second: int = field(default=0)
+
+
 def round_datetime_up_to_duration_multiple(
-    dt: datetime, duration_amount: int, duration_unit: str, weekday_starting_week: int = 0
+    dt: datetime, duration_amount: int, duration_unit: str, weekly_weekday: int = 0
 ) -> datetime:
     """Given a timezone-aware datetime and a duration, returns a datetime (in the same timezone) that is rounded up (ceiled)
     and snapped to the next multiple of the duration. The snapping is done relative to midnight (or an appropriate anchor).
     Supported units: "secondly", "minutely", "hourly", "daily", "weekly", "monthly", "yearly".
     For duration units that have a fixed length (secondly, minutely, hourly, daily), the anchor is midnight of dt's day.
-    For "weekly", the anchor is the most recent midnight from Saturday to Sunday if weekday_starting_week==0, and the
-    most recent midnight from Sunday to Monday if weekday_starting_week==1, and so on.
+    For "weekly", the anchor is the most recent midnight from Saturday to Sunday if weekly_weekday==0, and the
+    most recent midnight from Sunday to Monday if weekly_weekday==1, and so on.
     For "monthly", the anchor is January 1 of dt.year (so boundaries occur on January 1, February 1, ...,
     when duration_amount==1 or every N months when duration > 1).
     For "yearly", the anchor is January 1 of year 1 (so boundaries occur in years 1, 2, 3, ...,
@@ -5411,9 +5453,9 @@ def round_datetime_up_to_duration_multiple(
             # For non-week units, the anchor is simply dt's midnight.
             anchor = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         else:
-            # For weeks, the anchor is the most recent midnight from Saturday to Sunday if weekday_starting_week==0, and the
-            # most recent midnight from Sunday to Monday if weekday_starting_week==1, and so on.
-            n = (dt.weekday() + 1 - weekday_starting_week) % 7
+            # For weeks, the anchor is the most recent midnight from Saturday to Sunday if weekly_weekday==0, and the
+            # most recent midnight from Sunday to Monday if weekly_weekday==1, and so on.
+            n = (dt.weekday() + 1 - weekly_weekday) % 7
             anchor = (dt - timedelta(days=n)).replace(hour=0, minute=0, second=0, microsecond=0)
         offset: timedelta = dt - anchor
         offset_micros: int = (offset.days * 86400 + offset.seconds) * 1_000_000 + offset.microseconds

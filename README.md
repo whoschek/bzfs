@@ -552,6 +552,7 @@ usage: bzfs [-h] [--recursive]
             [--create-src-snapshot-even-if-not-due]
             [--create-src-snapshot-timeformat STRFTIME_SPEC]
             [--create-src-snapshot-timezone TZ_SPEC]
+            [--create-src-snapshot-weekday-starting-week [{Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sun,Mon,Tue,Wed,Thu,Fri,Sat,0,1,2,3,4,5,6,7}]]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -1164,6 +1165,14 @@ usage: bzfs [-h] [--recursive]
     --create-src-snapshot-infix=_us-west-1
     --create-src-snapshot-suffix=_daily` will generate snapshot names
     such as `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+
+<!-- -->
+
+<div id="--create-src-snapshot-weekday-starting-week"></div>
+
+**--create-src-snapshot-weekday-starting-week** *[{Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sun,Mon,Tue,Wed,Thu,Fri,Sat,0,1,2,3,4,5,6,7}]*
+
+*  TODO.
 
 <!-- -->
 
