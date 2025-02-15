@@ -1362,11 +1362,8 @@ class LogParams:
 
     def last_modified_cache_file(self, dataset_or_snapshot: str) -> str:
         i = dataset_or_snapshot.find("@")
-        if i >= 0:
-            dataset_or_snapshot = dataset_or_snapshot.replace("@", "/@")
-        else:
-            dataset_or_snapshot = dataset_or_snapshot + "/="
-        return os.path.join(self.last_modified_cache_dir, dataset_or_snapshot)
+        cache_file = dataset_or_snapshot.replace("@", "/@") if i >= 0 else dataset_or_snapshot + "/="
+        return os.path.join(self.last_modified_cache_dir, cache_file)
 
     def __repr__(self) -> str:
         return str(self.__dict__)
