@@ -1511,35 +1511,43 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
         self.assertEqual(result, dt)
 
-    def test_weeks_non_boundary_monday(self):
-        # With is_week_starting_on_monday True, anchor is the most recent Monday midnight.
+    def test_weeks_non_boundary_saturday(self):
+        # anchor is the most recent between Friday and Saturday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
-        # For Tuesday (weekday 1), anchor = dt - 1 day -> Monday midnight = 2025-02-10 00:00:00.
-        # Next boundary = anchor + 7 days = 2025-02-17 00:00:00.
-        expected = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=True)
+        expected = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=6)
         self.assertEqual(result, expected)
 
     def test_weeks_non_boundary_sunday(self):
-        # With is_week_starting_on_monday False, anchor is the most recent Sunday midnight.
+        # anchor is the most recent midnight between Saturday and Sunday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
-        # For Tuesday (weekday 1), days_since_sunday = (1+1)%7 = 2,
-        # so anchor = dt - 2 days -> Sunday midnight = 2025-02-09 00:00:00.
-        # Next boundary = anchor + 7 days = 2025-02-16 00:00:00.
         expected = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=False)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=0)
         self.assertEqual(result, expected)
 
-    def test_weeks_boundary_monday(self):
-        # dt is exactly at Monday midnight.
-        dt = datetime(2025, 2, 10, 0, 0, 0, tzinfo=self.tz)  # Monday midnight
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=True)
+    def test_weeks_non_boundary_monday(self):
+        # anchor is the most recent midnight between Sunday and Monday
+        dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
+        expected = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=1)
+        self.assertEqual(result, expected)
+
+    def test_weeks_boundary_saturday(self):
+        # dt is exactly at midnight between Friday and Saturday
+        dt = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=6)
         self.assertEqual(result, dt)
 
     def test_weeks_boundary_sunday(self):
-        # dt is exactly at Sunday midnight.
-        dt = datetime(2025, 2, 9, 0, 0, 0, tzinfo=self.tz)  # Sunday midnight
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", is_week_starting_on_monday=False)
+        # dt is exactly at midnight between Saturday and Sunday
+        dt = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=0)
+        self.assertEqual(result, dt)
+
+    def test_weeks_boundary_monday(self):
+        # dt is exactly at midnight between Sunday and Monday
+        dt = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=1)
         self.assertEqual(result, dt)
 
     # Variable-length durations: month and year.

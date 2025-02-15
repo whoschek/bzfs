@@ -5366,14 +5366,14 @@ def get_timezone(tz_spec: str = None) -> tzinfo:
 
 
 def round_datetime_up_to_duration_multiple(
-    dt: datetime, duration_amount: int, duration_unit: str, is_week_starting_on_monday: bool = True
+    dt: datetime, duration_amount: int, duration_unit: str, weekday_starting_week: int = 0
 ) -> datetime:
     """Given a timezone-aware datetime and a duration, returns a datetime (in the same timezone) that is rounded up (ceiled)
     and snapped to the next multiple of the duration. The snapping is done relative to midnight (or an appropriate anchor).
     Supported units: "secondly", "minutely", "hourly", "daily", "weekly", "monthly", "yearly".
     For duration units that have a fixed length (secondly, minutely, hourly, daily), the anchor is midnight of dt's day.
-    For "weekly", the anchor is the most recent midnight from Sunday to Monday if is_week_starting_on_monday, otherwise it
-    is the most recent midnight from Saturday to Sunday.
+    For "weekly", the anchor is the most recent midnight from Saturday to Sunday if weekday_starting_week==0, and the
+    most recent midnight from Sunday to Monday if weekday_starting_week==1, and so on.
     For "monthly", the anchor is January 1 of dt.year (so boundaries occur on January 1, February 1, ...,
     when duration_amount==1 or every N months when duration > 1).
     For "yearly", the anchor is January 1 of year 1 (so boundaries occur in years 1, 2, 3, ...,
@@ -5411,12 +5411,10 @@ def round_datetime_up_to_duration_multiple(
             # For non-week units, the anchor is simply dt's midnight.
             anchor = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         else:
-            # For weeks, the anchor is the most recent midnight from Sunday to Monday if is_week_starting_on_monday,
-            # otherwise it is the most recent midnight from Saturday to Sunday.
-            if is_week_starting_on_monday:
-                anchor = (dt - timedelta(days=dt.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-            else:
-                anchor = (dt - timedelta(days=(dt.weekday() + 1) % 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+            # For weeks, the anchor is the most recent midnight from Saturday to Sunday if weekday_starting_week==0, and the
+            # most recent midnight from Sunday to Monday if weekday_starting_week==1, and so on.
+            n = (dt.weekday() + 1 - weekday_starting_week) % 7
+            anchor = (dt - timedelta(days=n)).replace(hour=0, minute=0, second=0, microsecond=0)
         offset: timedelta = dt - anchor
         offset_micros: int = (offset.days * 86400 + offset.seconds) * 1_000_000 + offset.microseconds
         if offset_micros % duration_micros == 0:
