@@ -725,6 +725,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "source dataset only for a bookmark with the same GUID, and ignore whether a snapshot with the same GUID "
              "is present in the source dataset.")
     parser.add_argument(
+        "--delete-dst-snapshots-except", action="store_true",
+        help="This flag indicates that the --include/exclude-snapshot-* options shall have inverted semantics for the "
+             "--delete-dst-snapshots option, thus deleting all snapshots except for the selected snapshots (within the "
+             "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other"
+             " words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.")
+    parser.add_argument(
         "--delete-empty-dst-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
         const="snapshots+bookmarks", nargs="?",
         help="Do nothing if the --delete-empty-dst-datasets option is missing or --recursive is missing. Otherwise, "
@@ -1331,6 +1337,7 @@ class Params:
         self.delete_dst_snapshots: bool = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: bool = args.delete_dst_snapshots == "bookmarks"
         self.delete_dst_snapshots_no_crosscheck: bool = args.delete_dst_snapshots_no_crosscheck
+        self.delete_dst_snapshots_except: bool = args.delete_dst_snapshots_except
         self.delete_dst_datasets: bool = args.delete_dst_datasets
         self.delete_empty_dst_datasets: bool = args.delete_empty_dst_datasets is not None
         self.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots: bool = (
@@ -2051,7 +2058,7 @@ class Job:
                 dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="#", new="@")  # treat bookmarks as snapshots
-                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids)  # apply include/exclude
+                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, all_except=p.delete_dst_snapshots_except)
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="@", new="#")  # restore pre-filtering bookmark state
                 if filter_needs_creation_time:
@@ -2963,7 +2970,7 @@ class Job:
                     log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
         return results
 
-    def filter_snapshots(self, basis_snapshots: List[str]) -> List[str]:
+    def filter_snapshots(self, basis_snapshots: List[str], all_except: bool = False) -> List[str]:
         """Returns all snapshots that pass all include/exclude policies."""
         p, log = self.params, self.params.log
         resultset = set()
@@ -2981,7 +2988,7 @@ class Job:
                         snapshots, include_snapshot_times=_filter.timerange, include_snapshot_ranks=_filter.options
                     )
             resultset.update(snapshots)  # union
-        snapshots = [line for line in basis_snapshots if line in resultset]
+        snapshots = [line for line in basis_snapshots if "#" in line or (line in resultset) != all_except]
         is_debug = p.log.isEnabledFor(log_debug)
         for snapshot in snapshots:
             is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -2996,7 +3003,7 @@ class Job:
         for snapshot in snapshots:
             i = snapshot.find("@")  # snapshot separator
             if i < 0:
-                results.append(snapshot)  # retain bookmarks to help find common snaps, apply filter only to snapshots
+                continue  # retain bookmarks to help find common snaps, apply filter only to snapshots
             elif is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -3011,7 +3018,7 @@ class Job:
         results = []
         for snapshot in snaps:
             if "@" not in snapshot:
-                results.append(snapshot)  # retain bookmarks to help find common snaps, apply filter only to snapshots
+                continue  # retain bookmarks to help find common snaps, apply filter only to snapshots
             elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -3044,7 +3051,7 @@ class Job:
             results = []
             for snapshot in snapshots:
                 if "@" not in snapshot:
-                    results.append(snapshot)  # retain bookmarks to help find common snaps, apply filter only to snaps
+                    continue  # retain bookmarks to help find common snaps, apply filter only to snaps
                 else:
                     msg = None
                     if lo <= i < hi:

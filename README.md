@@ -386,6 +386,7 @@ or where more than 7 daily snapshots were created or received within the last 7 
 snapshots regardless of creation time. It can help to avoid accidental pruning of the last snapshot that source and
 destination have in common.
     * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
+    * Optionally, deletions can specify which snapshots to retain instead of which snapshots to delete.
     * Prints how many GB of disk space in total would be freed if the delete command were to be run for real without the 
 --dryrun flag.
 * Compare source and destination dataset trees recursively, in combination with snapshot filters and dataset filters.
@@ -519,6 +520,7 @@ usage: bzfs [-h] [--recursive]
             [--delete-dst-datasets]
             [--delete-dst-snapshots [{snapshots,bookmarks}]]
             [--delete-dst-snapshots-no-crosscheck]
+            [--delete-dst-snapshots-except]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
             [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
@@ -1286,6 +1288,20 @@ usage: bzfs [-h] [--recursive]
     --delete-dst-snapshots=bookmarks shall check the source dataset
     only for a bookmark with the same GUID, and ignore whether a
     snapshot with the same GUID is present in the source dataset.
+
+<!-- -->
+
+<div id="--delete-dst-snapshots-except"></div>
+
+**--delete-dst-snapshots-except**
+
+*  This flag indicates that the --include/exclude-snapshot-* options
+    shall have inverted semantics for the --delete-dst-snapshots
+    option, thus deleting all snapshots except for the selected
+    snapshots (within the specified datasets), instead of deleting all
+    selected snapshots (within the specified datasets). In other words,
+    this flag enables to specify which snapshots to retain instead of
+    which snapshots to delete.
 
 <!-- -->
 
