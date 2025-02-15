@@ -340,12 +340,12 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertTrue(os.path.exists(dir))
             self.assertTrue(os.path.exists(non_socket_file))
 
-    def test_ensure_file_exists(self):
+    def test_set_last_modification_time(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             file = os.path.join(tmpdir, "foo")
-            bzfs.ensure_file_exists(file)
+            bzfs.set_last_modification_time(file, 0)
             self.assertTrue(os.path.exists(file))
-            bzfs.ensure_file_exists(file)
+            bzfs.set_last_modification_time(file, 0)
             self.assertTrue(os.path.exists(file))
 
     def test_recv_option_property_names(self):

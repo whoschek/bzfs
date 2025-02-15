@@ -2190,15 +2190,14 @@ class Job:
                     cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
             components: List[Tuple] = self.find_components_to_snapshot(src_datasets)
-            drain(
-                self.itr_ssh_cmd_parallel(
-                    src,
-                    cmd,
-                    [[f"{dataset}@{''.join(component)}" for dataset in datasets_to_snapshot] for component in components],
-                    fn=lambda batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
-                    max_batch_items=1 if self.is_solaris_zfs(src) else 2**29,  # solaris CLI doesn't accept multiple datasets
-                )
+            iterator = self.itr_ssh_cmd_parallel(
+                src,
+                cmd,
+                [[f"{dataset}@{''.join(component)}" for dataset in datasets_to_snapshot] for component in components],
+                fn=lambda batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
+                max_batch_items=1 if self.is_solaris_zfs(src) else 2**29,  # solaris CLI doesn't accept multiple datasets
             )
+            drain(iterator)
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
             self.update_last_modified_cache(src_datasets, components)
 
@@ -3850,8 +3849,7 @@ class Job:
                 def update_last_modified_cache(dataset: str) -> None:
                     cache_file = p.log_params.last_modified_cache_file(dataset)
                     if not p.dry_run:
-                        ensure_file_exists(cache_file)
-                        os.utime(cache_file, times=(snapshots_changed, snapshots_changed))  # update cached lastmodified time
+                        set_last_modification_time(cache_file, snapshots_changed)  # update cached lastmodified time
 
                 update_last_modified_cache(src_dataset)
                 for component in components:
@@ -5312,11 +5310,11 @@ def unlink_missing_ok(file: str) -> None:  # workaround for compat with python <
         pass
 
 
-def ensure_file_exists(path: str) -> None:
-    """Better suited than Path(path).touch() wrt. timestamp handling."""
+def set_last_modification_time(path: str, unixtime_in_secs: int) -> None:
     if not os.path.exists(path):
         with open(path, "a"):
             pass
+    os.utime(path, times=(unixtime_in_secs, unixtime_in_secs))
 
 
 def drain(iterable: Iterable) -> None:
