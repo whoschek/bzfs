@@ -945,6 +945,7 @@ class TestHelperFunctions(unittest.TestCase):
             ]
         )
         config = bzfs.CreateSrcSnapshotConfig(good_args, p=None)
+        self.assertTrue(str(config))
         self.assertListEqual(["xxx_adhoc"], ["".join(c) for c in config.snapshot_components()])
 
         good_args = bzfs.argument_parser().parse_args(
