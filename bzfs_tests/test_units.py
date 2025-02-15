@@ -926,6 +926,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
         self.assertIsNone(run_filter(["hh"], basis_src_datasets))
 
+    def test_validate_snapshot_name(self):
+        bzfs.validate_snapshot_name("foo", "")
+        with self.assertRaises(SystemExit):
+            bzfs.validate_snapshot_name("foo@bar", "")
+        with self.assertRaises(SystemExit):
+            bzfs.validate_snapshot_name("foo/bar", "")
+
     def test_CreateSrcSnapshotConfig(self):
         good_args = bzfs.argument_parser().parse_args(
             [

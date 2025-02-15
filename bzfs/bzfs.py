@@ -1361,10 +1361,12 @@ class LogParams:
         self.params: Params = None
 
     def last_modified_cache_file(self, dataset_or_snapshot: str) -> str:
-        dataset_or_snapshot = dataset_or_snapshot.replace("/", "~")
         i = dataset_or_snapshot.find("@")
-        dataset = dataset_or_snapshot if i < 0 else dataset_or_snapshot[0:i]
-        return os.path.join(self.last_modified_cache_dir, dataset, dataset_or_snapshot)
+        if i >= 0:
+            dataset_or_snapshot = dataset_or_snapshot.replace("@", "/@")
+        else:
+            dataset_or_snapshot = dataset_or_snapshot + "/="
+        return os.path.join(self.last_modified_cache_dir, dataset_or_snapshot)
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -1778,7 +1780,7 @@ class CreateSrcSnapshotConfig:
             (prefix, "", infix, suffix) for suffix in suffixes for infix in infixes for prefix in prefixes
         ]
         for component in self.snapshot_components():
-            validate_dataset_name("".join(component), "--create-src-snapshot-*")
+            validate_snapshot_name("".join(component), "--create-src-snapshot-*")
 
     def snapshot_components(self) -> List[Tuple[str, str, str, str]]:
         timestamp: str = self.current_datetime.strftime(self.timeformat)
@@ -5582,6 +5584,8 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or dataset.startswith("../")
         or dataset.endswith("/.")
         or dataset.endswith("/..")
+        or "/./" in dataset
+        or "/../" in dataset
         or "@" in dataset
         or "#" in dataset
         or '"' in dataset
@@ -5618,6 +5622,12 @@ def validate_port(port: int, message: str) -> None:
         port = str(port)
     if port and not port.isdigit():
         die(message + f"must be empty or a positive integer: '{port}'")
+
+
+def validate_snapshot_name(snapshot_name: str, input_text: str) -> None:
+    validate_dataset_name(snapshot_name, input_text)
+    if "/" in snapshot_name:
+        die(f"Invalid ZFS snapshot name: '{snapshot_name}' for: '{input_text}'")
 
 
 def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
