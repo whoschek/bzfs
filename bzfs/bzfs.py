@@ -3754,8 +3754,8 @@ class Job:
         def cached_src_snapshots_with_creation(dataset: str) -> List[str]:
             if not self.is_snapshots_changed_zfs_property_available(src):
                 return None
-            zfs_snapshots_changed = self.zfs_get_snapshots_changed(src, dataset)
-            cached_snapshots_changed = self.cache_get_snapshots_changed(dataset)
+            zfs_snapshots_changed: int = self.zfs_get_snapshots_changed(src, dataset)
+            cached_snapshots_changed: int = self.cache_get_snapshots_changed(dataset)
             if cached_snapshots_changed == 0:
                 return None
             if cached_snapshots_changed != zfs_snapshots_changed:
@@ -3825,6 +3825,7 @@ class Job:
         return components.keys()
 
     def invalidate_last_modified_cache_dataset(self, dataset: str):
+        """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
         p, log = self.params, self.params.log
         try:
             for entry in os.scandir(os.path.dirname(p.log_params.last_modified_cache_file(dataset))):
@@ -3838,22 +3839,22 @@ class Job:
         src, dst = p.src, p.dst
         if len(src_datasets) > 0 and self.is_snapshots_changed_zfs_property_available(src):
             src_dataset = src_datasets[-1]  # same as in find_components_to_snapshot()
-            snapshots_changed = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
+            snapshots_changed: int = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
                 cache_dir = os.path.dirname(p.log_params.last_modified_cache_file(src_dataset))
                 os.makedirs(cache_dir, exist_ok=True)
 
-                def update_last_modified_cache(dataset: str) -> None:
+                def update_last_modification_time(dataset: str) -> None:
                     cache_file = p.log_params.last_modified_cache_file(dataset)
                     if not p.dry_run:
-                        set_last_modification_time(cache_file, snapshots_changed)  # update cached lastmodified time
+                        set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed)
 
-                update_last_modified_cache(src_dataset)
+                update_last_modification_time(src_dataset)
                 for component in components:
                     prefix, timestamp, infix, suffix = component
-                    update_last_modified_cache(f"{src_dataset}@{prefix}{infix}{suffix}")
+                    update_last_modification_time(f"{src_dataset}@{prefix}{infix}{suffix}")
 
     def zfs_get_snapshots_changed(self, remote: Remote, dataset: str) -> int:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.

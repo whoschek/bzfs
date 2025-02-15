@@ -343,9 +343,9 @@ class TestHelperFunctions(unittest.TestCase):
     def test_set_last_modification_time(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             file = os.path.join(tmpdir, "foo")
-            bzfs.set_last_modification_time(file, 0)
+            bzfs.set_last_modification_time(file, unixtime_in_secs=0)
             self.assertTrue(os.path.exists(file))
-            bzfs.set_last_modification_time(file, 0)
+            bzfs.set_last_modification_time(file, unixtime_in_secs=0)
             self.assertTrue(os.path.exists(file))
 
     def test_recv_option_property_names(self):
