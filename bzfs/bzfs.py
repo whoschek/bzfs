@@ -71,7 +71,7 @@ from argparse import Namespace
 from collections import defaultdict, deque, Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from contextlib import redirect_stderr
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timedelta, timezone, tzinfo
 from itertools import groupby
 from logging import Logger
@@ -652,11 +652,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "For a list of valid IANA TZ identifiers, see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List"
              "\n\nTo change the timezone not only for snapshot name creation, but in all respects for the entire program, "
              "use the standard 'TZ' Unix environment variable, like so: `export TZ=UTC`.\n\n" + h_fix)
-    weekday_choices = ([day.title() for day in cron_weekdays.keys()] + [day.title()[:3] for day in cron_weekdays.keys()] +
-                       [str(i) for i in range(8)])
-    parser.add_argument(
-        "--create-src-snapshot-weekly-weekday", choices=weekday_choices, default="Monday", nargs="?",
-        help="TODO.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -1251,6 +1246,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
              f"environment variables. Example: `{env_var_prefix}.*`\n\n")
 
+    for period, label in {"yearly": "years", "monthly": "months", "weekly": "weeks", "daily": "days", "hourly": "hours",
+                          "minutely": "minutes", "secondly": "seconds"}.items():
+        anchor_group = parser.add_argument_group(
+            f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
+            f"every N {label} are due to be created on the source by the --create-src-snapshot option.")
+        for f in [f for f in fields(PeriodAnchors) if f.name.startswith(period + "_")]:
+            m = f.metadata
+            _min = m.get("min")
+            _max = m.get("max")
+            anchor_group.add_argument(
+                "--" + f.name, type=int, min=_min, max=_max, default=f.default, action=CheckRange, metavar="INT",
+                help=f"{m.get('help')} ({_min} ≤ x ≤ {_max}, default: {f.default}).\n\n")
+
     for option_name, flag in zfs_recv_groups.items():
         grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
         flag = "'" + flag + "'"  # one of -o or -x
@@ -1759,6 +1767,7 @@ class CreateSrcSnapshotConfig:
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: str = args.create_src_snapshot_timeformat
         self.anchors = PeriodAnchors()
+        self.anchors.parse(args)
         prefixes: List[str] = args.create_src_snapshot_prefix or [create_src_snapshot_prefix_dflt]
         infixes: List[str] = args.create_src_snapshot_infix or [""]
         suffixes: List[str] = args.create_src_snapshot_suffix or [create_src_snapshot_suffix_dflt]
@@ -5385,13 +5394,13 @@ def parse_cron_weekday(weekday_spec: str) -> int:
     return cron_weekdays[normalized]
 
 
-metadata_month = {"min": 1, "max": 12}
-metadata_weekday = {"min": 0, "max": 7}
-metadata_day = {"min": 1, "max": 31}
-metadata_hour = {"min": 0, "max": 23}
-metadata_minute = {"min": 0, "max": 59}
-metadata_second = {"min": 0, "max": 59}
-metadata_microsecond = {"min": 0, "max": 999999}
+metadata_month = {"min": 1, "max": 12, "help": "The month within a year"}
+metadata_weekday = {"min": 0, "max": 7, "help": "The weekday within a week: 0=Sunday, 1=Monday, ..., 7=Sunday"}
+metadata_day = {"min": 1, "max": 31, "help": "The day within a month"}
+metadata_hour = {"min": 0, "max": 23, "help": "The hour within a day"}
+metadata_minute = {"min": 0, "max": 59, "help": "The minute within an hour"}
+metadata_second = {"min": 0, "max": 59, "help": "The second within a minute"}
+metadata_microsecond = {"min": 0, "max": 999999, "help": "The microsecond within a second"}
 
 
 @dataclass
@@ -5431,6 +5440,12 @@ class PeriodAnchors:
     # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.secondly_* vars
     secondly_microsecond: int = field(default=0, metadata=metadata_microsecond)  # 0 <= x <= 999999
 
+    def parse(self, args: argparse.Namespace):
+        for f in fields(PeriodAnchors):
+            name = f.name
+            if hasattr(args, name):
+                setattr(self, name, getattr(args, name))
+
 
 def round_datetime_up_to_duration_multiple(
     dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors = PeriodAnchors()
@@ -5441,7 +5456,7 @@ def round_datetime_up_to_duration_multiple(
     Supported units: "secondly", "minutely", "hourly", "daily", "weekly", "monthly", "yearly".
     If dt is already exactly on a boundary (i.e. exactly on a multiple), it is returned unchanged.
     Examples:
-    Hourly anchor default is midnight of dt
+    Default hourly anchor is midn
     14:00:00, 1 hours --> 14:00:00
     14:05:01, 1 hours --> 15:00:00
     15:05:01, 1 hours --> 16:00:00

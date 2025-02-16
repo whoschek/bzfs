@@ -552,7 +552,6 @@ usage: bzfs [-h] [--recursive]
             [--create-src-snapshot-even-if-not-due]
             [--create-src-snapshot-timeformat STRFTIME_SPEC]
             [--create-src-snapshot-timezone TZ_SPEC]
-            [--create-src-snapshot-weekday-starting-week [{Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sun,Mon,Tue,Wed,Thu,Fri,Sat,0,1,2,3,4,5,6,7}]]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -600,6 +599,16 @@ usage: bzfs [-h] [--recursive]
             [--log-config-var NAME:VALUE [NAME:VALUE ...]]
             [--include-envvar-regex REGEX [REGEX ...]]
             [--exclude-envvar-regex REGEX [REGEX ...]]
+            [--yearly_month INT] [--yearly_monthday INT]
+            [--yearly_hour INT] [--yearly_minute INT]
+            [--yearly_second INT] [--monthly_monthday INT]
+            [--monthly_hour INT] [--monthly_minute INT]
+            [--monthly_second INT] [--weekly_weekday INT]
+            [--weekly_hour INT] [--weekly_minute INT]
+            [--weekly_second INT] [--daily_hour INT]
+            [--daily_minute INT] [--daily_second INT]
+            [--hourly_minute INT] [--hourly_second INT]
+            [--minutely_second INT] [--secondly_microsecond INT]
             [--zfs-recv-o-targets {full,incremental,full+incremental}]
             [--zfs-recv-o-sources STRING]
             [--zfs-recv-o-include-regex REGEX [REGEX ...]]
@@ -1165,14 +1174,6 @@ usage: bzfs [-h] [--recursive]
     --create-src-snapshot-infix=_us-west-1
     --create-src-snapshot-suffix=_daily` will generate snapshot names
     such as `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
-
-<!-- -->
-
-<div id="--create-src-snapshot-weekday-starting-week"></div>
-
-**--create-src-snapshot-weekday-starting-week** *[{Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sun,Mon,Tue,Wed,Thu,Fri,Sat,0,1,2,3,4,5,6,7}]*
-
-*  TODO.
 
 <!-- -->
 
@@ -2359,6 +2360,195 @@ usage: bzfs [-h] [--recursive]
 **--help, -h**
 
 *  Show this help message and exit.
+
+# YEARLY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N years
+are due to be created on the source by the --create-src-snapshot
+option.
+
+<div id="--yearly_month"></div>
+
+**--yearly_month** *INT*
+
+*  The month within a year (1 ≤ x ≤ 12, default: 1).
+
+<!-- -->
+
+<div id="--yearly_monthday"></div>
+
+**--yearly_monthday** *INT*
+
+*  The day within a month (1 ≤ x ≤ 31, default: 1).
+
+<!-- -->
+
+<div id="--yearly_hour"></div>
+
+**--yearly_hour** *INT*
+
+*  The hour within a day (0 ≤ x ≤ 23, default: 0).
+
+<!-- -->
+
+<div id="--yearly_minute"></div>
+
+**--yearly_minute** *INT*
+
+*  The minute within an hour (0 ≤ x ≤ 59, default: 0).
+
+<!-- -->
+
+<div id="--yearly_second"></div>
+
+**--yearly_second** *INT*
+
+*  The second within a minute (0 ≤ x ≤ 59, default: 0).
+
+# MONTHLY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N months
+are due to be created on the source by the --create-src-snapshot
+option.
+
+<div id="--monthly_monthday"></div>
+
+**--monthly_monthday** *INT*
+
+*  The day within a month (1 ≤ x ≤ 31, default: 1).
+
+<!-- -->
+
+<div id="--monthly_hour"></div>
+
+**--monthly_hour** *INT*
+
+*  The hour within a day (0 ≤ x ≤ 23, default: 0).
+
+<!-- -->
+
+<div id="--monthly_minute"></div>
+
+**--monthly_minute** *INT*
+
+*  The minute within an hour (0 ≤ x ≤ 59, default: 0).
+
+<!-- -->
+
+<div id="--monthly_second"></div>
+
+**--monthly_second** *INT*
+
+*  The second within a minute (0 ≤ x ≤ 59, default: 0).
+
+# WEEKLY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N weeks
+are due to be created on the source by the --create-src-snapshot
+option.
+
+<div id="--weekly_weekday"></div>
+
+**--weekly_weekday** *INT*
+
+*  The weekday within a week: 0=Sunday, 1=Monday, ..., 7=Sunday (0 ≤ x
+    ≤ 7, default: 0).
+
+<!-- -->
+
+<div id="--weekly_hour"></div>
+
+**--weekly_hour** *INT*
+
+*  The hour within a day (0 ≤ x ≤ 23, default: 0).
+
+<!-- -->
+
+<div id="--weekly_minute"></div>
+
+**--weekly_minute** *INT*
+
+*  The minute within an hour (0 ≤ x ≤ 59, default: 0).
+
+<!-- -->
+
+<div id="--weekly_second"></div>
+
+**--weekly_second** *INT*
+
+*  The second within a minute (0 ≤ x ≤ 59, default: 0).
+
+# DAILY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N days
+are due to be created on the source by the --create-src-snapshot
+option.
+
+<div id="--daily_hour"></div>
+
+**--daily_hour** *INT*
+
+*  The hour within a day (0 ≤ x ≤ 23, default: 0).
+
+<!-- -->
+
+<div id="--daily_minute"></div>
+
+**--daily_minute** *INT*
+
+*  The minute within an hour (0 ≤ x ≤ 59, default: 0).
+
+<!-- -->
+
+<div id="--daily_second"></div>
+
+**--daily_second** *INT*
+
+*  The second within a minute (0 ≤ x ≤ 59, default: 0).
+
+# HOURLY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N hours
+are due to be created on the source by the --create-src-snapshot
+option.
+
+<div id="--hourly_minute"></div>
+
+**--hourly_minute** *INT*
+
+*  The minute within an hour (0 ≤ x ≤ 59, default: 0).
+
+<!-- -->
+
+<div id="--hourly_second"></div>
+
+**--hourly_second** *INT*
+
+*  The second within a minute (0 ≤ x ≤ 59, default: 0).
+
+# MINUTELY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N
+minutes are due to be created on the source by the
+--create-src-snapshot option.
+
+<div id="--minutely_second"></div>
+
+**--minutely_second** *INT*
+
+*  The second within a minute (0 ≤ x ≤ 59, default: 0).
+
+# SECONDLY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N
+seconds are due to be created on the source by the
+--create-src-snapshot option.
+
+<div id="--secondly_microsecond"></div>
+
+**--secondly_microsecond** *INT*
+
+*  The microsecond within a second (0 ≤ x ≤ 999999, default: 0).
 
 # ZFS-RECV-O (EXPERIMENTAL)
 

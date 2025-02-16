@@ -915,6 +915,7 @@ class LocalTestCase(BZFSTestCase):
                     "--create-src-snapshot-prefix=z",
                     "--create-src-snapshot-suffix=",
                     "--create-src-snapshot-timeformat=",
+                    "--yearly_month=6",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
