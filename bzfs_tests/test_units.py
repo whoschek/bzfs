@@ -1404,6 +1404,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
             return round_datetime_up_to_duration_multiple(dt, duration_amount, "hourly")
 
         """
+        Using default anchors (e.g. hourly snapshots at minute=0, second=0)
         14:00:00, 1 hours --> 14:00:00
         14:05:01, 1 hours --> 15:00:00
         15:05:01, 1 hours --> 16:00:00
@@ -1454,7 +1455,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 0, "hourly")
         expected = dt
-        self.assertEqual(result, expected)
+        self.assertEqual(expected, result)
         self.assertEqual(result.tzinfo, self.tz)
 
     # Fixed-length durations: second, minute, hour, day, week.
@@ -1463,7 +1464,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
         expected = dt.replace(microsecond=0) + timedelta(seconds=1)
-        self.assertEqual(result, expected)
+        self.assertEqual(expected, result)
         self.assertEqual(result.tzinfo, self.tz)
 
     def test_seconds_boundary(self):
@@ -1477,7 +1478,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = datetime(2025, 2, 11, 14, 5, 1, 500000, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
         expected = dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
-        self.assertEqual(result, expected)
+        self.assertEqual(expected, result)
 
     def test_minutes_boundary(self):
         """Rounding up to the next minute when dt is exactly on a minute boundary returns dt."""
@@ -1490,7 +1491,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        self.assertEqual(result, expected)
+        self.assertEqual(expected, result)
 
     def test_hours_boundary(self):
         """Rounding up to the next hour when dt is exactly on an hour boundary returns dt."""
@@ -1503,7 +1504,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
         expected = dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-        self.assertEqual(result, expected)
+        self.assertEqual(expected, result)
 
     def test_days_boundary(self):
         """Rounding up to the next day when dt is exactly at midnight returns dt."""
@@ -1515,64 +1516,78 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # anchor is the most recent between Friday and Saturday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=6)
-        self.assertEqual(result, expected)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=6))
+        self.assertEqual(expected, result)
 
     def test_weeks_non_boundary_sunday(self):
         # anchor is the most recent midnight between Saturday and Sunday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=0)
-        self.assertEqual(result, expected)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=0))
+        self.assertEqual(expected, result)
 
     def test_weeks_non_boundary_monday(self):
         # anchor is the most recent midnight between Sunday and Monday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=1)
-        self.assertEqual(result, expected)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=1))
+        self.assertEqual(expected, result)
 
     def test_weeks_boundary_saturday(self):
         # dt is exactly at midnight between Friday and Saturday
         dt = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=6)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=6))
         self.assertEqual(result, dt)
 
     def test_weeks_boundary_sunday(self):
         # dt is exactly at midnight between Saturday and Sunday
         dt = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=0)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=0))
         self.assertEqual(result, dt)
 
     def test_weeks_boundary_monday(self):
         # dt is exactly at midnight between Sunday and Monday
         dt = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", weekday_starting_week=1)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=1))
         self.assertEqual(result, dt)
 
-    # Variable-length durations: month and year.
-    def test_months_non_boundary(self):
+    def test_months_non_boundary2a(self):
         """Rounding up to the next multiple of months when dt is not on a boundary."""
         # For a 2-month step, using dt = March 15, 2025 should round up to May 1, 2025.
         dt = datetime(2025, 3, 15, 10, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
         expected = datetime(2025, 5, 1, 0, 0, 0, tzinfo=self.tz)
-        self.assertEqual(result, expected)
+        self.assertEqual(expected, result)
+
+    def test_months_non_boundary2b(self):
+        """Rounding up to the next multiple of months when dt is not on a boundary."""
+        # For a 2-month step, using dt = April 15, 2025 should round up to June 1, 2025.
+        dt = datetime(2025, 4, 15, 10, 30, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
+        expected = datetime(2025, 6, 1, 0, 0, 0, tzinfo=self.tz)
+        self.assertEqual(expected, result)
 
     def test_months_boundary(self):
         """When dt is exactly on a month boundary that is a multiple, dt is returned unchanged."""
-        # March 1, 2025 is on a boundary for a 2-month step ((3-1) % 2 == 0).
         dt = datetime(2025, 3, 1, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
         self.assertEqual(result, dt)
 
-    def test_years_non_boundary(self):
+    def test_years_non_boundary2a(self):
+        """Rounding up to the next multiple of years when dt is not on a boundary."""
+        # For a 2-year step, using dt = Feb 11, 2024 should round up to Jan 1, 2025.
+        dt = datetime(2024, 2, 11, 14, 5, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly")
+        expected = datetime(2026, 1, 1, 0, 0, 0, tzinfo=self.tz)
+        self.assertEqual(expected, result)
+
+    def test_years_non_boundary2b(self):
         """Rounding up to the next multiple of years when dt is not on a boundary."""
         # For a 2-year step, using dt = Feb 11, 2025 should round up to Jan 1, 2027.
         dt = datetime(2025, 2, 11, 14, 5, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly")
         expected = datetime(2027, 1, 1, 0, 0, 0, tzinfo=self.tz)
-        self.assertEqual(result, expected)
+        self.assertEqual(expected, result)
 
     def test_years_boundary(self):
         """When dt is exactly on a year boundary that is a multiple, dt is returned unchanged."""
@@ -1592,6 +1607,134 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         self.assertEqual(result.tzinfo, dt.tzinfo)
+
+    def test_custom_hourly_anchor(self):
+        # Custom hourly: snapshots occur at :15:30 each hour.
+        dt = datetime(2025, 2, 11, 14, 20, 0, tzinfo=self.tz)
+        # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
+        # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
+        expected = datetime(2025, 2, 11, 15, 15, 30, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(
+            dt, 1, "hourly", anchors=bzfs.PeriodAnchors(hourly_minute=15, hourly_second=30)
+        )
+        self.assertEqual(expected, result)
+
+    def test_custom_hourly_anchor2a(self):
+        # Custom hourly: snapshots occur at :15:30 every other hour.
+        dt = datetime(2025, 2, 11, 14, 20, 0, tzinfo=self.tz)
+        # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
+        # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
+        expected = datetime(2025, 2, 11, 16, 15, 30, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(
+            dt, 2, "hourly", anchors=bzfs.PeriodAnchors(hourly_minute=15, hourly_second=30)
+        )
+        self.assertEqual(expected, result)
+
+    def test_custom_hourly_anchor2b(self):
+        # Custom hourly: snapshots occur at :15:30 every other hour.
+        dt = datetime(2025, 2, 11, 15, 20, 0, tzinfo=self.tz)
+        # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
+        # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
+        expected = datetime(2025, 2, 11, 16, 15, 30, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(
+            dt, 2, "hourly", anchors=bzfs.PeriodAnchors(hourly_minute=15, hourly_second=30)
+        )
+        self.assertEqual(expected, result)
+
+    def test_custom_daily_anchor(self):
+        # Custom daily: snapshots occur at 01:30:00.
+        custom = bzfs.PeriodAnchors(daily_hour=1, daily_minute=30, daily_second=0)
+        dt = datetime(2025, 2, 11, 0, 45, 0, tzinfo=self.tz)
+        # Global base = previous day at 01:30:00, so next boundary = that + 1 day.
+        yesterday = dt.replace(hour=custom.daily_hour, minute=custom.daily_minute, second=custom.daily_second)
+        if yesterday > dt:
+            yesterday -= timedelta(days=1)
+        expected = yesterday + timedelta(days=1)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "daily", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_weekly_anchor1a(self):
+        # Custom weekly: every week, weekly_weekday=2, weekly time = 03:00:00.
+        custom = bzfs.PeriodAnchors(weekly_weekday=2, weekly_hour=3, weekly_minute=0, weekly_second=0)
+        dt = datetime(2025, 2, 13, 5, 0, 0, tzinfo=self.tz)  # Thursday
+        anchor = (dt - timedelta(days=2)).replace(hour=3, minute=0, second=0, microsecond=0)
+        expected = anchor + timedelta(weeks=1)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_monthly_anchor1a(self):
+        # Custom monthly: snapshots every month on the 15th at 12:00:00.
+        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        dt = datetime(2025, 4, 20, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_monthly_anchor1b(self):
+        # Custom monthly: snapshots every month on the 15th at 12:00:00.
+        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        dt = datetime(2025, 5, 12, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_monthly_anchor2a(self):
+        # Custom monthly: snapshots every other month on the 15th at 12:00:00.
+        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        dt = datetime(2025, 4, 20, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 6, 15, 12, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_monthly_anchor2b(self):
+        # Custom monthly: snapshots every other month on the 15th at 12:00:00.
+        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        dt = datetime(2025, 5, 12, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 6, 15, 12, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_monthly_anchor2c(self):
+        # Custom monthly: snapshots every other month on the 15th at 12:00:00.
+        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        dt = datetime(2025, 5, 17, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 7, 15, 12, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_yearly_anchor1a(self):
+        # Custom yearly: snapshots on June 30 at 02:00:00.
+        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        dt = datetime(2024, 3, 15, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2024, 6, 30, 2, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_yearly_anchor1b(self):
+        # Custom yearly: snapshots on June 30 at 02:00:00.
+        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        dt = datetime(2025, 3, 15, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 6, 30, 2, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_yearly_anchor2a(self):
+        # Custom yearly: snapshots every other year on June 30 at 02:00:00.
+        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        dt = datetime(2024, 3, 15, 10, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 6, 30, 2, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_yearly_anchor2b(self):
+        # Custom yearly: snapshots every other year on June 30 at 02:00:00.
+        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        dt = datetime(2025, 3, 15, 10, 0, 0, tzinfo=self.tz)
+        # For 2-year steps, the most recent anchor for 2025 is 2025-06-30 02:00:00 (which is > dt), so roll back to 2024.
+        # Next boundary = 2024 + 2 = 2026.
+        expected = datetime(2026, 6, 30, 2, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
+        self.assertEqual(expected, result)
 
 
 #############################################################################
