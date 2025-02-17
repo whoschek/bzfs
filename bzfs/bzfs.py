@@ -3816,23 +3816,14 @@ class Job:
         src, config = p.src, p.create_src_snapshot_config
         datasets_to_snapshot = defaultdict(list)
         labels = []
-        log.info("xxxsrc_datasets: %s", src_datasets)
         for label in config.snapshot_labels():
             _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
-            log.info(
-                "label: %s, repr: %s, _duration_amount: %s, create_src_snapshot_even_if_not_due: %s",
-                label,
-                repr(label),
-                _duration_amount,
-                config.create_src_snapshot_even_if_not_due,
-            )
             if config.create_src_snapshot_even_if_not_due or _duration_amount == 0:
                 datasets_to_snapshot[label] = src_datasets  # take snapshot regardless of creation time of any existing snaps
             else:
                 labels.append(label)
         if len(labels) == 0:
             return datasets_to_snapshot  # nothing more TBD
-        log.info("xxxlabels: %s", labels)
 
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot = defaultdict(list)
@@ -3867,9 +3858,7 @@ class Job:
         for lines in self.list_snapshots_in_parallel(src, cmd, src_datasets):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
-                log.info("xxxdataset: %s", dataset)
                 while src_datasets[i] < dataset:  # Take snapshots for datasets whose snapshot stream is empty
-                    log.info("xxxskip dataset: %s", src_datasets[i])
                     for label in labels:
                         datasets_to_snapshot[label].append(src_datasets[i])
                     i += 1
@@ -3879,7 +3868,6 @@ class Job:
                 snapshots.sort(key=lambda s: (int(s[0]), int(s[1]), s[2]))  # sort by createtxg,creation,name
                 snapshot_names = [snapshot[-1][snapshot[-1].index("@") + 1 :] for snapshot in snapshots]
                 for label in labels:
-                    # log.info("label %s", label)
                     prefix = label.prefix
                     end = label.infix + label.suffix
                     minlen = len(label.prefix) + len(label.infix) + len(label.suffix)
