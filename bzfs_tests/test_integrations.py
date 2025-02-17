@@ -902,6 +902,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_snapshotting_recursive_simple(self):
         self.setup_basic()
         create_filesystem(src_root_dataset, "boo")
+        create_filesystem(src_root_dataset, "xoo")
         destroy(dst_root_dataset, recursive=True)
         n = 3
         self.assertSnapshots(src_root_dataset, n, "s")
@@ -925,12 +926,14 @@ class LocalTestCase(BZFSTestCase):
                 if i == 0:
                     self.assertEqual(n, len(snapshots(src_root_dataset)))
                     self.assertEqual(0, len(snapshots(src_root_dataset + "/boo")))
+                    self.assertEqual(0, len(snapshots(src_root_dataset + "/xoo")))
                     self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
                     self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
                     self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
                 else:
                     self.assertEqual(n + 1, len(snapshots(src_root_dataset)))
                     self.assertEqual(1, len(snapshots(src_root_dataset + "/boo")))
+                    self.assertEqual(1, len(snapshots(src_root_dataset + "/xoo")))
                     self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo")))
                     self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo/a")))
                     self.assertEqual(1, len(snapshots(src_root_dataset + "/foo/b")))
