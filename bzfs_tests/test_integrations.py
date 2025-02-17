@@ -597,30 +597,29 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    # def test_basic_snapshotting_flat_simple(self):
-    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
-    #
-    # def test_basic_snapshotting_flat_non_existing_root(self):
-    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
-    #
-    # def test_basic_snapshotting_flat_empty(self):
-    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
+    def test_basic_snapshotting_flat_simple(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
+
+    def test_basic_snapshotting_flat_non_existing_root(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
+
+    def test_basic_snapshotting_flat_empty(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
 
     def test_basic_snapshotting_recursive_simple(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
 
-    #
-    # def test_basic_snapshotting_recursive_with_skip_parent(self):
-    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
-    #
-    # def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
-    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
-    #
-    # def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
-    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
-    #
-    # def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
-    #     LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
+    def test_basic_snapshotting_recursive_with_skip_parent(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
+
+    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
+
+    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
+
+    def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
+        LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
 
 
 #############################################################################
