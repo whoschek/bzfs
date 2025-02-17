@@ -3246,6 +3246,7 @@ class Job:
         log = self.params.log
         max_sleep_mark = policy.min_sleep_nanos
         retry_count = 0
+        sysrandom = None
         start_time_nanos = time.time_ns()
         while True:
             try:
@@ -3258,7 +3259,8 @@ class Job:
                         log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
                         continue
                     # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
-                    sleep_nanos = random.randint(policy.min_sleep_nanos, max_sleep_mark)
+                    sysrandom = sysrandom if sysrandom is not None else random.SystemRandom()
+                    sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
                     log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
                     time.sleep(sleep_nanos / 1_000_000_000)
                     max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
