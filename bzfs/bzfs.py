@@ -1746,6 +1746,27 @@ class Retry:
 
 
 #############################################################################
+@dataclass(order=True, frozen=True, repr=False)
+class SnapshotLabel:
+    prefix: str  # bzfs_
+    timestamp: str  # 2024-11-06_08:30:05
+    infix: str  # _us-west-1
+    suffix: str  # _hourly
+
+    def __repr__(self) -> str:  # bzfs_2024-11-06_08:30:05_us-west-1_hourly
+        return f"{self.prefix}{self.timestamp}{self.infix}{self.suffix}"
+
+    def __iter__(self):
+        return iter((self.prefix, self.timestamp, self.infix, self.suffix))
+
+    def validate(self, input_text: str) -> None:
+        name = str(self)
+        validate_dataset_name(name, input_text)
+        if "/" in name:
+            die(f"Invalid ZFS snapshot name: '{name}' for: '{input_text}'")
+
+
+#############################################################################
 class CreateSrcSnapshotConfig:
     def __init__(self, args: argparse.Namespace, p: Params):
         """Option values for --create-src-snapshot*; reads from ArgumentParser via args."""
@@ -1766,8 +1787,7 @@ class CreateSrcSnapshotConfig:
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: str = args.create_src_snapshot_timeformat
-        self.anchors = PeriodAnchors()
-        self.anchors.parse(args)
+        self.anchors = PeriodAnchors().parse(args)
         prefixes: List[str] = args.create_src_snapshot_prefix or [create_src_snapshot_prefix_dflt]
         infixes: List[str] = args.create_src_snapshot_infix or [""]
         suffixes: List[str] = args.create_src_snapshot_suffix or [create_src_snapshot_suffix_dflt]
@@ -1790,21 +1810,16 @@ class CreateSrcSnapshotConfig:
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
         self.suffix_durations: Dict[str, Tuple[int, str]] = {suffix: suffix_durations[suffix] for suffix in suffixes}  # sort
-        self._snapshot_components: List[Tuple[str, str, str, str]] = [
-            (prefix, "", infix, suffix) for suffix in suffixes for infix in infixes for prefix in prefixes
+        self._snapshot_labels: List[SnapshotLabel] = [
+            SnapshotLabel(prefix, "", infix, suffix) for suffix in suffixes for infix in infixes for prefix in prefixes
         ]
-        for component in self.snapshot_components():
-            validate_snapshot_name("".join(component), "--create-src-snapshot-*")
+        for label in self.snapshot_labels():
+            label.validate("--create-src-snapshot-*")
 
-    def snapshot_components(self) -> List[Tuple[str, str, str, str]]:
+    def snapshot_labels(self) -> List[SnapshotLabel]:
         timestamp: str = self.current_datetime.strftime(self.timeformat)
         timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
-        components = []
-        for component in self._snapshot_components:
-            prefix, _, infix, suffix = component
-            component = prefix, timestamp, infix, suffix
-            components.append(component)
-        return components
+        return [SnapshotLabel(label.prefix, timestamp, label.infix, label.suffix) for label in self._snapshot_labels]
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -2170,14 +2185,18 @@ class Job:
         basis_src_datasets = []
         self.src_properties = {}
         if not self.is_dummy_src(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
+            props = "volblocksize,recordsize,name"
+            props = "snapshots_changed," + props if self.is_snapshots_changed_zfs_property_available(src) else props
             cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o volblocksize,recordsize,name {p.recursive_flag}",
-                src.root_dataset,
+                f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
             )
+            snaps_changed_avail = self.is_snapshots_changed_zfs_property_available(src)
             for line in (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines():
-                volblocksize, recordsize, src_dataset = line.split("\t", 2)
+                cols = line.split("\t")
+                snapshots_changed, volblocksize, recordsize, src_dataset = cols if snaps_changed_avail else ["-"] + cols
                 self.src_properties[src_dataset] = {
-                    "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize)
+                    "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
+                    "snapshots_changed": int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 }
                 basis_src_datasets.append(src_dataset)
             basis_src_datasets = isorted(basis_src_datasets)
@@ -2196,26 +2215,29 @@ class Job:
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
-            cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
-            datasets_to_snapshot = src_datasets
-            if p.recursive:
-                # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to the non-recursive CLI flavor
-                root_datasets = self.root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
-                if root_datasets is not None:
-                    datasets_to_snapshot = root_datasets
-                    cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
+            datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = self.find_datasets_to_snapshot(src_datasets)
+            basis_datasets_to_snapshot = datasets_to_snapshot.copy()
+            commands = {}
+            for label, datasets in datasets_to_snapshot.items():
+                cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
+                if p.recursive:
+                    # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to the non-recursive CLI flavor
+                    root_datasets = self.root_datasets_if_recursive_zfs_snapshot_is_possible(datasets, basis_src_datasets)
+                    if root_datasets is not None:
+                        cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
+                        datasets_to_snapshot[label] = root_datasets
+                commands[label] = cmd
+
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
-            components: List[Tuple] = self.find_components_to_snapshot(src_datasets)
             iterator = self.itr_ssh_cmd_parallel(
                 src,
-                cmd,
-                [[f"{dataset}@{''.join(component)}" for dataset in datasets_to_snapshot] for component in components],
-                fn=lambda batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
+                [(commands[lbl], [f"{ds}@{lbl}" for ds in datasets]) for lbl, datasets in datasets_to_snapshot.items()],
+                fn=lambda cmd, batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
                 max_batch_items=1 if self.is_solaris_zfs(src) else 2**29,  # solaris CLI doesn't accept multiple datasets
             )
             drain(iterator)
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
-            self.update_last_modified_cache(src_datasets, components)
+            self.update_last_modified_cache(basis_datasets_to_snapshot)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
@@ -3757,90 +3779,112 @@ class Job:
             root_datasets.append(dataset)
         return root_datasets
 
-    def find_components_to_snapshot(self, src_datasets: List[str]) -> List[Tuple]:
-        p, log = self.params, self.params.log
-        src = p.src
-        config = p.create_src_snapshot_config
-        if len(src_datasets) == 0:
-            return []
-        if config.create_src_snapshot_even_if_not_due or all(
-            duration_amount == 0 for duration_amount, duration_unit in config.suffix_durations.values()
+    def find_datasets_to_snapshot(self, src_datasets: List[str]) -> Dict[SnapshotLabel, List[str]]:
+        """Given a (sorted) list of input datasets, returns a dict where the key is a snapshot name (aka SnapshotLabel, e.g.
+        bzfs_2024-11-06_08:30:05_hourly) and the value is the (sorted) (sub)list of datasets for which a snapshot needs to
+        be created with that name, because these datasets are due per the schedule, either because the 'creation' time of
+        their most recent snapshot with that name pattern is now too old, or such a snapshot does not even exist.
+        The baseline implementation uses the 'zfs list -t snapshot' CLI to find the most recent snapshots, which is simple
+        but doesn't scale well with the number of snapshots, at least if the goal is to take snapshots every second.
+        An alternative, much more scalable, implementation queries the standard ZFS "snapshots_changed" dataset property, in
+        combination with a local cache that stores this property, as well as the creation time of the most recent snapshot,
+        for each SnapshotLabel and each dataset."""
+
+        def cache_get_snapshots_changed(dataset: str) -> int:  # like zfs_get_snapshots_changed() but reads from local cache
+            try:
+                return round(os.stat(p.log_params.last_modified_cache_file(dataset)).st_mtime)
+            except FileNotFoundError:
+                return 0
+
+        def schedule_latest_snapshot(
+            datasets_to_snapshot: Dict[SnapshotLabel, List[str]], label: SnapshotLabel, creation_unixtime: int
         ):
-            return config.snapshot_components()  # take snapshot regardless of the creation time of any existing snapshots
-
-        def cached_src_snapshots_with_creation(dataset: str) -> List[str]:
-            if not self.is_snapshots_changed_zfs_property_available(src):
-                return None
-            zfs_snapshots_changed: int = self.zfs_get_snapshots_changed(src, dataset)
-            cached_snapshots_changed: int = self.cache_get_snapshots_changed(dataset)
-            if cached_snapshots_changed == 0:
-                return None
-            if cached_snapshots_changed != zfs_snapshots_changed:
-                self.invalidate_last_modified_cache_dataset(dataset)
-                return None
-            snapshots_with_creation = []
-            for component in config.snapshot_components():
-                prefix, timestamp, infix, suffix = component
-                cached_snapshots_changed = self.cache_get_snapshots_changed(f"{dataset}@{prefix}{infix}{suffix}")
-                if cached_snapshots_changed == 0:
-                    return None
-                snapshots_with_creation.append(f"{cached_snapshots_changed}\t{dataset}@{prefix}{infix}{suffix}")
-            return snapshots_with_creation
-
-        src_dataset = src_datasets[-1]  # same as in update_last_modified_cache()
-        src_snapshots_with_creation = cached_src_snapshots_with_creation(src_dataset)
-        if src_snapshots_with_creation is None:
-            cmd = p.split_args(
-                f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -s creation -s name -Hp -o creation,name", src_dataset
-            )
-            src_snapshots_with_creation = self.run_ssh_command(src, log_trace, cmd=cmd).splitlines()
-        src_snapshot_names = [line[line.index("@") + 1 :] for line in src_snapshots_with_creation]
-
-        # FIXME
-        # src_root_datasets: List[str] = self.find_root_datasets(src_datasets)
-        # cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o createtxg,creation,name")
-        # for src_snapshots_with_creation in self.list_snapshots_in_parallel(src, cmd, src_root_datasets):
-        #     # streaming group by dataset name (consumes constant memory only)
-        #     for dataset, group in groupby(
-        #         src_snapshots_with_creation, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]
-        #     ):
-        #         snapshots = list(group)  # fetch all snapshots of current dataset
-        #         snapshots = [snapshot.split("\t") for snapshot in snapshots]
-        #         # sort by createtxg,creation,name
-        #         snapshots = sorted(snapshots, key=lambda s: (int(s[0]), int(s[1]), s[2]))
-        #         src_snapshot_names = [snapshot[-1] for snapshot in snapshots]
-
-        components = {}
-        for component in config.snapshot_components():
-            prefix, timestamp, infix, suffix = component
-            duration_amount, duration_unit = config.suffix_durations[suffix]
-            if duration_amount == 0:
-                components[component] = None
-                continue
-            end = infix + suffix
-            min_len = len(prefix) + len(infix) + len(suffix)
-            i = find_match(
-                src_snapshot_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= min_len, reverse=True
-            )
-            if i < 0:
-                components[component] = None
-                continue
-            creation_unixtime = int(src_snapshots_with_creation[i].split("\t", 1)[0])
-            # creation_unixtime = int(snapshots[i][1])  # FIXME
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
-            log.trace("Latest snapshot creation: %s for %s", creation_dt, "".join(component))
+            log.trace("Latest snapshot creation: %s for %s", creation_dt, label)
+            duration_amount, duration_unit = config.suffix_durations[label.suffix]
             next_event_dt = round_datetime_up_to_duration_multiple(
                 creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.anchors
             )
             msg = ""
             if config.current_datetime >= next_event_dt:
-                components[component] = None
+                datasets_to_snapshot[label].append(dataset)
                 msg = " has passed"
-            log.info("Next scheduled snapshot time: %s for %s%s", next_event_dt, "".join(component), msg)
-            # FIXME
-            # if len(components) == len(config.snapshot_components):
-            #     return components.keys()  # perf: no need to scan any further
-        return components.keys()
+            log.info("Next scheduled snapshot time: %s for %s%s", next_event_dt, label, msg)
+
+        p, log = self.params, self.params.log
+        src, config = p.src, p.create_src_snapshot_config
+        datasets_to_snapshot = defaultdict(list)
+        labels = []
+        for label in config.snapshot_labels():
+            _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
+            if config.create_src_snapshot_even_if_not_due or _duration_amount == 0:
+                datasets_to_snapshot[label] = src_datasets  # take snapshot regardless of creation time of any existing snaps
+            else:
+                labels.append(label)
+        if len(labels) == 0:
+            return datasets_to_snapshot  # nothing more TBD
+
+        # satisfy request from local cache as much as possible
+        cached_datasets_to_snapshot = defaultdict(list)
+        if self.is_snapshots_changed_zfs_property_available(src):
+            src_datasets_todo = []
+            for dataset in src_datasets:
+                cached_snapshots_changed: int = cache_get_snapshots_changed(dataset)
+                if cached_snapshots_changed == 0:
+                    src_datasets_todo.append(dataset)  # request cannot be answered from cache
+                    continue
+                if cached_snapshots_changed != self.src_properties[dataset]["snapshots_changed"]:  # get that prop "for free"
+                    self.invalidate_last_modified_cache_dataset(dataset)
+                    src_datasets_todo.append(dataset)  # request cannot be answered from cache
+                    continue
+                creation_unixtimes = {}
+                for label in labels:
+                    creation_unixtime = cache_get_snapshots_changed(f"{dataset}@{label.prefix}{label.infix}{label.suffix}")
+                    if creation_unixtime == 0:
+                        src_datasets_todo.append(dataset)  # request cannot be answered from cache
+                        break
+                    creation_unixtimes[label] = creation_unixtime
+                if len(creation_unixtimes) == len(labels):
+                    for label in labels:
+                        schedule_latest_snapshot(cached_datasets_to_snapshot, label, creation_unixtimes[label])
+            src_datasets = src_datasets_todo
+
+        # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
+        n = len(src_datasets)
+        i = 0
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o createtxg,creation,name")
+        for lines in self.list_snapshots_in_parallel(src, cmd, src_datasets):
+            # streaming group by dataset name (consumes constant memory only)
+            for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
+                while src_datasets[i] < dataset:  # Take snapshots for datasets whose snapshot stream is empty
+                    for label in labels:
+                        datasets_to_snapshot[label].append(src_datasets[i])
+                    i += 1
+                assert src_datasets[i] == dataset
+                i += 1
+                snapshots = [snapshot.split("\t") for snapshot in group]  # fetch all snapshots of current dataset
+                snapshots.sort(key=lambda s: (int(s[0]), int(s[1]), s[2]))  # sort by createtxg,creation,name
+                snapshot_names = [snapshot[-1][snapshot[-1].index("@") + 1 :] for snapshot in snapshots]
+                for label in labels:
+                    # log.info("label %s", label)
+                    prefix, end = label.prefix
+                    end = label.infix + label.suffix
+                    minlen = len(label.prefix) + len(label.infix) + len(label.suffix)
+                    j = find_match(
+                        snapshot_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= minlen, reverse=True
+                    )
+                    if j < 0:
+                        datasets_to_snapshot[label].append(dataset)
+                    else:
+                        schedule_latest_snapshot(datasets_to_snapshot, label, creation_unixtime=int(snapshots[j][1]))
+        while i < n:  # Take snapshots for datasets whose snapshot stream is empty
+            for label in labels:
+                datasets_to_snapshot[label].append(src_datasets[i])
+            i += 1
+        for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
+            if lbl in cached_datasets_to_snapshot:
+                datasets_to_snapshot[lbl] = list(heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl]))
+        return datasets_to_snapshot
 
     def invalidate_last_modified_cache_dataset(self, dataset: str):
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
@@ -3851,13 +3895,21 @@ class Job:
         except FileNotFoundError:
             pass  # harmless
 
-    def update_last_modified_cache(self, src_datasets: List[str], components: List[Tuple]) -> None:
+    def update_last_modified_cache(self, datasets_to_snapshot: Dict[SnapshotLabel, List[str]]) -> None:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        if len(src_datasets) > 0 and self.is_snapshots_changed_zfs_property_available(src):
-            src_dataset = src_datasets[-1]  # same as in find_components_to_snapshot()
-            snapshots_changed: int = self.zfs_get_snapshots_changed(src, src_dataset)  # fetch lastmodified time from source
+        if not self.is_snapshots_changed_zfs_property_available(src):
+            return
+        src_datasets = set()
+        dataset_labels = defaultdict(list)
+        for label, datasets in datasets_to_snapshot.items():
+            src_datasets.update(datasets)  # union
+            for dataset in datasets:
+                dataset_labels[dataset].append(label)
+        src_datasets = isorted(src_datasets)
+
+        for src_dataset, snapshots_changed in self.zfs_get_snapshots_changed(src, src_datasets).items():
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
@@ -3870,30 +3922,28 @@ class Job:
                         set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed)
 
                 update_last_modification_time(src_dataset)
-                for component in components:
-                    prefix, timestamp, infix, suffix = component
-                    update_last_modification_time(f"{src_dataset}@{prefix}{infix}{suffix}")
+                for label in dataset_labels[src_dataset]:
+                    update_last_modification_time(f"{src_dataset}@{label.prefix}{label.infix}{label.suffix}")
 
-    def zfs_get_snapshots_changed(self, remote: Remote, dataset: str) -> int:
+    def zfs_get_snapshots_changed(self, remote: Remote, datasets: List[str]) -> Dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
         See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
         p, log = self.params, self.params.log
         assert self.is_snapshots_changed_zfs_property_available(remote)
-        cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed", dataset)
-        snapshots_changed = self.run_ssh_command(remote, log_trace, cmd=cmd).rstrip()
-        if snapshots_changed == "-" or not snapshots_changed:
-            return 0
-        return int(snapshots_changed)
-
-    def cache_get_snapshots_changed(self, dataset) -> int:
-        """Same as zfs_get_snapshots_changed() expect it reads from the local cache."""
-        p, log = self.params, self.params.log
-        cache_file = p.log_params.last_modified_cache_file(dataset)
-        try:
-            cached_snapshots_changed = round(os.stat(cache_file).st_mtime)
-        except FileNotFoundError:
-            return 0
-        return cached_snapshots_changed
+        cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
+        # cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed")
+        results = {}
+        for lines in self.itr_ssh_cmd_parallel(
+            remote,
+            [(cmd, datasets)],
+            lambda _cmd, batch: self.run_ssh_command(remote, log_trace, cmd=_cmd + batch).splitlines(),
+        ):
+            for line in lines:
+                snapshots_changed, dataset = line.split("\t", 1)
+                if snapshots_changed == "-" or not snapshots_changed:
+                    snapshots_changed = "0"
+                results[dataset] = int(snapshots_changed)
+        return results
 
     @dataclass(order=True)
     class ComparableSnapshot:
@@ -4544,18 +4594,17 @@ class Job:
     def itr_ssh_cmd_parallel(
         self,
         r: Remote,
-        cmd: List[str],
-        cmd_args_list: List[List[str]],
-        fn: Callable[[List[str]], Any],
+        cmd_args_list: List[Tuple[List[str], List[str]]],
+        fn: Callable[[List[str], List[str]], Any],
         max_batch_items=2**29,
     ) -> Generator:
         max_workers = self.max_workers[r.location]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             iterators = [
                 self.itr_ssh_cmd_batched(
-                    r, cmd, cmd_args, lambda batch: executor.submit(fn, batch), max_batch_items=max_batch_items
+                    r, cmd, cmd_args, lambda batch: executor.submit(fn, cmd, batch), max_batch_items=max_batch_items
                 )
-                for cmd_args in cmd_args_list
+                for cmd, cmd_args in cmd_args_list
             ]
             iterator = itertools.chain(*iterators)
 
@@ -4573,9 +4622,8 @@ class Job:
         max_workers = self.max_workers[r.location]
         return self.itr_ssh_cmd_parallel(
             r,
-            cmd,
-            [datasets],
-            fn=lambda batch: (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines(),
+            [(cmd, datasets)],
+            fn=lambda cmd, batch: (self.try_ssh_command(r, log_trace, cmd=cmd + batch) or "").splitlines(),
             max_batch_items=min(
                 self.max_datasets_per_minibatch_on_list_snaps[r.location],
                 max(
@@ -5395,7 +5443,7 @@ def parse_cron_weekday(weekday_spec: str) -> int:
 
 
 metadata_month = {"min": 1, "max": 12, "help": "The month within a year"}
-metadata_weekday = {"min": 0, "max": 7, "help": "The weekday within a week: 0=Sunday, 1=Monday, ..., 7=Sunday"}
+metadata_weekday = {"min": 0, "max": 6, "help": "The weekday within a week: 0=Sunday, 1=Monday, ..., 6=Saturday"}
 metadata_day = {"min": 1, "max": 31, "help": "The day within a month"}
 metadata_hour = {"min": 0, "max": 23, "help": "The hour within a day"}
 metadata_minute = {"min": 0, "max": 59, "help": "The minute within an hour"}
@@ -5442,9 +5490,8 @@ class PeriodAnchors:
 
     def parse(self, args: argparse.Namespace):
         for f in fields(PeriodAnchors):
-            name = f.name
-            if hasattr(args, name):
-                setattr(self, name, getattr(args, name))
+            setattr(self, f.name, getattr(args, f.name))
+        return self
 
 
 def round_datetime_up_to_duration_multiple(
@@ -5456,7 +5503,7 @@ def round_datetime_up_to_duration_multiple(
     Supported units: "secondly", "minutely", "hourly", "daily", "weekly", "monthly", "yearly".
     If dt is already exactly on a boundary (i.e. exactly on a multiple), it is returned unchanged.
     Examples:
-    Default hourly anchor is midn
+    Default hourly anchor is midnight
     14:00:00, 1 hours --> 14:00:00
     14:05:01, 1 hours --> 15:00:00
     15:05:01, 1 hours --> 16:00:00
@@ -5736,12 +5783,6 @@ def validate_port(port: int, message: str) -> None:
         port = str(port)
     if port and not port.isdigit():
         die(message + f"must be empty or a positive integer: '{port}'")
-
-
-def validate_snapshot_name(snapshot_name: str, input_text: str) -> None:
-    validate_dataset_name(snapshot_name, input_text)
-    if "/" in snapshot_name:
-        die(f"Invalid ZFS snapshot name: '{snapshot_name}' for: '{input_text}'")
 
 
 def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
