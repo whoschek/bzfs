@@ -900,9 +900,11 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_snapshotting_recursive_simple(self):
         self.setup_basic()
+        create_filesystem(src_root_dataset, "boo")
         destroy(dst_root_dataset, recursive=True)
         n = 3
         self.assertSnapshots(src_root_dataset, n, "s")
+        self.assertSnapshots(src_root_dataset + "/boo", 0)
         self.assertSnapshots(src_root_dataset + "/foo/b", 0)
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -913,7 +915,7 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-replication",
                     "--create-src-snapshot",
                     "--create-src-snapshot-prefix=z",
-                    "--create-src-snapshot-suffix=",
+                    "--create-src-snapshot-suffix=secondly",
                     "--create-src-snapshot-timeformat=",
                     "--yearly_month=6",
                     dry_run=(i == 0),
@@ -921,11 +923,13 @@ class LocalTestCase(BZFSTestCase):
                 self.assertFalse(dataset_exists(dst_root_dataset))
                 if i == 0:
                     self.assertEqual(n, len(snapshots(src_root_dataset)))
+                    self.assertEqual(0, len(snapshots(src_root_dataset + "/boo")))
                     self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
                     self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
                     self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
                 else:
                     self.assertEqual(n + 1, len(snapshots(src_root_dataset)))
+                    self.assertEqual(1, len(snapshots(src_root_dataset + "/boo")))
                     self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo")))
                     self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo/a")))
                     self.assertEqual(1, len(snapshots(src_root_dataset + "/foo/b")))
