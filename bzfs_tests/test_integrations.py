@@ -915,7 +915,7 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-replication",
                     "--create-src-snapshot",
                     "--create-src-snapshot-prefix=z",
-                    "--create-src-snapshot-suffix=secondly",
+                    "--create-src-snapshot-suffix=hourly",
                     "--create-src-snapshot-timeformat=",
                     "--yearly_month=6",
                     dry_run=(i == 0),

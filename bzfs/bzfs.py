@@ -2237,6 +2237,7 @@ class Job:
             )
             drain(iterator)
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
+
             self.update_last_modified_cache(basis_datasets_to_snapshot)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
@@ -3852,7 +3853,8 @@ class Job:
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         n = len(src_datasets)
         i = 0
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o createtxg,creation,name")
+        # cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o createtxg,creation,name")
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # by dataset, createtxg
         for lines in self.list_snapshots_in_parallel(src, cmd, src_datasets):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
@@ -3888,9 +3890,8 @@ class Job:
 
     def invalidate_last_modified_cache_dataset(self, dataset: str):
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
-        p, log = self.params, self.params.log
         try:
-            for entry in os.scandir(os.path.dirname(p.log_params.last_modified_cache_file(dataset))):
+            for entry in os.scandir(os.path.dirname(self.params.log_params.last_modified_cache_file(dataset))):
                 os.utime(entry.path, times=(0, 0))
         except FileNotFoundError:
             pass  # harmless
@@ -3901,13 +3902,13 @@ class Job:
         src, dst = p.src, p.dst
         if not self.is_snapshots_changed_zfs_property_available(src):
             return
-        src_datasets = set()
+        src_datasets_set = set()
         dataset_labels = defaultdict(list)
         for label, datasets in datasets_to_snapshot.items():
-            src_datasets.update(datasets)  # union
+            src_datasets_set.update(datasets)  # union
             for dataset in datasets:
                 dataset_labels[dataset].append(label)
-        src_datasets = isorted(src_datasets)
+        src_datasets = isorted(src_datasets_set)
 
         for src_dataset, snapshots_changed in self.zfs_get_snapshots_changed(src, src_datasets).items():
             if snapshots_changed == 0:
