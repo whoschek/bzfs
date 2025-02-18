@@ -5595,8 +5595,8 @@ def round_datetime_up_to_duration_multiple(
             period = timedelta(weeks=duration_amount)
 
         delta = dt - anchor
-        period_micros = period.days * 86400 * 1000000 + period.seconds * 1000000 + period.microseconds
-        delta_micros = delta.days * 86400 * 1000000 + delta.seconds * 1000000 + delta.microseconds
+        period_micros = (period.days * 86400 + period.seconds) * 1_000_000 + period.microseconds
+        delta_micros = (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
         remainder = delta_micros % period_micros
         if remainder == 0:
             return dt
@@ -5615,8 +5615,7 @@ def round_datetime_up_to_duration_multiple(
             candidate = add_months(candidate, -1)
         anchor = candidate
         diff_months = (dt.year - anchor.year) * 12 + (dt.month - anchor.month)
-        n = diff_months // duration_amount
-        candidate_boundary = add_months(anchor, n * duration_amount)
+        candidate_boundary = add_months(anchor, duration_amount * (diff_months // duration_amount))
         if candidate_boundary < dt:
             candidate_boundary = add_months(candidate_boundary, duration_amount)
         return candidate_boundary
@@ -5635,8 +5634,7 @@ def round_datetime_up_to_duration_multiple(
             candidate = candidate.replace(year=candidate.year - 1)
         anchor = candidate
         diff_years = dt.year - anchor.year
-        n = diff_years // duration_amount
-        candidate_boundary = add_years(anchor, n * duration_amount)
+        candidate_boundary = add_years(anchor, duration_amount * (diff_years // duration_amount))
         if candidate_boundary < dt:
             candidate_boundary = add_years(candidate_boundary, duration_amount)
         return candidate_boundary
