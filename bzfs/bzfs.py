@@ -1375,11 +1375,6 @@ class LogParams:
         delete_stale_files(dot_current_dir, prefix="", secs=60, dirs=True, exclude=os.path.basename(current_dir))
         self.params: Params = None
 
-    def last_modified_cache_file(self, dataset_or_snapshot: str) -> str:
-        i = dataset_or_snapshot.find("@")
-        cache_file = dataset_or_snapshot.replace("@", "/@") if i >= 0 else dataset_or_snapshot + "/="
-        return os.path.join(self.last_modified_cache_dir, cache_file)
-
     def __repr__(self) -> str:
         return str(self.__dict__)
 
@@ -3798,7 +3793,7 @@ class Job:
 
         def cache_get_snapshots_changed(dataset: str) -> int:  # like zfs_get_snapshots_changed() but reads from local cache
             try:
-                return round(os.stat(p.log_params.last_modified_cache_file(dataset)).st_mtime)
+                return round(os.stat(self.last_modified_cache_file(dataset)).st_mtime)
             except FileNotFoundError:
                 return 0
 
@@ -3892,10 +3887,17 @@ class Job:
                 datasets_to_snapshot[lbl] = list(heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl]))
         return datasets_to_snapshot
 
+    def last_modified_cache_file(self, dataset_or_snapshot) -> str:
+        p = self.params
+        i = dataset_or_snapshot.find("@")
+        cache_file = dataset_or_snapshot.replace("@", "/@") if i >= 0 else dataset_or_snapshot + "/="
+        userhost_dir = p.src.ssh_user_host if p.src.ssh_user_host else "-"
+        return os.path.join(p.log_params.last_modified_cache_dir, userhost_dir, cache_file)
+
     def invalidate_last_modified_cache_dataset(self, dataset: str):
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
         try:
-            for entry in os.scandir(os.path.dirname(self.params.log_params.last_modified_cache_file(dataset))):
+            for entry in os.scandir(os.path.dirname(self.last_modified_cache_file(dataset))):
                 os.utime(entry.path, times=(0, 0))
         except FileNotFoundError:
             pass  # harmless
@@ -3918,11 +3920,11 @@ class Job:
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
-                cache_dir = os.path.dirname(p.log_params.last_modified_cache_file(src_dataset))
+                cache_dir = os.path.dirname(self.last_modified_cache_file(src_dataset))
                 os.makedirs(cache_dir, exist_ok=True)
 
                 def update_last_modification_time(dataset: str) -> None:
-                    cache_file = p.log_params.last_modified_cache_file(dataset)
+                    cache_file = self.last_modified_cache_file(dataset)
                     if not p.dry_run:
                         set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed)
 
@@ -5772,12 +5774,12 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 
 
 def validate_user_name(user: str, input_text: str) -> None:
-    if user and any(char.isspace() or char == '"' or char == "'" or char == "`" for char in user):
+    if user and (".." in user or any(c.isspace() or c == '"' or c == "'" or c in "/@`" for c in user)):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
 def validate_host_name(host: str, input_text: str) -> None:
-    if host and any(char.isspace() or char == "@" or char == '"' or char == "'" or char == "`" for char in host):
+    if host and (".." in host or any(c.isspace() or c == '"' or c == "'" or c in "/@`" for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
