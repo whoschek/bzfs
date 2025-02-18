@@ -1250,7 +1250,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                           "minutely": "minutes", "secondly": "seconds"}.items():
         anchor_group = parser.add_argument_group(
             f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
-            f"every N {label} are due to be created on the source by the --create-src-snapshot option.")
+            f"every N {label} are scheduled to be created on the source by the --create-src-snapshot option.")
         for f in [f for f in fields(PeriodAnchors) if f.name.startswith(period + "_")]:
             m = f.metadata
             _min = m.get("min")
@@ -5535,34 +5535,34 @@ def round_datetime_up_to_duration_multiple(
         last_day = calendar.monthrange(new_year, dt.month)[1]  # last valid day of the current month
         return dt.replace(year=new_year, day=min(dt.day, last_day))
 
-    def adjust_anchor(candidate: datetime, dt: datetime, period: timedelta) -> datetime:
-        """Adjusts candidate downward by one period if candidate is in the future relative to dt."""
-        if candidate > dt:
-            assert candidate - period <= dt
-            return candidate - period
-        return candidate
+    def get_anchor(anchor: datetime, dt: datetime, period: timedelta) -> datetime:
+        """Adjusts anchor downward by one period if anchor is in the future relative to dt."""
+        if anchor > dt:
+            assert anchor - period <= dt
+            return anchor - period
+        return anchor
 
     if duration_amount == 0:
         return dt
 
     if duration_unit in {"secondly", "minutely", "hourly", "daily", "weekly"}:
         if duration_unit == "secondly":
-            anchor = adjust_anchor(
+            anchor = get_anchor(
                 dt.replace(hour=0, minute=0, second=0, microsecond=anchors.secondly_microsecond), dt, timedelta(seconds=1)
             )
             period = timedelta(seconds=duration_amount)
         elif duration_unit == "minutely":
-            anchor = adjust_anchor(dt.replace(second=anchors.minutely_second, microsecond=0), dt, timedelta(minutes=1))
+            anchor = get_anchor(dt.replace(second=anchors.minutely_second, microsecond=0), dt, timedelta(minutes=1))
             period = timedelta(minutes=duration_amount)
         elif duration_unit == "hourly":
             daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            anchor = adjust_anchor(
+            anchor = get_anchor(
                 daily_base + timedelta(minutes=anchors.hourly_minute, seconds=anchors.hourly_second), dt, timedelta(days=1)
             )
             period = timedelta(hours=duration_amount)
         elif duration_unit == "daily":
             daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            anchor = adjust_anchor(
+            anchor = get_anchor(
                 daily_base + timedelta(hours=anchors.daily_hour, minutes=anchors.daily_minute, seconds=anchors.daily_second),
                 dt,
                 timedelta(days=1),
@@ -5578,7 +5578,7 @@ def round_datetime_up_to_duration_multiple(
             target_py_weekday = (anchors.weekly_weekday - 1) % 7
             diff_days = (candidate.weekday() - target_py_weekday) % 7
             candidate -= timedelta(days=diff_days)
-            anchor = adjust_anchor(candidate, dt, timedelta(days=7))
+            anchor = get_anchor(candidate, dt, timedelta(days=7))
             period = timedelta(weeks=duration_amount)
 
         delta = dt - anchor
@@ -5591,8 +5591,7 @@ def round_datetime_up_to_duration_multiple(
 
     elif duration_unit == "monthly":
         last_day = calendar.monthrange(dt.year, dt.month)[1]  # last valid day of the current month
-        # Compute the base anchor for the month ensuring the day is valid
-        candidate = dt.replace(
+        candidate = dt.replace(  # Compute the base anchor for the month ensuring the day is valid
             day=min(anchors.monthly_monthday, last_day),
             hour=anchors.monthly_hour,
             minute=anchors.monthly_minute,
@@ -5611,8 +5610,7 @@ def round_datetime_up_to_duration_multiple(
 
     elif duration_unit == "yearly":
         last_day = calendar.monthrange(dt.year, anchors.yearly_month)[1]  # last valid day for anchor month in current year
-        # Compute the base yearly anchor candidate for the current year, ensuring the day is valid
-        candidate = dt.replace(
+        candidate = dt.replace(  # Compute the base yearly anchor candidate for the current year, ensuring the day is valid
             month=anchors.yearly_month,
             day=min(anchors.yearly_monthday, last_day),
             hour=anchors.yearly_hour,

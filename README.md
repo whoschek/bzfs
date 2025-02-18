@@ -2364,7 +2364,7 @@ usage: bzfs [-h] [--recursive]
 # YEARLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N years
-are due to be created on the source by the --create-src-snapshot
+are scheduled to be created on the source by the --create-src-snapshot
 option.
 
 <div id="--yearly_month"></div>
@@ -2408,7 +2408,7 @@ option.
 # MONTHLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N months
-are due to be created on the source by the --create-src-snapshot
+are scheduled to be created on the source by the --create-src-snapshot
 option.
 
 <div id="--monthly_monthday"></div>
@@ -2444,15 +2444,15 @@ option.
 # WEEKLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N weeks
-are due to be created on the source by the --create-src-snapshot
+are scheduled to be created on the source by the --create-src-snapshot
 option.
 
 <div id="--weekly_weekday"></div>
 
 **--weekly_weekday** *INT*
 
-*  The weekday within a week: 0=Sunday, 1=Monday, ..., 7=Sunday (0 ≤ x
-    ≤ 7, default: 0).
+*  The weekday within a week: 0=Sunday, 1=Monday, ..., 6=Saturday (0 ≤
+    x ≤ 6, default: 0).
 
 <!-- -->
 
@@ -2481,7 +2481,7 @@ option.
 # DAILY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N days
-are due to be created on the source by the --create-src-snapshot
+are scheduled to be created on the source by the --create-src-snapshot
 option.
 
 <div id="--daily_hour"></div>
@@ -2509,7 +2509,7 @@ option.
 # HOURLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N hours
-are due to be created on the source by the --create-src-snapshot
+are scheduled to be created on the source by the --create-src-snapshot
 option.
 
 <div id="--hourly_minute"></div>
@@ -2529,7 +2529,7 @@ option.
 # MINUTELY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N
-minutes are due to be created on the source by the
+minutes are scheduled to be created on the source by the
 --create-src-snapshot option.
 
 <div id="--minutely_second"></div>
@@ -2541,7 +2541,7 @@ minutes are due to be created on the source by the
 # SECONDLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N
-seconds are due to be created on the source by the
+seconds are scheduled to be created on the source by the
 --create-src-snapshot option.
 
 <div id="--secondly_microsecond"></div>
