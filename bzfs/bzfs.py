@@ -3783,8 +3783,8 @@ class Job:
             root_datasets.append(dataset)
         return root_datasets
 
-    def find_datasets_to_snapshot(self, src_datasets: List[str]) -> Dict[SnapshotLabel, List[str]]:
-        """Given a (sorted) list of input datasets, returns a dict where the key is a snapshot name (aka SnapshotLabel, e.g.
+    def find_datasets_to_snapshot(self, sorted_datasets: List[str]) -> Dict[SnapshotLabel, List[str]]:
+        """Given a (sorted) list of source datasets, returns a dict where the key is a snapshot name (aka SnapshotLabel, e.g.
         bzfs_2024-11-06_08:30:05_hourly) and the value is the (sorted) (sub)list of datasets for which a snapshot needs to
         be created with that name, because these datasets are due per the schedule, either because the 'creation' time of
         their most recent snapshot with that name pattern is now too old, or such a snapshot does not even exist.
@@ -3812,7 +3812,7 @@ class Job:
             )
             msg = ""
             if config.current_datetime >= next_event_dt:
-                datasets_to_snapshot[label].append(dataset)
+                datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for creation
                 msg = " has passed"
             log.info("Next scheduled snapshot time: %s for %s@%s%s", next_event_dt, dataset, label, msg)
 
@@ -3823,7 +3823,7 @@ class Job:
         for label in config.snapshot_labels():
             _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
             if _duration_amount == 0 or config.create_src_snapshot_even_if_not_due:
-                datasets_to_snapshot[label] = src_datasets  # take snapshot regardless of creation time of any existing snaps
+                datasets_to_snapshot[label] = sorted_datasets  # take snapshot regardless of creation time of existing snaps
             else:
                 labels.append(label)
         if len(labels) == 0:
@@ -3832,39 +3832,39 @@ class Job:
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot = defaultdict(list)
         if self.is_snapshots_changed_zfs_property_available(src):
-            src_datasets_todo = []
-            for dataset in src_datasets:
+            sorted_datasets_todo = []
+            for dataset in sorted_datasets:
                 cached_snapshots_changed: int = cache_get_snapshots_changed(dataset)
                 if cached_snapshots_changed == 0:
-                    src_datasets_todo.append(dataset)  # request cannot be answered from cache
+                    sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
                 if cached_snapshots_changed != self.src_properties[dataset]["snapshots_changed"]:  # get that prop "for free"
                     self.invalidate_last_modified_cache_dataset(dataset)
-                    src_datasets_todo.append(dataset)  # request cannot be answered from cache
+                    sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
                 creation_unixtimes = {}
                 for label in labels:
                     creation_unixtime = cache_get_snapshots_changed(f"{dataset}@{label.prefix}{label.infix}{label.suffix}")
                     if creation_unixtime == 0:
-                        src_datasets_todo.append(dataset)  # request cannot be answered from cache
+                        sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
                     creation_unixtimes[label] = creation_unixtime
                 if len(creation_unixtimes) == len(labels):
                     for label in labels:
                         create_snapshot_if_latest_is_too_old(cached_datasets_to_snapshot, label, creation_unixtimes[label])
-            src_datasets = src_datasets_todo
+            sorted_datasets = sorted_datasets_todo
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         i = 0
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # by dataset, createtxg
-        for lines in self.list_snapshots_in_parallel(src, cmd, src_datasets):
+        for lines in self.list_snapshots_in_parallel(src, cmd, sorted_datasets):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
-                while src_datasets[i] < dataset:  # Take snapshots for datasets whose snapshot stream is empty
+                while sorted_datasets[i] < dataset:  # Take snapshots for datasets whose snapshot stream is empty
                     for label in labels:
-                        datasets_to_snapshot[label].append(src_datasets[i])
+                        datasets_to_snapshot[label].append(sorted_datasets[i])
                     i += 1
-                assert src_datasets[i] == dataset
+                assert sorted_datasets[i] == dataset
                 i += 1
                 snapshots = [snapshot.split("\t") for snapshot in group]  # fetch all snapshots of current dataset
                 snapshots.sort(key=lambda s: (int(s[0]), int(s[1]), s[2]))  # sort by createtxg,creation,name
@@ -3878,9 +3878,9 @@ class Job:
                     )
                     creation_unixtime = int(snapshots[j][1]) if j >= 0 else 0
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
-        while i < len(src_datasets):  # Take snapshots for datasets whose snapshot stream is empty
+        while i < len(sorted_datasets):  # Take snapshots for datasets whose snapshot stream is empty
             for label in labels:
-                datasets_to_snapshot[label].append(src_datasets[i])
+                datasets_to_snapshot[label].append(sorted_datasets[i])
             i += 1
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
             if lbl in cached_datasets_to_snapshot:
