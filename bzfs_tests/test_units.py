@@ -1463,6 +1463,34 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = make_dt(hour=23, minute=55, second=1)
         self.assertEqual(dt.replace(day=dt.day + 1, hour=0, minute=0, second=0), round_up(dt, duration_amount=2))
 
+    def test_zero_unixtime(self):
+        dt = datetime.fromtimestamp(0, tz=timezone.utc)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
+        expected = dt
+        self.assertEqual(expected, result)
+        self.assertEqual(result.tzinfo, timezone.utc)
+
+        tz = timezone(timedelta(hours=-7))
+        dt = datetime.fromtimestamp(0, tz=tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
+        expected = dt
+        self.assertEqual(expected, result)
+        self.assertEqual(result.tzinfo, tz)
+
+    def test_zero_unixtime_plus_one_microsecond(self):
+        dt = datetime.fromtimestamp(1 / 1_000_000, tz=timezone.utc)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
+        expected = dt.replace(microsecond=0) + timedelta(hours=1)
+        self.assertEqual(expected, result)
+        self.assertEqual(result.tzinfo, timezone.utc)
+
+        tz = timezone(timedelta(hours=-7))
+        dt = datetime.fromtimestamp(1 / 1_000_000, tz=tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
+        expected = dt.replace(microsecond=0) + timedelta(hours=1)
+        self.assertEqual(expected, result)
+        self.assertEqual(result.tzinfo, tz)
+
     def test_zero_duration_amount(self):
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 0, "hourly")

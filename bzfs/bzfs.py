@@ -3798,11 +3798,12 @@ class Job:
             try:
                 return round(os.stat(self.last_modified_cache_file(dataset)).st_mtime)
             except FileNotFoundError:
-                return 0
+                return 0  # harmless
 
-        def schedule_latest_snapshot(
+        def create_snapshot_if_latest_is_too_old(
             datasets_to_snapshot: Dict[SnapshotLabel, List[str]], label: SnapshotLabel, creation_unixtime: int
         ):
+            """Schedules creation of a snapshot for the given label if the label's existing latest snapshot is too old."""
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.trace("Latest snapshot creation: %s for %s", creation_dt, label)
             duration_amount, duration_unit = config.suffix_durations[label.suffix]
@@ -3850,7 +3851,7 @@ class Job:
                     creation_unixtimes[label] = creation_unixtime
                 if len(creation_unixtimes) == len(labels):
                     for label in labels:
-                        schedule_latest_snapshot(cached_datasets_to_snapshot, label, creation_unixtimes[label])
+                        create_snapshot_if_latest_is_too_old(cached_datasets_to_snapshot, label, creation_unixtimes[label])
             src_datasets = src_datasets_todo
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
@@ -3875,10 +3876,8 @@ class Job:
                     j = find_match(
                         snapshot_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= minlen, reverse=True
                     )
-                    if j < 0:
-                        datasets_to_snapshot[label].append(dataset)
-                    else:
-                        schedule_latest_snapshot(datasets_to_snapshot, label, creation_unixtime=int(snapshots[j][1]))
+                    creation_unixtime = int(snapshots[j][1]) if j >= 0 else 0
+                    create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
         while i < len(src_datasets):  # Take snapshots for datasets whose snapshot stream is empty
             for label in labels:
                 datasets_to_snapshot[label].append(src_datasets[i])
