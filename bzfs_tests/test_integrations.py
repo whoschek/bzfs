@@ -1142,11 +1142,11 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--create-src-snapshot",
             "--create-src-snapshot-prefix=s1_",
-            "--create-src-snapshot-suffix=_secondly",
+            "--create-src-snapshot-suffix=_2secondly",
             "--create-src-snapshot-timeformat=%Y-%m-%d_%H:%M:%S.%f",
-            "--daemon-lifetime=2seconds",
+            "--daemon-lifetime=4seconds",
         )
-        expected = ["s1.*_secondly", "s1.*_secondly", "s1.*_secondly"]
+        expected = ["s1.*_2secondly", "s1.*_2secondly", "s1.*_2secondly"]
         self.assertSnapshotNameRegexes(src_root_dataset, expected)
         self.assertSnapshotNameRegexes(dst_root_dataset, expected)
 
