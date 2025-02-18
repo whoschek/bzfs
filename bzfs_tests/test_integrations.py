@@ -618,6 +618,9 @@ class AdhocTestCase(BZFSTestCase):
     def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
 
+    def test_basic_snapshotting_flat_even_if_not_due(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_even_if_not_due()
+
     def test_basic_snapshotting_flat_daemon(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
 
@@ -1113,6 +1116,20 @@ class LocalTestCase(BZFSTestCase):
             "--create-src-snapshot-suffix=_secondly",
             expected_status=die_status,
         )
+
+    def test_basic_snapshotting_flat_even_if_not_due(self):
+        take_snapshot(src_root_dataset, "s1_9999-01-01_00:00:00_hourly")
+        take_snapshot(src_root_dataset, "s1_9999-01-01_00:00:00_daily")
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--create-src-snapshot",
+            "--create-src-snapshot-even-if-not-due",
+            "--create-src-snapshot-prefix=s1_",
+            "--create-src-snapshot-suffix=_hourly",
+        )
+        self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_hourly", "s1.*_daily", "s1.*_hourly"])
 
     def test_basic_snapshotting_flat_daemon(self):
         destroy(dst_root_dataset, recursive=True)
