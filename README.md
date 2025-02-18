@@ -1057,8 +1057,8 @@ usage: bzfs [-h] [--recursive]
 
     Note: All bzfs functions including snapshot creation, replication,
     deletion, comparison, etc. happily work with any snapshots in any
-    format with anyand naming convention, even created or managed by any
-    third party ZFS snapshot management tool, including manual zfs
+    format and with any naming convention, even created or managed by
+    any third party ZFS snapshot management tool, including manual zfs
     snapshot/destroy.
 
 <!-- -->
@@ -1084,9 +1084,9 @@ usage: bzfs [-h] [--recursive]
 
 **--create-src-snapshot-infix** *STRING [STRING ...]*
 
-*  Default is the empty string. This enables to include an optional
-    label in the snapshot name that identifies the intended snapshot
-    use, for example the hostname or cloud provider region code (e.g.
+*  Default is the empty string. This enables to include an optional tag
+    in the snapshot name that identifies the intended snapshot use, for
+    example the hostname or cloud provider region code (e.g.
     '_us-west-1') of the intended backup destination if replicating
     to multiple independent backup destination sites. This option can be
     specified multiple times to create multiple snapshots of each source

@@ -600,7 +600,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "command line are spread over multiple command line invocations, respecting the limits that the operating "
              "system places on the maximum length of a single command line, per `getconf ARG_MAX`.\n\n"
              f"Note: All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily "
-             "work with any snapshots in any format with anyand naming convention, even created or managed by any third "
+             "work with any snapshots in any format and with any naming convention, even created or managed by any third "
              "party ZFS snapshot management tool, including manual zfs snapshot/destroy.\n\n")
     h_fix = ("The name of the snapshot created on the source is `${--create-src-snapshot-prefix}"
              "strftime(--create-src-snapshot-time*)"
@@ -615,7 +615,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "containing the same timestamp in the name.\n\n" + h_fix)
     parser.add_argument(
         "--create-src-snapshot-infix", action=SetAction, nargs="+", default=[], metavar="STRING",
-        help=f"Default is the empty string. This enables to include an optional label in the "
+        help=f"Default is the empty string. This enables to include an optional tag in the "
              "snapshot name that identifies the intended snapshot use, for example the hostname or cloud provider region "
              "code (e.g. '_us-west-1') of the intended backup destination if replicating to multiple independent backup "
              "destination sites. "
