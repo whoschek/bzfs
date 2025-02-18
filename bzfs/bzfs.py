@@ -3811,7 +3811,7 @@ class Job:
             if config.current_datetime >= next_event_dt:
                 datasets_to_snapshot[label].append(dataset)
                 msg = " has passed"
-            log.info("Next scheduled snapshot time: %s for %s%s", next_event_dt, label, msg)
+            log.info("Next scheduled snapshot time: %s for %s@%s%s", next_event_dt, dataset, label, msg)
 
         p, log = self.params, self.params.log
         src, config = p.src, p.create_src_snapshot_config
