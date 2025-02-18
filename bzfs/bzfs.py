@@ -3877,11 +3877,8 @@ class Job:
                     )
                     creation_unixtime = int(snapshots[j][1]) if j >= 0 else 0
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
-        while i < len(sorted_datasets):  # Take snapshots for datasets whose snapshot stream is empty
-            for label in labels:
-                datasets_to_snapshot[label].append(sorted_datasets[i])
-            i += 1
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
+            datasets_to_snapshot[lbl].extend(sorted_datasets[i:])  # Take snaps for datasets whose snapshot stream is empty
             if lbl in cached_datasets_to_snapshot:
                 datasets_to_snapshot[lbl] = list(heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl]))
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
