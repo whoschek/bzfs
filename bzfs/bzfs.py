@@ -2231,13 +2231,12 @@ class Job:
                 commands[label] = cmd
 
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
-            iterator = self.itr_ssh_cmd_parallel(
+            self.run_ssh_cmd_parallel(
                 src,
                 [(commands[lbl], [f"{ds}@{lbl}" for ds in datasets]) for lbl, datasets in datasets_to_snapshot.items()],
                 fn=lambda cmd, batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
                 max_batch_items=1 if self.is_solaris_zfs(src) else 2**29,  # solaris CLI doesn't accept multiple datasets
             )
-            drain(iterator)
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
             self.update_last_modified_cache(basis_datasets_to_snapshot)
 
@@ -3819,7 +3818,7 @@ class Job:
         labels = []
         for label in config.snapshot_labels():
             _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
-            if  _duration_amount == 0 or config.create_src_snapshot_even_if_not_due:
+            if _duration_amount == 0 or config.create_src_snapshot_even_if_not_due:
                 datasets_to_snapshot[label] = src_datasets  # take snapshot regardless of creation time of any existing snaps
             else:
                 labels.append(label)
@@ -4625,6 +4624,15 @@ class Job:
                 if next_future is not None:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
+
+    def run_ssh_cmd_parallel(
+        self,
+        r: Remote,
+        cmd_args_list: List[Tuple[List[str], List[str]]],
+        fn: Callable[[List[str], List[str]], Any],
+        max_batch_items=2**29,
+    ) -> None:
+        drain(self.itr_ssh_cmd_parallel(r, cmd_args_list, fn=fn, max_batch_items=max_batch_items))
 
     def list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
         max_workers = self.max_workers[r.location]

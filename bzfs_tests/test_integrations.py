@@ -3618,6 +3618,9 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--delete-dst-snapshots=bookmarks")
         self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assertBookmarkNames(src_root_dataset, [fix("s1"), fix("s3")])
+        self.run_bzfs(bzfs.dummy_dataset, src_root_dataset, "--skip-replication", "-v", "--delete-dst-snapshots=bookmarks")
+        self.assertBookmarkNames(src_root_dataset, [])
 
     def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self):
         self.setup_basic()
