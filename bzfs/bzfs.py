@@ -1763,13 +1763,13 @@ class SnapshotLabel:
         name = str(self)
         validate_dataset_name(name, input_text)
         if "/" in name:
-            die(f"Invalid ZFS snapshot name: '{name}' for: '{input_text}'")
-        for key, val in {"prefix": self.prefix, "infix": self.infix, "suffix": self.suffix}.items():
+            die(f"Invalid ZFS snapshot name: '{name}' for: '{input_text}*'")
+        for key, value in {"prefix": self.prefix, "infix": self.infix, "suffix": self.suffix}.items():
             if key == "prefix":
-                if val and (val.count("_") > 1 or not val.endswith("_")):
-                    die(f"Invalid ZFS snapshot name {key}: '{val}' for: '{input_text}'")
-            elif val and (val.count("_") > 1 or not val.startswith("_")):
-                die(f"Invalid ZFS snapshot name {key}: '{val}' for: '{input_text}'")
+                if value and (value.count("_") > 1 or not value.endswith("_")):
+                    die(f"Invalid ZFS snapshot name {key}: '{value}' for: '{input_text}{key}'")
+            elif value and (value.count("_") > 1 or not value.startswith("_")):
+                die(f"Invalid ZFS snapshot name {key}: '{value}' for: '{input_text}{key}'")
 
 
 #############################################################################
@@ -1820,7 +1820,7 @@ class CreateSrcSnapshotConfig:
             SnapshotLabel(prefix, "", infix, suffix) for suffix in suffixes for infix in infixes for prefix in prefixes
         ]
         for label in self.snapshot_labels():
-            label.validate("--create-src-snapshot-*")
+            label.validate("--create-src-snapshot-")
 
     def snapshot_labels(self) -> List[SnapshotLabel]:
         timestamp: str = self.current_datetime.strftime(self.timeformat)
@@ -2243,7 +2243,6 @@ class Job:
             )
             drain(iterator)
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
-
             self.update_last_modified_cache(basis_datasets_to_snapshot)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset

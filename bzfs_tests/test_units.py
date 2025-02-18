@@ -943,6 +943,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.SnapshotLabel("foo@bar_", "", "", "").validate("")
         with self.assertRaises(SystemExit):
             bzfs.SnapshotLabel("foo/bar_", "", "", "").validate("")
+        self.assertTrue(str(bzfs.SnapshotLabel("foo_", "", "", "")))
 
     def test_CreateSrcSnapshotConfig(self):
         good_args = bzfs.argument_parser().parse_args(
