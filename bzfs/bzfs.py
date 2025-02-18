@@ -3854,7 +3854,6 @@ class Job:
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         n = len(src_datasets)
         i = 0
-        # cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s name -Hp -o createtxg,creation,name")
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # by dataset, createtxg
         for lines in self.list_snapshots_in_parallel(src, cmd, src_datasets):
             # streaming group by dataset name (consumes constant memory only)
