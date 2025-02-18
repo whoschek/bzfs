@@ -3895,11 +3895,12 @@ class Job:
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
-        try:
-            for entry in os.scandir(os.path.dirname(self.last_modified_cache_file(dataset))):
-                os.utime(entry.path, times=(0, 0))
-        except FileNotFoundError:
-            pass  # harmless
+        if not self.params.dry_run:
+            try:
+                for entry in os.scandir(os.path.dirname(self.last_modified_cache_file(dataset))):
+                    os.utime(entry.path, times=(0, 0))
+            except FileNotFoundError:
+                pass  # harmless
 
     def update_last_modified_cache(self, datasets_to_snapshot: Dict[SnapshotLabel, List[str]]) -> None:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
@@ -3920,7 +3921,8 @@ class Job:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
                 cache_dir = os.path.dirname(self.last_modified_cache_file(src_dataset))
-                os.makedirs(cache_dir, exist_ok=True)
+                if not p.dry_run:
+                    os.makedirs(cache_dir, exist_ok=True)
 
                 def update_last_modification_time(dataset: str) -> None:
                     cache_file = self.last_modified_cache_file(dataset)
