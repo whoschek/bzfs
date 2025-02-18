@@ -618,6 +618,9 @@ class AdhocTestCase(BZFSTestCase):
     def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
 
+    def test_basic_snapshotting_flat_daemon(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
+
     def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
         LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
 
@@ -1110,6 +1113,21 @@ class LocalTestCase(BZFSTestCase):
             "--create-src-snapshot-suffix=_secondly",
             expected_status=die_status,
         )
+
+    def test_basic_snapshotting_flat_daemon(self):
+        destroy(dst_root_dataset, recursive=True)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--create-src-snapshot",
+            "--create-src-snapshot-prefix=s1_",
+            "--create-src-snapshot-suffix=_secondly",
+            "--create-src-snapshot-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+            "--daemon-lifetime=2seconds",
+        )
+        expected = ["s1.*_secondly", "s1.*_secondly", "s1.*_secondly"]
+        self.assertSnapshotNameRegexes(src_root_dataset, expected)
+        self.assertSnapshotNameRegexes(dst_root_dataset, expected)
 
     def test_basic_replication_flat_simple(self):
         self.setup_basic()

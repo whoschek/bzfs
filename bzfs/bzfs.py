@@ -1103,6 +1103,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "throughput at 100 MB/sec. Default is unlimited. Also see "
              "https://manpages.ubuntu.com/manpages/latest/en/man1/pv.1.html\n\n")
     parser.add_argument(
+        "--daemon-lifetime", default="0 seconds", metavar="STRING",
+        help=argparse.SUPPRESS)
+    parser.add_argument(
         "--no-estimate-send-size", action="store_true",
         help=argparse.SUPPRESS)
 
@@ -1462,7 +1465,7 @@ class Params:
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
         self.compare_snapshot_lists: Optional[str] = args.compare_snapshot_lists
-        self.daemon_lifetime_nanos: int = 1_000_000_000 * parse_duration_to_seconds(getenv_any("daemon_lifetime", "0 secs"))
+        self.daemon_lifetime_nanos: int = 1_000_000_000 * parse_duration_to_seconds(args.daemon_lifetime)
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.resume_recv: bool = not args.no_resume_recv
