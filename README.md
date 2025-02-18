@@ -1046,11 +1046,11 @@ usage: bzfs [-h] [--recursive]
     invocation will be taken within the same ZFS transaction group, and
     correspondingly have identical 'createtxg' ZFS property (but not
     necessarily identical 'creation' ZFS time property as ZFS actually
-    provides no such guarantee). Dataset names that can't fit into a
-    single command line are spread over multiple command line
-    invocations, respecting the limits that the operating system places
-    on the maximum length of a single command line, per `getconf
-    ARG_MAX`.
+    provides no such guarantee), and thus be consistent. Dataset names
+    that can't fit into a single command line are spread over multiple
+    command line invocations, respecting the limits that the operating
+    system places on the maximum length of a single command line, per
+    `getconf ARG_MAX`.
 
     Note: All bzfs functions including snapshot creation, replication,
     deletion, comparison, etc. happily work with any snapshots in any
