@@ -2218,7 +2218,7 @@ class Job:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = self.find_datasets_to_snapshot(src_datasets)
-            basis_datasets_to_snapshot = datasets_to_snapshot.copy()
+            basis_datasets_to_snapshot = datasets_to_snapshot.copy()  # shallow copy
             commands = {}
             for label, datasets in datasets_to_snapshot.items():
                 cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
@@ -2229,7 +2229,6 @@ class Job:
                         cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
                         datasets_to_snapshot[label] = root_datasets
                 commands[label] = cmd
-
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
             self.run_ssh_cmd_parallel(
                 src,
