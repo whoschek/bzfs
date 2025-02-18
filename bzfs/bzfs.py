@@ -1746,7 +1746,7 @@ class Retry:
 
 
 #############################################################################
-@dataclass(order=True, frozen=True)
+@dataclass(frozen=True, order=True)
 class SnapshotLabel:
     prefix: str  # bzfs_
     timestamp: str  # 2024-11-06_08:30:05
