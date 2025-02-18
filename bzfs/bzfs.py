@@ -3885,6 +3885,9 @@ class Job:
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
             if lbl in cached_datasets_to_snapshot:
                 datasets_to_snapshot[lbl] = list(heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl]))
+        # sort to ensure that we take snapshots for dailies before hourlies, and so on
+        label_indexes = {label: k for k, label in enumerate(config.snapshot_labels())}
+        datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
         return datasets_to_snapshot
 
     def last_modified_cache_file(self, dataset_or_snapshot) -> str:
