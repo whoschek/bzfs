@@ -65,8 +65,7 @@ snapshots and properties to create, replicate, delete or compare.
 All bzfs functions including snapshot creation, replication, deletion,
 comparison, etc. happily work with any snapshots in any format and with
 any naming convention, even created or managed by any third party ZFS
-snapshot management tool, for example Sanoid, zrepl, pyznap,
-zfs-auto-snapshot, zfs_autobackup, manual zfs snapshot/destroy, etc.
+snapshot management tool, including manual zfs snapshot/destroy.
 
 The source 'pushes to' the destination whereas the destination 'pulls
 from' the source. bzfs is installed and executed on the 'initiator'

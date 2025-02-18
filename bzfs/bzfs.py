@@ -149,8 +149,8 @@ In the spirit of rsync, {prog_name} supports a variety of powerful include/exclu
 select which datasets, snapshots and properties to create, replicate, delete or compare.
 
 All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
-snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot management 
-tool, for example Sanoid, zrepl, pyznap, zfs-auto-snapshot, zfs_autobackup, manual zfs snapshot/destroy, etc.
+snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot 
+management tool, including manual zfs snapshot/destroy.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
@@ -1750,9 +1750,6 @@ class SnapshotLabel:
 
     def __str__(self) -> str:  # bzfs_2024-11-06_08:30:05_us-west-1_hourly
         return f"{self.prefix}{self.timestamp}{self.infix}{self.suffix}"
-
-    def __iter__(self):
-        return iter((self.prefix, self.timestamp, self.infix, self.suffix))
 
     def validate(self, input_text: str) -> None:
         name = str(self)
@@ -5450,17 +5447,6 @@ def get_timezone(tz_spec: str = None) -> tzinfo:
         else:
             raise ValueError(f"Invalid timezone specification: {tz_spec}")
     return tz
-
-
-def parse_cron_weekday(weekday_spec: str) -> int:
-    normalized = weekday_spec.strip().lower()
-    if normalized.isdigit():
-        return int(normalized) % 7
-    if normalized not in cron_weekdays:
-        normalized = normalized[0:3]
-        if normalized not in cron_weekdays:
-            die("Invalid weekday: " + weekday_spec)
-    return cron_weekdays[normalized]
 
 
 metadata_month = {"min": 1, "max": 12, "help": "The month within a year"}
