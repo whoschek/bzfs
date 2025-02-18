@@ -4602,6 +4602,15 @@ class Job:
         if results is not None:
             yield results
 
+    def run_ssh_cmd_parallel(
+        self,
+        r: Remote,
+        cmd_args_list: List[Tuple[List[str], List[str]]],
+        fn: Callable[[List[str], List[str]], Any],
+        max_batch_items=2**29,
+    ) -> None:
+        drain(self.itr_ssh_cmd_parallel(r, cmd_args_list, fn=fn, max_batch_items=max_batch_items))
+
     def itr_ssh_cmd_parallel(
         self,
         r: Remote,
@@ -4628,15 +4637,6 @@ class Job:
                 if next_future is not None:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
-
-    def run_ssh_cmd_parallel(
-        self,
-        r: Remote,
-        cmd_args_list: List[Tuple[List[str], List[str]]],
-        fn: Callable[[List[str], List[str]], Any],
-        max_batch_items=2**29,
-    ) -> None:
-        drain(self.itr_ssh_cmd_parallel(r, cmd_args_list, fn=fn, max_batch_items=max_batch_items))
 
     def list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
         max_workers = self.max_workers[r.location]
