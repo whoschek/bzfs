@@ -90,7 +90,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
     sudo_cmd = ["sudo", "-n"]
     set_sudo_cmd(["sudo", "-n"])
 
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
+test_mode = getenv_any("test_mode", "adhoc")  # Consider toggling this when testing isolated code changes
 
 
 def suite():
