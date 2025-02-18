@@ -65,7 +65,10 @@ snapshots and properties to create, replicate, delete or compare.
 All bzfs functions including snapshot creation, replication, deletion,
 comparison, etc. happily work with any snapshots in any format and with
 any naming convention, even created or managed by any third party ZFS
-snapshot management tool, including manual zfs snapshot/destroy.
+snapshot management tool, including manual zfs snapshot/destroy. All
+functions can also be used independently. That is, if you wish you can
+use bzfs just for creating snapshots, or just for replicating, or just
+for deleting/pruning, or just for comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls
 from' the source. bzfs is installed and executed on the 'initiator'
@@ -387,6 +390,10 @@ bzfs --help  # Run the CLI
 * Rsync'ish look and feel.
 * Supports a variety of powerful include/exclude filters that can be combined to select which datasets, snapshots and
 properties to create, replicate, delete or compare.
+* All these functions happily work with any snapshots in any format and with any naming convention, even created or managed 
+by any third party ZFS snapshot management tool, including manual zfs snapshot/destroy. All functions can also be used 
+independently. That is, if you wish you can use bzfs just for creating snapshots, or just for replicating, or just for 
+deleting/pruning, or just for comparing snapshot lists.
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.
@@ -445,7 +452,7 @@ simultaneously this is detected and the operation can be auto-retried safely.
 completion yet.
 * Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
 integration.
-* Codebase is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
+* Codebase is easy to change and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
 

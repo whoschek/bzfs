@@ -150,7 +150,9 @@ select which datasets, snapshots and properties to create, replicate, delete or 
 
 All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
 snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot 
-management tool, including manual zfs snapshot/destroy.
+management tool, including manual zfs snapshot/destroy. All functions can also be used independently. That is, if you 
+wish you can use {prog_name} just for creating snapshots, or just for replicating, or just for deleting/pruning, 
+or just for comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
