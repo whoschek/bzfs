@@ -1784,6 +1784,7 @@ class CreateSrcSnapshotConfig:
         # immutable variables:
         self.skip_create_src_snapshot: bool = not args.create_src_snapshot
         self.create_src_snapshot_even_if_not_due: bool = args.create_src_snapshot_even_if_not_due
+        self.enable_snapshots_changed_cache: bool = getenv_bool("enable_snapshots_changed_cache", True)
         tz_spec: str = args.create_src_snapshot_timezone if args.create_src_snapshot_timezone else None
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
@@ -4525,9 +4526,11 @@ class Job:
         ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
 
     def is_snapshots_changed_zfs_property_available(self, remote: Remote) -> bool:
-        return self.is_program_available(
-            zfs_version_is_at_least_2_2_0, remote.location
-        ) and self.is_zpool_feature_enabled_or_active(remote, "feature@extensible_dataset")
+        return (
+            self.params.create_src_snapshot_config.enable_snapshots_changed_cache
+            and self.is_program_available(zfs_version_is_at_least_2_2_0, remote.location)
+            and self.is_zpool_feature_enabled_or_active(remote, "feature@extensible_dataset")
+        )
 
     def check_zfs_dataset_busy(self, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
         """Decline to start a state changing ZFS operation that may conflict with other currently running processes.
