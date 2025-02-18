@@ -94,6 +94,7 @@ test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing i
 
 
 def suite():
+    test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
     is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     suite = unittest.TestSuite()
