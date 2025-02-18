@@ -3931,17 +3931,20 @@ class Job:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
                 cache_dir = os.path.dirname(self.last_modified_cache_file(src_dataset))
-                if not p.dry_run:
-                    os.makedirs(cache_dir, exist_ok=True)
+                try:
 
-                def update_last_modification_time(dataset: str) -> None:
-                    cache_file = self.last_modified_cache_file(dataset)
+                    def update_last_modification_time(dataset: str) -> None:
+                        cache_file = self.last_modified_cache_file(dataset)
+                        if not p.dry_run:
+                            set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed)
+
                     if not p.dry_run:
-                        set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed)
-
-                update_last_modification_time(src_dataset)
-                for label in dataset_labels[src_dataset]:
-                    update_last_modification_time(f"{src_dataset}@{label.prefix}{label.infix}{label.suffix}")
+                        os.makedirs(cache_dir, exist_ok=True)
+                    update_last_modification_time(src_dataset)
+                    for label in dataset_labels[src_dataset]:
+                        update_last_modification_time(f"{src_dataset}@{label.prefix}{label.infix}{label.suffix}")
+                except FileNotFoundError:
+                    pass  # harmless
 
     def zfs_get_snapshots_changed(self, remote: Remote, datasets: List[str]) -> Dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
