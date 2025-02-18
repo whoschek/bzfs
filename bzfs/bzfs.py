@@ -2191,7 +2191,7 @@ class Job:
         src_datasets = None
         basis_src_datasets = []
         self.src_properties = {}
-        if not self.is_dummy_src(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
+        if not self.is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
             props = "volblocksize,recordsize,name"
             props = "snapshots_changed," + props if self.is_snapshots_changed_zfs_property_available(src) else props
             cmd = p.split_args(
@@ -2249,6 +2249,8 @@ class Job:
             log.info("Starting replication task: %s", task_description)
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
+            if self.is_dummy(dst):
+                die(f"Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
             self.dedicated_tcp_connection_per_zfs_send = (
@@ -2271,6 +2273,8 @@ class Job:
         ):
             return
         log.info("Listing dst datasets: %s", task_description)
+        if self.is_dummy(dst):
+            die(f"Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
         cmd = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o name", p.recursive_flag, dst.root_dataset
         )
@@ -2405,7 +2409,7 @@ class Job:
 
         if p.compare_snapshot_lists and not failed:
             log.info("--compare-snapshot-lists: %s", task_description)
-            if len(basis_src_datasets) == 0 and not self.is_dummy_src(src):
+            if len(basis_src_datasets) == 0 and not self.is_dummy(src):
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.run_compare_snapshot_lists(src_datasets, dst_datasets)
@@ -4493,15 +4497,15 @@ class Job:
         return self.params.available_programs[location].get("zfs") == "notOpenZFS"
 
     @staticmethod
-    def is_dummy_src(r: Remote) -> bool:
-        return r.root_dataset == dummy_dataset and r.location == "src"
+    def is_dummy(r: Remote) -> bool:
+        return r.root_dataset == dummy_dataset
 
     def detect_zpool_features(self, remote: Remote) -> None:
         p = params = self.params
         r, loc, log = remote, remote.location, p.log
         lines = []
         features = {}
-        if self.is_dummy_src(r):
+        if self.is_dummy(r):
             params.zpool_features[loc] = {}
             return
         if params.zpool_program != disable_prg:

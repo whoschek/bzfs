@@ -621,6 +621,9 @@ class AdhocTestCase(BZFSTestCase):
     def test_basic_snapshotting_flat_even_if_not_due(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_even_if_not_due()
 
+    def test_invalid_use_of_dummy(self):
+        LocalTestCase(param=self.param).test_invalid_use_of_dummy()
+
     def test_basic_snapshotting_flat_daemon(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
 
@@ -851,7 +854,7 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
-                    dst_root_dataset,
+                    bzfs.dummy_dataset,
                     "--skip-replication",
                     "--create-src-snapshot",
                     "--create-src-snapshot-prefix=s1_",
@@ -917,7 +920,7 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
-                    dst_root_dataset,
+                    bzfs.dummy_dataset,
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshot",
@@ -954,7 +957,7 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
-                    dst_root_dataset,
+                    bzfs.dummy_dataset,
                     "--skip-parent",
                     "--recursive",
                     "--skip-replication",
@@ -1145,6 +1148,16 @@ class LocalTestCase(BZFSTestCase):
         expected = ["s1.*_secondly", "s1.*_secondly", "s1.*_secondly"]
         self.assertSnapshotNameRegexes(src_root_dataset, expected)
         self.assertSnapshotNameRegexes(dst_root_dataset, expected)
+
+    def test_invalid_use_of_dummy(self):
+        self.run_bzfs(src_root_dataset, bzfs.dummy_dataset, expected_status=die_status)
+        self.run_bzfs(
+            src_root_dataset, bzfs.dummy_dataset, "--skip-replication", "--delete-dst-snapshots", expected_status=die_status
+        )
+        self.run_bzfs(
+            bzfs.dummy_dataset, bzfs.dummy_dataset, "--skip-replication", "--create-src-snapshot", expected_status=die_status
+        )
+        self.run_bzfs(bzfs.dummy_dataset, bzfs.dummy_dataset, expected_status=die_status)
 
     def test_basic_replication_flat_simple(self):
         self.setup_basic()
