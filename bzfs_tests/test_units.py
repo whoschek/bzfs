@@ -244,9 +244,9 @@ class TestHelperFunctions(unittest.TestCase):
             create_parser().parse_args(["--prefix", "foo", "foo"])
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--prefix", nargs="+", default=None, action=bzfs.SetAction)
-        args = create_parser().parse_args([])
-        self.assertEqual(args.prefix, [])
+        parser.add_argument("--prefix", nargs="+", action=bzfs.SetAction)
+        args = parser.parse_args([])
+        self.assertIsNone(args.prefix)
 
     def test_compile_regexes(self):
         def _assertFullMatch(text: str, regex: str, re_suffix="", expected=True):
