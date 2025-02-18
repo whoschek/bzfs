@@ -67,7 +67,9 @@ to create new snapshots and prune outdated snapshots on the source,
 whereas another `cron` job on the destination host runs `bzfs`
 periodically to prune outdated destination snapshots. Yet another
 `cron` job runs `bzfs` periodically to replicate the recently
-created snapshots from the source to the destination.
+created snapshots from the source to the destination. The frequency of
+these periodic activities is typically every second, minute, hour, day,
+week, month and/or year (or multiples thereof).
 
 All bzfs functions including snapshot creation, replication, deletion,
 comparison, etc. happily work with any snapshots in any format and with
@@ -393,6 +395,7 @@ properties to create, replicate, delete or compare.
 by any third party ZFS snapshot management tool, including manual zfs snapshot/destroy. All functions can also be used 
 independently. That is, if you wish you can use bzfs just for creating snapshots, or just for replicating, or just for 
 deleting/pruning, or just for comparing snapshot lists.
+* Frequency of periodic activities is every second, minute, hour, day, week, month and/or year (or multiples thereof).
 * Supports pull, push, pull-push and local transfer mode.
 * Prioritizes safe, reliable and predictable operations. Clearly separates read-only mode, append-only mode and
 delete mode.

@@ -151,7 +151,8 @@ select which datasets, snapshots and properties to create, replicate, delete or 
 Typically, a `cron` job on the source host runs `{prog_name}` periodically to create new snapshots and prune outdated
 snapshots on the source, whereas another `cron` job on the destination host runs `{prog_name}` periodically to prune
 outdated destination snapshots. Yet another `cron` job runs `{prog_name}` periodically to replicate the recently created
-snapshots from the source to the destination.
+snapshots from the source to the destination. The frequency of these periodic activities is typically every second, 
+minute, hour, day, week, month and/or year (or multiples thereof).
 
 All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
 snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot
