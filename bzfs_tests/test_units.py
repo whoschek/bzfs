@@ -248,6 +248,11 @@ class TestHelperFunctions(unittest.TestCase):
         args = parser.parse_args([])
         self.assertIsNone(args.prefix)
 
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--prefix", nargs="+", action=bzfs.SetAction)
+        args = parser.parse_args(["--prefix", "foo"])
+        self.assertEqual(args.prefix, ["foo"])
+
     def test_compile_regexes(self):
         def _assertFullMatch(text: str, regex: str, re_suffix="", expected=True):
             match = bzfs.compile_regexes([regex], suffix=re_suffix)[0][0].fullmatch(text)
