@@ -3812,7 +3812,7 @@ class Job:
             )
             msg = ""
             if config.current_datetime >= next_event_dt:
-                datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for creation
+                datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
                 msg = " has passed"
             log.info("Next scheduled snapshot time: %s for %s@%s%s", next_event_dt, dataset, label, msg)
 
@@ -3856,7 +3856,7 @@ class Job:
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         i = 0
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # by dataset, createtxg
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
         for lines in self.list_snapshots_in_parallel(src, cmd, sorted_datasets):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
