@@ -1805,9 +1805,9 @@ class CreateSrcSnapshotConfig:
         suffix_regex = re.compile(rf"_([1-9][0-9]*)?({'|'.join(suffix_seconds.keys())})")
         suffix_durations = {suffix: suffix_to_duration(suffix, suffix_regex) for suffix in suffixes}
 
-        def suffix_key(s):
-            duration_amount, duration_unit = suffix_durations[s]
-            return duration_amount * suffix_seconds.get(duration_unit, 0), s
+        def suffix_key(suffix: str):
+            duration_amount, duration_unit = suffix_durations[suffix]
+            return duration_amount * suffix_seconds.get(duration_unit, 0), suffix
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
         self.suffix_durations: Dict[str, Tuple[int, str]] = {suffix: suffix_durations[suffix] for suffix in suffixes}  # sort
