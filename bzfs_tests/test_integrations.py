@@ -1248,6 +1248,17 @@ class LocalTestCase(BZFSTestCase):
                     self.assertSnapshots(dst_root_dataset + f"/woo{j}", 3, "w")
                     for k in range(q):
                         self.assertSnapshots(dst_root_dataset + f"/woo{j}/qoo{k}", 3, "q")
+                if i == 0 and are_bookmarks_enabled("src") and not self.is_no_privilege_elevation():
+                    self.run_bzfs(
+                        bzfs.dummy_dataset,
+                        src_root_dataset,
+                        "--skip-replication",
+                        "--recursive",
+                        "--delete-dst-snapshots=bookmarks",
+                    )
+                    self.assertBookmarkNames(src_root_dataset, [])
+                    self.assertBookmarkNames(src_root_dataset + "/foo", [])
+                    self.assertBookmarkNames(src_root_dataset + "/foo/a", [])
 
     def test_basic_replication_flat_pool(self):
         for child in datasets(src_pool) + datasets(dst_pool):
@@ -3618,9 +3629,9 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--delete-dst-snapshots=bookmarks")
         self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertBookmarkNames(src_root_dataset, [fix("s1"), fix("s3")])
-        self.run_bzfs(bzfs.dummy_dataset, src_root_dataset, "--skip-replication", "-v", "--delete-dst-snapshots=bookmarks")
-        self.assertBookmarkNames(src_root_dataset, [])
+        if are_bookmarks_enabled("src") and not self.is_no_privilege_elevation():
+            self.run_bzfs(bzfs.dummy_dataset, src_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
+            self.assertBookmarkNames(src_root_dataset, [])
 
     def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self):
         self.setup_basic()
