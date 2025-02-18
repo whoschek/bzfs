@@ -3819,7 +3819,7 @@ class Job:
         labels = []
         for label in config.snapshot_labels():
             _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
-            if config.create_src_snapshot_even_if_not_due or _duration_amount == 0:
+            if  _duration_amount == 0 or config.create_src_snapshot_even_if_not_due:
                 datasets_to_snapshot[label] = src_datasets  # take snapshot regardless of creation time of any existing snaps
             else:
                 labels.append(label)
@@ -3852,7 +3852,6 @@ class Job:
             src_datasets = src_datasets_todo
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
-        n = len(src_datasets)
         i = 0
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # by dataset, createtxg
         for lines in self.list_snapshots_in_parallel(src, cmd, src_datasets):
@@ -3878,7 +3877,7 @@ class Job:
                         datasets_to_snapshot[label].append(dataset)
                     else:
                         schedule_latest_snapshot(datasets_to_snapshot, label, creation_unixtime=int(snapshots[j][1]))
-        while i < n:  # Take snapshots for datasets whose snapshot stream is empty
+        while i < len(src_datasets):  # Take snapshots for datasets whose snapshot stream is empty
             for label in labels:
                 datasets_to_snapshot[label].append(src_datasets[i])
             i += 1
