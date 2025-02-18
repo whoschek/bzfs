@@ -244,7 +244,7 @@ class TestHelperFunctions(unittest.TestCase):
             create_parser().parse_args(["--prefix", "foo", "foo"])
 
         parser = argparse.ArgumentParser()
-        parser.add_argument("--prefix", nargs="+", action=bzfs.SetAction)
+        parser.add_argument("--prefix", nargs="+", default=None, action=bzfs.SetAction)
         args = create_parser().parse_args([])
         self.assertEqual(args.prefix, [])
 
