@@ -3435,10 +3435,14 @@ class Job:
         # Unfortunately ZFS has no syntax yet to delete multiple bookmarks in a single CLI invocation
         p, log = self.params, self.params.log
         log.info(p.dry("Deleting bookmark(s): %s"), dataset + "#" + ",".join(snapshot_tags))
-        for i, snapshot_tag in enumerate(snapshot_tags):
-            log.debug(p.dry(f"Deleting bookmark {i+1}/{len(snapshot_tags)}: %s"), snapshot_tag)
-            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy", f"{dataset}#{snapshot_tag}")
-            self.try_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
+        cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy")
+        self.run_ssh_cmd_parallel(
+            remote,
+            [(cmd, [f"{dataset}#{snapshot_tag}"]) for snapshot_tag in snapshot_tags],
+            lambda _cmd, batch: self.try_ssh_command(
+                remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
+            ),
+        )
 
     def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
         """Deletes the given datasets via zfs destroy -r on the given remote."""
