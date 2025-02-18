@@ -3895,7 +3895,7 @@ class Job:
         userhost_dir = p.src.ssh_user_host if p.src.ssh_user_host else "-"
         return os.path.join(p.log_params.last_modified_cache_dir, userhost_dir, cache_file)
 
-    def invalidate_last_modified_cache_dataset(self, dataset: str):
+    def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
         try:
             for entry in os.scandir(os.path.dirname(self.last_modified_cache_file(dataset))):
@@ -5584,14 +5584,13 @@ def round_datetime_up_to_duration_multiple(
         else:
             assert duration_unit == "weekly"
             daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            candidate = daily_base + timedelta(
+            anchor = daily_base + timedelta(
                 hours=anchors.weekly_hour, minutes=anchors.weekly_minute, seconds=anchors.weekly_second
             )
             # Convert cron weekday (0=Sunday, 1=Monday, …,6=Saturday) to Python's weekday (Monday=0,...,Sunday=6)
             target_py_weekday = (anchors.weekly_weekday - 1) % 7
-            diff_days = (candidate.weekday() - target_py_weekday) % 7
-            candidate -= timedelta(days=diff_days)
-            anchor = get_anchor(candidate, dt, timedelta(days=7))
+            diff_days = (anchor.weekday() - target_py_weekday) % 7
+            anchor = get_anchor(anchor - timedelta(days=diff_days), dt, timedelta(days=7))
             period = timedelta(weeks=duration_amount)
 
         delta = dt - anchor
@@ -5604,25 +5603,24 @@ def round_datetime_up_to_duration_multiple(
 
     elif duration_unit == "monthly":
         last_day = calendar.monthrange(dt.year, dt.month)[1]  # last valid day of the current month
-        candidate = dt.replace(  # Compute the base anchor for the month ensuring the day is valid
+        anchor = dt.replace(  # Compute the base anchor for the month ensuring the day is valid
             day=min(anchors.monthly_monthday, last_day),
             hour=anchors.monthly_hour,
             minute=anchors.monthly_minute,
             second=anchors.monthly_second,
             microsecond=0,
         )
-        if candidate > dt:
-            candidate = add_months(candidate, -1)
-        anchor = candidate
+        if anchor > dt:
+            anchor = add_months(anchor, -1)
         diff_months = (dt.year - anchor.year) * 12 + (dt.month - anchor.month)
-        candidate_boundary = add_months(anchor, duration_amount * (diff_months // duration_amount))
-        if candidate_boundary < dt:
-            candidate_boundary = add_months(candidate_boundary, duration_amount)
-        return candidate_boundary
+        anchor_boundary = add_months(anchor, duration_amount * (diff_months // duration_amount))
+        if anchor_boundary < dt:
+            anchor_boundary = add_months(anchor_boundary, duration_amount)
+        return anchor_boundary
 
     elif duration_unit == "yearly":
         last_day = calendar.monthrange(dt.year, anchors.yearly_month)[1]  # last valid day for anchor month in current year
-        candidate = dt.replace(  # Compute the base yearly anchor candidate for the current year, ensuring the day is valid
+        anchor = dt.replace(  # Compute the base yearly anchor candidate for the current year, ensuring the day is valid
             month=anchors.yearly_month,
             day=min(anchors.yearly_monthday, last_day),
             hour=anchors.yearly_hour,
@@ -5630,14 +5628,13 @@ def round_datetime_up_to_duration_multiple(
             second=anchors.yearly_second,
             microsecond=0,
         )
-        if candidate > dt:
-            candidate = candidate.replace(year=candidate.year - 1)
-        anchor = candidate
+        if anchor > dt:
+            anchor = anchor.replace(year=anchor.year - 1)
         diff_years = dt.year - anchor.year
-        candidate_boundary = add_years(anchor, duration_amount * (diff_years // duration_amount))
-        if candidate_boundary < dt:
-            candidate_boundary = add_years(candidate_boundary, duration_amount)
-        return candidate_boundary
+        anchor_boundary = add_years(anchor, duration_amount * (diff_years // duration_amount))
+        if anchor_boundary < dt:
+            anchor_boundary = add_years(anchor_boundary, duration_amount)
+        return anchor_boundary
 
     else:
         raise ValueError(f"Unsupported duration unit: {duration_unit}")
