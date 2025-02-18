@@ -927,11 +927,22 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertIsNone(run_filter(["hh"], basis_src_datasets))
 
     def test_validate_snapshot_name(self):
-        bzfs.SnapshotLabel("foo", "", "", "").validate("")
+        bzfs.SnapshotLabel("foo_", "", "", "").validate("")
+        bzfs.SnapshotLabel("foo_", "", "_foo", "_foo").validate("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo@bar", "", "", "").validate("")
+            bzfs.SnapshotLabel("foo__", "", "", "").validate("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo/bar", "", "", "").validate("")
+            bzfs.SnapshotLabel("foo_", "", "_foo", "__foo").validate("")
+        with self.assertRaises(SystemExit):
+            bzfs.SnapshotLabel("foo", "", "", "").validate("")
+        with self.assertRaises(SystemExit):
+            bzfs.SnapshotLabel("foo_", "", "foo", "").validate("")
+        with self.assertRaises(SystemExit):
+            bzfs.SnapshotLabel("foo_", "", "", "foo").validate("")
+        with self.assertRaises(SystemExit):
+            bzfs.SnapshotLabel("foo@bar_", "", "", "").validate("")
+        with self.assertRaises(SystemExit):
+            bzfs.SnapshotLabel("foo/bar_", "", "", "").validate("")
 
     def test_CreateSrcSnapshotConfig(self):
         good_args = bzfs.argument_parser().parse_args(

@@ -1764,6 +1764,12 @@ class SnapshotLabel:
         validate_dataset_name(name, input_text)
         if "/" in name:
             die(f"Invalid ZFS snapshot name: '{name}' for: '{input_text}'")
+        for key, val in {"prefix": self.prefix, "infix": self.infix, "suffix": self.suffix}.items():
+            if key == "prefix":
+                if val and (val.count("_") > 1 or not val.endswith("_")):
+                    die(f"Invalid ZFS snapshot name {key}: '{val}' for: '{input_text}'")
+            elif val and (val.count("_") > 1 or not val.startswith("_")):
+                die(f"Invalid ZFS snapshot name {key}: '{val}' for: '{input_text}'")
 
 
 #############################################################################
