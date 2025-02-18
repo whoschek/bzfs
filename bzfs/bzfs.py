@@ -148,10 +148,15 @@ backup.
 In the spirit of rsync, {prog_name} supports a variety of powerful include/exclude filters that can be combined to
 select which datasets, snapshots and properties to create, replicate, delete or compare.
 
+Typically, a `cron` job on the source host runs `{prog_name}` periodically to create new snapshots and prune outdated
+snapshots on the source, whereas another `cron` job on the destination host runs `{prog_name}` periodically to prune
+outdated destination snapshots. Yet another `cron` job runs `{prog_name}` periodically to replicate the recently created
+snapshots from the source to the destination.
+
 All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
-snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot 
-management tool, including manual zfs snapshot/destroy. All functions can also be used independently. That is, if you 
-wish you can use {prog_name} just for creating snapshots, or just for replicating, or just for deleting/pruning, 
+snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot
+management tool, including manual zfs snapshot/destroy. All functions can also be used independently. That is, if you
+wish you can use {prog_name} just for creating snapshots, or just for replicating, or just for deleting/pruning,
 or just for comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
@@ -175,8 +180,9 @@ environments. No external Python packages are required; indeed no Python package
 You can just copy the file wherever you like, for example into /usr/local/bin or similar, and simply run it like
 any stand-alone shell script or binary executable.
 
-{prog_name} automatically replicates the snapshots of multiple datasets in parallel for best performance. 
-Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel.
+{prog_name} automatically replicates the snapshots of multiple datasets in parallel for best performance.
+Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be taken
+as frequently as every second.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
@@ -188,25 +194,21 @@ feature.
 
 # Example Usage
 
-* Create an adhoc snapshot without a schedule:
+* Create adhoc atomic snapshots without a schedule:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --create-src-snapshot 
---create-src-snapshot-prefix test_ 
---create-src-snapshot-infix _us-west-1 
---create-src-snapshot-suffix _adhoc 
---skip-replication```
+`$ {prog_name} tank1/foo/bar dummy --recursive --create-src-snapshot --create-src-snapshot-prefix test_ 
+--create-src-snapshot-infix _us-west-1 --create-src-snapshot-suffix _adhoc --skip-replication`
 
 ```$ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@test_2024-11-06_08:30:05_us-west-1_adhoc
 ```
 
-* Create periodic snapshots on a schedule, every hour and every day. A periodic snapshot will only be taken if it is due 
-per the schedule indicated by its --create-src-snapshot-suffix (unless the --create-src-snapshot-even-if-not-due flag is 
-specified), so consider launching this from a periodic cron job, or similar:
+* Create periodic atomic snapshots on a schedule, every hour and every day. A periodic snapshot will only be taken if
+it is due per the schedule indicated by its --create-src-snapshot-suffix (unless the --create-src-snapshot-even-if-not-due 
+flag is specified), so consider launching this from a periodic cron job, or similar:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --create-src-snapshot 
---create-src-snapshot-suffix _hourly _daily 
---skip-replication```
+`$ {prog_name} tank1/foo/bar dummy --recursive --create-src-snapshot --create-src-snapshot-suffix _hourly _daily 
+--skip-replication`
 
 ```$ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily

@@ -62,6 +62,13 @@ In the spirit of rsync, bzfs supports a variety of powerful
 include/exclude filters that can be combined to select which datasets,
 snapshots and properties to create, replicate, delete or compare.
 
+Typically, a `cron` job on the source host runs `bzfs` periodically
+to create new snapshots and prune outdated snapshots on the source,
+whereas another `cron` job on the destination host runs `bzfs`
+periodically to prune outdated destination snapshots. Yet another
+`cron` job runs `bzfs` periodically to replicate the recently
+created snapshots from the source to the destination.
+
 All bzfs functions including snapshot creation, replication, deletion,
 comparison, etc. happily work with any snapshots in any format and with
 any naming convention, even created or managed by any third party ZFS
@@ -104,7 +111,8 @@ executable.
 
 bzfs automatically replicates the snapshots of multiple datasets in
 parallel for best performance. Similarly, it quickly deletes (or
-compares) snapshots of multiple datasets in parallel.
+compares) snapshots of multiple datasets in parallel. Atomic snapshots
+can be taken as frequently as every second.
 
 Optionally, bzfs applies bandwidth rate-limiting and progress monitoring
 (via 'pv' CLI) during 'zfs send/receive' data transfers. When run
@@ -117,16 +125,11 @@ without the corresponding auxiliary feature.
 
 # Example Usage
 
-* Create an adhoc snapshot without a schedule:
+* Create adhoc atomic snapshots without a schedule:
 
-
-```
-$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
+`$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
 --create-src-snapshot-prefix test_ --create-src-snapshot-infix
-_us-west-1 --create-src-snapshot-suffix _adhoc
---skip-replication
-```
-
+_us-west-1 --create-src-snapshot-suffix _adhoc --skip-replication`
 
 
 ```
@@ -135,18 +138,14 @@ tank1/foo/bar@test_2024-11-06_08:30:05_us-west-1_adhoc
 ```
 
 
-* Create periodic snapshots on a schedule, every hour and every day. A
-periodic snapshot will only be taken if it is due per the schedule
-indicated by its --create-src-snapshot-suffix (unless the
+* Create periodic atomic snapshots on a schedule, every hour and every
+day. A periodic snapshot will only be taken if it is due per the
+schedule indicated by its --create-src-snapshot-suffix (unless the
 --create-src-snapshot-even-if-not-due flag is specified), so consider
 launching this from a periodic cron job, or similar:
 
-
-```
-$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
---create-src-snapshot-suffix _hourly _daily --skip-replication
-```
-
+`$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
+--create-src-snapshot-suffix _hourly _daily --skip-replication`
 
 
 ```
@@ -400,7 +399,8 @@ delete mode.
 * Continously tested on Linux, FreeBSD and Solaris.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
-deletes (or compares) snapshots of multiple datasets in parallel.
+deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be taken as frequently as every 
+second.
 * For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not 
 to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates 
 over the parallel replication tasks. 
