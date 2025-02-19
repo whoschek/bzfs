@@ -420,7 +420,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "This option is automatically translated to an --include-dataset-regex (see below) and can be "
              "specified multiple times.\n\n"
              "If the option starts with a `+` prefix then dataset names are read from the newline-separated "
-             "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file. "
+             "UTF-8 text file given after the `+` prefix, one dataset per line inside of the text file.\n\n"
              "Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative), "
              "`+dataset_names.txt`, `+/path/to/dataset_names.txt`\n\n")
     parser.add_argument(
@@ -438,8 +438,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "This option can be specified multiple times. "
              "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
              "leading `!` character removed does not match.\n\n"
-             "Default: `.*` (include all datasets). "
-             "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`\n\n")
+             "If the option starts with a `+` prefix then regex names are read from the newline-separated "
+             "UTF-8 text file given after the `+` prefix, one regex per line inside of the text file.\n\n"
+             "Default: `.*` (include all datasets).\n\n"
+             "Examples: `baz/tmp`, `(.*/)?doc[^/]*/(private|confidential).*`, `!public`, "
+             "`+dataset_regexes.txt`, `+/path/to/dataset_regexes.txt`\n\n")
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-dataset-regex (see above) except that the default is "

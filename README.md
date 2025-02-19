@@ -715,8 +715,9 @@ usage: bzfs [-h] [--recursive]
 
     If the option starts with a `+` prefix then dataset names are read
     from the newline-separated UTF-8 text file given after the `+`
-    prefix, one dataset per line inside of the text file. Examples:
-    `/tank/baz/tmp` (absolute), `baz/tmp` (relative),
+    prefix, one dataset per line inside of the text file.
+
+    Examples: `/tank/baz/tmp` (absolute), `baz/tmp` (relative),
     `+dataset_names.txt`, `+/path/to/dataset_names.txt`
 
 <!-- -->
@@ -749,8 +750,15 @@ usage: bzfs [-h] [--recursive]
     character indicates logical negation, i.e. the regex matches if the
     regex with the leading `!` character removed does not match.
 
-    Default: `.*` (include all datasets). Examples: `baz/tmp`,
-    `(.*/)?doc[^/]*/(private|confidential).*`, `!public`
+    If the option starts with a `+` prefix then regex names are read
+    from the newline-separated UTF-8 text file given after the `+`
+    prefix, one regex per line inside of the text file.
+
+    Default: `.*` (include all datasets).
+
+    Examples: `baz/tmp`,
+    `(.*/)?doc[^/]*/(private|confidential).*`, `!public`,
+    `+dataset_regexes.txt`, `+/path/to/dataset_regexes.txt`
 
 <!-- -->
 
