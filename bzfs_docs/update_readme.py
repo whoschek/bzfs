@@ -51,7 +51,7 @@ def main():
         subprocess.run(cmd, check=True, stdout=fd)
 
     # Step 2: Convert to markdown using pandoc
-    cmd = ["pandoc", "-s", "-t", "markdown", tmp_manpage1_path, "-o", tmp_manpage_md_path]
+    cmd = ["pandoc", "--columns=98", "-s", "-t", "markdown", tmp_manpage1_path, "-o", tmp_manpage_md_path]
     subprocess.run(cmd, check=True)
 
     # Step 3: Clean up generated markdown file
