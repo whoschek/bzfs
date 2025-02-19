@@ -1623,7 +1623,8 @@ class Params:
                tuple(self.args.create_src_snapshot_prefix),
                tuple(self.args.create_src_snapshot_infix),
                tuple(self.args.create_src_snapshot_suffix),
-               self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_empty_dst_datasets,
+               self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
+               self.args.delete_empty_dst_datasets,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
