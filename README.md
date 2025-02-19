@@ -209,7 +209,8 @@ $ bzfs tank1/foo/bar tank2/boo/bar --recursive
 
 
 ```
-$ zfs list -t snapshot -r tank1/foo/bar tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+$ zfs list -t snapshot -r tank1/foo/bar
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
 tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
 tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_daily
 tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_hourly

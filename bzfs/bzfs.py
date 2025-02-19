@@ -258,6 +258,7 @@ datasets to tank2/boo/bar:
 ```$ {prog_name} tank1/foo/bar tank2/boo/bar --recursive```
 
 ```$ zfs list -t snapshot -r tank1/foo/bar
+
 tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
 
 tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
