@@ -57,6 +57,15 @@ def main():
     # Step 3: Clean up generated markdown file
     with open(tmp_manpage_md_path, "r", encoding="utf-8") as file:
         content = file.read()
+
+    triple_backticks = "\\`\\`\\`"
+    re_triple_backticks = r"\\`\\`\\`"
+    content = re.sub(
+        re_triple_backticks + r"(.*?)" + re_triple_backticks,
+        lambda m: triple_backticks + m.group(1).replace("\n\n", "\n") + triple_backticks,
+        content,
+        flags=re.DOTALL,
+    )
     content = content.replace(r"\`\`\`", "\n```\n")
     content = re.sub(r"\\([`#-_|~>\[*])", r"\1", content)  # s/\\\([`#-_|>\[\*]\)/\1/g
     content = re.sub(r"\\'", r"'", content)  # s/\\\'/'/g

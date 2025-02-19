@@ -129,9 +129,14 @@ without the corresponding auxiliary feature.
 
 * Create adhoc atomic snapshots without a schedule:
 
-`$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
+
+```
+$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
 --create-src-snapshot-prefix test_ --create-src-snapshot-infix
-_us-west-1 --create-src-snapshot-suffix _adhoc --skip-replication`
+_us-west-1 --create-src-snapshot-suffix _adhoc
+--skip-replication
+```
+
 
 
 ```
@@ -143,8 +148,21 @@ tank1/foo/bar@test_2024-11-06_08:30:05_us-west-1_adhoc
 * Create periodic atomic snapshots on a schedule, every hour and every
 day, by launching this from a periodic `cron` job:
 
-`$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
---create-src-snapshot-suffix _hourly _daily --skip-replication`
+
+```
+$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
+--create-src-snapshot-suffix _hourly _daily --skip-replication
+
+```
+
+
+
+```
+$ zfs list -t snapshot tank1/foo/bar
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly 
+```
+
 
 Note: A periodic snapshot is created if it is due per the schedule
 indicated by its --create-src-snapshot-suffix (for example '_daily'
@@ -156,14 +174,6 @@ backdated to the missed time), and then resumes the original schedule.
 If the --create-src-snapshot-suffix is '_adhoc' or not a known
 period then a snapshot is considered non-periodic and is thus created
 immediately regardless of the creation time of any existing snapshot.
-
-
-```
-$ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly 
-```
-
 
 * Replication example in local mode (no network, no ssh), to replicate
 ZFS dataset tank1/foo/bar to tank2/boo/bar:
@@ -179,24 +189,40 @@ $ bzfs tank1/foo/bar tank2/boo/bar
 $ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
 tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
+```
 
+
+
+```
 $ zfs list -t snapshot tank2/boo/bar
 tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly 
+tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly
 ```
 
 
 * Same example in pull mode:
 
-` bzfs root@host1.example.com:tank1/foo/bar tank2/boo/bar`
+
+```
+$ bzfs root@host1.example.com:tank1/foo/bar tank2/boo/bar
+```
+
 
 * Same example in push mode:
 
-` bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar`
+
+```
+$ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar
+```
+
 
 * Same example in pull-push mode:
 
-` bzfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar`
+
+```
+$ bzfs root@host1:tank1/foo/bar root@host2:tank2/boo/bar
+```
+
 
 * Example in local mode (no network, no ssh) to recursively replicate
 ZFS dataset tank1/foo/bar and its descendant datasets to tank2/boo/bar:
@@ -214,29 +240,41 @@ tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
 tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
 tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_daily
 tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_hourly
+```
 
+
+
+```
 $ zfs list -t snapshot -r tank2/boo/bar
 tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
 tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly
 tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_daily
-tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_hourly 
+tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_hourly
 ```
 
 
 * Example that makes destination identical to source even if the two
 have drastically diverged:
 
-` bzfs tank1/foo/bar tank2/boo/bar --recursive --force
---delete-dst-datasets --delete-dst-snapshots`
+
+```
+$ bzfs tank1/foo/bar tank2/boo/bar --recursive --force
+--delete-dst-datasets --delete-dst-snapshots
+```
+
 
 * Replicate all daily snapshots created during the last 7 days, and at
 the same time ensure that the latest 7 daily snapshots (per dataset) are
 replicated regardless of creation time:
 
-` bzfs tank1/foo/bar tank2/boo/bar --recursive
+
+```
+$ bzfs tank1/foo/bar tank2/boo/bar --recursive
 --include-snapshot-regex '.*_daily'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest
-7'`
+7'
+```
+
 
 Note: The example above compares the specified times against the
 standard ZFS 'creation' time property of the snapshots (which is a UTC
@@ -247,10 +285,15 @@ be part of the snapshot name.
 latest 7 daily snapshots (per dataset) are retained regardless of
 creation time:
 
-` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks notime 'all except latest 7'
---include-snapshot-times-and-ranks 'anytime..7 days ago'`
+
+```
+$ bzfs dummy tank2/boo/bar --dryrun --recursive
+--skip-replication --delete-dst-snapshots --include-snapshot-regex
+'.*_daily' --include-snapshot-times-and-ranks notime 'all except
+latest 7' --include-snapshot-times-and-ranks 'anytime..7 days
+ago'
+```
+
 
 Note: This also prints how many GB of disk space in total would be freed
 if the command were to be run for real without the --dryrun flag.
@@ -261,10 +304,15 @@ creation time. Additionally, only delete a snapshot if no corresponding
 snapshot or bookmark exists in the source dataset (same as above except
 replace the 'dummy' source with 'tank1/foo/bar'):
 
-` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
+
+```
+$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
 '.*_daily' --include-snapshot-times-and-ranks notime 'all except
-latest 7' --include-snapshot-times-and-ranks '7 days ago..anytime'`
+latest 7' --include-snapshot-times-and-ranks '7 days
+ago..anytime'
+```
+
 
 * Delete all daily snapshots older than 7 days, but ensure that the
 latest 7 daily snapshots (per dataset) are retained regardless of
@@ -272,26 +320,38 @@ creation time. Additionally, only delete a snapshot if no corresponding
 snapshot exists in the source dataset (same as above except append
 'no-crosscheck'):
 
-` bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
+
+```
+$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive
 --skip-replication --delete-dst-snapshots --include-snapshot-regex
 '.*_daily' --include-snapshot-times-and-ranks notime 'all except
 latest 7' --include-snapshot-times-and-ranks 'anytime..7 days ago'
---delete-dst-snapshots-no-crosscheck`
+--delete-dst-snapshots-no-crosscheck
+```
+
 
 * Delete all daily bookmarks older than 90 days, but retain the latest
 200 daily bookmarks (per dataset) regardless of creation time:
 
-` bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots=bookmarks --include-snapshot-regex
-'.*_daily' --include-snapshot-times-and-ranks notime 'all except
-latest 200' --include-snapshot-times-and-ranks 'anytime..90 days
-ago'`
+
+```
+$ bzfs dummy tank1/foo/bar --dryrun --recursive
+--skip-replication --delete-dst-snapshots=bookmarks
+--include-snapshot-regex '.*_daily'
+--include-snapshot-times-and-ranks notime 'all except latest 200'
+--include-snapshot-times-and-ranks 'anytime..90 days ago'
+```
+
 
 * Delete all tmp datasets within tank2/boo/bar:
 
-` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*'
---exclude-dataset-regex '!.*'`
+
+```
+$ bzfs dummy tank2/boo/bar --dryrun --recursive
+--skip-replication --delete-dst-datasets --include-dataset-regex
+'(.*/)?tmp.*' --exclude-dataset-regex '!.*'
+```
+
 
 * Delete all secondly snapshots older than 150 seconds, but ensure that
 the latest 150 secondly snapshots (per dataset) are retained regardless
@@ -309,25 +369,29 @@ monthly snapshots older than 365 days, but ensure that the latest 12
 monthly snapshots (per dataset) are retained regardless of creation time
 (same as above except insert --new-snapshot-filter-group separators):
 
-` bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --include-snapshot-regex '.*_secondly'
---include-snapshot-times-and-ranks notime 'all except latest 150'
---include-snapshot-times-and-ranks 'anytime..150 seconds ago'
---new-snapshot-filter-group --include-snapshot-regex '.*_minutely'
---include-snapshot-times-and-ranks notime 'all except latest 90'
---include-snapshot-times-and-ranks 'anytime..90 minutes ago'
---new-snapshot-filter-group --include-snapshot-regex '.*_hourly'
---include-snapshot-times-and-ranks notime 'all except latest 48'
---include-snapshot-times-and-ranks 'anytime..48 hours ago'
---new-snapshot-filter-group --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks notime 'all except latest 31'
---include-snapshot-times-and-ranks 'anytime..31 days ago'
+
+```
+$ bzfs dummy tank2/boo/bar --dryrun --recursive
+--skip-replication --delete-dst-snapshots --include-snapshot-regex
+'.*_secondly' --include-snapshot-times-and-ranks notime 'all
+except latest 150' --include-snapshot-times-and-ranks 'anytime..150
+seconds ago' --new-snapshot-filter-group --include-snapshot-regex
+'.*_minutely' --include-snapshot-times-and-ranks notime 'all
+except latest 90' --include-snapshot-times-and-ranks 'anytime..90
+minutes ago' --new-snapshot-filter-group --include-snapshot-regex
+'.*_hourly' --include-snapshot-times-and-ranks notime 'all except
+latest 48' --include-snapshot-times-and-ranks 'anytime..48 hours
+ago' --new-snapshot-filter-group --include-snapshot-regex
+'.*_daily' --include-snapshot-times-and-ranks notime 'all except
+latest 31' --include-snapshot-times-and-ranks 'anytime..31 days ago'
 --new-snapshot-filter-group --include-snapshot-regex '.*_weekly'
 --include-snapshot-times-and-ranks notime 'all except latest 26'
 --include-snapshot-times-and-ranks 'anytime..26 weeks ago'
 --new-snapshot-filter-group --include-snapshot-regex '.*_monthly'
 --include-snapshot-times-and-ranks notime 'all except latest 12'
---include-snapshot-times-and-ranks 'anytime..365 days ago'`
+--include-snapshot-times-and-ranks 'anytime..365 days ago'
+```
+
 
 * Compare source and destination dataset trees recursively, for example
 to check if all recently taken snapshots have been successfully
@@ -338,11 +402,15 @@ hourly and daily snapshots taken within the last 7 days, excluding the
 last 4 hours (to allow for some slack/stragglers), excluding temporary
 datasets:
 
-` bzfs tank1/foo/bar tank2/boo/bar --skip-replication
+
+```
+$ bzfs tank1/foo/bar tank2/boo/bar --skip-replication
 --compare-snapshot-lists=src+dst+all --recursive
 --include-snapshot-regex '.*_(hourly|daily)'
 --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
---exclude-dataset-regex '(.*/)?tmp.*'`
+--exclude-dataset-regex '(.*/)?tmp.*'
+```
+
 
 If the resulting TSV output file contains zero lines starting with the
 prefix 'src' and zero lines starting with the prefix 'dst' then no
@@ -361,15 +429,18 @@ missing on dst, etc.
 
 * Example with further options:
 
-` bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
---exclude-snapshot-regex '.*_(hourly|frequent)'
+
+```
+$ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar
+--recursive --exclude-snapshot-regex '.*_(hourly|frequent)'
 --exclude-snapshot-regex 'test_.*'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'
 --exclude-dataset /tank1/foo/bar/temporary --exclude-dataset
 /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
 --exclude-dataset-regex
 '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'
---ssh-dst-private-key /root/.ssh/id_rsa`
+--ssh-dst-private-key /root/.ssh/id_rsa
+```
 
 <!-- END DESCRIPTION SECTION -->
 
