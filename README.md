@@ -316,37 +316,28 @@ $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 ```
 
 
-* Delete all secondly snapshots older than 150 seconds, but ensure that the latest 150 secondly
-snapshots (per dataset) are retained regardless of creation time. Additionally, delete all
-minutely snapshots older than 90 minutes, but ensure that the latest 90 minutely snapshots (per
-dataset) are retained regardless of creation time. Additionally, delete all hourly snapshots older
-than 48 hours, but ensure that the latest 48 hourly snapshots (per dataset) are retained
-regardless of creation time. Additionally, delete all daily snapshots older than 31 days, but
-ensure that the latest 31 daily snapshots (per dataset) are retained regardless of creation time.
-Additionally, delete all weekly snapshots older than 26 weeks, but ensure that the latest 26
-weekly snapshots (per dataset) are retained regardless of creation time. Additionally, delete all
-monthly snapshots older than 365 days, but ensure that the latest 12 monthly snapshots (per
-dataset) are retained regardless of creation time (same as above except insert
---new-snapshot-filter-group separators):
+* Retain all secondly snapshots that were created more recently than 150 seconds ago, and ensure
+that the latest 150 secondly snapshots (per dataset) are retained regardless of creation time.
+Same for 90 minutely snapshots, 48 hourly snapshots, 31 daily snapshots, 26 weekly snapshots, and
+18 monthly snapshots, and 5 yearly snapshots:
 
 
 ```
 $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --include-snapshot-regex '.*_secondly'
---include-snapshot-times-and-ranks notime 'all except latest 150'
---include-snapshot-times-and-ranks 'anytime..150 seconds ago' --new-snapshot-filter-group
---include-snapshot-regex '.*_minutely' --include-snapshot-times-and-ranks notime 'all
-except latest 90' --include-snapshot-times-and-ranks 'anytime..90 minutes ago'
+--delete-dst-snapshots --delete-dst-snapshots-except --include-snapshot-regex '.*_secondly'
+--include-snapshot-times-and-ranks '150 seconds ago..anytime' 'latest 150'
+--new-snapshot-filter-group --include-snapshot-regex '.*_minutely'
+--include-snapshot-times-and-ranks '90 minutes ago..anytime' 'latest 90'
 --new-snapshot-filter-group --include-snapshot-regex '.*_hourly'
---include-snapshot-times-and-ranks notime 'all except latest 48'
---include-snapshot-times-and-ranks 'anytime..48 hours ago' --new-snapshot-filter-group
---include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except
-latest 31' --include-snapshot-times-and-ranks 'anytime..31 days ago'
+--include-snapshot-times-and-ranks '48 hours ago..anytime' 'latest 48'
+--new-snapshot-filter-group --include-snapshot-regex '.*_daily'
+--include-snapshot-times-and-ranks '31 days ago..anytime' 'latest 31'
 --new-snapshot-filter-group --include-snapshot-regex '.*_weekly'
---include-snapshot-times-and-ranks notime 'all except latest 26'
---include-snapshot-times-and-ranks 'anytime..26 weeks ago' --new-snapshot-filter-group
---include-snapshot-regex '.*_monthly' --include-snapshot-times-and-ranks notime 'all except
-latest 12' --include-snapshot-times-and-ranks 'anytime..365 days ago'
+--include-snapshot-times-and-ranks '26 weeks ago..anytime' 'latest 26'
+--new-snapshot-filter-group --include-snapshot-regex '.*_monthly'
+--include-snapshot-times-and-ranks '18 months ago..anytime' 'latest 18'
+--new-snapshot-filter-group --include-snapshot-regex '.*_yearly'
+--include-snapshot-times-and-ranks '5 years ago..anytime' 'latest 5'
 ```
 
 
@@ -890,8 +881,8 @@ usage: bzfs [-h] [--recursive]
     * d) a duration that indicates how long ago from the current time, using the following
     syntax: a non-negative integer, followed by an optional space, followed by a duration unit
     that is *one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days',
-    'weeks', followed by an optional space, followed by the word 'ago'. Examples: '0secs
-    ago', '90 mins ago', '48hours ago', '90days ago', '12weeksago'.
+    'weeks', 'months', 'years'followed by an optional space, followed by the word 'ago'.
+    Examples: '0secs ago', '90 mins ago', '48hours ago', '90days ago', '12weeksago'.
 
     * Note: This option compares the specified time against the standard ZFS 'creation' time
     property of the snapshot (which is a UTC Unix time in integer seconds), rather than against a
