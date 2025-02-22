@@ -328,9 +328,9 @@ of creation time:
 ```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
 --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'```
 
-* Retain all secondly snapshots that were created more recently than 150 seconds ago, and ensure that the latest 150 
+* Retain all secondly snapshots that were created less than 150 seconds ago, and ensure that the latest 150 
 secondly snapshots (per dataset) are retained regardless of creation time. Same for 90 minutely snapshots, 48 hourly 
-snapshots, 31 daily snapshots, 26 weekly snapshots, and 18 monthly snapshots, and 5 yearly snapshots:
+snapshots, 31 daily snapshots, 26 weekly snapshots, 18 monthly snapshots, and 5 yearly snapshots:
 
 ```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots 
 --delete-dst-snapshots-except
@@ -2270,6 +2270,7 @@ class Job:
                         cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
                         datasets_to_snapshot[label] = root_datasets
                 commands[label] = cmd
+            log.info(p.dry(f"Creating {sum(len(dtsets) for dtsets in basis_datasets_to_snapshot.values())} snapshot(s) ..."))
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
             self.run_ssh_cmd_parallel(
                 src,
@@ -3405,6 +3406,8 @@ class Job:
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
         if len(snapshot_tags) == 0:
             return
+        p, log = self.params, self.params.log
+        log.info(p.dry(f"Deleting {len(snapshot_tags)} snapshot(s): %s"), snapshot_tags)
         # delete snapshots in batches without creating a command line that's too big for the OS to handle
         self.run_ssh_cmd_batched(
             remote,
@@ -3416,7 +3419,6 @@ class Job:
 
     def delete_snapshot(self, r: Remote, dataset: str, snaps_to_delete: str) -> None:
         p, log = self.params, self.params.log
-        log.info(p.dry("Deleting snapshot(s): %s"), snaps_to_delete)
         cmd = self.delete_snapshot_cmd(r, snaps_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(r)  # solaris-11.4 knows no 'zfs destroy -n' flag
         try:
@@ -3439,7 +3441,7 @@ class Job:
             return
         # Unfortunately ZFS has no syntax yet to delete multiple bookmarks in a single CLI invocation
         p, log = self.params, self.params.log
-        log.info(p.dry("Deleting bookmark(s): %s"), dataset + "#" + ",".join(snapshot_tags))
+        log.info(p.dry(f"Deleting {len(snapshot_tags)} bookmark(s): %s"), dataset + "#" + ",".join(snapshot_tags))
         cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy")
         self.run_ssh_cmd_parallel(
             remote,
@@ -3935,7 +3937,7 @@ class Job:
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
         return datasets_to_snapshot
 
-    def last_modified_cache_file(self, dataset_or_snapshot) -> str:
+    def last_modified_cache_file(self, dataset_or_snapshot: str) -> str:
         p = self.params
         i = dataset_or_snapshot.find("@")
         cache_file = dataset_or_snapshot.replace("@", "/@") if i >= 0 else dataset_or_snapshot + "/="
@@ -6164,7 +6166,7 @@ class DatasetPairsAction(argparse.Action):
                     parser.error(f"File not found: {value[1:]}")
 
         if len(datasets) % 2 != 0:
-            parser.error("Each SRC_DATASET must have a corresponding DST_DATASET.")
+            parser.error(f"Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
         root_dataset_pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
         setattr(namespace, self.dest, root_dataset_pairs)
 

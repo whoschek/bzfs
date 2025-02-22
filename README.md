@@ -316,10 +316,10 @@ $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 ```
 
 
-* Retain all secondly snapshots that were created more recently than 150 seconds ago, and ensure
-that the latest 150 secondly snapshots (per dataset) are retained regardless of creation time.
-Same for 90 minutely snapshots, 48 hourly snapshots, 31 daily snapshots, 26 weekly snapshots, and
-18 monthly snapshots, and 5 yearly snapshots:
+* Retain all secondly snapshots that were created less than 150 seconds ago, and ensure that the
+latest 150 secondly snapshots (per dataset) are retained regardless of creation time. Same for 90
+minutely snapshots, 48 hourly snapshots, 31 daily snapshots, 26 weekly snapshots, 18 monthly
+snapshots, and 5 yearly snapshots:
 
 
 ```
