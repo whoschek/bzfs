@@ -1409,7 +1409,7 @@ class LogParams:
 
 #############################################################################
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
-UnixTimeRange = Optional[Tuple[int, int]]  # Type alias
+UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
 RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
 Tree = Dict[str, Optional[Dict]]  # Type alias
 RemoteConfCacheItem = namedtuple("RemoteConfCacheItem", ["connection_pools", "available_programs", "zpool_features"])
@@ -1992,6 +1992,7 @@ class Job:
             try:
                 daemon_stoptime_nanos = time.time_ns() + p.daemon_lifetime_nanos
                 while True:
+                    self.progress_reporter.reset()
                     src, dst = p.src, p.dst
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                         src.root_dataset = src.basis_root_dataset = src_root_dataset
@@ -2053,6 +2054,7 @@ class Job:
         sleep_nanos = daemon_stoptime_nanos - time.time_ns()
         if sleep_nanos <= 0:
             return False
+        self.progress_reporter.pause()
         p, log = self.params, self.params.log
         conf = p.create_src_snapshot_config
         curr_datetime = conf.current_datetime + timedelta(microseconds=1)
@@ -3287,7 +3289,21 @@ class Job:
 
     def filter_snapshots(self, basis_snapshots: List[str], all_except: bool = False) -> List[str]:
         """Returns all snapshots that pass all include/exclude policies."""
+
+        def resolve_timerange(timerange: UnixTimeRange) -> UnixTimeRange:
+            if timerange is not None:
+                lo, hi = timerange
+                if isinstance(lo, timedelta):
+                    lo = ceil(current_unixtime_in_secs - lo.total_seconds())
+                if isinstance(hi, timedelta):
+                    hi = ceil(current_unixtime_in_secs - hi.total_seconds())
+                assert isinstance(lo, int)
+                assert isinstance(hi, int)
+                return (lo, hi) if lo <= hi else (hi, lo)
+            return timerange
+
         p, log = self.params, self.params.log
+        current_unixtime_in_secs: float = p.create_src_snapshot_config.current_datetime.timestamp()
         resultset = set()
         for snapshot_filter in p.snapshot_filters:
             snapshots = basis_snapshots
@@ -3296,11 +3312,13 @@ class Job:
                 if name == snapshot_regex_filter_name:
                     snapshots = self.filter_snapshots_by_regex(snapshots, regexes=_filter.options)
                 elif name == "include_snapshot_times":
-                    snapshots = self.filter_snapshots_by_creation_time(snapshots, include_snapshot_times=_filter.timerange)
+                    timerange = resolve_timerange(_filter.timerange)
+                    snapshots = self.filter_snapshots_by_creation_time(snapshots, include_snapshot_times=timerange)
                 else:
                     assert name == "include_snapshot_times_and_ranks"
+                    timerange = resolve_timerange(_filter.timerange)
                     snapshots = self.filter_snapshots_by_creation_time_and_rank(
-                        snapshots, include_snapshot_times=_filter.timerange, include_snapshot_ranks=_filter.options
+                        snapshots, include_snapshot_times=timerange, include_snapshot_ranks=_filter.options
                     )
             resultset.update(snapshots)  # union
         snapshots = [line for line in basis_snapshots if "#" in line or (line in resultset) != all_except]
@@ -3812,7 +3830,7 @@ class Job:
             if basis_datasets[j] < root_datasets[i]:  # irrelevant subtree?
                 j += 1  # move to the next basis_src_dataset
             elif is_descendant(basis_datasets[j], of_root_dataset=root_datasets[i]):  # relevant subtree?
-                if basis_datasets[j] not in datasets_set:  # was subtree chopped off by schedule or --incl/exclude-dataset*?
+                if basis_datasets[j] not in datasets_set:  # was dataset chopped off by schedule or --incl/exclude-dataset*?
                     return None  # detected filter pruning that is incompatible with 'zfs snapshot -r'
                 j += 1  # move to the next basis_src_dataset
             else:
@@ -4881,6 +4899,8 @@ class ProgressReporter:
         self.sleeper: InterruptibleSleep = InterruptibleSleep(self.lock)  # sleeper shares lock with reporter
         self.file_name_queue: Set[str] = set()
         self.file_name_set: Set[str] = set()
+        self.is_resetting = True
+        self.is_pausing = False
 
     def start(self) -> None:
         with self.lock:
@@ -4897,6 +4917,14 @@ class ProgressReporter:
         e = self.exception
         if e is not None:
             raise e  # reraise exception in current thread
+
+    def pause(self) -> None:
+        with self.lock:
+            self.is_pausing = True
+
+    def reset(self) -> None:
+        with self.lock:
+            self.is_resetting = True
 
     def enqueue_pv_log_file(self, pv_log_file: str) -> None:
         """Tells progress reporter thread to also monitor and tail the given pv log file."""
@@ -4945,11 +4973,6 @@ class ProgressReporter:
         update_interval_nanos: int = round(update_interval_secs * 1_000_000_000)
         sliding_window_nanos: int = round(sliding_window_secs * 1_000_000_000)
         sleep_nanos = round(update_interval_nanos / 2.5)
-        sent_bytes, last_status_len = 0, 0
-        num_lines, num_readables = 0, 0
-        start_time_nanos = time.time_ns()
-        next_update_nanos = start_time_nanos + update_interval_nanos
-        latest_samples: Deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window containing recent measurements
         etas: List = []
         while True:
             empty_file_name_queue: Set[str] = set()
@@ -4963,6 +4986,18 @@ class ProgressReporter:
                 assert len(self.file_name_set) == n + m  # aka assert (previous) file_name_set.isdisjoint(file_name_queue)
                 local_file_name_queue = self.file_name_queue
                 self.file_name_queue = empty_file_name_queue  # exchange buffers
+                is_pausing = self.is_pausing
+                self.is_pausing = False
+                is_resetting = self.is_resetting
+                self.is_resetting = False
+            if is_pausing:
+                next_update_nanos = time.time_ns() + 1000 * 365 * 86400 * 1_000_000_000  # infinity
+            if is_resetting:
+                sent_bytes, last_status_len = 0, 0
+                num_lines, num_readables = 0, 0
+                start_time_nanos = time.time_ns()
+                next_update_nanos = start_time_nanos + update_interval_nanos
+                latest_samples: Deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measurements
             for pv_log_file in local_file_name_queue:
                 Path(pv_log_file).touch()
                 fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
@@ -6260,7 +6295,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
     def get_include_snapshot_times(times) -> UnixTimeRange:
         def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
             if isinstance(time_spec, timedelta):
-                return ceil(current_time - time_spec.total_seconds())
+                return time_spec
             if isinstance(time_spec, int):
                 return int(time_spec)
             return default
@@ -6268,10 +6303,11 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         lo, hi = times
         if lo is None and hi is None:
             return None
-        current_time = time.time()
         lo = utc_unix_time_in_seconds(lo, default=0)
         hi = utc_unix_time_in_seconds(hi, default=unixtime_infinity_secs)
-        return (lo, hi) if lo <= hi else (hi, lo)
+        if isinstance(lo, int) and isinstance(hi, int):
+            return (lo, hi) if lo <= hi else (hi, lo)
+        return lo, hi
 
     @staticmethod
     def parse_rankranges(parser, values, option_string=None) -> List[RankRange]:

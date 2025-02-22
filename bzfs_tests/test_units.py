@@ -2227,8 +2227,8 @@ class TestTimeRangeAction(unittest.TestCase):
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertAlmostEqual(int(time.time() - 60), p.snapshot_filters[0][0].timerange[0], delta=2)
-        self.assertAlmostEqual(int(time.time()), p.snapshot_filters[0][0].timerange[1], delta=2)
+        self.assertEqual(timedelta(seconds=0), p.snapshot_filters[0][0].timerange[0])
+        self.assertEqual(timedelta(seconds=60), p.snapshot_filters[0][0].timerange[1])
 
         for wildcard in wildcards:
             args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
