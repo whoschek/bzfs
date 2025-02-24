@@ -1995,6 +1995,7 @@ class Job:
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         self.stats_lock = threading.Lock()
+        self.num_snapshots_found: int = 0
         self.num_snapshots_replicated: int = 0
         self.control_persist_secs: int = 90
         self.control_persist_margin_secs: int = 2
@@ -2373,7 +2374,8 @@ class Job:
                         cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
                         datasets_to_snapshot[label] = root_datasets
                 commands[label] = cmd
-            log.info(p.dry(f"Creating {sum(len(dtsets) for dtsets in basis_datasets_to_snapshot.values())} snapshot(s) ..."))
+            creation_msg = f"Creating {sum(len(datasets) for datasets in basis_datasets_to_snapshot.values())} snapshots"
+            log.info(p.dry("--create-src-snapshots: %s"), f"{creation_msg} within {len(src_datasets)} datasets ...")
             # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
             self.run_ssh_cmd_parallel(
                 src,
@@ -2386,18 +2388,21 @@ class Job:
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
-            log.info("Starting replication task: %s", task_description)
             if len(basis_src_datasets) == 0:
-                die(f"Source dataset does not exist: {src.basis_root_dataset}")
+                die(f"Replication: Source dataset does not exist: {src.basis_root_dataset}")
             if self.is_dummy(dst):
-                die(f"Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
+                die(f"Replication: Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
+            log.info("Starting replication task: %s", task_description + f" [{len(src_datasets)} datasets]")
             # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
             self.dedicated_tcp_connection_per_zfs_send = (
                 p.dedicated_tcp_connection_per_zfs_send
                 and min(self.max_workers[p.src.location], self.max_workers[p.dst.location]) > 1
                 and has_siblings(src_datasets)  # siblings can be replicated in parallel
             )
+            self.num_snapshots_found = 0
+            self.num_snapshots_replicated = 0
+            start_time_nanos = time.time_ns()
             # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
             failed = self.process_datasets_in_parallel_and_fault_tolerant(
                 src_datasets,
@@ -2405,7 +2410,13 @@ class Job:
                 skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
                     replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
                 ],
-                task_name="Replicating",
+                task_name="Replication",
+            )
+            log.info(
+                p.dry("Replication done: %s"),
+                task_description
+                + f" [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots "
+                f"within {len(src_datasets)} datasets; took {human_readable_duration(time.time_ns() - start_time_nanos)}]",
             )
 
         if failed or not (
@@ -2449,11 +2460,12 @@ class Job:
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
         # via --{include|exclude}-dataset* policy.
         if p.delete_dst_snapshots and not failed:
-            log.info(p.dry("--delete-dst-snapshots: %s"), task_description)
+            log.info(p.dry("--delete-dst-snapshots: %s"), task_description + f" [{len(dst_datasets)} datasets]")
             kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
             filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
             props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
             basis_src_datasets_set = set(basis_src_datasets)
+            num_snapshots_found, num_snapshots_deleted = 0, 0
 
             def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
@@ -2474,6 +2486,7 @@ class Job:
                     log.warning("Third party deleted destination: %s", dst_dataset)
                     return False
                 dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
+                num_dst_snaps_with_guids = len(dst_snaps_with_guids)
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="#", new="@")  # treat bookmarks as snapshots
                 dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, all_except=p.delete_dst_snapshots_except)
@@ -2489,15 +2502,26 @@ class Job:
                     self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
                 else:
                     self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                with self.stats_lock:
+                    nonlocal num_snapshots_found
+                    num_snapshots_found += num_dst_snaps_with_guids
+                    nonlocal num_snapshots_deleted
+                    num_snapshots_deleted += len(missing_snapshot_tags)
                 return True
 
             # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
             if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
+                starttime_nanos = time.time_ns()
                 failed = self.process_datasets_in_parallel_and_fault_tolerant(
                     dst_datasets,
                     process_dataset=delete_destination_snapshots,  # lambda
                     skip_tree_on_error=lambda dataset: False,
                     task_name="--delete-dst-snapshots",
+                )
+                log.info(
+                    p.dry("--delete-dst-snapshots: %s"),
+                    task_description + f" [Deleted {num_snapshots_deleted} out of {num_snapshots_found} {kind}s "
+                    f"within {len(dst_datasets)} datasets; took {human_readable_duration(time.time_ns() - starttime_nanos)}]",
                 )
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
@@ -2594,7 +2618,9 @@ class Job:
         if len(dst_snapshots_with_guids) == 0 and "bookmark" in types:
             # src bookmarks serve no purpose if the destination dataset has no snapshot; ignore them
             src_snapshots_with_guids = [snapshot for snapshot in src_snapshots_with_guids if "@" in snapshot]
-
+        num_src_snapshots_found = sum(1 for snapshot in src_snapshots_with_guids if "@" in snapshot)
+        with self.stats_lock:
+            self.num_snapshots_found += num_src_snapshots_found
         # apply include/exclude regexes to ignore irrelevant src snapshots
         basis_src_snapshots_with_guids = src_snapshots_with_guids
         src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
@@ -3526,7 +3552,7 @@ class Job:
         if len(snapshot_tags) == 0:
             return
         p, log = self.params, self.params.log
-        log.info(p.dry(f"Deleting {len(snapshot_tags)} snapshot(s): %s"), snapshot_tags)
+        log.info(p.dry(f"Deleting {len(snapshot_tags)} snapshots within %s: %s"), dataset, snapshot_tags)
         # delete snapshots in batches without creating a command line that's too big for the OS to handle
         self.run_ssh_cmd_batched(
             remote,
@@ -3560,7 +3586,9 @@ class Job:
             return
         # Unfortunately ZFS has no syntax yet to delete multiple bookmarks in a single CLI invocation
         p, log = self.params, self.params.log
-        log.info(p.dry(f"Deleting {len(snapshot_tags)} bookmark(s): %s"), dataset + "#" + ",".join(snapshot_tags))
+        log.info(
+            p.dry(f"Deleting {len(snapshot_tags)} bookmarks within %s: %s"), dataset, dataset + "#" + ",".join(snapshot_tags)
+        )
         cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy")
         self.run_ssh_cmd_parallel(
             remote,
