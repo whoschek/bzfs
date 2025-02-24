@@ -136,6 +136,7 @@ def argument_parser() -> argparse.ArgumentParser:
             }
         }
     ).replace(" ", "")
+
     # fmt: off
     parser = argparse.ArgumentParser(
         prog=prog_name,
@@ -214,7 +215,7 @@ feature.
 
 * Create adhoc atomic snapshots without a schedule:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots --create-src-snapshots 
+```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots 
 --create-src-snapshots-periods "{create_src_snapshots_periods_example1}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
@@ -235,7 +236,7 @@ tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
 ```
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly` 
-or `_10minutely` or `_2secondly`), or if the --create-src-snapshots-even-if-not-due flag is specified, or  if the most 
+or `_10minutely` or `_2secondly`), or if the --create-src-snapshots-even-if-not-due flag is specified, or if the most 
 recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates a snapshot (named with 
 the current time, not backdated to the missed time), and then resumes the original schedule. If the suffix is `_adhoc` 
 or not a known period then a snapshot is considered non-periodic and is thus created immediately regardless of the 

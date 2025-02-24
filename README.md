@@ -110,7 +110,7 @@ reliably without the corresponding auxiliary feature.
 
 ```
 $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
---create-src-snapshots --create-src-snapshots-periods "{'test':{'':{'adhoc':1}}}"
+--create-src-snapshots-periods "{'test':{'':{'adhoc':1}}}"
 ```
 
 
