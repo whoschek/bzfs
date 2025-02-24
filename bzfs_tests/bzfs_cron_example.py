@@ -92,7 +92,7 @@ src_snapshot_periods = {
 #         "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
 #     }
 # }
-N = 5  # multiply src_snapshot_periods by a factor N
+N = 2  # multiply src_snapshot_periods by a factor N
 src_bookmark_periods = {
     org: {target: {period: N * count for period, count in periods.items()} for target, periods in target_periods.items()}
     for org, target_periods in src_snapshot_periods.items()

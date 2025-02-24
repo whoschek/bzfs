@@ -148,7 +148,7 @@ def main():
     pull_targets = [target for target, dst_host in dst_hosts.items() if dst_host == localhostname]
     sep = ","  # for straightforward log file processing
 
-    def get_dst_dataset(dst_dataset: str, dst_host: str) -> str:
+    def resolve_dst_dataset(dst_dataset: str, dst_host: str) -> str:
         dst_root_dataset = dst_root_datasets.get(dst_host)
         assert dst_root_dataset, f"hostname: '{dst_host}' must not have a missing or empty root dataset: {dst_root_datasets}"
         return dst_root_dataset + "/" + dst_dataset
@@ -181,7 +181,7 @@ def main():
             opts += [f"--log-file-suffix={sep}{src_host}{sep}{localhostname}{sep}"]
             opts += unknown_args + ["--"]
             for src, dst in args.root_dataset_pairs:
-                opts += [f"{src_host}:{src}", get_dst_dataset(dst, localhostname)]
+                opts += [f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)]
             run_cmd(["bzfs"] + daemon_opts + opts)
         else:
             assert src_host in [localhostname, "-"], "Local host name must be --src-host or in --dst-hosts: " + localhostname
@@ -198,7 +198,7 @@ def main():
                 opts += [f"--log-file-suffix={sep}{localhostname}{sep}{dst_host}{sep}"]
                 opts += unknown_args + ["--"]
                 for src, dst in args.root_dataset_pairs:
-                    opts += [src, f"{dst_host}:{get_dst_dataset(dst, dst_host)}"]
+                    opts += [src, f"{dst_host}:{resolve_dst_dataset(dst, dst_host)}"]
                 run_cmd(["bzfs"] + daemon_opts + opts)
 
     if args.prune_src_snapshots or args.prune_src_bookmarks:
@@ -237,7 +237,7 @@ def main():
         opts += [f"--log-file-suffix={sep}"]
         opts += unknown_args + ["--"]
         for src, dst in args.root_dataset_pairs:
-            opts += ["dummy", get_dst_dataset(dst, localhostname)]
+            opts += ["dummy", resolve_dst_dataset(dst, localhostname)]
         run_cmd(["bzfs"] + opts)
 
 
