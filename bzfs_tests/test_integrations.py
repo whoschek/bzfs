@@ -597,6 +597,12 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
+    def test_delete_dst_snapshots_except_periods(self):
+        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_periods()
+
+    def test_daemon_frequency(self):
+        LocalTestCase(param=self.param).test_daemon_frequency()
+
     def test_basic_snapshotting_flat_simple(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
 
@@ -852,16 +858,15 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(src_root_dataset, 0)
         for i in range(0, 6):
             with stop_on_failure_subtest(i=i):
+                localperiods = {"hourly": 1, "adhoc": 1}
+                localperiods["secondly" if i != 4 else "daily"] = 1
                 self.run_bzfs(
                     src_root_dataset,
                     bzfs.dummy_dataset,
                     "--skip-replication",
-                    "--create-src-snapshot",
-                    "--create-src-snapshot-prefix=s1_",
-                    "--create-src-snapshot-suffix=" + ("_secondly" if i != 4 else "_daily"),
-                    "--create-src-snapshot-suffix=_hourly",
-                    "--create-src-snapshot-suffix=_adhoc",
-                    "--create-src-snapshot-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-periods=" + str({"s1": {"onsite": localperiods}}),
+                    "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
                     dry_run=(i == 0 or i == 5),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
@@ -923,10 +928,9 @@ class LocalTestCase(BZFSTestCase):
                     bzfs.dummy_dataset,
                     "--recursive",
                     "--skip-replication",
-                    "--create-src-snapshot",
-                    "--create-src-snapshot-prefix=z_",
-                    "--create-src-snapshot-suffix=_hourly",
-                    "--create-src-snapshot-timeformat=",
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-timeformat=",
                     "--yearly_month=6",
                     dry_run=(i == 0),
                 )
@@ -961,10 +965,9 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-parent",
                     "--recursive",
                     "--skip-replication",
-                    "--create-src-snapshot",
-                    "--create-src-snapshot-prefix=z_",
-                    "--create-src-snapshot-suffix=_hourly",
-                    "--create-src-snapshot-timeformat=",
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
@@ -994,10 +997,9 @@ class LocalTestCase(BZFSTestCase):
                     "--exclude-dataset-regex=.*foo/a.*",
                     "--recursive",
                     "--skip-replication",
-                    "--create-src-snapshot",
-                    "--create-src-snapshot-prefix=z_",
-                    "--create-src-snapshot-suffix=_hourly",
-                    "--create-src-snapshot-timeformat=",
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
@@ -1028,10 +1030,9 @@ class LocalTestCase(BZFSTestCase):
                     "--exclude-dataset-regex=.*foo/a.*",
                     "--recursive",
                     "--skip-replication",
-                    "--create-src-snapshot",
-                    "--create-src-snapshot-prefix=z_",
-                    "--create-src-snapshot-suffix=_hourly",
-                    "--create-src-snapshot-timeformat=",
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
@@ -1068,10 +1069,9 @@ class LocalTestCase(BZFSTestCase):
             "--exclude-dataset-regex=.*xxx",  # induce incompatible pruning
             "--recursive",
             "--skip-replication",
-            "--create-src-snapshot",
-            "--create-src-snapshot-prefix=z_",
-            "--create-src-snapshot-suffix=_foo",
-            "--create-src-snapshot-timeformat=",
+            "--create-src-snapshots",
+            "--create-src-snapshots-periods=" + str({"z": {"onsite": {"foo": 1}}}),
+            "--create-src-snapshots-timeformat=",
         )
         print(f"Snapshotting took {bzfs.human_readable_duration(time.time_ns() - start_time_nanos)}")
         self.assert_snapshotting_generates_identical_createtxg()
@@ -1100,9 +1100,8 @@ class LocalTestCase(BZFSTestCase):
                     dst_root_dataset,
                     "--skip-replication",
                     "--exclude-dataset-regex=.*",
-                    "--create-src-snapshot",
-                    "--create-src-snapshot-prefix=s1_",
-                    "--create-src-snapshot-suffix=_secondly",
+                    "--create-src-snapshots",
+                    "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
                 self.assertSnapshots(src_root_dataset, 0)
@@ -1114,9 +1113,8 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--create-src-snapshot",
-            "--create-src-snapshot-prefix=s1_",
-            "--create-src-snapshot-suffix=_secondly",
+            "--create-src-snapshots",
+            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
             expected_status=die_status,
         )
 
@@ -1127,10 +1125,9 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--skip-replication",
-            "--create-src-snapshot",
-            "--create-src-snapshot-even-if-not-due",
-            "--create-src-snapshot-prefix=s1_",
-            "--create-src-snapshot-suffix=_hourly",
+            "--create-src-snapshots-even-if-not-due",
+            "--create-src-snapshots",
+            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"hourly": 1}}}),
         )
         self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_hourly", "s1.*_daily", "s1.*_hourly"])
 
@@ -1139,10 +1136,9 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            "--create-src-snapshot",
-            "--create-src-snapshot-prefix=s1_",
-            "--create-src-snapshot-suffix=_secondly",
-            "--create-src-snapshot-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+            "--create-src-snapshots",
+            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
+            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
             "--daemon-lifetime=2seconds",
         )
         expected = ["s1.*_secondly", "s1.*_secondly", "s1.*_secondly"]
@@ -1154,15 +1150,99 @@ class LocalTestCase(BZFSTestCase):
             self.assertSnapshotNameRegexes(src_root_dataset, expected)
             self.assertSnapshotNameRegexes(dst_root_dataset, expected)
 
+    def test_daemon_frequency(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--daemon-frequency=1seconds")
+
     def test_invalid_use_of_dummy(self):
         self.run_bzfs(src_root_dataset, bzfs.dummy_dataset, expected_status=die_status)
         self.run_bzfs(
             src_root_dataset, bzfs.dummy_dataset, "--skip-replication", "--delete-dst-snapshots", expected_status=die_status
         )
         self.run_bzfs(
-            bzfs.dummy_dataset, bzfs.dummy_dataset, "--skip-replication", "--create-src-snapshot", expected_status=die_status
+            bzfs.dummy_dataset,
+            bzfs.dummy_dataset,
+            "--skip-replication",
+            "--create-src-snapshots",
+            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
+            expected_status=die_status,
         )
         self.run_bzfs(bzfs.dummy_dataset, bzfs.dummy_dataset, expected_status=die_status)
+
+    def test_delete_dst_snapshots_except_periods(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("Destroying snapshots on src needs extra permissions")
+        take_snapshot(src_root_dataset, "s1_2024-01-01_00:00:00_onsite_secondly")
+        take_snapshot(src_root_dataset, "s1_2024-01-01_00:01:00_onsite_secondly")
+        take_snapshot(src_root_dataset, "s1_2024-01-01_00:02:00_onsite_secondly")
+        take_snapshot(src_root_dataset, "s1_2024-01-01_00:00:00_onsite_daily")
+        take_snapshot(src_root_dataset, "s1_2024-01-02_00:00:00_onsite_daily")
+        take_snapshot(src_root_dataset, "s1_2024-01-03_00:00:00_onsite_daily")
+        self.assertSnapshotNameRegexes(
+            src_root_dataset,
+            [
+                "s1.*_daily",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_daily",
+                "s1.*_daily",
+            ],
+        )
+        time.sleep(1.1)
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-periods",
+            str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
+        )
+        self.assertSnapshotNames(src_root_dataset, ["s1_2024-01-01_00:02:00_onsite_secondly"])
+
+        # multiple --delete-dst-snapshots-except-periods expressions are UNIONized:
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-periods",
+            str({}),
+            "--delete-dst-snapshots-except-periods",
+            str({"s1": {"onsite": {"secondly": 1}}}),
+        )
+        self.assertSnapshotNames(src_root_dataset, ["s1_2024-01-01_00:02:00_onsite_secondly"])
+
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-periods",
+            str({"s1": {"onsite": {"secondly": 0, "hourly": 1}}}),
+        )
+        self.assertSnapshotNames(src_root_dataset, [])
+
+        take_snapshot(src_root_dataset, "s1_2024-01-04_00:00:00_onsite_adhoc")
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-periods",
+            str({"s1": {"onsite": {"secondly": 1, "adhoc": 1}}}),  # adhoc is retained despite no time period
+        )
+        self.assertSnapshotNames(src_root_dataset, ["s1_2024-01-04_00:00:00_onsite_adhoc"])
+
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-periods",
+            str({"s1": {"onsite": {"secondly": -1, "hourly": 1}}}),  # parser error: negative int isn't accepted
+            expected_status=2,
+        )
 
     def test_basic_replication_flat_simple(self):
         self.setup_basic()

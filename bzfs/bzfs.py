@@ -26,13 +26,14 @@
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
 * The core replication algorithm is in run_task() and especially in replicate_dataset().
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
-* The --create-src-snapshot-* and --delete-* and --compare-* algorithms also start in run_task().
+* The --create-src-snapshots-* and --delete-* and --compare-* algorithms also start in run_task().
 * Consider using an IDE/editor that can open multiple windows for the same file, such as PyCharm or Sublime Text, etc.
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.py.
 Simply run that script whenever you change or add ArgumentParser help text.
 """
 
 import argparse
+import ast
 import bisect
 import calendar
 import collections
@@ -91,8 +92,8 @@ if sys.version_info < min_python_version:
     print(f"ERROR: {prog_name} requires Python version >= {'.'.join(map(str, min_python_version))}!")
     sys.exit(die_status)
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
-create_src_snapshot_prefix_dflt = prog_name + "_"
-create_src_snapshot_suffix_dflt = "_adhoc"
+create_src_snapshots_prefix_dflt = prog_name + "_"
+create_src_snapshots_suffix_dflt = "_adhoc"
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
 pv_file_thread_separator = "_"
@@ -117,8 +118,25 @@ DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
 
 
-# fmt: off
 def argument_parser() -> argparse.ArgumentParser:
+    create_src_snapshots_periods_example1 = str({"test": {"": {"adhoc": 1}}}).replace(" ", "")
+    create_src_snapshots_periods_example2 = str({"prod": {"us-west-1": {"hourly": 48, "daily": 31}}}).replace(" ", "")
+    delete_dst_snapshots_except_periods_example1 = str(
+        {
+            "prod": {
+                "onsite": {
+                    "secondly": 150,
+                    "minutely": 90,
+                    "hourly": 48,
+                    "daily": 31,
+                    "weekly": 26,
+                    "monthly": 18,
+                    "yearly": 5,
+                }
+            }
+        }
+    ).replace(" ", "")
+    # fmt: off
     parser = argparse.ArgumentParser(
         prog=prog_name,
         allow_abbrev=False,
@@ -196,33 +214,32 @@ feature.
 
 * Create adhoc atomic snapshots without a schedule:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --create-src-snapshot --create-src-snapshot-prefix test_ 
---create-src-snapshot-infix _us-west-1 --create-src-snapshot-suffix _adhoc --skip-replication```
+```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots --create-src-snapshots 
+--create-src-snapshots-periods "{create_src_snapshots_periods_example1}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@test_2024-11-06_08:30:05_us-west-1_adhoc
+tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
 ```
 
 * Create periodic atomic snapshots on a schedule, every hour and every day, by launching this from a periodic `cron` job:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --create-src-snapshot --create-src-snapshot-suffix _hourly _daily 
---skip-replication
-```
+```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots 
+--create-src-snapshots-periods "{create_src_snapshots_periods_example2}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
 
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
 ```
 
-Note: A periodic snapshot is created if it is due per the schedule indicated by its --create-src-snapshot-suffix (for
-example '_daily' or '_hourly' or _'10minutely' or '_2secondly'), or if the --create-src-snapshot-even-if-not-due flag is 
-specified, or if the most recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates 
-a snapshot (named with the current time, not backdated to the missed time), and then resumes the original schedule. If the 
---create-src-snapshot-suffix is '_adhoc' or not a known period then a snapshot is considered non-periodic and is thus 
-created immediately regardless of the creation time of any existing snapshot.
+Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly` 
+or `_10minutely` or `_2secondly`), or if the --create-src-snapshots-even-if-not-due flag is specified, or  if the most 
+recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates a snapshot (named with 
+the current time, not backdated to the missed time), and then resumes the original schedule. If the suffix is `_adhoc` 
+or not a known period then a snapshot is considered non-periodic and is thus created immediately regardless of the 
+creation time of any existing snapshot.
 
 * Replication example in local mode (no network, no ssh), to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
 
@@ -230,15 +247,15 @@ created immediately regardless of the creation time of any existing snapshot.
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
 
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly```
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly```
 
 ```$ zfs list -t snapshot tank2/boo/bar
 
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
 
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly```
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly```
 
 * Same example in pull mode:
 
@@ -259,23 +276,23 @@ datasets to tank2/boo/bar:
 
 ```$ zfs list -t snapshot -r tank1/foo/bar
 
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
 
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
 
-tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_daily
+tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
 
-tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_hourly```
+tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly```
 
 ```$ zfs list -t snapshot -r tank2/boo/bar
 
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
 
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
 
-tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_daily
+tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
 
-tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_hourly```
+tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly```
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
@@ -348,6 +365,11 @@ snapshots, 31 daily snapshots, 26 weekly snapshots, 18 monthly snapshots, and 5 
 --new-snapshot-filter-group 
 --include-snapshot-regex '.*_yearly' --include-snapshot-times-and-ranks '5 years ago..anytime' 'latest 5'```
 
+For convenience, the lengthy command line above can be expressed in a more concise way, like so:
+
+```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots 
+--delete-dst-snapshots-except-periods "{delete_dst_snapshots_except_periods_example1}"```
+
 * Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
 been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'), 
 only contained in dst (tagged with 'dst'), and contained in both src and dst (tagged with 'all'), restricted to hourly 
@@ -370,7 +392,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 * Example with further options:
 
 ```$ {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
---exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*'
+--exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
 --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
 --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' --ssh-dst-private-key /root/.ssh/id_rsa```
@@ -593,18 +615,18 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 31' "
              "--include-snapshot-times-and-ranks 'anytime..31 days ago'`\n\n")
     parser.add_argument(
-        "--create-src-snapshot", action="store_true",
-        help="Do nothing if the --create-src-snapshot flag is missing. Otherwise, before the replication step (see below), "
-             "atomically create a new snapshot of the source datasets selected via --{include|exclude}-dataset* policy. "
-             "The name of the snapshot can be configured via --create-src-snapshot-* suboptions (see below). "
+        "--create-src-snapshots", action="store_true",
+        help="Do nothing if the --create-src-snapshots flag is missing. Otherwise, before the replication step (see below), "
+             "atomically create new snapshots of the source datasets selected via --{include|exclude}-dataset* policy. "
+             "The names of the snapshots can be configured via --create-src-snapshots-* suboptions (see below). "
              "To create snapshots only, without any other processing such as replication, etc, consider using this flag "
              "together with the --skip-replication flag.\n\n"
-             "A periodic snapshot is created if it is due per the schedule indicated by its --create-src-snapshot-suffix "
+             "A periodic snapshot is created if it is due per the schedule indicated by --create-src-snapshots-periods "
              "(for example '_daily' or '_hourly' or _'10minutely' or '_2secondly'), or if the "
-             "--create-src-snapshot-even-if-not-due flag is specified, or if the most recent scheduled snapshot "
+             "--create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled snapshot "
              f"is somehow missing. In the latter case {prog_name} immediately creates a snapshot (tagged with the current "
              "time, not backdated to the missed time), and then resumes the original schedule.\n\n"
-             "If the --create-src-snapshot-suffix is '_adhoc' or not a known period then a snapshot is considered "
+             "If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered "
              "non-periodic and is thus created immediately regardless of the creation time of any existing snapshot.\n\n"
              "The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command "
              "line, using case-insensitive sort order, and using 'zfs snapshot -r' to the extent that this is compatible "
@@ -617,61 +639,70 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"Note: All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily "
              "work with any snapshots in any format and with any naming convention, even created or managed by any third "
              "party ZFS snapshot management tool, including manual zfs snapshot/destroy.\n\n")
-    h_fix = ("The name of the snapshot created on the source is `${--create-src-snapshot-prefix}"
-             "strftime(--create-src-snapshot-time*)"
-             "{--create-src-snapshot-infix}{--create-src-snapshot-suffix}`. "
-             f"Example: `--create-src-snapshot-prefix={prog_name}_ --create-src-snapshot-infix=_us-west-1 "
-             "--create-src-snapshot-suffix=_daily` "
-             f"will generate snapshot names such as `tank/foo@{prog_name}_2024-09-03_12:26:15_us-west-1_daily`\n\n")
+
+    def format_dict(dictionary):
+        return f'"{dictionary}"'
+
+    src_snapshot_periods_example = {
+        "prod": {
+            "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
+            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18,
+                          "yearly": 5},
+            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18,
+                          "yearly": 5}},
+        "test": {
+            "offsite": {"12hourly": 42, "weekly": 12},
+        },
+    }
     parser.add_argument(
-        "--create-src-snapshot-prefix", action=SetAction, nargs="+", default=[], metavar="STRING",
-        help=f"Default is '{create_src_snapshot_prefix_dflt}'. "
-             "This option can be specified multiple times to create multiple snapshots of each source dataset, all "
-             "containing the same timestamp in the name.\n\n" + h_fix)
-    parser.add_argument(
-        "--create-src-snapshot-infix", action=SetAction, nargs="+", default=[], metavar="STRING",
-        help=f"Default is the empty string. This enables to include an optional tag in the "
-             "snapshot name that identifies the intended snapshot use, for example the hostname or cloud provider region "
-             "code (e.g. '_us-west-1') of the intended backup destination if replicating to multiple independent backup "
-             "destination sites. "
-             "This option can be specified multiple times to create multiple snapshots of each source dataset, all "
-             "containing the same timestamp in the name.\n\n" + h_fix)
-    parser.add_argument(
-        "--create-src-snapshot-suffix", action=SetAction, nargs="+", default=[], metavar="STRING",
-        help=f"Default is '{create_src_snapshot_suffix_dflt}'. Typical values are: "
-             "'_secondly', '_minutely', '_hourly', '_daily', '_weekly', '_monthly', '_yearly', '_adhoc'. "
-             "Can include an optional positive integer immediately preceding the time period unit, for example "
-             "'_2secondly' or '_10minutely' to indicate that snapshots are taken every 2 seconds, or every 10 minutes, "
-             "respectively. "
-             "This option can be specified multiple times to create multiple snapshots of each source dataset, all "
-             "containing the same timestamp in the name.\n\n" + h_fix)
-    parser.add_argument(
-        "--create-src-snapshot-even-if-not-due", action="store_true",
-        help="Take a snapshot immediately regardless of the creation time of any existing snapshot, even if the snapshot "
-             "is periodic and not actually due per the schedule.\n\n")
+        "--create-src-snapshots-periods", default=None, type=str, metavar="DICT_STRING",
+        help="Creation periods that specify a schedule for when new snapshots shall be created on src within the selected "
+             "datasets. Has the same format as --delete-dst-snapshots-except-periods.\n\n"
+             f"Example: `{format_dict(src_snapshot_periods_example)}`. This example will, for the organization 'prod' and "
+             "the intended logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots every "
+             "minute, hourly snapshots every hour, and so on. " 
+             "It will also create snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
+             "In addition, it will create snapshots every 12 hours and every week for the 'test' organization, "
+             "and mark them as being intended for the 'offsite' replication target.\n\n"
+             "The example creates ZFS snapshots with names like "
+             "`prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`, "
+             "`prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`, "
+             "`prod_<timestamp>_eu-west-1_hourly`, `prod_<timestamp>_eu-west-1_daily`, "
+             "`test_<timestamp>_offsite_12hourly`, `test_<timestamp>_offsite_weekly`, and so on.\n\n"
+             "Note: A period name that is missing indicates that no snapshots shall be created for the given period.\n\n"
+             "The period name can contain an optional positive integer immediately preceding the time period unit, for "
+             "example `_2secondly` or `_10minutely` to indicate that snapshots are taken every 2 seconds, or every 10 "
+             "minutes, respectively.\n\n")
 
     def argparser_escape(text: str) -> str:
         return text.replace('%', '%%')
-    create_src_snapshot_timeformat_dflt = "%Y-%m-%d_%H:%M:%S"
+
+    create_src_snapshots_timeformat_dflt = "%Y-%m-%d_%H:%M:%S"
     parser.add_argument(
-        "--create-src-snapshot-timeformat", default=create_src_snapshot_timeformat_dflt, metavar="STRFTIME_SPEC",
-        help=f"Default is `{argparser_escape(create_src_snapshot_timeformat_dflt)}`. For the strftime format, see "
+        "--create-src-snapshots-timeformat", default=create_src_snapshots_timeformat_dflt, metavar="STRFTIME_SPEC",
+        help=f"Default is `{argparser_escape(create_src_snapshots_timeformat_dflt)}`. For the strftime format, see "
              "https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. "
              "Specify the empty string to create source snapshot names that do not contain an auto-generated timestamp. "
              f"Examples: `{argparser_escape('%Y-%m-%d_%H:%M:%S.%f')}` (adds microsecond resolution), "
              f"`{argparser_escape('%Y-%m-%d_%H:%M:%S%z')}` (adds timezone offset), "
-             f"`{argparser_escape('%Y-%m-%dT%H-%M-%S')}` (no colons).\n\n" + h_fix)
+             f"`{argparser_escape('%Y-%m-%dT%H-%M-%S')}` (no colons).\n\n"
+             "The name of the snapshot created on the src is `$org_strftime(--create-src-snapshots-time*)_$target_$period`. "
+             "Example: `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily\n\n")
     parser.add_argument(
-        "--create-src-snapshot-timezone", default="", type=str, metavar="TZ_SPEC",
+        "--create-src-snapshots-timezone", default="", type=str, metavar="TZ_SPEC",
         help=f"Default is the local timezone of the system running {prog_name}. When creating a new snapshot on the source, "
              "fetch the current time in the specified timezone, and feed that time, and the value of "
-             "--create-src-snapshot-timeformat, into the standard strftime() function to generate the timestamp portion "
+             "--create-src-snapshots-timeformat, into the standard strftime() function to generate the timestamp portion "
              "of the snapshot name. The TZ_SPEC input parameter is of the form 'UTC' or '+HHMM' or '-HHMM' for fixed UTC "
              "offsets, or an IANA TZ identifier for auto-adjustment to daylight savings time, or the empty string to use "
              "the local timezone, for example '', 'UTC', '+0000', '+0530', '-0400', 'America/Los_Angeles', 'Europe/Vienna'. "
              "For a list of valid IANA TZ identifiers see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List"
              "\n\nTo change the timezone not only for snapshot name creation, but in all respects for the entire program, "
-             "use the standard 'TZ' Unix environment variable, like so: `export TZ=UTC`.\n\n" + h_fix)
+             "use the standard 'TZ' Unix environment variable, like so: `export TZ=UTC`.\n\n")
+    parser.add_argument(
+        "--create-src-snapshots-even-if-not-due", action="store_true",
+        help="Take snapshots immediately regardless of the creation time of any existing snapshot, even if snapshots "
+             "are periodic and not actually due per the schedule.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -855,6 +886,33 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--delete-dst-snapshots option, thus deleting all snapshots except for the selected snapshots (within the "
              "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other"
              " words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.")
+    parser.add_argument(
+        "--delete-dst-snapshots-except-periods", action=DeleteDstSnapshotsExceptPeriodsAction, default=None,
+        metavar="DICT_STRING",
+        help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datastes via "
+             "--delete-dst-snapshots. Has the same format as --create-src-snapshots-periods."
+             "Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with --delete-dst-snapshots=bookmarks) that "
+             "do not match a period will be deleted. To avoid unexpected surprises, make sure to carefully specify ALL "
+             "snapshot names and periods that shall be retained, in combination with --dryrun.\n\n"
+             f"Example: `{format_dict(src_snapshot_periods_example)}`. This example will, for the organization 'prod' and "
+             "the intended logical target 'onsite', retain secondly snapshots that were created less than 150 seconds ago, "
+             "yet retain the latest 150 secondly snapshots regardless of creation time. Analog for the latest 90 minutely "
+             "snapshots, latest 48 hourly snapshots, etc. "
+             "It will also retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
+             "In addition, within the 'test' organization, it will retain snapshots that are created every 12 hours and "
+             "every week as specified, and name them as being intended for the 'offsite' replication target. "
+             "All other snapshots within the selected datasets will be deleted - you've been warned!\n\n"
+             "The example scans the selected ZFS datasets for snapshots with names like "
+             "`prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`, "
+             "`prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`, "
+             "`prod_<timestamp>_eu-west-1_hourly`, `prod_<timestamp>_eu-west-1_daily`, "
+             "`test_<timestamp>_offsite_12hourly`, `test_<timestamp>_offsite_weekly`, and so on, and deletes all snapshots "
+             "therein that do not match a retention rule.\n\n"
+             "Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be retained for the given "
+             "period.\n\n"
+             "Note: --delete-dst-snapshots-except-periods is a convenience option that auto-generates a series of the "
+             "following other options: --delete-dst-snapshots-except, "
+             "--new-snapshot-filter-group, --include-snapshot-regex, --include-snapshot-times-and-ranks\n\n")
     parser.add_argument(
         "--delete-empty-dst-datasets", choices=["snapshots", "snapshots+bookmarks"], default=None,
         const="snapshots+bookmarks", nargs="?",
@@ -1124,7 +1182,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "throughput at 100 MB/sec. Default is unlimited. Also see "
              "https://manpages.ubuntu.com/manpages/latest/en/man1/pv.1.html\n\n")
     parser.add_argument(
-        "--daemon-lifetime", default="0 seconds", metavar="STRING",
+        "--daemon-lifetime", default="0 seconds", metavar="DURATION",
+        help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--daemon-frequency", default=None, metavar="STRING",
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--no-estimate-send-size", action="store_true",
@@ -1279,7 +1340,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                           "minutely": "minutes", "secondly": "seconds"}.items():
         anchor_group = parser.add_argument_group(
             f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
-            f"every N {label} are scheduled to be created on the source by the --create-src-snapshot option.")
+            f"every N {label} are scheduled to be created on the source by the --create-src-snapshots option.")
         for f in [f for f in fields(PeriodAnchors) if f.name.startswith(period + "_")]:
             m = f.metadata
             _min = m.get("min")
@@ -1352,7 +1413,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--help, -h", action="help",
         help="Show this help message and exit.\n\n")
     return parser
-# fmt: on
+    # fmt: on
 
 
 #############################################################################
@@ -1495,7 +1556,7 @@ class Params:
 
         self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
-        self.create_src_snapshot_config: CreateSrcSnapshotConfig = CreateSrcSnapshotConfig(args, self)
+        self.create_src_snapshots_config: CreateSrcSnapshotConfig = CreateSrcSnapshotConfig(args, self)
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -1622,11 +1683,8 @@ class Params:
         key = (tuple(self.root_dataset_pairs), self.args.recursive, self.args.exclude_dataset_property,
                tuple(self.args.include_dataset), tuple(self.args.exclude_dataset),
                tuple(self.args.include_dataset_regex), tuple(self.args.exclude_dataset_regex),
-               tuple(tuple(f) for f in self.snapshot_filters), self.args.skip_replication,
-               self.args.create_src_snapshot, self.args.create_src_snapshot_timeformat,
-               tuple(self.args.create_src_snapshot_prefix),
-               tuple(self.args.create_src_snapshot_infix),
-               tuple(self.args.create_src_snapshot_suffix),
+               tuple(tuple(f) for f in self.snapshot_filters), self.args.skip_replication, self.args.create_src_snapshots,
+               self.args.create_src_snapshots_periods, self.args.create_src_snapshots_timeformat,
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
                self.args.delete_empty_dst_datasets,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
@@ -1802,33 +1860,9 @@ class SnapshotLabel:
 
 
 #############################################################################
-class CreateSrcSnapshotConfig:
-    def __init__(self, args: argparse.Namespace, p: Params):
-        """Option values for --create-src-snapshot*; reads from ArgumentParser via args."""
-
-        def suffix_to_duration(suffix: str, regex: re.Pattern) -> Tuple[int, str]:
-            match = regex.fullmatch(suffix)
-            if match:
-                duration_amount = int(match.group(1)) if match.group(1) else 1
-                assert duration_amount != 0
-                duration_unit = match.group(2)
-                return duration_amount, duration_unit
-            return 0, ""
-
-        # immutable variables:
-        self.skip_create_src_snapshot: bool = not args.create_src_snapshot
-        self.create_src_snapshot_even_if_not_due: bool = args.create_src_snapshot_even_if_not_due
-        self.enable_snapshots_changed_cache: bool = getenv_bool("enable_snapshots_changed_cache", True)
-        tz_spec: str = args.create_src_snapshot_timezone if args.create_src_snapshot_timezone else None
-        self.tz: tzinfo = get_timezone(tz_spec)
-        self.current_datetime: datetime = current_datetime(tz_spec)
-        self.timeformat: str = args.create_src_snapshot_timeformat
-        self.anchors = PeriodAnchors().parse(args)
-        prefixes: List[str] = args.create_src_snapshot_prefix or [create_src_snapshot_prefix_dflt]
-        infixes: List[str] = args.create_src_snapshot_infix or [""]
-        suffixes: List[str] = args.create_src_snapshot_suffix or [create_src_snapshot_suffix_dflt]
-
-        suffix_seconds = {
+class SnapshotPeriods:
+    def __init__(self):
+        self.suffix_seconds = {
             "yearly": 365 * 86400,
             "monthly": round(30.5 * 86400),
             "weekly": 7 * 86400,
@@ -1837,27 +1871,88 @@ class CreateSrcSnapshotConfig:
             "minutely": 60,
             "secondly": 1,
         }
-        suffix_regex = re.compile(rf"_([1-9][0-9]*)?({'|'.join(suffix_seconds.keys())})")
-        suffix_durations = {suffix: suffix_to_duration(suffix, suffix_regex) for suffix in suffixes}
+        self.period_labels = {
+            "yearly": "years",
+            "monthly": "months",
+            "weekly": "weeks",
+            "daily": "days",
+            "hourly": "hours",
+            "minutely": "minutes",
+            "secondly": "seconds",
+        }
+        self._suffix_regex0 = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_seconds.keys())})")
+        self._suffix_regex1 = re.compile("_" + self._suffix_regex0.pattern)
+
+    def suffix_to_duration0(self, suffix: str) -> Tuple[int, str]:
+        return self._suffix_to_duration(suffix, self._suffix_regex0)
+
+    def suffix_to_duration1(self, suffix: str) -> Tuple[int, str]:
+        return self._suffix_to_duration(suffix, self._suffix_regex1)
+
+    @staticmethod
+    def _suffix_to_duration(suffix: str, regex: re.Pattern) -> Tuple[int, str]:
+        match = regex.fullmatch(suffix)
+        if match:
+            duration_amount = int(match.group(1)) if match.group(1) else 1
+            assert duration_amount > 0
+            duration_unit = match.group(2)
+            return duration_amount, duration_unit
+        else:
+            return 0, ""
+
+
+#############################################################################
+class CreateSrcSnapshotConfig:
+    def __init__(self, args: argparse.Namespace, p: Params):
+        """Option values for --create-src-snapshots*; reads from ArgumentParser via args."""
+        # immutable variables:
+        self.skip_create_src_snapshots: bool = not args.create_src_snapshots
+        self.create_src_snapshots_even_if_not_due: bool = args.create_src_snapshots_even_if_not_due
+        self.enable_snapshots_changed_cache: bool = getenv_bool("enable_snapshots_changed_cache", True)
+        tz_spec: str = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
+        self.tz: tzinfo = get_timezone(tz_spec)
+        self.current_datetime: datetime = current_datetime(tz_spec)
+        self.timeformat: str = args.create_src_snapshots_timeformat
+        self.anchors = PeriodAnchors().parse(args)
+
+        def nonprefix(s: str) -> str:
+            return "_" + s if s else ""
+
+        suffixes: List[str] = []
+        labels = []
+        for org, target_periods in ast.literal_eval(args.create_src_snapshots_periods or "{}").items():
+            for target, periods in target_periods.items():
+                for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
+                    if not isinstance(period_amount, int) or period_amount < 0:
+                        die(f"--create-src-snapshots-period: Period amount must be a non-negative integer: {period_amount}")
+                    if period_amount > 0:
+                        suffix = nonprefix(period_unit)
+                        suffixes.append(suffix)
+                        labels.append(SnapshotLabel(prefix=org + "_", timestamp="", infix=nonprefix(target), suffix=suffix))
+        if args.daemon_frequency and not args.create_src_snapshots_periods:
+            suffixes.append(nonprefix(args.daemon_frequency))
+
+        xperiods = SnapshotPeriods()
+        suffix_durations = {suffix: xperiods.suffix_to_duration1(suffix) for suffix in suffixes}
 
         def suffix_key(suffix: str):
             duration_amount, duration_unit = suffix_durations[suffix]
-            duration_seconds = duration_amount * suffix_seconds.get(duration_unit, 0)
+            duration_seconds = duration_amount * xperiods.suffix_seconds.get(duration_unit, 0)
             if suffix.endswith("hourly") or suffix.endswith("minutely") or suffix.endswith("secondly"):
                 if duration_seconds != 0 and 86400 % duration_seconds != 0:
                     die(
-                        "Invalid --create-src-snapshot-suffix: Period duration should be a divisor of 86400 seconds without "
+                        "Invalid --create-src-snapshots-suffix: Period duration should be a divisor of 86400 seconds without "
                         "remainder so that snapshots will be created at the same time of day every day: " + suffix
                     )
             return duration_seconds, suffix
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
         self.suffix_durations: Dict[str, Tuple[int, str]] = {suffix: suffix_durations[suffix] for suffix in suffixes}  # sort
-        self._snapshot_labels: List[SnapshotLabel] = [
-            SnapshotLabel(prefix, "", infix, suffix) for suffix in suffixes for infix in infixes for prefix in prefixes
-        ]
+        suffix_indexes = {suffix: k for k, suffix in enumerate(suffixes)}
+        labels.sort(key=lambda label: (suffix_indexes[label.suffix], label))  # take snapshots for dailies before hourlies
+        self._snapshot_labels: List[SnapshotLabel] = labels
         for label in self.snapshot_labels():
-            label.validate("--create-src-snapshot-")
+            label.validate("--create-src-snapshots-")
 
     def snapshot_labels(self) -> List[SnapshotLabel]:
         timestamp: str = self.current_datetime.strftime(self.timeformat)
@@ -1938,6 +2033,11 @@ class Job:
         try:
             log = get_logger(log_params, args, log)
             log.info("%s", "Log file is: " + log_params.log_file)
+            if getattr(args, "delete_dst_snapshots_except_periods", None):
+                log.info("Auxiliary CLI arguments: %s", " ".join(args.delete_dst_snapshots_except_periods))
+                args = argument_parser().parse_args(
+                    xappend(args.delete_dst_snapshots_except_periods, "--", args.root_dataset_pairs), namespace=args
+                )
             log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
             log.debug("Parsed CLI arguments: %s", args)
             try:
@@ -2056,7 +2156,7 @@ class Job:
             return False
         self.progress_reporter.pause()
         p, log = self.params, self.params.log
-        conf = p.create_src_snapshot_config
+        conf = p.create_src_snapshots_config
         curr_datetime = conf.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt = min(
             round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, conf.anchors)
@@ -2065,7 +2165,7 @@ class Job:
         offset: timedelta = next_snapshotting_event_dt - datetime.now(conf.tz)
         offset_nanos = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
         sleep_nanos = min(sleep_nanos, max(0, offset_nanos))
-        log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), " ...")
+        log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), f" ... [Log {p.log_params.log_file}]")
         time.sleep(sleep_nanos / 1_000_000_000)
         conf.current_datetime = datetime.now(conf.tz)
         return daemon_stoptime_nanos - time.time_ns() > 0
@@ -2255,8 +2355,8 @@ class Job:
         # provides no such guarantee), and thus be consistent. Dataset names that can't fit into a single command line are
         # spread over multiple command line invocations, respecting the limits that the operating system places on the
         # maximum length of a single command line, per `getconf ARG_MAX`.
-        if not p.create_src_snapshot_config.skip_create_src_snapshot:
-            log.info(p.dry("--create-src-snapshot: %s"), f"{src.basis_root_dataset} {p.recursive_flag} ...")
+        if not p.create_src_snapshots_config.skip_create_src_snapshots:
+            log.info(p.dry("--create-src-snapshots: %s"), f"{src.basis_root_dataset} {p.recursive_flag} ...")
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
@@ -3303,7 +3403,7 @@ class Job:
             return timerange
 
         p, log = self.params, self.params.log
-        current_unixtime_in_secs: float = p.create_src_snapshot_config.current_datetime.timestamp()
+        current_unixtime_in_secs: float = p.create_src_snapshots_config.current_datetime.timestamp()
         resultset = set()
         for snapshot_filter in p.snapshot_filters:
             snapshots = basis_snapshots
@@ -3336,7 +3436,7 @@ class Job:
         for snapshot in snapshots:
             i = snapshot.find("@")  # snapshot separator
             if i < 0:
-                continue  # retain bookmarks to help find common snaps, apply filter only to snapshots
+                continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             elif is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -3351,7 +3451,7 @@ class Job:
         results = []
         for snapshot in snaps:
             if "@" not in snapshot:
-                continue  # retain bookmarks to help find common snaps, apply filter only to snapshots
+                continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
                 results.append(snapshot)
                 is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -3384,7 +3484,7 @@ class Job:
             results = []
             for snapshot in snapshots:
                 if "@" not in snapshot:
-                    continue  # retain bookmarks to help find common snaps, apply filter only to snaps
+                    continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
                 else:
                     msg = None
                     if lo <= i < hi:
@@ -3814,7 +3914,7 @@ class Job:
         within `datasets` is considered a root dataset if it has no parent, i.e. it is not a descendant of any dataset in
         `datasets`. Returns `None` if any (unfiltered) dataset in `basis_dataset` that is a descendant of at least one of
         the root datasets is missing in `datasets`, indicating that --include/exclude-dataset* or the snapshot schedule
-        have pruned datasets in a way that is incompatible with 'zfs snapshot -r' CLI semantics, thus requiring a switch
+        have pruned a dataset in a way that is incompatible with 'zfs snapshot -r' CLI semantics, thus requiring a switch
         to the non-recursive 'zfs snapshot snapshot1 .. snapshot N' CLI flavor.
         Assumes that set(datasets).issubset(set(basis_datasets)). Also assumes that datasets and basis_datasets are both
         sorted (and thus the output root_datasets is sorted too), which is why this algorithm is efficient - O(N) time
@@ -3885,12 +3985,12 @@ class Job:
             log.info("Next scheduled snapshot time: %s for %s@%s%s", next_event_dt, dataset, label, msg)
 
         p, log = self.params, self.params.log
-        src, config = p.src, p.create_src_snapshot_config
+        src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot = defaultdict(list)
         labels = []
         for label in config.snapshot_labels():
             _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
-            if _duration_amount == 0 or config.create_src_snapshot_even_if_not_due:
+            if _duration_amount == 0 or config.create_src_snapshots_even_if_not_due:
                 datasets_to_snapshot[label] = sorted_datasets  # take snapshot regardless of creation time of existing snaps
             else:
                 labels.append(label)
@@ -3934,7 +4034,7 @@ class Job:
                     i += 1
                 assert sorted_datasets[i] == dataset
                 i += 1
-                snapshots = [snapshot.split("\t") for snapshot in group]  # fetch all snapshots of current dataset
+                snapshots = [snapshot.split("\t", 2) for snapshot in group]  # fetch all snapshots of current dataset
                 snapshots.sort(key=lambda s: (int(s[0]), int(s[1]), s[2]))  # sort by createtxg,creation,name
                 snapshot_names = [snapshot[-1][snapshot[-1].index("@") + 1 :] for snapshot in snapshots]
                 for label in labels:
@@ -3984,7 +4084,7 @@ class Job:
         src_datasets_set = set()
         dataset_labels = defaultdict(list)
         for label, datasets in datasets_to_snapshot.items():
-            duration_amount, duration_unit = p.create_src_snapshot_config.suffix_durations[label.suffix]
+            duration_amount, duration_unit = p.create_src_snapshots_config.suffix_durations[label.suffix]
             if duration_amount != 0:  # no need to update the cache for adhoc snapshots
                 src_datasets_set.update(datasets)  # union
                 for dataset in datasets:
@@ -4604,7 +4704,7 @@ class Job:
 
     def is_snapshots_changed_zfs_property_available(self, remote: Remote) -> bool:
         return (
-            self.params.create_src_snapshot_config.enable_snapshots_changed_cache
+            self.params.create_src_snapshots_config.enable_snapshots_changed_cache
             and self.is_program_available(zfs_version_is_at_least_2_2_0, remote.location)
             and self.is_zpool_feature_enabled_or_active(remote, "feature@extensible_dataset")
         )
@@ -6224,19 +6324,6 @@ class NewSnapshotFilterGroupAction(argparse.Action):
 
 
 #############################################################################
-class SetAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        current_values = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        for value in values:
-            current_values.append(value)
-        if len(current_values) != len(set(current_values)):
-            parser.error(f"{option_string}: Must not contain duplicate items: {current_values}")
-        setattr(namespace, self.dest, current_values)
-
-
-#############################################################################
 class FileOrLiteralAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         current_values = getattr(namespace, self.dest, None)
@@ -6259,6 +6346,39 @@ class FileOrLiteralAction(argparse.Action):
         setattr(namespace, self.dest, current_values)
         if self.dest in snapshot_regex_filter_names:
             add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
+
+
+#############################################################################
+class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        # Generates extra options to be parsed later during second parse_args() pass, within run_main()
+        opts = getattr(namespace, self.dest, None)
+        if opts is None:
+            opts = []
+        xperiods = SnapshotPeriods()
+        opts += ["--delete-dst-snapshots-except"]
+        for org, target_periods in ast.literal_eval(values).items():
+            for target, periods in target_periods.items():
+                for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
+
+                    if not isinstance(period_amount, int) or period_amount < 0:
+                        parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
+                    if period_amount != 0:
+                        regex = f"{re.escape(org)}_.*_{re.escape(target)}_{re.escape(period_unit)}"
+                        duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
+                        duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
+                        opts += [
+                            "--new-snapshot-filter-group",
+                            f"--include-snapshot-regex={regex}",
+                            "--include-snapshot-times-and-ranks",
+                            (
+                                "notime"
+                                if duration_unit_label is None or duration_amount * period_amount == 0
+                                else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
+                            ),
+                            f"latest{period_amount}",
+                        ]
+        setattr(namespace, self.dest, opts)
 
 
 #############################################################################

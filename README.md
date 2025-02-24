@@ -109,16 +109,15 @@ reliably without the corresponding auxiliary feature.
 
 
 ```
-$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
---create-src-snapshot-prefix test_ --create-src-snapshot-infix _us-west-1
---create-src-snapshot-suffix _adhoc --skip-replication
+$ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
+--create-src-snapshots --create-src-snapshots-periods "{'test':{'':{'adhoc':1}}}"
 ```
 
 
 
 ```
 $ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@test_2024-11-06_08:30:05_us-west-1_adhoc 
+tank1/foo/bar@test_2024-11-06_08:30:05_adhoc 
 ```
 
 
@@ -127,27 +126,26 @@ from a periodic `cron` job:
 
 
 ```
-$ bzfs tank1/foo/bar dummy --recursive --create-src-snapshot
---create-src-snapshot-suffix _hourly _daily --skip-replication 
+$ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
+--create-src-snapshots-periods "{'prod':{'us-west-1':{'hourly':48,'daily':31}}}"
 ```
 
 
 
 ```
 $ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly 
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly 
 ```
 
 
-Note: A periodic snapshot is created if it is due per the schedule indicated by its
---create-src-snapshot-suffix (for example '_daily' or '_hourly' or _'10minutely' or
-'_2secondly'), or if the --create-src-snapshot-even-if-not-due flag is specified, or if the
-most recent scheduled snapshot is somehow missing. In the latter case bzfs immediately creates a
-snapshot (named with the current time, not backdated to the missed time), and then resumes the
-original schedule. If the --create-src-snapshot-suffix is '_adhoc' or not a known period then
-a snapshot is considered non-periodic and is thus created immediately regardless of the creation
-time of any existing snapshot.
+Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g.
+`_daily` or `_hourly` or `_10minutely` or `_2secondly`), or if the
+--create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled
+snapshot is somehow missing. In the latter case bzfs immediately creates a snapshot (named with
+the current time, not backdated to the missed time), and then resumes the original schedule. If
+the suffix is `_adhoc` or not a known period then a snapshot is considered non-periodic and is
+thus created immediately regardless of the creation time of any existing snapshot.
 
 * Replication example in local mode (no network, no ssh), to replicate ZFS dataset tank1/foo/bar
 to tank2/boo/bar:
@@ -161,16 +159,16 @@ $ bzfs tank1/foo/bar tank2/boo/bar
 
 ```
 $ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
 ```
 
 
 
 ```
 $ zfs list -t snapshot tank2/boo/bar
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
 ```
 
 
@@ -210,20 +208,20 @@ $ bzfs tank1/foo/bar tank2/boo/bar --recursive
 
 ```
 $ zfs list -t snapshot -r tank1/foo/bar
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_daily
-tank1/foo/bar@bzfs_2024-11-06_08:30:05_hourly
-tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_daily
-tank1/foo/bar/baz@bzfs_2024-11-06_08:40:00_hourly
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
+tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
+tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly
 ```
 
 
 
 ```
 $ zfs list -t snapshot -r tank2/boo/bar
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_daily
-tank2/boo/bar@bzfs_2024-11-06_08:30:05_hourly
-tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_daily
-tank2/boo/bar/baz@bzfs_2024-11-06_08:40:00_hourly
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
+tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
+tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly
 ```
 
 
@@ -341,6 +339,16 @@ $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 ```
 
 
+For convenience, the lengthy command line above can be expressed in a more concise way, like so:
+
+
+```
+$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
+--delete-dst-snapshots --delete-dst-snapshots-except-periods
+"{'prod':{'onsite':{'secondly':150,'minutely':90,'hourly':48,'daily':31,'weekly':26,'monthly':18,'yearly':5}}}"
+```
+
+
 * Compare source and destination dataset trees recursively, for example to check if all recently
 taken snapshots have been successfully replicated by a periodic job. List snapshots only contained
 in src (tagged with 'src'), only contained in dst (tagged with 'dst'), and contained in both
@@ -373,7 +381,7 @@ of data are missing on dst, etc.
 
 ```
 $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
---exclude-snapshot-regex '.*_(hourly|frequent)' --exclude-snapshot-regex 'test_.*'
+--exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset
 /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex
 '(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'
@@ -567,13 +575,11 @@ usage: bzfs [-h] [--recursive]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
             [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
-            [--new-snapshot-filter-group] [--create-src-snapshot]
-            [--create-src-snapshot-prefix STRING [STRING ...]]
-            [--create-src-snapshot-infix STRING [STRING ...]]
-            [--create-src-snapshot-suffix STRING [STRING ...]]
-            [--create-src-snapshot-even-if-not-due]
-            [--create-src-snapshot-timeformat STRFTIME_SPEC]
-            [--create-src-snapshot-timezone TZ_SPEC]
+            [--new-snapshot-filter-group] [--create-src-snapshots]
+            [--create-src-snapshots-periods DICT_STRING]
+            [--create-src-snapshots-timeformat STRFTIME_SPEC]
+            [--create-src-snapshots-timezone TZ_SPEC]
+            [--create-src-snapshots-even-if-not-due]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -590,6 +596,7 @@ usage: bzfs [-h] [--recursive]
             [--delete-dst-snapshots [{snapshots,bookmarks}]]
             [--delete-dst-snapshots-no-crosscheck]
             [--delete-dst-snapshots-except]
+            [--delete-dst-snapshots-except-periods DICT_STRING]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
             [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
@@ -980,27 +987,27 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--create-src-snapshot"></div>
+<div id="--create-src-snapshots"></div>
 
-**--create-src-snapshot**
+**--create-src-snapshots**
 
-*  Do nothing if the --create-src-snapshot flag is missing. Otherwise, before the replication
-    step (see below), atomically create a new snapshot of the source datasets selected via
-    --{include|exclude}-dataset* policy. The name of the snapshot can be configured via
-    --create-src-snapshot-* suboptions (see below). To create snapshots only, without any other
+*  Do nothing if the --create-src-snapshots flag is missing. Otherwise, before the replication
+    step (see below), atomically create new snapshots of the source datasets selected via
+    --{include|exclude}-dataset* policy. The names of the snapshots can be configured via
+    --create-src-snapshots-* suboptions (see below). To create snapshots only, without any other
     processing such as replication, etc, consider using this flag together with the
     --skip-replication flag.
 
-    A periodic snapshot is created if it is due per the schedule indicated by its
-    --create-src-snapshot-suffix (for example '_daily' or '_hourly' or _'10minutely' or
-    '_2secondly'), or if the --create-src-snapshot-even-if-not-due flag is specified, or if
-    the most recent scheduled snapshot is somehow missing. In the latter case bzfs immediately
+    A periodic snapshot is created if it is due per the schedule indicated by
+    --create-src-snapshots-periods (for example '_daily' or '_hourly' or _'10minutely'
+    or '_2secondly'), or if the --create-src-snapshots-even-if-not-due flag is specified, or
+    if the most recent scheduled snapshot is somehow missing. In the latter case bzfs immediately
     creates a snapshot (tagged with the current time, not backdated to the missed time), and then
     resumes the original schedule.
 
-    If the --create-src-snapshot-suffix is '_adhoc' or not a known period then a snapshot is
-    considered non-periodic and is thus created immediately regardless of the creation time of any
-    existing snapshot.
+    If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered
+    non-periodic and is thus created immediately regardless of the creation time of any existing
+    snapshot.
 
     The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs
     snapshot' command line, using case-insensitive sort order, and using 'zfs snapshot -r' to
@@ -1020,70 +1027,43 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--create-src-snapshot-prefix"></div>
+<div id="--create-src-snapshots-periods"></div>
 
-**--create-src-snapshot-prefix** *STRING [STRING ...]*
+**--create-src-snapshots-periods** *DICT_STRING*
 
-*  Default is 'bzfs_'. This option can be specified multiple times to create multiple
-    snapshots of each source dataset, all containing the same timestamp in the name.
+*  Creation periods that specify a schedule for when new snapshots shall be created on src within
+    the selected datasets. Has the same format as --delete-dst-snapshots-except-periods.
 
-    The name of the snapshot created on the source is
-    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
-    Example: `--create-src-snapshot-prefix=bzfs_ --create-src-snapshot-infix=_us-west-1
-    --create-src-snapshot-suffix=_daily` will generate snapshot names such as
-    `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+    Example: `"{'prod': {'onsite': {'secondly': 150, 'minutely': 90, 'hourly': 48,
+    'daily': 31, 'weekly': 26, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
+    0, 'minutely': 0, 'hourly': 48, 'daily': 31, 'weekly': 26, 'monthly': 18,
+    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 48, 'daily':
+    31, 'weekly': 26, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
+    42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
+    logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots
+    every minute, hourly snapshots every hour, and so on. It will also create snapshots for the
+    targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. In addition, it will
+    create snapshots every 12 hours and every week for the 'test' organization, and mark them as
+    being intended for the 'offsite' replication target.
 
-<!-- -->
+    The example creates ZFS snapshots with names like `prod_<timestamp>_onsite_secondly`,
+    `prod_<timestamp>_onsite_minutely`, `prod_<timestamp>_us-west-1_hourly`,
+    `prod_<timestamp>_us-west-1_daily`, `prod_<timestamp>_eu-west-1_hourly`,
+    `prod_<timestamp>_eu-west-1_daily`, `test_<timestamp>_offsite_12hourly`,
+    `test_<timestamp>_offsite_weekly`, and so on.
 
-<div id="--create-src-snapshot-infix"></div>
+    Note: A period name that is missing indicates that no snapshots shall be created for the given
+    period.
 
-**--create-src-snapshot-infix** *STRING [STRING ...]*
-
-*  Default is the empty string. This enables to include an optional tag in the snapshot name that
-    identifies the intended snapshot use, for example the hostname or cloud provider region code
-    (e.g. '_us-west-1') of the intended backup destination if replicating to multiple
-    independent backup destination sites. This option can be specified multiple times to create
-    multiple snapshots of each source dataset, all containing the same timestamp in the name.
-
-    The name of the snapshot created on the source is
-    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
-    Example: `--create-src-snapshot-prefix=bzfs_ --create-src-snapshot-infix=_us-west-1
-    --create-src-snapshot-suffix=_daily` will generate snapshot names such as
-    `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
-
-<!-- -->
-
-<div id="--create-src-snapshot-suffix"></div>
-
-**--create-src-snapshot-suffix** *STRING [STRING ...]*
-
-*  Default is '_adhoc'. Typical values are: '_secondly', '_minutely', '_hourly',
-    '_daily', '_weekly', '_monthly', '_yearly', '_adhoc'. Can include an optional
-    positive integer immediately preceding the time period unit, for example '_2secondly' or
-    '_10minutely' to indicate that snapshots are taken every 2 seconds, or every 10 minutes,
-    respectively. This option can be specified multiple times to create multiple snapshots of each
-    source dataset, all containing the same timestamp in the name.
-
-    The name of the snapshot created on the source is
-    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
-    Example: `--create-src-snapshot-prefix=bzfs_ --create-src-snapshot-infix=_us-west-1
-    --create-src-snapshot-suffix=_daily` will generate snapshot names such as
-    `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+    The period name can contain an optional positive integer immediately preceding the time period
+    unit, for example `_2secondly` or `_10minutely` to indicate that snapshots are taken
+    every 2 seconds, or every 10 minutes, respectively.
 
 <!-- -->
 
-<div id="--create-src-snapshot-even-if-not-due"></div>
+<div id="--create-src-snapshots-timeformat"></div>
 
-**--create-src-snapshot-even-if-not-due**
-
-*  Take a snapshot immediately regardless of the creation time of any existing snapshot, even if
-    the snapshot is periodic and not actually due per the schedule.
-
-<!-- -->
-
-<div id="--create-src-snapshot-timeformat"></div>
-
-**--create-src-snapshot-timeformat** *STRFTIME_SPEC*
+**--create-src-snapshots-timeformat** *STRFTIME_SPEC*
 
 *  Default is `%Y-%m-%d_%H:%M:%S`. For the strftime format, see
     https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. Specify the
@@ -1091,21 +1071,19 @@ usage: bzfs [-h] [--recursive]
     Examples: `%Y-%m-%d_%H:%M:%S.%f` (adds microsecond resolution), `%Y-%m-%d_%H:%M:%S%z`
     (adds timezone offset), `%Y-%m-%dT%H-%M-%S` (no colons).
 
-    The name of the snapshot created on the source is
-    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
-    Example: `--create-src-snapshot-prefix=bzfs_ --create-src-snapshot-infix=_us-west-1
-    --create-src-snapshot-suffix=_daily` will generate snapshot names such as
-    `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+    The name of the snapshot created on the src is
+    `$org_strftime(--create-src-snapshots-time*)_$target_$period`. Example:
+    `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily
 
 <!-- -->
 
-<div id="--create-src-snapshot-timezone"></div>
+<div id="--create-src-snapshots-timezone"></div>
 
-**--create-src-snapshot-timezone** *TZ_SPEC*
+**--create-src-snapshots-timezone** *TZ_SPEC*
 
 *  Default is the local timezone of the system running bzfs. When creating a new snapshot on the
     source, fetch the current time in the specified timezone, and feed that time, and the value of
-    --create-src-snapshot-timeformat, into the standard strftime() function to generate the
+    --create-src-snapshots-timeformat, into the standard strftime() function to generate the
     timestamp portion of the snapshot name. The TZ_SPEC input parameter is of the form 'UTC' or
     '+HHMM' or '-HHMM' for fixed UTC offsets, or an IANA TZ identifier for auto-adjustment to
     daylight savings time, or the empty string to use the local timezone, for example '',
@@ -1116,11 +1094,14 @@ usage: bzfs [-h] [--recursive]
     To change the timezone not only for snapshot name creation, but in all respects for the entire
     program, use the standard 'TZ' Unix environment variable, like so: `export TZ=UTC`.
 
-    The name of the snapshot created on the source is
-    `${--create-src-snapshot-prefix}strftime(--create-src-snapshot-time*){--create-src-snapshot-infix}{--create-src-snapshot-suffix}`.
-    Example: `--create-src-snapshot-prefix=bzfs_ --create-src-snapshot-infix=_us-west-1
-    --create-src-snapshot-suffix=_daily` will generate snapshot names such as
-    `tank/foo@bzfs_2024-09-03_12:26:15_us-west-1_daily`
+<!-- -->
+
+<div id="--create-src-snapshots-even-if-not-due"></div>
+
+**--create-src-snapshots-even-if-not-due**
+
+*  Take snapshots immediately regardless of the creation time of any existing snapshot, even if
+    snapshots are periodic and not actually due per the schedule.
 
 <!-- -->
 
@@ -1414,6 +1395,48 @@ usage: bzfs [-h] [--recursive]
     selected snapshots (within the specified datasets), instead of deleting all selected snapshots
     (within the specified datasets). In other words, this flag enables to specify which snapshots
     to retain instead of which snapshots to delete.
+
+<!-- -->
+
+<div id="--delete-dst-snapshots-except-periods"></div>
+
+**--delete-dst-snapshots-except-periods** *DICT_STRING*
+
+*  Retention periods to be used if pruning snapshots or bookmarks within the selected destination
+    datastes via --delete-dst-snapshots. Has the same format as
+    --create-src-snapshots-periods.Snapshots (--delete-dst-snapshots=snapshots) or bookmarks
+    (with --delete-dst-snapshots=bookmarks) that do not match a period will be deleted. To avoid
+    unexpected surprises, make sure to carefully specify ALL snapshot names and periods that shall
+    be retained, in combination with --dryrun.
+
+    Example: `"{'prod': {'onsite': {'secondly': 150, 'minutely': 90, 'hourly': 48,
+    'daily': 31, 'weekly': 26, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
+    0, 'minutely': 0, 'hourly': 48, 'daily': 31, 'weekly': 26, 'monthly': 18,
+    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 48, 'daily':
+    31, 'weekly': 26, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
+    42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
+    logical target 'onsite', retain secondly snapshots that were created less than 150 seconds
+    ago, yet retain the latest 150 secondly snapshots regardless of creation time. Analog for the
+    latest 90 minutely snapshots, latest 48 hourly snapshots, etc. It will also retain snapshots
+    for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. In addition,
+    within the 'test' organization, it will retain snapshots that are created every 12 hours and
+    every week as specified, and name them as being intended for the 'offsite' replication
+    target. All other snapshots within the selected datasets will be deleted - you've been
+    warned!
+
+    The example scans the selected ZFS datasets for snapshots with names like
+    `prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`,
+    `prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`,
+    `prod_<timestamp>_eu-west-1_hourly`, `prod_<timestamp>_eu-west-1_daily`,
+    `test_<timestamp>_offsite_12hourly`, `test_<timestamp>_offsite_weekly`, and so on,
+    and deletes all snapshots therein that do not match a retention rule.
+
+    Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be
+    retained for the given period.
+
+    Note: --delete-dst-snapshots-except-periods is a convenience option that auto-generates a
+    series of the following other options: --delete-dst-snapshots-except,
+    --new-snapshot-filter-group, --include-snapshot-regex, --include-snapshot-times-and-ranks
 
 <!-- -->
 
@@ -2168,7 +2191,7 @@ usage: bzfs [-h] [--recursive]
 # YEARLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N years are scheduled to be
-created on the source by the --create-src-snapshot option.
+created on the source by the --create-src-snapshots option.
 
 <div id="--yearly_month"></div>
 
@@ -2211,7 +2234,7 @@ created on the source by the --create-src-snapshot option.
 # MONTHLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N months are scheduled to be
-created on the source by the --create-src-snapshot option.
+created on the source by the --create-src-snapshots option.
 
 <div id="--monthly_monthday"></div>
 
@@ -2246,7 +2269,7 @@ created on the source by the --create-src-snapshot option.
 # WEEKLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N weeks are scheduled to be
-created on the source by the --create-src-snapshot option.
+created on the source by the --create-src-snapshots option.
 
 <div id="--weekly_weekday"></div>
 
@@ -2281,7 +2304,7 @@ created on the source by the --create-src-snapshot option.
 # DAILY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N days are scheduled to be created
-on the source by the --create-src-snapshot option.
+on the source by the --create-src-snapshots option.
 
 <div id="--daily_hour"></div>
 
@@ -2308,7 +2331,7 @@ on the source by the --create-src-snapshot option.
 # HOURLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N hours are scheduled to be
-created on the source by the --create-src-snapshot option.
+created on the source by the --create-src-snapshots option.
 
 <div id="--hourly_minute"></div>
 
@@ -2327,7 +2350,7 @@ created on the source by the --create-src-snapshot option.
 # MINUTELY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N minutes are scheduled to be
-created on the source by the --create-src-snapshot option.
+created on the source by the --create-src-snapshots option.
 
 <div id="--minutely_second"></div>
 
@@ -2338,7 +2361,7 @@ created on the source by the --create-src-snapshot option.
 # SECONDLY PERIOD ANCHORS
 
 Use these options to customize when snapshots that happen every N seconds are scheduled to be
-created on the source by the --create-src-snapshot option.
+created on the source by the --create-src-snapshots option.
 
 <div id="--secondly_microsecond"></div>
 
