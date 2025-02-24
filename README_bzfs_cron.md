@@ -56,6 +56,7 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
                  [--prune-src-snapshots] [--prune-src-bookmarks]
                  [--prune-dst-snapshots] [--src-host STRING]
                  [--dst-hosts DICT_STRING]
+                 [--dst-root-datasets DICT_STRING]
                  [--src-snapshot-periods DICT_STRING]
                  [--src-bookmark-periods DICT_STRING]
                  [--dst-snapshot-periods DICT_STRING]
@@ -144,6 +145,19 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
     snapshot from the --src-host, or if the snapshot is intended for another target host, in
     which case it skips the snapshot. A destination host running bzfs_cron will 'pull' snapshots
     for all targets that map to its own hostname.
+
+<!-- -->
+
+<div id="--dst-root-datasets"></div>
+
+**--dst-root-datasets** *DICT_STRING*
+
+*  Dictionary that maps each destination host name to a root dataset located on that destination
+    host. Typically, this is the backup ZFS pool or a ZFS dataset path within that pool. The root
+    dataset name is a prefix that will be prepended to each dataset that is replicated to that
+    destination host. Example:`"{'nas': 'tank2/bak', 'bak-us-west-1.example.com':
+    'backups/bak001', 'bak-eu-west-1.example.com': 'backups/bak999',
+    'archive.example.com': 'archives/zoo'}"`
 
 <!-- -->
 

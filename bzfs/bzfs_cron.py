@@ -74,6 +74,17 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              "snapshot from the --src-host, or if the snapshot is intended for another target host, in which case it skips "
              f"the snapshot. A destination host running {prog_name} will 'pull' snapshots for all targets that map to its "
              "own hostname.\n\n")
+    dst_root_datasets_example = {
+        "nas": "tank2/bak",
+        "bak-us-west-1.example.com": "backups/bak001",
+        "bak-eu-west-1.example.com": "backups/bak999",
+        "archive.example.com": "archives/zoo",
+    }
+    parser.add_argument("--dst-root-datasets", default="{}", metavar="DICT_STRING",
+        help="Dictionary that maps each destination host name to a root dataset located on that destination host. "
+             "Typically, this is the backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a "
+             "prefix that will be prepended to each dataset that is replicated to that destination host. "
+             f"Example:`{format_dict(dst_root_datasets_example)}`\n\n")
     src_snapshot_periods_example = {
         "prod": {
             "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
@@ -132,9 +143,15 @@ def main():
     dst_snapshot_periods = ast.literal_eval(args.dst_snapshot_periods)
     src_host = args.src_host
     dst_hosts = ast.literal_eval(args.dst_hosts)
+    dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
     localhostname = socket.getfqdn()
     pull_targets = [target for target, dst_host in dst_hosts.items() if dst_host == localhostname]
     sep = ","  # for straightforward log file processing
+
+    def get_dst_dataset(dst_dataset: str, dst_host: str) -> str:
+        dst_root_dataset = dst_root_datasets.get(dst_host)
+        assert dst_root_dataset, f"hostname: '{dst_host}' must not have a missing or empty root dataset: {dst_root_datasets}"
+        return dst_root_dataset + "/" + dst_dataset
 
     if args.create_src_snapshots:
         opts = ["--create-src-snapshots", f"--create-src-snapshots-periods={src_snapshot_periods}", "--skip-replication"]
@@ -164,23 +181,24 @@ def main():
             opts += [f"--log-file-suffix={sep}{src_host}{sep}{localhostname}{sep}"]
             opts += unknown_args + ["--"]
             for src, dst in args.root_dataset_pairs:
-                opts += [f"{src_host}:{src}", dst]
+                opts += [f"{src_host}:{src}", get_dst_dataset(dst, localhostname)]
             run_cmd(["bzfs"] + daemon_opts + opts)
         else:
             assert src_host in [localhostname, "-"], "Local host name must be --src-host or in --dst-hosts: " + localhostname
             targets = {target: "" for org, targetperiods in src_snapshot_periods.items() for target in targetperiods.keys()}
             for target in targets.keys():
-                print(f"Replicating target '{target}' in push mode from {localhostname} to {dst_hosts[target]} ...")
+                dst_host = dst_hosts[target]
+                print(f"Replicating target '{target}' in push mode from {localhostname} to {dst_host} ...")
                 opts = [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                 for org, target_periods in src_snapshot_periods.items():
                     for target2, periods in target_periods.items():
                         if target == target2:
                             add_include_snapshot_regexes(org, target, periods, opts)
                 opts += [f"--log-file-prefix={prog_name}{sep}push{sep}"]
-                opts += [f"--log-file-suffix={sep}{localhostname}{sep}{dst_hosts[target]}{sep}"]
+                opts += [f"--log-file-suffix={sep}{localhostname}{sep}{dst_host}{sep}"]
                 opts += unknown_args + ["--"]
                 for src, dst in args.root_dataset_pairs:
-                    opts += [src, f"{dst_hosts[target]}:{dst}"]
+                    opts += [src, f"{dst_host}:{get_dst_dataset(dst, dst_host)}"]
                 run_cmd(["bzfs"] + daemon_opts + opts)
 
     if args.prune_src_snapshots or args.prune_src_bookmarks:
@@ -219,7 +237,7 @@ def main():
         opts += [f"--log-file-suffix={sep}"]
         opts += unknown_args + ["--"]
         for src, dst in args.root_dataset_pairs:
-            opts += ["dummy", dst]
+            opts += ["dummy", get_dst_dataset(dst, localhostname)]
         run_cmd(["bzfs"] + opts)
 
 

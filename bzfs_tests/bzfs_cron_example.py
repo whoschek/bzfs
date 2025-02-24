@@ -31,7 +31,7 @@ unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapsho
 
 # Source and destination datasets that will be managed, in the form of (src, dst) pairs, excluding usernames and excluding
 # host names, which will all be auto-appended later:
-root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar", "tank1/baz", "tank2/baz"]  # replicate from tank1 to tank2
+root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # replicate from tank1 to dst
 
 
 # Include descendant datasets, i.e. datasets within the dataset tree, including children, and children of children, etc
@@ -54,6 +54,17 @@ src_host = "127.0.0.1"
 #     "offsite": "archive.example.com",
 # }
 dst_hosts = {"onsite": "nas"}
+
+
+# Dictionary that maps each destination host name to a root dataset located on that destination host. Typically, this is the
+# backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a prefix that will be prepended to each
+# dataset that is replicated to that destination host.
+dst_root_datasets = {
+    "nas": "tank2/bak",
+    "bak-us-west-1.example.com": "backups/bak001",
+    "bak-eu-west-1.example.com": "backups/bak999",
+    "archive.example.com": "archives/zoo",
+}
 
 
 # Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src.
@@ -119,6 +130,7 @@ cmd = ["bzfs_cron"]
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
+cmd += [f"--dst-root-datasets={dst_root_datasets}"]
 cmd += [f"--src-snapshot-periods={src_snapshot_periods}"]
 cmd += [f"--src-bookmark-periods={src_bookmark_periods}"]
 cmd += [f"--dst-snapshot-periods={dst_snapshot_periods}"]
