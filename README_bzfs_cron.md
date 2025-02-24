@@ -26,9 +26,10 @@
 WARNING: For now, `bzfs_cron` is work-in-progress, and as such may still change in incompatible
 ways.
 
-This program is a convenience wrapper around `bzfs` that automates periodic activities such as
-creating snapshots, replicating and pruning, on both source and destination hosts, using a single
-shared [deployment specification file](bzfs_tests/bzfs_cron_example.py).
+This program is a convenience wrapper around [bzfs](README.md) that automates periodic
+activities such as creating snapshots, replicating and pruning, on multiple source hosts and
+multiple destination hosts, using a single shared [deployment specification
+file](bzfs_tests/bzfs_cron_example.py).
 
 Typically, a cron job on the source host runs `bzfs_cron` periodically to create new snapshots
 (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via
@@ -141,8 +142,8 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
     network host name to which the snapshot shall be replicated. Also, given a snapshot name and
     its own hostname, a destination host can determine if it shall 'pull' replicate the given
     snapshot from the --src-host, or if the snapshot is intended for another target host, in
-    which case it skips the snapshot. A destination host running {prog_name} will 'pull'
-    snapshots for all targets that map to its own hostname.
+    which case it skips the snapshot. A destination host running bzfs_cron will 'pull' snapshots
+    for all targets that map to its own hostname.
 
 <!-- -->
 

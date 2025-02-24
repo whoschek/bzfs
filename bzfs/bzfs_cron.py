@@ -32,8 +32,8 @@ def argument_parser() -> argparse.ArgumentParser:
         description=f"""
 WARNING: For now, `bzfs_cron` is work-in-progress, and as such may still change in incompatible ways.
 
-This program is a convenience wrapper around `bzfs` that automates periodic activities such as creating snapshots, 
-replicating and pruning, on both source and destination hosts, using a single shared 
+This program is a convenience wrapper around [bzfs](README.md) that automates periodic activities such as creating snapshots,
+replicating and pruning, on multiple source hosts and multiple destination hosts, using a single shared 
 [deployment specification file](bzfs_tests/bzfs_cron_example.py).
 
 
@@ -72,7 +72,7 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              "name, we can find the destination network host name to which the snapshot shall be replicated. Also, given a "
              "snapshot name and its own hostname, a destination host can determine if it shall 'pull' replicate the given "
              "snapshot from the --src-host, or if the snapshot is intended for another target host, in which case it skips "
-             "the snapshot. A destination host running {prog_name} will 'pull' snapshots for all targets that map to its "
+             f"the snapshot. A destination host running {prog_name} will 'pull' snapshots for all targets that map to its "
              "own hostname.\n\n")
     src_snapshot_periods_example = {
         "prod": {
@@ -148,7 +148,7 @@ def main():
 
         def add_include_snapshot_regexes(org, target, periods, opts):
             for duration_unit, duration_amount in periods.items():
-                if duration_amount != 0:
+                if duration_amount > 0:
                     regex = f"{re.escape(org)}_.*_{re.escape(target)}_{re.escape(duration_unit)}"
                     opts.append(f"--include-snapshot-regex={regex}")
 

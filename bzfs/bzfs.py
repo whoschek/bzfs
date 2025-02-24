@@ -890,7 +890,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--delete-dst-snapshots-except-periods", action=DeleteDstSnapshotsExceptPeriodsAction, default=None,
         metavar="DICT_STRING",
         help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datastes via "
-             "--delete-dst-snapshots. Has the same format as --create-src-snapshots-periods."
+             "--delete-dst-snapshots. Has the same format as --create-src-snapshots-periods. "
              "Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with --delete-dst-snapshots=bookmarks) that "
              "do not match a period will be deleted. To avoid unexpected surprises, make sure to carefully specify ALL "
              "snapshot names and periods that shall be retained, in combination with --dryrun.\n\n"
@@ -4085,7 +4085,7 @@ class Job:
         dataset_labels = defaultdict(list)
         for label, datasets in datasets_to_snapshot.items():
             duration_amount, duration_unit = p.create_src_snapshots_config.suffix_durations[label.suffix]
-            if duration_amount != 0:  # no need to update the cache for adhoc snapshots
+            if duration_amount > 0:  # no need to update the cache for adhoc snapshots
                 src_datasets_set.update(datasets)  # union
                 for dataset in datasets:
                     dataset_labels[dataset].append(label)

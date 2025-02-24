@@ -32,7 +32,6 @@ unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapsho
 # Source and destination datasets that will be managed, in the form of (src, dst) pairs, excluding usernames and excluding
 # host names, which will all be auto-appended later:
 root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar", "tank1/baz", "tank2/baz"]
-# root_dataset_pairs = ["inta/sec/tmp/isrc", "inta/sec/tmp/idst"]
 
 
 # Include descendant datasets, i.e. datasets within the dataset tree, including children, and children of children, etc
@@ -106,11 +105,11 @@ daemon_prune_src_frequency = "minutely"
 daemon_prune_dst_frequency = "minutely"
 
 
-# ssh_src_port = 22
-ssh_src_port = 40999
+ssh_src_port = 22
+# ssh_src_port = 40999
 
-# ssh_dst_port = 22
-ssh_dst_port = 40999
+ssh_dst_port = 22
+# ssh_dst_port = 40999
 
 extra_args = []
 # extra_args = ["--src-user=alice"]  # ssh username on src

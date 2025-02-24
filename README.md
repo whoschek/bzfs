@@ -395,8 +395,8 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 # bzfs_cron
 
 The software also ships with the [bzfs_cron](README_bzfs_cron.md) companion program, which is a convenience wrapper around 
-`bzfs` that automates periodic activities such as creating snapshots, replicating and pruning, on both source and 
-destination hosts, using a single shared [deployment specification file](bzfs_tests/bzfs_cron_example.py).
+`bzfs` that automates periodic activities such as creating snapshots, replicating and pruning, on multiple source hosts 
+and multiple destination hosts, using a single shared [deployment specification file](bzfs_tests/bzfs_cron_example.py).
 
 # How To Install and Run
 
@@ -1411,9 +1411,9 @@ usage: bzfs [-h] [--recursive]
 **--delete-dst-snapshots-except-periods** *DICT_STRING*
 
 *  Retention periods to be used if pruning snapshots or bookmarks within the selected destination
-    datastes via --delete-dst-snapshots. Has the same format as
-    --create-src-snapshots-periods.Snapshots (--delete-dst-snapshots=snapshots) or bookmarks
-    (with --delete-dst-snapshots=bookmarks) that do not match a period will be deleted. To avoid
+    datastes via --delete-dst-snapshots. Has the same format as --create-src-snapshots-periods.
+    Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with
+    --delete-dst-snapshots=bookmarks) that do not match a period will be deleted. To avoid
     unexpected surprises, make sure to carefully specify ALL snapshot names and periods that shall
     be retained, in combination with --dryrun.
 
