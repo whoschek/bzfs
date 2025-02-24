@@ -167,7 +167,7 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
     time. Analog for the latest 90 minutely snapshots, 48 hourly snapshots, etc. It will also
     create and retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the
     'prod' organization. In addition, it will create and retain snapshots every 12 hours and
-    every week for the 'test' organization, and mark them as being intended for the 'offsite'
+    every week for the 'test' organization, and name them as being intended for the 'offsite'
     replication target. The example creates snapshots with names like
     `prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`,
     `prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`,
@@ -223,7 +223,7 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
 
 **--daemon-prune-src-frequency** *STRING*
 
-*  Specifies how often bzfs daemon shall prune src if --daemon-lifetime is nonzero.
+*  Specifies how often the bzfs daemon shall prune src if --daemon-lifetime is nonzero.
 
 <!-- -->
 
@@ -231,4 +231,4 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
 
 **--daemon-prune-dst-frequency** *STRING*
 
-*  Specifies how often bzfs daemon shall prune dst if --daemon-lifetime is nonzero.
+*  Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.

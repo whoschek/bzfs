@@ -112,8 +112,8 @@ ssh_dst_port = 22
 # ssh_dst_port = 40999
 
 extra_args = []
-# extra_args = ["--src-user=alice"]  # ssh username on src
-# extra_args = ["--dst-user=root"]  # ssh username on dst
+# extra_args += ["--src-user=alice"]  # ssh username on src
+# extra_args += ["--dst-user=root"]  # ssh username on dst
 
 cmd = ["bzfs_cron"]
 cmd += ["--recursive"] if recursive else []

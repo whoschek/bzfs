@@ -96,7 +96,7 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              "It will also create and retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' "
              "organization. "
              "In addition, it will create and retain snapshots every 12 hours and every week for the 'test' organization, "
-             "and mark them as being intended for the 'offsite' replication target. "
+             "and name them as being intended for the 'offsite' replication target. "
              "The example creates snapshots with names like "
              "`prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`, "
              "`prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`, "
@@ -113,9 +113,9 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
     parser.add_argument("--daemon-replication-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-prune-src-frequency", default="minutely", metavar="STRING",
-        help="Specifies how often bzfs daemon shall prune src if --daemon-lifetime is nonzero.\n\n")
+        help="Specifies how often the bzfs daemon shall prune src if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-prune-dst-frequency", default="minutely", metavar="STRING",
-        help="Specifies how often bzfs daemon shall prune dst if --daemon-lifetime is nonzero.\n\n")
+        help="Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding host names, which will all be "
              "auto-appended later).\n\n")
