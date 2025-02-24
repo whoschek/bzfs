@@ -31,7 +31,7 @@ unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapsho
 
 # Source and destination datasets that will be managed, in the form of (src, dst) pairs, excluding usernames and excluding
 # host names, which will all be auto-appended later:
-root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar", "tank1/baz", "tank2/baz"]
+root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar", "tank1/baz", "tank2/baz"]  # replicate from tank1 to tank2
 
 
 # Include descendant datasets, i.e. datasets within the dataset tree, including children, and children of children, etc
