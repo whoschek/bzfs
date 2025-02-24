@@ -392,6 +392,12 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 
 
 <!-- FINE TO EDIT -->
+# bzfs_cron
+
+The software also ships with the [bzfs_cron](README_bzfs_cron.md) companion program, which is a convenience wrapper around 
+`bzfs` that automates periodic activities such as creating snapshots, replicating and pruning, on both source and 
+destination hosts, using a single shared [deployment specification file](bzfs_tests/bzfs_cron_example.py).
+
 # How To Install and Run
 
 ```
@@ -402,11 +408,13 @@ sudo apt-get -y install zstd pv mbuffer  # auxiliary helpers are optional
 git clone https://github.com/whoschek/bzfs.git
 cd bzfs/bzfs
 ./bzfs --help  # Run the CLI
-sudo cp bzfs /usr/local/bin/  # Optional system installation
+./bzfs_cron --help
+sudo cp bzfs bzfs_cron /usr/local/bin/  # Optional system installation
 
 # Alternatively, install a release via pip:
 pip install bzfs
 bzfs --help  # Run the CLI
+bzfs_cron --help
 ```
 
 
