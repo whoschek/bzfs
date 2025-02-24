@@ -4058,7 +4058,10 @@ class Job:
     def last_modified_cache_file(self, dataset_or_snapshot: str) -> str:
         p = self.params
         i = dataset_or_snapshot.find("@")
-        cache_file = dataset_or_snapshot.replace("@", "/@") if i >= 0 else dataset_or_snapshot + "/="
+        if i >= 0:
+            cache_file = os.path.join(dataset_or_snapshot[:i], dataset_or_snapshot[i:])
+        else:
+            cache_file = os.path.join(dataset_or_snapshot, "=")
         userhost_dir = p.src.ssh_user_host if p.src.ssh_user_host else "-"
         return os.path.join(p.log_params.last_modified_cache_dir, userhost_dir, cache_file)
 
