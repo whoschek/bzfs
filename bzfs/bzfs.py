@@ -4064,17 +4064,19 @@ class Job:
                     i += 1
                 assert sorted_datasets[i] == dataset
                 i += 1
-                snapshots = [snapshot.split("\t", 2) for snapshot in group]  # fetch all snapshots of current dataset
-                snapshots.sort(key=lambda s: (int(s[0]), int(s[1]), s[2]))  # sort by createtxg,creation,name
-                snapshot_names = [snapshot[-1][snapshot[-1].index("@") + 1 :] for snapshot in snapshots]
+                snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
+                    (int(createtxg), int(creation), name[name.index("@") + 1 :])
+                    for createtxg, creation, name in (line.split("\t", 2) for line in group)
+                )
+                snapshot_names = [snapshot[-1] for snapshot in snapshots]
                 for label in labels:
                     prefix = label.prefix
                     end = label.infix + label.suffix
                     minlen = len(label.prefix) + len(label.infix) + len(label.suffix)
-                    j = find_match(
+                    j = find_match(  # find latest snapshot that matches this label
                         snapshot_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= minlen, reverse=True
                     )
-                    creation_unixtime = int(snapshots[j][1]) if j >= 0 else 0
+                    creation_unixtime = snapshots[j][1] if j >= 0 else 0
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
             datasets_to_snapshot[lbl].extend(sorted_datasets[i:])  # Take snaps for datasets whose snapshot stream is empty
