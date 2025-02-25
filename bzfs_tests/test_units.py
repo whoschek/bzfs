@@ -2214,6 +2214,10 @@ class TestTimeRangeAction(unittest.TestCase):
         p = bzfs.Params(args)
         self.assertListEqual([[]], p.snapshot_filters)
 
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "notime"])
+        p = bzfs.Params(args)
+        self.assertEqual((0, 0), p.snapshot_filters[0][0].timerange)
+
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
         p = bzfs.Params(args)
         self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
@@ -2225,6 +2229,11 @@ class TestTimeRangeAction(unittest.TestCase):
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
         self.assertEqual(timedelta(seconds=0), p.snapshot_filters[0][0].timerange[0])
+        self.assertEqual(timedelta(seconds=60), p.snapshot_filters[0][0].timerange[1])
+
+        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1secs ago..60secs ago"])
+        p = bzfs.Params(args)
+        self.assertEqual(timedelta(seconds=1), p.snapshot_filters[0][0].timerange[0])
         self.assertEqual(timedelta(seconds=60), p.snapshot_filters[0][0].timerange[1])
 
         for wildcard in wildcards:
@@ -2248,6 +2257,7 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "0..4"))
         self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "0..5"))
         self.assertListEqual(["\td#1", "\td@2"], self.filter_snapshots_by_times_and_rank1(lst1, "1..3"))
+        self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "1000 years ago..0secondsago"))
 
     @staticmethod
     def filter_snapshots_by_times_and_rank1(snapshots, timerange, ranks=[]):

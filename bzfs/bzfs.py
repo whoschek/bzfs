@@ -3418,16 +3418,15 @@ class Job:
         """Returns all snapshots that pass all include/exclude policies."""
 
         def resolve_timerange(timerange: UnixTimeRange) -> UnixTimeRange:
-            if timerange is not None:
-                lo, hi = timerange
-                if isinstance(lo, timedelta):
-                    lo = ceil(current_unixtime_in_secs - lo.total_seconds())
-                if isinstance(hi, timedelta):
-                    hi = ceil(current_unixtime_in_secs - hi.total_seconds())
-                assert isinstance(lo, int)
-                assert isinstance(hi, int)
-                return (lo, hi) if lo <= hi else (hi, lo)
-            return timerange
+            assert timerange is not None
+            lo, hi = timerange
+            if isinstance(lo, timedelta):
+                lo = ceil(current_unixtime_in_secs - lo.total_seconds())
+            if isinstance(hi, timedelta):
+                hi = ceil(current_unixtime_in_secs - hi.total_seconds())
+            assert isinstance(lo, int)
+            assert isinstance(hi, int)
+            return (lo, hi) if lo <= hi else (hi, lo)
 
         p, log = self.params, self.params.log
         current_unixtime_in_secs: float = p.create_src_snapshots_config.current_datetime.timestamp()
@@ -3439,11 +3438,11 @@ class Job:
                 if name == snapshot_regex_filter_name:
                     snapshots = self.filter_snapshots_by_regex(snapshots, regexes=_filter.options)
                 elif name == "include_snapshot_times":
-                    timerange = resolve_timerange(_filter.timerange)
+                    timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
                     snapshots = self.filter_snapshots_by_creation_time(snapshots, include_snapshot_times=timerange)
                 else:
                     assert name == "include_snapshot_times_and_ranks"
-                    timerange = resolve_timerange(_filter.timerange)
+                    timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
                     snapshots = self.filter_snapshots_by_creation_time_and_rank(
                         snapshots, include_snapshot_times=timerange, include_snapshot_ranks=_filter.options
                     )
@@ -6399,7 +6398,6 @@ class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
         for org, target_periods in ast.literal_eval(values).items():
             for target, periods in target_periods.items():
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
-
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
                     if period_amount != 0:
