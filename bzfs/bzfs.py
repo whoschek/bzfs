@@ -4852,6 +4852,8 @@ class Job:
                 yield curr_future.result()  # blocks until CLI returns
 
     def zfs_list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
+        """Runs 'zfs list -t snapshot' on multiple datasets at the same time. Returns output datasets in the same order as
+        the input datasets (not in random order)."""
         max_workers = self.max_workers[r.location]
         return self.itr_ssh_cmd_parallel(
             r,
