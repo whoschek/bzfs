@@ -63,13 +63,13 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
 
     # options:
     parser.add_argument("--src-host", default="-", metavar="STRING",
-        help="Network host name of src. Used if replicating in pull mode.\n\n")
+        help="Network hostname of src. Used if replicating in pull mode.\n\n")
     dst_hosts_example = {"onsite": "nas", "us-west-1": "bak-us-west-1.example.com",
                          "eu-west-1": "bak-eu-west-1.example.com", "offsite": "archive.example.com"}
     parser.add_argument("--dst-hosts", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to actual "
-             f"destination network host names. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot "
-             "name, we can find the destination network host name to which the snapshot shall be replicated. Also, given a "
+             f"destination network hostnames. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot "
+             "name, we can find the destination network hostname to which the snapshot shall be replicated. Also, given a "
              "snapshot name and its own hostname, a destination host can determine if it shall 'pull' replicate the given "
              "snapshot from the --src-host, or if the snapshot is intended for another target host, in which case it skips "
              f"the snapshot. A destination host running {prog_name} will 'pull' snapshots for all targets that map to its "
@@ -81,10 +81,10 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
         "archive.example.com": "archives/zoo",
     }
     parser.add_argument("--dst-root-datasets", default="{}", metavar="DICT_STRING",
-        help="Dictionary that maps each destination host name to a root dataset located on that destination host. "
+        help="Dictionary that maps each destination hostname to a root dataset located on that destination host. "
              "Typically, this is the backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a "
              "prefix that will be prepended to each dataset that is replicated to that destination host. "
-             f"Example:`{format_dict(dst_root_datasets_example)}`\n\n")
+             f"Example: `{format_dict(dst_root_datasets_example)}`\n\n")
     src_snapshot_periods_example = {
         "prod": {
             "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
@@ -128,7 +128,7 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
     parser.add_argument("--daemon-prune-dst-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
-        help="Source and destination dataset pairs (excluding usernames and excluding host names, which will all be "
+        help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
              "auto-appended later).\n\n")
     return parser
     # fmt: on
@@ -145,13 +145,13 @@ def main():
     dst_hosts = ast.literal_eval(args.dst_hosts)
     dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
     localhostname = socket.getfqdn()
-    pull_targets = [target for target, dst_host in dst_hosts.items() if dst_host == localhostname]
+    pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
     sep = ","  # for straightforward log file processing
 
-    def resolve_dst_dataset(dst_dataset: str, dst_host: str) -> str:
-        dst_root_dataset = dst_root_datasets.get(dst_host)
-        assert dst_root_dataset, f"hostname: '{dst_host}' must not have a missing or empty root dataset: {dst_root_datasets}"
-        return dst_root_dataset + "/" + dst_dataset
+    def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
+        root_dataset = dst_root_datasets.get(dst_hostname)
+        assert root_dataset, f"hostname: '{dst_hostname}' must not have a missing or empty root dataset: {dst_root_datasets}"
+        return root_dataset + "/" + dst_dataset
 
     if args.create_src_snapshots:
         opts = ["--create-src-snapshots", f"--create-src-snapshots-periods={src_snapshot_periods}", "--skip-replication"]
@@ -184,21 +184,21 @@ def main():
                 opts += [f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)]
             run_cmd(["bzfs"] + daemon_opts + opts)
         else:
-            assert src_host in [localhostname, "-"], "Local host name must be --src-host or in --dst-hosts: " + localhostname
+            assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
             targets = {target: "" for org, targetperiods in src_snapshot_periods.items() for target in targetperiods.keys()}
             for target in targets.keys():
-                dst_host = dst_hosts[target]
-                print(f"Replicating target '{target}' in push mode from {localhostname} to {dst_host} ...")
+                dst_hostname = dst_hosts[target]
+                print(f"Replicating target '{target}' in push mode from {localhostname} to {dst_hostname} ...")
                 opts = [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                 for org, target_periods in src_snapshot_periods.items():
                     for target2, periods in target_periods.items():
                         if target == target2:
                             add_include_snapshot_regexes(org, target, periods, opts)
                 opts += [f"--log-file-prefix={prog_name}{sep}push{sep}"]
-                opts += [f"--log-file-suffix={sep}{localhostname}{sep}{dst_host}{sep}"]
+                opts += [f"--log-file-suffix={sep}{localhostname}{sep}{dst_hostname}{sep}"]
                 opts += unknown_args + ["--"]
                 for src, dst in args.root_dataset_pairs:
-                    opts += [src, f"{dst_host}:{resolve_dst_dataset(dst, dst_host)}"]
+                    opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
                 run_cmd(["bzfs"] + daemon_opts + opts)
 
     if args.prune_src_snapshots or args.prune_src_bookmarks:

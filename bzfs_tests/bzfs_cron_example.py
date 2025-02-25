@@ -30,7 +30,7 @@ unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapsho
 
 
 # Source and destination datasets that will be managed, in the form of (src, dst) pairs, excluding usernames and excluding
-# host names, which will all be auto-appended later:
+# hostnames, which will all be auto-appended later:
 root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # replicate from tank1 to dst
 
 
@@ -39,14 +39,14 @@ root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # replica
 recursive = True
 
 
-# Network host name of src. Used if replicating in pull mode:
+# Network hostname of src. Used if replicating in pull mode:
 # src_host = "prod001.example.com"
 # src_host = "-"  # for local mode (no ssh, no network)
 src_host = "127.0.0.1"
 
 
 # Dictionary that maps logical replication target names (the infix portion of a snapshot name) to actual destination network
-# host names
+# hostnames:
 # dst_hosts = {
 #     "onsite": "nas",
 #     "us-west-1": "bak-us-west-1.example.com",
@@ -56,7 +56,7 @@ src_host = "127.0.0.1"
 dst_hosts = {"onsite": "nas"}
 
 
-# Dictionary that maps each destination host name to a root dataset located on that destination host. Typically, this is the
+# Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this is the
 # backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a prefix that will be prepended to each
 # dataset that is replicated to that destination host.
 dst_root_datasets = {

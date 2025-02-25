@@ -73,7 +73,7 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
 
 **SRC_DATASET DST_DATASET**
 
-*  Source and destination dataset pairs (excluding usernames and excluding host names, which will
+*  Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
     all be auto-appended later).
 
 
@@ -128,7 +128,7 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
 
 **--src-host** *STRING*
 
-*  Network host name of src. Used if replicating in pull mode.
+*  Network hostname of src. Used if replicating in pull mode.
 
 <!-- -->
 
@@ -137,10 +137,10 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
 **--dst-hosts** *DICT_STRING*
 
 *  Dictionary that maps logical replication target names (the infix portion of a snapshot name)
-    to actual destination network host names. Example: `"{'onsite': 'nas', 'us-west-1':
+    to actual destination network hostnames. Example: `"{'onsite': 'nas', 'us-west-1':
     'bak-us-west-1.example.com', 'eu-west-1': 'bak-eu-west-1.example.com', 'offsite':
     'archive.example.com'}"`. With this, given a snapshot name, we can find the destination
-    network host name to which the snapshot shall be replicated. Also, given a snapshot name and
+    network hostname to which the snapshot shall be replicated. Also, given a snapshot name and
     its own hostname, a destination host can determine if it shall 'pull' replicate the given
     snapshot from the --src-host, or if the snapshot is intended for another target host, in
     which case it skips the snapshot. A destination host running bzfs_cron will 'pull' snapshots
@@ -152,10 +152,10 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
 
 **--dst-root-datasets** *DICT_STRING*
 
-*  Dictionary that maps each destination host name to a root dataset located on that destination
+*  Dictionary that maps each destination hostname to a root dataset located on that destination
     host. Typically, this is the backup ZFS pool or a ZFS dataset path within that pool. The root
     dataset name is a prefix that will be prepended to each dataset that is replicated to that
-    destination host. Example:`"{'nas': 'tank2/bak', 'bak-us-west-1.example.com':
+    destination host. Example: `"{'nas': 'tank2/bak', 'bak-us-west-1.example.com':
     'backups/bak001', 'bak-eu-west-1.example.com': 'backups/bak999',
     'archive.example.com': 'archives/zoo'}"`
 
