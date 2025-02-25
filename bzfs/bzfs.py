@@ -2562,7 +2562,7 @@ class Job:
                 if run == 0:
                     # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
                     cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                    for datasets_having_snapshots in self.list_snapshots_in_parallel(dst, cmd, isorted(orphans)):
+                    for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(dst, cmd, isorted(orphans)):
                         if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                             replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
                         datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
@@ -4055,7 +4055,7 @@ class Job:
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         i = 0
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
-        for lines in self.list_snapshots_in_parallel(src, cmd, sorted_datasets):
+        for lines in self.zfs_list_snapshots_in_parallel(src, cmd, sorted_datasets):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
                 while sorted_datasets[i] < dataset:  # Take snapshots for datasets whose snapshot stream is empty
@@ -4199,7 +4199,7 @@ class Job:
             if p.use_bookmark and r.location == "src" and self.are_bookmarks_enabled(r):
                 types = "snapshot,bookmark"
             cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
-            for lines in self.list_snapshots_in_parallel(r, cmd, sorted(datasets)):
+            for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted(datasets)):
                 yield from lines
 
         def snapshot_iterator(
@@ -4851,7 +4851,7 @@ class Job:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
 
-    def list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
+    def zfs_list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
         max_workers = self.max_workers[r.location]
         return self.itr_ssh_cmd_parallel(
             r,
