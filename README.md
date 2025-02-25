@@ -484,7 +484,7 @@ simultaneously this is detected and the operation can be auto-retried safely.
 completion yet.
 * Can log to local and remote destinations out of the box. Logging mechanism is customizable and plugable for smooth
 integration.
-* Codebase is easy to change, hack and maintain. No hidden magic. Python is very readable to contemporary engineers.
+* Codebase is easy to change and maintain. No hidden magic. Python is very readable to contemporary engineers.
 Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
 
