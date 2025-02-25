@@ -3560,6 +3560,7 @@ class Job:
             snapshot_tags,
             lambda batch: self.delete_snapshot(remote, dataset, dataset + "@" + ",".join(batch)),
             max_batch_items=1 if self.is_solaris_zfs(remote) else self.params.max_snapshots_per_minibatch_on_delete_snaps,
+            sep=",",
         )
 
     def delete_snapshot(self, r: Remote, dataset: str, snaps_to_delete: str) -> None:
@@ -4775,15 +4776,17 @@ class Job:
         return any(filter(lambda proc: (proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc), procs))
 
     def run_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29
+        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29, sep=" "
     ) -> None:
-        drain(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items))
+        drain(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items, sep=sep))
 
     def itr_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29
+        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29, sep=" "
     ) -> Generator[Any, None, None]:
         """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
+        # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
+        max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy s1,s2,...,sN'
         fsenc = sys.getfilesystemencoding()
         conn_pool: ConnectionPool = self.params.connection_pools[r.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
@@ -4798,7 +4801,7 @@ class Job:
                 return fn(batch)
 
         for cmd_arg in cmd_args:
-            curr_bytes = len(f" {cmd_arg}".encode(fsenc))
+            curr_bytes = len(f"{sep}{cmd_arg}".encode(fsenc))
             if total_bytes + curr_bytes > max_bytes or len(batch) >= max_batch_items:
                 results = flush()
                 if results is not None:
