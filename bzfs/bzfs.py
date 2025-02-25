@@ -2808,8 +2808,8 @@ class Job:
                         last_appended_guid = guid
                     if snapshot == latest_common_src_snapshot:  # latest_common_src_snapshot is a snapshot or bookmark
                         if guid != last_appended_guid and "@" not in snapshot:
-                            # only appends the src bookmark if it has no snapshot. If the bookmark has a snap then that
-                            # snap has already been appended, per the sort order previously used for 'zfs list -s ...'
+                            # only appends the src bookmark if it has no snapshot. If the bookmark has a snapshot then that
+                            # snapshot has already been appended, per the sort order previously used for 'zfs list -s ...'
                             result_snapshots.append(snapshot)
                             result_guids.append(guid)
                         break
