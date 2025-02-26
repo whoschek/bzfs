@@ -858,7 +858,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(src_root_dataset, 0)
         for i in range(0, 6):
             with stop_on_failure_subtest(i=i):
-                localperiods = {"hourly": 1, "adhoc": 1}
+                localperiods = {"yearly": 1, "adhoc": 1}
                 localperiods["secondly" if i != 4 else "daily"] = 1
                 self.run_bzfs(
                     src_root_dataset,
@@ -873,11 +873,11 @@ class LocalTestCase(BZFSTestCase):
                 if i == 0:
                     self.assertSnapshots(src_root_dataset, 0)
                 elif i == 1:
-                    self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_adhoc", "s1.*_hourly", "s1.*_secondly"])
+                    self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_adhoc", "s1.*_secondly", "s1.*_yearly"])
                     time.sleep(1.1)
                 elif i == 2:
                     self.assertSnapshotNameRegexes(
-                        src_root_dataset, ["s1.*_adhoc", "s1.*_hourly", "s1.*_secondly", "s1.*_adhoc", "s1.*_secondly"]
+                        src_root_dataset, ["s1.*_adhoc", "s1.*_secondly", "s1.*_yearly", "s1.*_adhoc", "s1.*_secondly"]
                     )
                     time.sleep(1.1)
                     take_snapshot(src_root_dataset, fix("x1"))
@@ -886,8 +886,8 @@ class LocalTestCase(BZFSTestCase):
                         src_root_dataset,
                         [
                             "s1.*_adhoc",
-                            "s1.*_hourly",
                             "s1.*_secondly",
+                            "s1.*_yearly",
                             "s1.*_adhoc",
                             "s1.*_secondly",
                             "s1.*_adhoc",
@@ -900,8 +900,8 @@ class LocalTestCase(BZFSTestCase):
                         src_root_dataset,
                         [
                             "s1.*_adhoc",
-                            "s1.*_hourly",
                             "s1.*_secondly",
+                            "s1.*_yearly",
                             "s1.*_adhoc",
                             "s1.*_secondly",
                             "s1.*_adhoc",
@@ -929,7 +929,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     "--yearly_month=6",
                     dry_run=(i == 0),
@@ -966,7 +966,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
@@ -998,7 +998,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
@@ -1031,7 +1031,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"hourly": 1}}}),
+                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
