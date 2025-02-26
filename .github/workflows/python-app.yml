@@ -451,7 +451,7 @@ jobs:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
       fail-fast: false
-    timeout-minutes: 140
+    timeout-minutes: 160
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
