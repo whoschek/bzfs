@@ -1081,7 +1081,7 @@ usage: bzfs [-h] [--recursive]
 
     The name of the snapshot created on the src is
     `$org_strftime(--create-src-snapshots-time*)_$target_$period`. Example:
-    `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily
+    `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily`
 
 <!-- -->
 

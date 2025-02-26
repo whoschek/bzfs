@@ -688,7 +688,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"`{argparser_escape('%Y-%m-%d_%H:%M:%S%z')}` (adds timezone offset), "
              f"`{argparser_escape('%Y-%m-%dT%H-%M-%S')}` (no colons).\n\n"
              "The name of the snapshot created on the src is `$org_strftime(--create-src-snapshots-time*)_$target_$period`. "
-             "Example: `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily\n\n")
+             "Example: `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily`\n\n")
     parser.add_argument(
         "--create-src-snapshots-timezone", default="", type=str, metavar="TZ_SPEC",
         help=f"Default is the local timezone of the system running {prog_name}. When creating a new snapshot on the source, "
