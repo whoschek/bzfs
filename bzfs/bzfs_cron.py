@@ -109,10 +109,10 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              "In addition, it will create and retain snapshots every 12 hours and every week for the 'test' organization, "
              "and name them as being intended for the 'offsite' replication target. "
              "The example creates snapshots with names like "
-             "`prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`, "
-             "`prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`, "
-             "`prod_<timestamp>_eu-west-1_hourly`, `prod_<timestamp>_eu-west-1_daily`, "
-             "`test_<timestamp>_offsite_12hourly`, `test_<timestamp>_offsite_weekly`, and so on.\n\n")
+             "`prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`, "
+             "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
+             "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
+             "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on.\n\n")
     parser.add_argument("--src-bookmark-periods", default="{}", metavar="DICT_STRING",
         help="Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-periods.\n\n")
     parser.add_argument("--dst-snapshot-periods", default="{}", metavar="DICT_STRING",
@@ -166,7 +166,7 @@ def main():
         def add_include_snapshot_regexes(org, target, periods, opts):
             for duration_unit, duration_amount in periods.items():
                 if duration_amount > 0:
-                    regex = f"{re.escape(org)}_.*_{re.escape(target)}_{re.escape(duration_unit)}"
+                    regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(duration_unit))}"
                     opts.append(f"--include-snapshot-regex={regex}")
 
         daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
@@ -243,6 +243,14 @@ def main():
 
 def run_cmd(*params):
     subprocess.run(*params, text=True, check=True)
+
+
+def nsuffix(s: str) -> str:
+    return "_" + s if s else ""
+
+
+def ninfix(s: str) -> str:
+    return s + "_" if s else ""
 
 
 def format_dict(dictionary):

@@ -910,19 +910,19 @@ class TestHelperFunctions(unittest.TestCase):
     def test_validate_snapshot_name(self):
         bzfs.SnapshotLabel("foo_", "", "", "").validate_label("")
         bzfs.SnapshotLabel("foo_", "", "", "_foo").validate_label("")
-        bzfs.SnapshotLabel("foo_", "", "_foo", "_foo").validate_label("")
+        bzfs.SnapshotLabel("foo_", "foo_", "", "_foo").validate_label("")
         with self.assertRaises(SystemExit):
             bzfs.SnapshotLabel("", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
             bzfs.SnapshotLabel("foo__", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "", "__foo", "_foo").validate_label("")
+            bzfs.SnapshotLabel("foo_", "foo__", "", "_foo").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "", "_foo", "__foo").validate_label("")
+            bzfs.SnapshotLabel("foo_", "_foo_", "", "__foo").validate_label("")
         with self.assertRaises(SystemExit):
             bzfs.SnapshotLabel("foo", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "", "foo", "").validate_label("")
+            bzfs.SnapshotLabel("foo_", "foo", "", "").validate_label("")
         with self.assertRaises(SystemExit):
             bzfs.SnapshotLabel("foo_", "", "", "foo").validate_label("")
         with self.assertRaises(SystemExit):
@@ -942,7 +942,7 @@ class TestHelperFunctions(unittest.TestCase):
         )
         config = bzfs.CreateSrcSnapshotConfig(good_args, p=None)
         self.assertTrue(str(config))
-        self.assertListEqual(["foo_xxx_onsite_adhoc"], [str(label) for label in config.snapshot_labels()])
+        self.assertListEqual(["foo_onsite_xxx_adhoc"], [str(label) for label in config.snapshot_labels()])
 
         foo_bar_periods = {"us-west-1": {"hourly": 1, "weekly": 1, "daily": 1, "baz": 1}}
         periods = {"foo": foo_bar_periods, "bar": foo_bar_periods}
@@ -957,14 +957,14 @@ class TestHelperFunctions(unittest.TestCase):
         config = bzfs.CreateSrcSnapshotConfig(good_args, p=None)
         self.assertListEqual(
             [
-                "bar_xxx_us-west-1_weekly",
-                "foo_xxx_us-west-1_weekly",
-                "bar_xxx_us-west-1_daily",
-                "foo_xxx_us-west-1_daily",
-                "bar_xxx_us-west-1_hourly",
-                "foo_xxx_us-west-1_hourly",
-                "bar_xxx_us-west-1_baz",
-                "foo_xxx_us-west-1_baz",
+                "bar_us-west-1_xxx_weekly",
+                "foo_us-west-1_xxx_weekly",
+                "bar_us-west-1_xxx_daily",
+                "foo_us-west-1_xxx_daily",
+                "bar_us-west-1_xxx_hourly",
+                "foo_us-west-1_xxx_hourly",
+                "bar_us-west-1_xxx_baz",
+                "foo_us-west-1_xxx_baz",
             ],
             [str(label) for label in config.snapshot_labels()],
         )

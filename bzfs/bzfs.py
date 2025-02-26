@@ -666,10 +666,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "In addition, it will create snapshots every 12 hours and every week for the 'test' organization, "
              "and name them as being intended for the 'offsite' replication target.\n\n"
              "The example creates ZFS snapshots with names like "
-             "`prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`, "
-             "`prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`, "
-             "`prod_<timestamp>_eu-west-1_hourly`, `prod_<timestamp>_eu-west-1_daily`, "
-             "`test_<timestamp>_offsite_12hourly`, `test_<timestamp>_offsite_weekly`, and so on.\n\n"
+             "`prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`, "
+             "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
+             "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
+             "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on.\n\n"
              "Note: A period name that is missing indicates that no snapshots shall be created for the given period.\n\n"
              "The period name can contain an optional positive integer immediately preceding the time period unit, for "
              "example `_2secondly` or `_10minutely` to indicate that snapshots are taken every 2 seconds, or every 10 "
@@ -904,10 +904,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "every week as specified, and name them as being intended for the 'offsite' replication target. "
              "All other snapshots within the selected datasets will be deleted - you've been warned!\n\n"
              "The example scans the selected ZFS datasets for snapshots with names like "
-             "`prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`, "
-             "`prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`, "
-             "`prod_<timestamp>_eu-west-1_hourly`, `prod_<timestamp>_eu-west-1_daily`, "
-             "`test_<timestamp>_offsite_12hourly`, `test_<timestamp>_offsite_weekly`, and so on, and deletes all snapshots "
+             "`prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`, "
+             "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
+             "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
+             "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on, and deletes all snapshots "
              "therein that do not match a retention rule.\n\n"
              "Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be retained for the given "
              "period.\n\n"
@@ -1835,12 +1835,12 @@ class SnapshotLabel:
     """Contains the individual parts that are concatenated into a ZFS snapshot name."""
 
     prefix: str  # bzfs_
+    infix: str  # us-west-1_
     timestamp: str  # 2024-11-06_08:30:05
-    infix: str  # _us-west-1
     suffix: str  # _hourly
 
-    def __str__(self) -> str:  # bzfs_2024-11-06_08:30:05_us-west-1_hourly
-        return f"{self.prefix}{self.timestamp}{self.infix}{self.suffix}"
+    def __str__(self) -> str:  # bzfs_us-west-1_2024-11-06_08:30:05_hourly
+        return f"{self.prefix}{self.infix}{self.timestamp}{self.suffix}"
 
     def validate_label(self, input_text: str) -> None:
         name = str(self)
@@ -1853,6 +1853,12 @@ class SnapshotLabel:
                     die(f"Invalid {input_text}{key}: Must end with an underscore character: '{value}'")
                 if value.count("_") > 1:
                     die(f"Invalid {input_text}{key}: Must not contain multiple underscore characters: '{value}'")
+            elif key == "infix":
+                if value:
+                    if not value.endswith("_"):
+                        die(f"Invalid {input_text}{key}: Must end with an underscore character: '{value}'")
+                    if value.count("_") > 1:
+                        die(f"Invalid {input_text}{key}: Must not contain multiple underscore characters: '{value}'")
             elif value:
                 if not value.startswith("_"):
                     die(f"Invalid {input_text}{key}: Must start with an underscore character: '{value}'")
@@ -1924,11 +1930,11 @@ class CreateSrcSnapshotConfig:
                     if not isinstance(period_amount, int) or period_amount < 0:
                         die(f"--create-src-snapshots-period: Period amount must be a non-negative integer: {period_amount}")
                     if period_amount > 0:
-                        suffix = nonprefix(period_unit)
+                        suffix = nsuffix(period_unit)
                         suffixes.append(suffix)
-                        labels.append(SnapshotLabel(prefix=org + "_", timestamp="", infix=nonprefix(target), suffix=suffix))
+                        labels.append(SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=suffix))
         if args.daemon_frequency and not args.create_src_snapshots_periods:
-            suffixes.append(nonprefix(args.daemon_frequency))
+            suffixes.append(nsuffix(args.daemon_frequency))
 
         xperiods = SnapshotPeriods()
         suffix_durations = {suffix: xperiods.suffix_to_duration1(suffix) for suffix in suffixes}
@@ -1955,7 +1961,7 @@ class CreateSrcSnapshotConfig:
     def snapshot_labels(self) -> List[SnapshotLabel]:
         timestamp: str = self.current_datetime.strftime(self.timeformat)
         timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
-        return [SnapshotLabel(label.prefix, timestamp, label.infix, label.suffix) for label in self._snapshot_labels]
+        return [SnapshotLabel(label.prefix, label.infix, timestamp, label.suffix) for label in self._snapshot_labels]
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -4066,8 +4072,8 @@ class Job:
                 )
                 snapshot_names = [snapshot[-1] for snapshot in snapshots]
                 for label in labels:
-                    prefix = label.prefix
-                    end = label.infix + label.suffix
+                    prefix = label.prefix + label.infix
+                    end = label.suffix
                     minlen = len(label.prefix) + len(label.infix) + len(label.suffix)
                     j = find_match(  # find latest snapshot that matches this label
                         snapshot_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= minlen, reverse=True
@@ -5639,8 +5645,12 @@ def drain(iterable: Iterable) -> None:
     deque(iterable, maxlen=0)
 
 
-def nonprefix(s: str) -> str:
+def nsuffix(s: str) -> str:
     return "_" + s if s else ""
+
+
+def ninfix(s: str) -> str:
+    return s + "_" if s else ""
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
@@ -6402,7 +6412,7 @@ class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
                     if period_amount != 0:
-                        regex = f"{re.escape(org)}_.*{re.escape(nonprefix(target))}{re.escape(nonprefix(period_unit))}"
+                        regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(period_unit))}"
                         duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
                         duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
                         opts += [

@@ -1054,11 +1054,11 @@ usage: bzfs [-h] [--recursive]
     create snapshots every 12 hours and every week for the 'test' organization, and name them as
     being intended for the 'offsite' replication target.
 
-    The example creates ZFS snapshots with names like `prod_<timestamp>_onsite_secondly`,
-    `prod_<timestamp>_onsite_minutely`, `prod_<timestamp>_us-west-1_hourly`,
-    `prod_<timestamp>_us-west-1_daily`, `prod_<timestamp>_eu-west-1_hourly`,
-    `prod_<timestamp>_eu-west-1_daily`, `test_<timestamp>_offsite_12hourly`,
-    `test_<timestamp>_offsite_weekly`, and so on.
+    The example creates ZFS snapshots with names like `prod_onsite_<timestamp>_secondly`,
+    `prod_onsite_<timestamp>_minutely`, `prod_us-west-1_<timestamp>_hourly`,
+    `prod_us-west-1_<timestamp>_daily`, `prod_eu-west-1_<timestamp>_hourly`,
+    `prod_eu-west-1_<timestamp>_daily`, `test_offsite_<timestamp>_12hourly`,
+    `test_offsite_<timestamp>_weekly`, and so on.
 
     Note: A period name that is missing indicates that no snapshots shall be created for the given
     period.
@@ -1433,10 +1433,10 @@ usage: bzfs [-h] [--recursive]
     warned!
 
     The example scans the selected ZFS datasets for snapshots with names like
-    `prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`,
-    `prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`,
-    `prod_<timestamp>_eu-west-1_hourly`, `prod_<timestamp>_eu-west-1_daily`,
-    `test_<timestamp>_offsite_12hourly`, `test_<timestamp>_offsite_weekly`, and so on,
+    `prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`,
+    `prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`,
+    `prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`,
+    `test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on,
     and deletes all snapshots therein that do not match a retention rule.
 
     Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be

@@ -1119,8 +1119,8 @@ class LocalTestCase(BZFSTestCase):
         )
 
     def test_basic_snapshotting_flat_even_if_not_due(self):
-        take_snapshot(src_root_dataset, "s1_9999-01-01_00:00:00_hourly")
-        take_snapshot(src_root_dataset, "s1_9999-01-01_00:00:00_daily")
+        take_snapshot(src_root_dataset, "s1_onsite_9999-01-01_00:00:00_hourly")
+        take_snapshot(src_root_dataset, "s1_onsite_9999-01-01_00:00:00_daily")
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
@@ -1172,12 +1172,12 @@ class LocalTestCase(BZFSTestCase):
     def test_delete_dst_snapshots_except_periods(self):
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
-        take_snapshot(src_root_dataset, "s1_2024-01-01_00:00:00_onsite_secondly")
-        take_snapshot(src_root_dataset, "s1_2024-01-01_00:01:00_onsite_secondly")
-        take_snapshot(src_root_dataset, "s1_2024-01-01_00:02:00_onsite_secondly")
-        take_snapshot(src_root_dataset, "s1_2024-01-01_00:00:00_onsite_daily")
-        take_snapshot(src_root_dataset, "s1_2024-01-02_00:00:00_onsite_daily")
-        take_snapshot(src_root_dataset, "s1_2024-01-03_00:00:00_onsite_daily")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:01:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:02:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_daily")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-02_00:00:00_daily")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-03_00:00:00_daily")
         self.assertSnapshotNameRegexes(
             src_root_dataset,
             [
@@ -1198,7 +1198,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-periods",
             str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
         )
-        self.assertSnapshotNames(src_root_dataset, ["s1_2024-01-01_00:02:00_onsite_secondly"])
+        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly"])
 
         # multiple --delete-dst-snapshots-except-periods expressions are UNIONized:
         self.run_bzfs(
@@ -1211,7 +1211,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-periods",
             str({"s1": {"onsite": {"secondly": 1}}}),
         )
-        self.assertSnapshotNames(src_root_dataset, ["s1_2024-01-01_00:02:00_onsite_secondly"])
+        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly"])
 
         self.run_bzfs(
             bzfs.dummy_dataset,
@@ -1223,7 +1223,7 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertSnapshotNames(src_root_dataset, [])
 
-        take_snapshot(src_root_dataset, "s1_2024-01-04_00:00:00_onsite_adhoc")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-04_00:00:00_adhoc")
         self.run_bzfs(
             bzfs.dummy_dataset,
             src_root_dataset,
@@ -1232,7 +1232,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-periods",
             str({"s1": {"onsite": {"secondly": 1, "adhoc": 1}}}),  # adhoc is retained despite no time period
         )
-        self.assertSnapshotNames(src_root_dataset, ["s1_2024-01-04_00:00:00_onsite_adhoc"])
+        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
 
         self.run_bzfs(
             bzfs.dummy_dataset,
