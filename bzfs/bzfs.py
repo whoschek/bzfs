@@ -1842,7 +1842,7 @@ class SnapshotLabel:
     def __str__(self) -> str:  # bzfs_2024-11-06_08:30:05_us-west-1_hourly
         return f"{self.prefix}{self.timestamp}{self.infix}{self.suffix}"
 
-    def validate(self, input_text: str) -> None:
+    def validate_label(self, input_text: str) -> None:
         name = str(self)
         validate_dataset_name(name, input_text)
         if "/" in name:
@@ -1953,7 +1953,7 @@ class CreateSrcSnapshotConfig:
         labels.sort(key=lambda label: (suffix_indexes[label.suffix], label))  # take snapshots for dailies before hourlies
         self._snapshot_labels: List[SnapshotLabel] = labels
         for label in self.snapshot_labels():
-            label.validate("--create-src-snapshots-")
+            label.validate_label("--create-src-snapshots-")
 
     def snapshot_labels(self) -> List[SnapshotLabel]:
         timestamp: str = self.current_datetime.strftime(self.timeformat)

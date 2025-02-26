@@ -908,27 +908,27 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertIsNone(run_filter(["hh"], basis_src_datasets))
 
     def test_validate_snapshot_name(self):
-        bzfs.SnapshotLabel("foo_", "", "", "").validate("")
-        bzfs.SnapshotLabel("foo_", "", "", "_foo").validate("")
-        bzfs.SnapshotLabel("foo_", "", "_foo", "_foo").validate("")
+        bzfs.SnapshotLabel("foo_", "", "", "").validate_label("")
+        bzfs.SnapshotLabel("foo_", "", "", "_foo").validate_label("")
+        bzfs.SnapshotLabel("foo_", "", "_foo", "_foo").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("", "", "", "").validate("")
+            bzfs.SnapshotLabel("", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo__", "", "", "").validate("")
+            bzfs.SnapshotLabel("foo__", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "", "__foo", "_foo").validate("")
+            bzfs.SnapshotLabel("foo_", "", "__foo", "_foo").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "", "_foo", "__foo").validate("")
+            bzfs.SnapshotLabel("foo_", "", "_foo", "__foo").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo", "", "", "").validate("")
+            bzfs.SnapshotLabel("foo", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "", "foo", "").validate("")
+            bzfs.SnapshotLabel("foo_", "", "foo", "").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "", "", "foo").validate("")
+            bzfs.SnapshotLabel("foo_", "", "", "foo").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo@bar_", "", "", "").validate("")
+            bzfs.SnapshotLabel("foo@bar_", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo/bar_", "", "", "").validate("")
+            bzfs.SnapshotLabel("foo/bar_", "", "", "").validate_label("")
         self.assertTrue(str(bzfs.SnapshotLabel("foo_", "", "", "")))
 
     def test_CreateSrcSnapshotConfig(self):
