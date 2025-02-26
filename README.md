@@ -896,7 +896,7 @@ usage: bzfs [-h] [--recursive]
     * d) a duration that indicates how long ago from the current time, using the following
     syntax: a non-negative integer, followed by an optional space, followed by a duration unit
     that is *one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days',
-    'weeks', 'months', 'years'followed by an optional space, followed by the word 'ago'.
+    'weeks', 'months', 'years', followed by an optional space, followed by the word 'ago'.
     Examples: '0secs ago', '90 mins ago', '48hours ago', '90days ago', '12weeksago'.
 
     * Note: This option compares the specified time against the standard ZFS 'creation' time
@@ -1051,7 +1051,7 @@ usage: bzfs [-h] [--recursive]
     logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots
     every minute, hourly snapshots every hour, and so on. It will also create snapshots for the
     targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. In addition, it will
-    create snapshots every 12 hours and every week for the 'test' organization, and mark them as
+    create snapshots every 12 hours and every week for the 'test' organization, and name them as
     being intended for the 'offsite' replication target.
 
     The example creates ZFS snapshots with names like `prod_<timestamp>_onsite_secondly`,
@@ -1571,8 +1571,8 @@ usage: bzfs [-h] [--recursive]
 **--no-privilege-elevation**, **-p**
 
 *  Do not attempt to run state changing ZFS operations 'zfs
-    create/rollback/destroy/send/receive' as root (via 'sudo -u root' elevation granted by
-    administrators appending the following to /etc/sudoers: `<NON_ROOT_USER_NAME>
+    create/rollback/destroy/send/receive/snapshot' as root (via 'sudo -u root' elevation
+    granted by administrators appending the following to /etc/sudoers: `<NON_ROOT_USER_NAME>
     ALL=NOPASSWD:/path/to/zfs`
 
     Instead, the --no-privilege-elevation flag is for non-root users that have been granted

@@ -550,7 +550,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "requires Python >= 3.11.\n\n"
              "* d) a duration that indicates how long ago from the current time, using the following syntax: "
              "a non-negative integer, followed by an optional space, followed by a duration unit that is "
-             "*one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days', 'weeks', 'months', 'years'"
+             "*one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days', 'weeks', 'months', 'years', "
              "followed by an optional space, followed by the word 'ago'. "
              "Examples: '0secs ago', '90 mins ago', '48hours ago', '90days ago', '12weeksago'.\n\n"
              "* Note: This option compares the specified time against the standard ZFS 'creation' time property of the "
@@ -664,7 +664,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "minute, hourly snapshots every hour, and so on. " 
              "It will also create snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
              "In addition, it will create snapshots every 12 hours and every week for the 'test' organization, "
-             "and mark them as being intended for the 'offsite' replication target.\n\n"
+             "and name them as being intended for the 'offsite' replication target.\n\n"
              "The example creates ZFS snapshots with names like "
              "`prod_<timestamp>_onsite_secondly`, `prod_<timestamp>_onsite_minutely`, "
              "`prod_<timestamp>_us-west-1_hourly`, `prod_<timestamp>_us-west-1_daily`, "
@@ -880,13 +880,13 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "a snapshot with the same GUID, and ignore whether a bookmark with the same GUID is present in the "
              "source dataset. Similarly, it also indicates that --delete-dst-snapshots=bookmarks shall check the "
              "source dataset only for a bookmark with the same GUID, and ignore whether a snapshot with the same GUID "
-             "is present in the source dataset.")
+             "is present in the source dataset.\n\n")
     parser.add_argument(
         "--delete-dst-snapshots-except", action="store_true",
         help="This flag indicates that the --include/exclude-snapshot-* options shall have inverted semantics for the "
              "--delete-dst-snapshots option, thus deleting all snapshots except for the selected snapshots (within the "
              "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other"
-             " words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.")
+             " words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n")
     parser.add_argument(
         "--delete-dst-snapshots-except-periods", action=DeleteDstSnapshotsExceptPeriodsAction, default=None,
         metavar="DICT_STRING",
@@ -995,8 +995,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="Suppress non-error, info, debug, and trace output.\n\n")
     parser.add_argument(
         "--no-privilege-elevation", "-p", action="store_true",
-        help="Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive' as root "
-             "(via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
+        help="Do not attempt to run state changing ZFS operations 'zfs create/rollback/destroy/send/receive/snapshot' as "
+             "root (via 'sudo -u root' elevation granted by administrators appending the following to /etc/sudoers: "
              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`\n\n"
              "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
              "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
@@ -4787,7 +4787,7 @@ class Job:
         """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
         # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
-        max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy s1,s2,...,sN'
+        max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
         fsenc = sys.getfilesystemencoding()
         conn_pool: ConnectionPool = self.params.connection_pools[r.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
