@@ -1916,9 +1916,6 @@ class CreateSrcSnapshotConfig:
         self.timeformat: str = args.create_src_snapshots_timeformat
         self.anchors = PeriodAnchors().parse(args)
 
-        def nonprefix(s: str) -> str:
-            return "_" + s if s else ""
-
         suffixes: List[str] = []
         labels = []
         for org, target_periods in ast.literal_eval(args.create_src_snapshots_periods or "{}").items():
@@ -5642,6 +5639,10 @@ def drain(iterable: Iterable) -> None:
     deque(iterable, maxlen=0)
 
 
+def nonprefix(s: str) -> str:
+    return "_" + s if s else ""
+
+
 def unixtime_fromisoformat(datetime_str: str) -> int:
     """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds. If the datetime string does not
     contain time zone info then it is assumed to be in the local time zone."""
@@ -6401,7 +6402,7 @@ class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
                     if period_amount != 0:
-                        regex = f"{re.escape(org)}_.*_{re.escape(target)}_{re.escape(period_unit)}"
+                        regex = f"{re.escape(org)}_.*{nonprefix(re.escape(target))}{re.escape(nonprefix(period_unit))}"
                         duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
                         duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
                         opts += [
