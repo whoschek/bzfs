@@ -173,7 +173,7 @@ def main():
         if len(pull_targets) > 0:
             print(f"Replicating targets {pull_targets} in pull mode from {src_host} to {localhostname} ...")
             opts = [f"--ssh-src-user={args.src_user}"] if args.src_user else []
-            for org, target_periods in src_snapshot_periods.items():
+            for org, target_periods in dst_snapshot_periods.items():
                 for target, periods in target_periods.items():
                     if target in pull_targets:
                         add_include_snapshot_regexes(org, target, periods, opts)
@@ -185,12 +185,12 @@ def main():
             run_cmd(["bzfs"] + daemon_opts + opts)
         else:
             assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
-            targets = {target: "" for org, targetperiods in src_snapshot_periods.items() for target in targetperiods.keys()}
+            targets = {target: "" for org, targetperiods in dst_snapshot_periods.items() for target in targetperiods.keys()}
             for target in targets.keys():
                 dst_hostname = dst_hosts[target]
                 print(f"Replicating target '{target}' in push mode from {localhostname} to {dst_hostname} ...")
                 opts = [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
-                for org, target_periods in src_snapshot_periods.items():
+                for org, target_periods in dst_snapshot_periods.items():
                     for target2, periods in target_periods.items():
                         if target == target2:
                             add_include_snapshot_regexes(org, target, periods, opts)
