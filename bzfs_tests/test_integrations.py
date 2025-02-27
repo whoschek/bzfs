@@ -1240,6 +1240,16 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-except-periods",
+            str({"s1": {"onsite": {"adhoc": 0}}}),  # adhoc is retained despite no time period
+        )
+        self.assertSnapshotNames(src_root_dataset, [])
+
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-periods",
             str({"s1": {"onsite": {"secondly": -1, "hourly": 1}}}),  # parser error: negative int isn't accepted
             expected_status=2,
         )

@@ -6413,21 +6413,20 @@ class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
-                    if period_amount != 0:
-                        regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(period_unit))}"
-                        duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
-                        duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
-                        opts += [
-                            "--new-snapshot-filter-group",
-                            f"--include-snapshot-regex={regex}",
-                            "--include-snapshot-times-and-ranks",
-                            (
-                                "notime"
-                                if duration_unit_label is None or duration_amount * period_amount == 0
-                                else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
-                            ),
-                            f"latest{period_amount}",
-                        ]
+                    regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(period_unit))}"
+                    duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
+                    duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
+                    opts += [
+                        "--new-snapshot-filter-group",
+                        f"--include-snapshot-regex={regex}",
+                        "--include-snapshot-times-and-ranks",
+                        (
+                            "notime"
+                            if duration_unit_label is None or duration_amount * period_amount == 0
+                            else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
+                        ),
+                        f"latest{period_amount}",
+                    ]
         setattr(namespace, self.dest, opts)
 
 
