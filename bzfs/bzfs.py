@@ -230,9 +230,9 @@ tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
 
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 ```
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly` 
@@ -248,15 +248,15 @@ creation time of any existing snapshot.
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
 
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly```
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
 
 ```$ zfs list -t snapshot tank2/boo/bar
 
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
 
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly```
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
 
 * Same example in pull mode:
 
@@ -277,23 +277,23 @@ datasets to tank2/boo/bar:
 
 ```$ zfs list -t snapshot -r tank1/foo/bar
 
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
 
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 
-tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
+tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_daily
 
-tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly```
+tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly```
 
 ```$ zfs list -t snapshot -r tank2/boo/bar
 
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
 
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 
-tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
+tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_daily
 
-tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly```
+tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly```
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
@@ -688,7 +688,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"`{argparser_escape('%Y-%m-%d_%H:%M:%S%z')}` (adds timezone offset), "
              f"`{argparser_escape('%Y-%m-%dT%H-%M-%S')}` (no colons).\n\n"
              "The name of the snapshot created on the src is `$org_strftime(--create-src-snapshots-time*)_$target_$period`. "
-             "Example: `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily`\n\n")
+             "Example: `tank/foo@prod_us-west-1_2024-09-03_12:26:15_daily`\n\n")
     parser.add_argument(
         "--create-src-snapshots-timezone", default="", type=str, metavar="TZ_SPEC",
         help=f"Default is the local timezone of the system running {prog_name}. When creating a new snapshot on the source, "
@@ -1256,8 +1256,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "do tac -s $(printf '\\r') $f | tr '\\r' '\\n' | grep -m1 -v '^$'; done; sleep 1; done`\n\n")
     h_fix = ("The path name of the log file on local host is "
              "`${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`. "
-             "Example: `--log-file-prefix=zrun_ --log-file-infix=_us-west-1 --log-file-suffix=_daily` will generate log "
-             "file names such as `zrun_2024-09-03_12:26:15_us-west-1_daily-bl4i1fth.log`\n\n")
+             "Example: `--log-file-prefix=zrun_us-west-1_ --log-file-suffix=_daily` will generate log "
+             "file names such as `zrun_us-west-1_2024-09-03_12:26:15_daily-bl4i1fth.log`\n\n")
     parser.add_argument(
         "--log-file-prefix", default="zrun_", action=SafeFileNameAction, metavar="STRING",
         help="Default is zrun_. " + h_fix)

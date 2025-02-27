@@ -134,8 +134,8 @@ $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 
 ```
 $ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly 
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly 
 ```
 
 
@@ -159,16 +159,16 @@ $ bzfs tank1/foo/bar tank2/boo/bar
 
 ```
 $ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 ```
 
 
 
 ```
 $ zfs list -t snapshot tank2/boo/bar
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 ```
 
 
@@ -208,20 +208,20 @@ $ bzfs tank1/foo/bar tank2/boo/bar --recursive
 
 ```
 $ zfs list -t snapshot -r tank1/foo/bar
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
-tank1/foo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
-tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
-tank1/foo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
+tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_daily
+tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly
 ```
 
 
 
 ```
 $ zfs list -t snapshot -r tank2/boo/bar
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_daily
-tank2/boo/bar@prod_2024-11-06_08:30:05_us-west-1_hourly
-tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_daily
-tank2/boo/bar/baz@prod_2024-11-06_08:40:00_us-west-1_hourly
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
+tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
+tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_daily
+tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly
 ```
 
 
@@ -1081,7 +1081,7 @@ usage: bzfs [-h] [--recursive]
 
     The name of the snapshot created on the src is
     `$org_strftime(--create-src-snapshots-time*)_$target_$period`. Example:
-    `tank/foo@prod_2024-09-03_12:26:15_us-west-1_daily`
+    `tank/foo@prod_us-west-1_2024-09-03_12:26:15_daily`
 
 <!-- -->
 
@@ -2035,9 +2035,8 @@ usage: bzfs [-h] [--recursive]
 
 *  Default is zrun_. The path name of the log file on local host is
     `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
-    Example: `--log-file-prefix=zrun_ --log-file-infix=_us-west-1
-    --log-file-suffix=_daily` will generate log file names such as
-    `zrun_2024-09-03_12:26:15_us-west-1_daily-bl4i1fth.log`
+    Example: `--log-file-prefix=zrun_us-west-1_ --log-file-suffix=_daily` will generate log
+    file names such as `zrun_us-west-1_2024-09-03_12:26:15_daily-bl4i1fth.log`
 
 <!-- -->
 
@@ -2047,9 +2046,8 @@ usage: bzfs [-h] [--recursive]
 
 *  Default is the empty string. The path name of the log file on local host is
     `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
-    Example: `--log-file-prefix=zrun_ --log-file-infix=_us-west-1
-    --log-file-suffix=_daily` will generate log file names such as
-    `zrun_2024-09-03_12:26:15_us-west-1_daily-bl4i1fth.log`
+    Example: `--log-file-prefix=zrun_us-west-1_ --log-file-suffix=_daily` will generate log
+    file names such as `zrun_us-west-1_2024-09-03_12:26:15_daily-bl4i1fth.log`
 
 <!-- -->
 
@@ -2059,9 +2057,8 @@ usage: bzfs [-h] [--recursive]
 
 *  Default is the empty string. The path name of the log file on local host is
     `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
-    Example: `--log-file-prefix=zrun_ --log-file-infix=_us-west-1
-    --log-file-suffix=_daily` will generate log file names such as
-    `zrun_2024-09-03_12:26:15_us-west-1_daily-bl4i1fth.log`
+    Example: `--log-file-prefix=zrun_us-west-1_ --log-file-suffix=_daily` will generate log
+    file names such as `zrun_us-west-1_2024-09-03_12:26:15_daily-bl4i1fth.log`
 
 <!-- -->
 
