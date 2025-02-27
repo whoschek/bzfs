@@ -1440,7 +1440,7 @@ usage: bzfs [-h] [--recursive]
     `prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`,
     `prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`,
     `test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on,
-    and deletes all snapshots therein that do not match a retention rule.
+    and deletes all snapshots that do not match a retention rule.
 
     Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be
     retained for the given period.

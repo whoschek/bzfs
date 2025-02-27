@@ -21,7 +21,7 @@ import sys
 parser = argparse.ArgumentParser(
     description=f"""
 CLI that defines user specific parameters and passes them to `bzfs_cron`, along with all unknown CLI arguments, using a
-"Configuration as code" approach.
+"Infrastructure as Code" approach.
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
 """
 )
@@ -31,7 +31,8 @@ unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapsho
 
 # Source and destination datasets that will be managed, in the form of (src, dst) pairs, excluding usernames and excluding
 # hostnames, which will all be auto-appended later:
-root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # replicate from tank1 to dst
+# root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # replicate from tank1 to dst
+root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 to tank2
 
 
 # Include descendant datasets, i.e. datasets within the dataset tree, including children, and children of children, etc
@@ -58,17 +59,24 @@ dst_hosts = {"onsite": "nas"}
 
 # Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this is the
 # backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a prefix that will be prepended to each
-# dataset that is replicated to that destination host.
+# dataset on replication to that destination host.
+# For example, dst_root_datasets = {"nas":"tank2/bak"} turns "boo/bar" into "tank2/bak/boo/bar" on dst host "nas", and with
+# root_dataset_pairs = ["tank1/foo/bar", "boo/bar" ] it turns tank1/foo/bar on src into tank2/bak/boo/bar on dst host "nas".
+# For example, dst_root_datasets = {"nas":""} turns "boo/bar" into "boo/bar" on dst host "nas", and with
+# root_dataset_pairs = ["tank1/foo/bar", "tank1/foo/bar" ] it turns tank1/foo/bar on src into tank1/foo/bar on dst host "nas"
+# dst_root_datasets = {
+#     "nas": "tank2/bak",
+#     "bak-us-west-1.example.com": "backups/bak001",
+#     "bak-eu-west-1.example.com": "backups/bak999",
+#     "archive.example.com": "archives/zoo",
+# }
 dst_root_datasets = {
-    "nas": "tank2/bak",
-    "bak-us-west-1.example.com": "backups/bak001",
-    "bak-eu-west-1.example.com": "backups/bak999",
-    "archive.example.com": "archives/zoo",
+    "nas": "",  # Empty string means 'Don't prepend a prefix'
 }
 
 
 # Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src.
-# Uses snapshot names like 'prod_<timestamp>_onsite_secondly', 'prod_<timestamp>_onsite_minutely', etc:
+# Uses snapshot names like 'prod_onsite_<timestamp>_secondly', 'prod_onsite_<timestamp>_minutely', etc:
 # src_snapshot_periods = {
 #     "prod": {
 #         "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},

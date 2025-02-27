@@ -911,7 +911,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
              "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
              "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on, and deletes all snapshots "
-             "therein that do not match a retention rule.\n\n"
+             "that do not match a retention rule.\n\n"
              "Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be retained for the given "
              "period.\n\n"
              "Note: --delete-dst-snapshots-except-periods is a convenience option that auto-generates a series of the "
@@ -5913,7 +5913,7 @@ def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "
         size_in_bytes = round(number * (m ** (i + 1)) / b)
         return size_in_bytes, line_tail
     else:
-        return 0, ""  # skip partial or bad 'pv' log file line (process killed?)
+        return 0, ""  # skip partial or bad 'pv' log file line (pv process killed while writing?)
 
 
 def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
