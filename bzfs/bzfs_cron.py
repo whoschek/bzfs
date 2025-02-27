@@ -150,8 +150,8 @@ def main():
 
     def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
         root_dataset = dst_root_datasets.get(dst_hostname)
-        assert root_dataset, f"hostname: '{dst_hostname}' must not have a missing or empty root dataset: {dst_root_datasets}"
-        return root_dataset + "/" + dst_dataset
+        assert root_dataset is not None, f"Hostname '{dst_hostname}' is missing in --dst-root-datasets: {dst_root_datasets}"
+        return root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
 
     if args.create_src_snapshots:
         opts = ["--create-src-snapshots", f"--create-src-snapshots-periods={src_snapshot_periods}", "--skip-replication"]
