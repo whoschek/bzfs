@@ -6410,6 +6410,7 @@ class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
             opts = []
         xperiods = SnapshotPeriods()
         opts += ["--delete-dst-snapshots-except"]
+        has_at_least_one_filter_clause = False
         for org, target_periods in ast.literal_eval(values).items():
             for target, periods in target_periods.items():
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
@@ -6429,6 +6430,15 @@ class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
                         ),
                         f"latest{period_amount}",
                     ]
+                    has_at_least_one_filter_clause = True
+        if not has_at_least_one_filter_clause:
+            parser.error(
+                f"{option_string}: Cowardly refusing to delete all snapshots on "
+                f"--delete-dst-snapshots-except-periods='{values}' (which means 'retain no snapshots' aka "
+                "'delete all snapshots'). Assuming this is an unintended pilot error rather than intended carnage. "
+                "Aborting. If this is really what is intended, use `--delete-dst-snapshots --include-snapshot-regex=.*` "
+                "instead to force the deletion."
+            )
         setattr(namespace, self.dest, opts)
 
 

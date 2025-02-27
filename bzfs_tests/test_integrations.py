@@ -1201,17 +1201,20 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly"])
 
         # multiple --delete-dst-snapshots-except-periods expressions are UNIONized:
+        take_snapshot(src_root_dataset, "s2_onsite_2024-01-01_00:02:00_secondly")
         self.run_bzfs(
             bzfs.dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-except-periods",
-            str({}),
-            "--delete-dst-snapshots-except-periods",
             str({"s1": {"onsite": {"secondly": 1}}}),
+            "--delete-dst-snapshots-except-periods",
+            str({"s2": {"onsite": {"secondly": 1}}}),
         )
-        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly"])
+        self.assertSnapshotNames(
+            src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly", "s2_onsite_2024-01-01_00:02:00_secondly"]
+        )
 
         self.run_bzfs(
             bzfs.dummy_dataset,
@@ -1240,9 +1243,21 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-except-periods",
-            str({"s1": {"onsite": {"adhoc": 0}}}),  # adhoc is retained despite no time period
+            str({"s1": {"onsite": {"adhoc": 0}}}),  # zero amount
         )
         self.assertSnapshotNames(src_root_dataset, [])
+
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-04_00:00:00_adhoc")
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-periods",
+            str({}),  # error out on empty dict as deleting all snapshots is likely a pilot error rather than intended
+            expected_status=2,
+        )
+        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
 
         self.run_bzfs(
             bzfs.dummy_dataset,
