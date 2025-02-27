@@ -657,10 +657,9 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(1024**8, pv_size_to_bytes("1 YiB"))
         self.assertEqual(1024**9, pv_size_to_bytes("1 RiB"))
         self.assertEqual(1024**10, pv_size_to_bytes("1 QiB"))
-        with self.assertRaises(ValueError):
-            pv_size_to_bytes("foo")
-        with self.assertRaises(ValueError):
-            pv_size_to_bytes("46-2GiB")
+
+        self.assertEqual(0, pv_size_to_bytes("foo"))
+        self.assertEqual(0, pv_size_to_bytes("46-2GiB"))
         with self.assertRaises(ValueError):
             pv_size_to_bytes("4.12 KiB/s")
 

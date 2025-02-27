@@ -5912,7 +5912,7 @@ def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "
         size_in_bytes = round(number * (m ** (i + 1)) / b)
         return size_in_bytes, line_tail
     else:
-        raise ValueError("Invalid pv_size: " + size)
+        return 0, ""  # skip partial or bad 'pv' log file line (process killed?)
 
 
 def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
