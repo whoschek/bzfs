@@ -1926,7 +1926,8 @@ class CreateSrcSnapshotConfig:
 
         suffixes: List[str] = []
         labels = []
-        for org, target_periods in ast.literal_eval(args.create_src_snapshots_periods or "{}").items():
+        create_src_snapshots_periods = args.create_src_snapshots_periods or str({"bzfs": {"onsite": {"adhoc": 1}}})
+        for org, target_periods in ast.literal_eval(create_src_snapshots_periods).items():
             for target, periods in target_periods.items():
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
@@ -1936,7 +1937,8 @@ class CreateSrcSnapshotConfig:
                         suffixes.append(suffix)
                         labels.append(SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=suffix))
         if args.daemon_frequency and not args.create_src_snapshots_periods:
-            suffixes.append(nsuffix(args.daemon_frequency))
+            suffixes = [nsuffix(args.daemon_frequency)]
+            labels = []
 
         xperiods = SnapshotPeriods()
         suffix_durations = {suffix: xperiods.suffix_to_duration1(suffix) for suffix in suffixes}
