@@ -917,7 +917,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.SnapshotLabel("foo_", "foo__", "", "_foo").validate_label("")
         with self.assertRaises(SystemExit):
-            bzfs.SnapshotLabel("foo_", "_foo_", "", "__foo").validate_label("")
+            bzfs.SnapshotLabel("foo_", "foo_", "", "__foo").validate_label("")
         with self.assertRaises(SystemExit):
             bzfs.SnapshotLabel("foo", "", "", "").validate_label("")
         with self.assertRaises(SystemExit):
