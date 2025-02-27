@@ -1950,8 +1950,8 @@ class CreateSrcSnapshotConfig:
             if suffix.endswith("hourly") or suffix.endswith("minutely") or suffix.endswith("secondly"):
                 if duration_seconds != 0 and 86400 % duration_seconds != 0:
                     die(
-                        "Invalid --create-src-snapshots-suffix: Period duration should be a divisor of 86400 seconds without "
-                        "remainder so that snapshots will be created at the same time of day every day: " + suffix
+                        "Invalid --create-src-snapshots-periods: Period duration should be a divisor of 86400 seconds "
+                        f"without remainder so that snapshots will be created at the same time of day every day: {suffix}"
                     )
             return duration_seconds, suffix
 
