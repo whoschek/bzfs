@@ -92,23 +92,24 @@ src_snapshot_periods = {
 }
 
 
+# Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-periods:
+# dst_snapshot_periods = {
+#     "prod": {"onsite": {"secondly": 90, "minutely": 90, "hourly": 48, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
+# }
+N = 2  # multiply src_snapshot_periods by a factor N
+dst_snapshot_periods = {
+    org: {target: {period: N * count for period, count in periods.items()} for target, periods in target_periods.items()}
+    for org, target_periods in src_snapshot_periods.items()
+}
+
+
 # Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-periods:
 # src_bookmark_periods = {
 #     "prod": {
 #         "onsite": {"secondly": 90, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
 #     }
 # }
-N = 2  # multiply src_snapshot_periods by a factor N
-src_bookmark_periods = {
-    org: {target: {period: N * count for period, count in periods.items()} for target, periods in target_periods.items()}
-    for org, target_periods in src_snapshot_periods.items()
-}
-
-
-# Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-periods:
-dst_snapshot_periods = {
-    "prod": {"onsite": {"secondly": 90, "minutely": 90, "hourly": 48, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
-}
+src_bookmark_periods = dst_snapshot_periods
 
 
 # daemon_replication_frequency = "minutely"
@@ -118,7 +119,6 @@ daemon_replication_frequency = "10secondly"
 daemon_prune_src_frequency = "minutely"
 
 daemon_prune_dst_frequency = "minutely"
-
 
 ssh_src_port = 22
 # ssh_src_port = 40999
