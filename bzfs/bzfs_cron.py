@@ -21,8 +21,11 @@ import ast
 import re
 import socket
 import subprocess
+from collections import defaultdict
+from typing import List, Dict
 
 prog_name = "bzfs_cron"
+sep = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -145,7 +148,6 @@ def main():
     dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
     localhostname = socket.getfqdn()
     pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
-    sep = ","  # for straightforward log file processing
 
     def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
         root_dataset = dst_root_datasets.get(dst_hostname)
@@ -161,40 +163,25 @@ def main():
             opts += [src, "dummy"]
         run_cmd(["bzfs"] + opts)
     if args.replicate:
-
-        def add_include_snapshot_regexes(org, target, periods, opts):
-            for duration_unit, duration_amount in periods.items():
-                if duration_amount > 0:
-                    regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(duration_unit))}"
-                    opts.append(f"--include-snapshot-regex={regex}")
-
         daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-        if len(pull_targets) > 0:
-            print(f"Replicating targets {pull_targets} in pull mode from {src_host} to {localhostname} ...")
+        if len(pull_targets) > 0:  # pull mode
             opts = [f"--ssh-src-user={args.src_user}"] if args.src_user else []
-            for org, target_periods in dst_snapshot_periods.items():
-                for target, periods in target_periods.items():
-                    if target in pull_targets:
-                        add_include_snapshot_regexes(org, target, periods, opts)
-            opts += [f"--log-file-prefix={prog_name}{sep}pull{sep}"]
-            opts += [f"--log-file-suffix={sep}{src_host}{sep}{localhostname}{sep}"]
+            opts += replication_filter_opts(dst_snapshot_periods, "pull", pull_targets, src_host, localhostname)
             opts += unknown_args + ["--"]
             for src, dst in args.root_dataset_pairs:
                 opts += [f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)]
             run_cmd(["bzfs"] + daemon_opts + opts)
-        else:
+        else:  # push mode
             assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
-            targets = {target: "" for org, targetperiods in dst_snapshot_periods.items() for target in targetperiods.keys()}
-            for target in targets.keys():
-                dst_hostname = dst_hosts[target]
-                print(f"Replicating target '{target}' in push mode from {localhostname} to {dst_hostname} ...")
+            host_targets = defaultdict(list)
+            for org, targetperiods in dst_snapshot_periods.items():
+                for target in targetperiods.keys():
+                    dst_hostname = dst_hosts.get(target)
+                    if dst_hostname:
+                        host_targets[dst_hostname].append(target)
+            for dst_hostname, push_targets in host_targets.items():
                 opts = [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
-                for org, target_periods in dst_snapshot_periods.items():
-                    for target2, periods in target_periods.items():
-                        if target == target2:
-                            add_include_snapshot_regexes(org, target, periods, opts)
-                opts += [f"--log-file-prefix={prog_name}{sep}push{sep}"]
-                opts += [f"--log-file-suffix={sep}{localhostname}{sep}{dst_hostname}{sep}"]
+                opts += replication_filter_opts(dst_snapshot_periods, "push", push_targets, localhostname, dst_hostname)
                 opts += unknown_args + ["--"]
                 for src, dst in args.root_dataset_pairs:
                     opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
@@ -244,12 +231,27 @@ def run_cmd(*params):
     subprocess.run(*params, text=True, check=True)
 
 
-def nsuffix(s: str) -> str:
-    return "_" + s if s else ""
+def replication_filter_opts(
+    dst_snapshot_periods: Dict, kind: str, targets: List[str], src_hostname: str, dst_hostname: str
+) -> List[str]:
+    def nsuffix(s: str) -> str:
+        return "_" + s if s else ""
 
+    def ninfix(s: str) -> str:
+        return s + "_" if s else ""
 
-def ninfix(s: str) -> str:
-    return s + "_" if s else ""
+    print(f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+    opts = []
+    for org, target_periods in dst_snapshot_periods.items():
+        for target, periods in target_periods.items():
+            if target in targets:
+                for duration_unit, duration_amount in periods.items():
+                    if duration_amount > 0:
+                        regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(duration_unit))}"
+                        opts.append(f"--include-snapshot-regex={regex}")
+    opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
+    opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
+    return opts
 
 
 def format_dict(dictionary) -> str:
