@@ -71,7 +71,7 @@ dst_hosts = {"onsite": "nas"}
 #     "archive.example.com": "archives/zoo",
 # }
 dst_root_datasets = {
-    "nas": "",  # Empty string means 'Don't prepend a prefix'
+    "nas": "",  # Empty string means 'Don't prepend a prefix' (to avoid accidents the hostname must always be in the dict)
 }
 
 

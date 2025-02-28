@@ -81,12 +81,14 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
         "bak-us-west-1.example.com": "backups/bak001",
         "bak-eu-west-1.example.com": "backups/bak999",
         "archive.example.com": "archives/zoo",
+        "secondary": "",
     }
     parser.add_argument("--dst-root-datasets", default="{}", metavar="DICT_STRING",
-        help="Dictionary that maps each destination hostname to a root dataset located on that destination host. "
-             "Typically, this is the backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a "
-             "prefix that will be prepended to each dataset that is replicated to that destination host. "
-             f"Example: `{format_dict(dst_root_datasets_example)}`\n\n")
+        help="Dictionary that maps each destination hostname to a root dataset located on that destination host. The root "
+             "dataset name is an (optional) prefix that will be prepended to each dataset that is replicated to that "
+             "destination host. For backup use cases, this is the backup ZFS pool or a ZFS dataset path within that pool, "
+             "whereas for cloning, master slave replication, or replication from a primary to a secondary, this can also be "
+             f"the empty string. Example: `{format_dict(dst_root_datasets_example)}`\n\n")
     src_snapshot_periods_example = {
         "prod": {
             "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},

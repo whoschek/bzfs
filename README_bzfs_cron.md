@@ -153,11 +153,13 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
 **--dst-root-datasets** *DICT_STRING*
 
 *  Dictionary that maps each destination hostname to a root dataset located on that destination
-    host. Typically, this is the backup ZFS pool or a ZFS dataset path within that pool. The root
-    dataset name is a prefix that will be prepended to each dataset that is replicated to that
-    destination host. Example: `"{'nas': 'tank2/bak', 'bak-us-west-1.example.com':
-    'backups/bak001', 'bak-eu-west-1.example.com': 'backups/bak999',
-    'archive.example.com': 'archives/zoo'}"`
+    host. The root dataset name is an (optional) prefix that will be prepended to each dataset
+    that is replicated to that destination host. For backup use cases, this is the backup ZFS pool
+    or a ZFS dataset path within that pool, whereas for cloning, master slave replication, or
+    replication from a primary to a secondary, this can also be the empty string. Example:
+    `"{'nas': 'tank2/bak', 'bak-us-west-1.example.com': 'backups/bak001',
+    'bak-eu-west-1.example.com': 'backups/bak999', 'archive.example.com': 'archives/zoo',
+    'secondary': ''}"`
 
 <!-- -->
 
