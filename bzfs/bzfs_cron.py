@@ -36,7 +36,6 @@ This program is a convenience wrapper around [bzfs](README.md) that automates pe
 replicating and pruning, on multiple source hosts and multiple destination hosts, using a single shared 
 [deployment specification file](bzfs_tests/bzfs_cron_example.py).
 
-
 Typically, a cron job on the source host runs `{prog_name}` periodically to create new snapshots (via --create-src-snapshots) 
 and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and --prune-src-bookmarks), whereas 
 another cron job on the destination host runs `{prog_name}` periodically to prune outdated destination snapshots (via 
@@ -87,7 +86,7 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              f"Example: `{format_dict(dst_root_datasets_example)}`\n\n")
     src_snapshot_periods_example = {
         "prod": {
-            "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
+            "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
             "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18,
                           "yearly": 5},
             "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18,
@@ -102,8 +101,8 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              "that no snapshots shall be retained (or even be created) for the given period.\n\n"
              f"Example: `{format_dict(src_snapshot_periods_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', create and then retain secondly snapshots that were created less "
-             "than 150 seconds ago, yet retain the latest 150 secondly snapshots regardless of creation time. Analog for "
-             "the latest 90 minutely snapshots, 48 hourly snapshots, etc. "
+             "than 45 seconds ago, yet retain the latest 45 secondly snapshots regardless of creation time. Analog for "
+             "the latest 45 minutely snapshots, 48 hourly snapshots, etc. "
              "It will also create and retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' "
              "organization. "
              "In addition, it will create and retain snapshots every 12 hours and every week for the 'test' organization, "
@@ -253,7 +252,7 @@ def ninfix(s: str) -> str:
     return s + "_" if s else ""
 
 
-def format_dict(dictionary):
+def format_dict(dictionary) -> str:
     return f'"{dictionary}"'
 
 

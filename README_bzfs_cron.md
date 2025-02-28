@@ -170,19 +170,19 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
     period indicates that no snapshots shall be retained (or even be created) for the given
     period.
 
-    Example: `"{'prod': {'onsite': {'secondly': 150, 'minutely': 90, 'hourly': 48,
+    Example: `"{'prod': {'onsite': {'secondly': 45, 'minutely': 45, 'hourly': 48,
     'daily': 31, 'weekly': 26, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
     0, 'minutely': 0, 'hourly': 48, 'daily': 31, 'weekly': 26, 'monthly': 18,
     'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 48, 'daily':
     31, 'weekly': 26, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
     42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
     logical target 'onsite', create and then retain secondly snapshots that were created less
-    than 150 seconds ago, yet retain the latest 150 secondly snapshots regardless of creation
-    time. Analog for the latest 90 minutely snapshots, 48 hourly snapshots, etc. It will also
-    create and retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the
-    'prod' organization. In addition, it will create and retain snapshots every 12 hours and
-    every week for the 'test' organization, and name them as being intended for the 'offsite'
-    replication target. The example creates snapshots with names like
+    than 45 seconds ago, yet retain the latest 45 secondly snapshots regardless of creation time.
+    Analog for the latest 45 minutely snapshots, 48 hourly snapshots, etc. It will also create and
+    retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod'
+    organization. In addition, it will create and retain snapshots every 12 hours and every week
+    for the 'test' organization, and name them as being intended for the 'offsite' replication
+    target. The example creates snapshots with names like
     `prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`,
     `prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`,
     `prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`,
