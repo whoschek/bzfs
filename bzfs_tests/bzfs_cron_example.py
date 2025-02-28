@@ -98,7 +98,7 @@ src_snapshot_periods = {
 # }
 N = 2  # multiply src_snapshot_periods by a factor N
 dst_snapshot_periods = {
-    org: {target: {period: N * count for period, count in periods.items()} for target, periods in target_periods.items()}
+    org: {target: {period: round(N * M) for period, M in periods.items()} for target, periods in target_periods.items()}
     for org, target_periods in src_snapshot_periods.items()
 }
 
@@ -109,7 +109,7 @@ dst_snapshot_periods = {
 #         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
 #     }
 # }
-src_bookmark_periods = dst_snapshot_periods
+src_bookmark_periods = src_snapshot_periods
 
 
 # daemon_replication_frequency = "minutely"
