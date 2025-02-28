@@ -1346,12 +1346,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
             f"every N {label} are scheduled to be created on the source by the --create-src-snapshots option.")
         for f in [f for f in fields(PeriodAnchors) if f.name.startswith(period + "_")]:
-            m = f.metadata
-            _min = m.get("min")
-            _max = m.get("max")
+            _min = f.metadata.get("min")
+            _max = f.metadata.get("max")
             anchor_group.add_argument(
                 "--" + f.name, type=int, min=_min, max=_max, default=f.default, action=CheckRange, metavar="INT",
-                help=f"{m.get('help')} ({_min} ≤ x ≤ {_max}, default: {f.default}).\n\n")
+                help=f"{f.metadata.get('help')} ({_min} ≤ x ≤ {_max}, default: {f.default}).\n\n")
 
     for option_name, flag in zfs_recv_groups.items():
         grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
