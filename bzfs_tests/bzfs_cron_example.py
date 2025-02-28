@@ -20,7 +20,7 @@ import sys
 
 parser = argparse.ArgumentParser(
     description=f"""
-CLI that defines user specific parameters and passes them to `bzfs_cron`, along with all unknown CLI arguments, using a
+CLI that defines user specific parameters and passes them to `bzfs_cron`, along with all unknown CLI arguments, using an
 "Infrastructure as Code" approach.
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
 """
