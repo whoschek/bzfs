@@ -5342,6 +5342,7 @@ def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List
 
 
 def has_siblings(sorted_datasets: List[str]) -> bool:
+    """Returns whether the (sorted) list of input datasets contains any siblings."""
     skip_dataset = DONT_SKIP_DATASET
     parents: Set[str] = set()
     for dataset in sorted_datasets:

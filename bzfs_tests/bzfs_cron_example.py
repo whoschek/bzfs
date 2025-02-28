@@ -79,7 +79,7 @@ dst_root_datasets = {
 # Uses snapshot names like 'prod_onsite_<timestamp>_secondly', 'prod_onsite_<timestamp>_minutely', etc:
 # src_snapshot_periods = {
 #     "prod": {
-#         "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
+#         "onsite": {"secondly": 90, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
 #         "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
 #         "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
 #     },
@@ -88,16 +88,14 @@ dst_root_datasets = {
 #     },
 # }
 src_snapshot_periods = {
-    "prod": {
-        "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
-    }
+    "prod": {"onsite": {"secondly": 90, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
 }
 
 
 # Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-periods:
 # src_bookmark_periods = {
 #     "prod": {
-#         "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
+#         "onsite": {"secondly": 90, "minutely": 90, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
 #     }
 # }
 N = 2  # multiply src_snapshot_periods by a factor N
@@ -109,9 +107,7 @@ src_bookmark_periods = {
 
 # Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-periods:
 dst_snapshot_periods = {
-    "prod": {
-        "onsite": {"secondly": 150, "minutely": 90, "hourly": 48, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}
-    }
+    "prod": {"onsite": {"secondly": 90, "minutely": 90, "hourly": 48, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
 }
 
 
