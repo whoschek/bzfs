@@ -76,7 +76,9 @@ dst_root_datasets = {
 
 
 # Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src.
-# Uses snapshot names like 'prod_onsite_<timestamp>_secondly', 'prod_onsite_<timestamp>_minutely', etc:
+# For example, "daily": 31 specifies to retain all daily snapshots that were created less than 31 days ago, and
+# ensure that the latest 31 daily snapshots (per dataset) are retained regardless of creation time.
+# Uses snapshot names like 'prod_onsite_<timestamp>_daily', 'prod_onsite_<timestamp>_minutely', etc:
 # src_snapshot_periods = {
 #     "prod": {
 #         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
