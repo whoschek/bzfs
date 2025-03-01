@@ -35,7 +35,7 @@ unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapsho
 root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 to tank2
 
 
-# Include descendant datasets, i.e. datasets within the dataset tree, including children, and children of children, etc
+# Include descendant datasets, i.e. datasets within the dataset tree, including children, and children of children, etc.
 # recursive = False
 recursive = True
 
@@ -79,7 +79,7 @@ dst_root_datasets = {
 # Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src.
 # For example, "daily": 31 specifies to retain all daily snapshots that were created less than 31 days ago, and
 # ensure that the latest 31 daily snapshots (per dataset) are retained regardless of creation time.
-# Uses snapshot names like 'prod_onsite_<timestamp>_daily', 'prod_onsite_<timestamp>_minutely', etc:
+# Uses snapshot names like 'prod_onsite_<timestamp>_daily', 'prod_onsite_<timestamp>_minutely', etc.:
 # src_snapshot_periods = {
 #     "prod": {
 #         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
@@ -115,7 +115,7 @@ dst_snapshot_periods = {
 #         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
 #     }
 # }
-src_bookmark_periods = src_snapshot_periods
+src_bookmark_periods = dst_snapshot_periods
 
 
 # daemon_replication_frequency = "minutely"
@@ -135,8 +135,11 @@ ssh_dst_port = 22
 extra_args = []
 # extra_args += ["--src-user=alice"]  # ssh username on src
 # extra_args += ["--dst-user=root"]  # ssh username on dst
-# extra_args += ["--daily_hour=8"]  # take daily snapshots at 8:30am
+# extra_args += ["--daily_hour=4"]  # take daily snapshots at 4:30am
 # extra_args += ["--daily_minute=30"]
+# extra_args += ["--weekly_weekday=6"]  # take weekly snapshots on Saturday 4:15am (0=Sunday, 1=Monday, ..., 6=Saturday)
+# extra_args += ["--weekly_hour=4"]
+# extra_args += ["--weekly_minute=15"]
 
 cmd = ["bzfs_cron"]
 cmd += ["--recursive"] if recursive else []
