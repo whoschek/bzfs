@@ -54,6 +54,7 @@ src_host = "127.0.0.1"
 #     "eu-west-1": "bak-eu-west-1.example.com",
 #     "offsite": "archive.example.com",
 # }
+# dst_hosts = {"": "nas"}  # missing target name is ok
 dst_hosts = {"onsite": "nas"}
 
 
@@ -88,6 +89,9 @@ dst_root_datasets = {
 #     "test": {
 #         "offsite": {"12hourly": 42, "weekly": 12},
 #     },
+# }
+# src_snapshot_periods = {  # missing target name is ok
+#     "prod": {"": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
 # }
 src_snapshot_periods = {
     "prod": {"onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
@@ -131,6 +135,8 @@ ssh_dst_port = 22
 extra_args = []
 # extra_args += ["--src-user=alice"]  # ssh username on src
 # extra_args += ["--dst-user=root"]  # ssh username on dst
+# extra_args += ["--daily_hour=8"]
+# extra_args += ["--daily_minute=30"]
 
 cmd = ["bzfs_cron"]
 cmd += ["--recursive"] if recursive else []
