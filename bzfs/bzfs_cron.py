@@ -140,8 +140,7 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
 
 def main():
     print("WARNING: For now, `bzfs_cron` is work-in-progress, and as such may still change in incompatible ways.")
-    parser = argument_parser()
-    args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs`
+    args, unknown_args = argument_parser().parse_known_args()  # forward all unknown args to `bzfs`
     src_snapshot_periods = ast.literal_eval(args.src_snapshot_periods)
     src_bookmark_periods = ast.literal_eval(args.src_bookmark_periods)
     dst_snapshot_periods = ast.literal_eval(args.dst_snapshot_periods)
