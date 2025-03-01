@@ -76,12 +76,20 @@ dst_root_datasets = {
 }
 
 
+# organization (the prefix portion of a snapshot name)
+# org = "autosnap"
+# org = "zrepl"
+# org = "test"
+org = "prod"
+
+
 # Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src.
 # For example, "daily": 31 specifies to retain all daily snapshots that were created less than 31 days ago, and
 # ensure that the latest 31 daily snapshots (per dataset) are retained regardless of creation time.
+# Each target of each organization can have separate retention periods.
 # Uses snapshot names like 'prod_onsite_<timestamp>_daily', 'prod_onsite_<timestamp>_minutely', etc.:
 # src_snapshot_periods = {
-#     "prod": {
+#     org: {
 #         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
 #         "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
 #         "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
@@ -91,16 +99,16 @@ dst_root_datasets = {
 #     },
 # }
 # src_snapshot_periods = {  # missing target name is ok
-#     "prod": {"": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
+#     org: {"": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
 # }
 src_snapshot_periods = {
-    "prod": {"onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
+    org: {"onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
 }
 
 
 # Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-periods:
 # dst_snapshot_periods = {
-#     "prod": {"onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
+#     org: {"onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
 # }
 N = 2  # multiply src_snapshot_periods by a factor N
 dst_snapshot_periods = {
@@ -111,7 +119,7 @@ dst_snapshot_periods = {
 
 # Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-periods:
 # src_bookmark_periods = {
-#     "prod": {
+#     org: {
 #         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
 #     }
 # }
@@ -135,6 +143,10 @@ ssh_dst_port = 22
 extra_args = []
 # extra_args += ["--src-user=alice"]  # ssh username on src
 # extra_args += ["--dst-user=root"]  # ssh username on dst
+# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
+# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds
+# extra_args += ["--create-src-snapshots-timeformat=%Y%m%d_%H%M%S_%F"]  # zrepl convention
+# extra_args += ["--create-src-snapshots-timezone=UTC"]
 # extra_args += ["--daily_hour=4"]  # take daily snapshots at 4:30am
 # extra_args += ["--daily_minute=30"]
 # extra_args += ["--weekly_weekday=6"]  # take weekly snapshots on Saturday 4:15am (0=Sunday, 1=Monday, ..., 6=Saturday)
