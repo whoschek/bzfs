@@ -174,11 +174,11 @@ def main():
             opts = [f"--ssh-src-user={args.src_user}"] if args.src_user else []
             opts += replication_filter_opts(dst_snapshot_periods, "pull", pull_targets, src_host, localhostname)
             opts += unknown_args + ["--"]
-            len_opts = len(opts)
+            old_len_opts = len(opts)
             pairs = [(f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
-            for src, dst in skip_datasets_with_nonexisting_dst_pools(pairs):
+            for src, dst in skip_datasets_with_nonexisting_dst_pool(pairs):
                 opts += [src, dst]
-            if len(opts) > len_opts:
+            if len(opts) > old_len_opts:
                 run_cmd(["bzfs"] + daemon_opts + opts)
         else:  # push mode
             assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
@@ -231,11 +231,11 @@ def main():
         opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
         opts += [f"--log-file-suffix={sep}"]
         opts += unknown_args + ["--"]
-        len_opts = len(opts)
+        old_len_opts = len(opts)
         pairs = [("dummy", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
-        for src, dst in skip_datasets_with_nonexisting_dst_pools(pairs):
+        for src, dst in skip_datasets_with_nonexisting_dst_pool(pairs):
             opts += [src, dst]
-        if len(opts) > len_opts:
+        if len(opts) > old_len_opts:
             run_cmd(["bzfs"] + opts)
 
 
@@ -267,7 +267,7 @@ def replication_filter_opts(
     return opts
 
 
-def skip_datasets_with_nonexisting_dst_pools(root_dataset_pairs):
+def skip_datasets_with_nonexisting_dst_pool(root_dataset_pairs):
     def zpool(dataset: str) -> str:
         return dataset.split("/", 1)[0]
 

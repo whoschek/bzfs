@@ -135,7 +135,7 @@ ssh_dst_port = 22
 extra_args = []
 # extra_args += ["--src-user=alice"]  # ssh username on src
 # extra_args += ["--dst-user=root"]  # ssh username on dst
-# extra_args += ["--daily_hour=8"]
+# extra_args += ["--daily_hour=8"]  # take daily snapshots at 8:30am
 # extra_args += ["--daily_minute=30"]
 
 cmd = ["bzfs_cron"]
