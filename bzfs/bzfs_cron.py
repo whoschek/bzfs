@@ -21,11 +21,11 @@ import ast
 import re
 import socket
 import subprocess
+import sys
 from collections import defaultdict
 from typing import List, Dict
 
 prog_name = "bzfs_cron"
-sep = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -138,6 +138,11 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
     # fmt: on
 
 
+sep = ","
+DEVNULL = subprocess.DEVNULL
+PIPE = subprocess.PIPE
+
+
 def main():
     print("WARNING: For now, `bzfs_cron` is work-in-progress, and as such may still change in incompatible ways.")
     args, unknown_args = argument_parser().parse_known_args()  # forward all unknown args to `bzfs`
@@ -169,9 +174,12 @@ def main():
             opts = [f"--ssh-src-user={args.src_user}"] if args.src_user else []
             opts += replication_filter_opts(dst_snapshot_periods, "pull", pull_targets, src_host, localhostname)
             opts += unknown_args + ["--"]
-            for src, dst in args.root_dataset_pairs:
-                opts += [f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)]
-            run_cmd(["bzfs"] + daemon_opts + opts)
+            len_opts = len(opts)
+            pairs = [(f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
+            for src, dst in skip_datasets_with_nonexisting_dst_pools(pairs):
+                opts += [src, dst]
+            if len(opts) > len_opts:
+                run_cmd(["bzfs"] + daemon_opts + opts)
         else:  # push mode
             assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
             host_targets = defaultdict(list)
@@ -223,12 +231,16 @@ def main():
         opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
         opts += [f"--log-file-suffix={sep}"]
         opts += unknown_args + ["--"]
-        for src, dst in args.root_dataset_pairs:
-            opts += ["dummy", resolve_dst_dataset(dst, localhostname)]
-        run_cmd(["bzfs"] + opts)
+        len_opts = len(opts)
+        pairs = [("dummy", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
+        for src, dst in skip_datasets_with_nonexisting_dst_pools(pairs):
+            opts += [src, dst]
+        if len(opts) > len_opts:
+            run_cmd(["bzfs"] + opts)
 
 
 def run_cmd(*params):
+    sys.stdout.flush()
     subprocess.run(*params, text=True, check=True)
 
 
@@ -253,6 +265,25 @@ def replication_filter_opts(
     opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
     opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
     return opts
+
+
+def skip_datasets_with_nonexisting_dst_pools(root_dataset_pairs):
+    def zpool(dataset: str) -> str:
+        return dataset.split("/", 1)[0]
+
+    pools = {zpool(dst) for src, dst in root_dataset_pairs}
+    cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
+    if len(root_dataset_pairs) > 0:
+        existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
+    else:
+        existing_pools = set()
+    results = []
+    for src, dst in root_dataset_pairs:
+        if zpool(dst) in existing_pools:
+            results.append((src, dst))
+        else:
+            print("[W]: Skipping dst dataset for which dst pool does not exist: " + dst)
+    return results
 
 
 def format_dict(dictionary) -> str:
