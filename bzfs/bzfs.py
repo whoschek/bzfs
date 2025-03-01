@@ -1963,7 +1963,13 @@ class CreateSrcSnapshotConfig:
             label.validate_label("--create-src-snapshots-")
 
     def snapshot_labels(self) -> List[SnapshotLabel]:
-        timestamp: str = self.current_datetime.strftime(self.timeformat)
+        timeformat = self.timeformat
+        is_millis = timeformat.endswith("%F")  # non-standard hack to append milliseconds
+        if is_millis:
+            timeformat = timeformat[0:-1] + "f"  # replace %F with %f (append microseconds)
+        timestamp: str = self.current_datetime.strftime(timeformat)
+        if is_millis:
+            timestamp = timestamp[0 : -len("000")]  # replace microseconds with milliseconds
         timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
         return [SnapshotLabel(label.prefix, label.infix, timestamp, label.suffix) for label in self._snapshot_labels]
 
