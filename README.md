@@ -396,7 +396,7 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 
 The software also ships with the [bzfs_cron](README_bzfs_cron.md) companion program, which is a convenience wrapper around 
 `bzfs` that automates periodic activities such as creating snapshots, replicating and pruning, on multiple source hosts 
-and multiple destination hosts, using a single shared [deployment specification file](bzfs_tests/bzfs_cron_example.py).
+and multiple destination hosts, using a single shared [deployment specification file](bzfs_tests/bzfs_cronjob_example.py).
 
 # How To Install and Run
 
