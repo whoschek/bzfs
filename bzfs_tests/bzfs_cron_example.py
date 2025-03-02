@@ -79,6 +79,7 @@ dst_root_datasets = {
 # organization (the prefix portion of a snapshot name)
 # org = "autosnap"
 # org = "zrepl"
+# org = "bzfs"
 # org = "test"
 org = "prod"
 
@@ -145,7 +146,6 @@ extra_args = []
 # extra_args += ["--dst-user=root"]  # ssh username on dst
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds
-# extra_args += ["--create-src-snapshots-timeformat=%Y%m%d_%H%M%S_%F"]  # zrepl convention
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
 # extra_args += ["--daily_hour=4"]  # take daily snapshots at 4:30am
 # extra_args += ["--daily_minute=30"]
