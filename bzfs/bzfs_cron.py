@@ -171,8 +171,8 @@ def main():
     if args.replicate:
         daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
         if len(pull_targets) > 0:  # pull mode
-            opts = [f"--ssh-src-user={args.src_user}"] if args.src_user else []
-            opts += replication_filter_opts(dst_snapshot_periods, "pull", pull_targets, src_host, localhostname)
+            opts = replication_filter_opts(dst_snapshot_periods, "pull", pull_targets, src_host, localhostname)
+            opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
             opts += unknown_args + ["--"]
             old_len_opts = len(opts)
             pairs = [(f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
@@ -189,37 +189,25 @@ def main():
                     if dst_hostname:
                         host_targets[dst_hostname].append(target)
             for dst_hostname, push_targets in host_targets.items():
-                opts = [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
-                opts += replication_filter_opts(dst_snapshot_periods, "push", push_targets, localhostname, dst_hostname)
+                opts = replication_filter_opts(dst_snapshot_periods, "push", push_targets, localhostname, dst_hostname)
+                opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                 opts += unknown_args + ["--"]
                 for src, dst in args.root_dataset_pairs:
                     opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
                 run_cmd(["bzfs"] + daemon_opts + opts)
 
     if args.prune_src_snapshots or args.prune_src_bookmarks:
-        opts = ["--skip-replication"]
-        opts += [f"--daemon-frequency={args.daemon_prune_src_frequency}"]
         if args.prune_src_snapshots:
+            opts = ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-periods={src_snapshot_periods}"]
             opts += [f"--log-file-prefix={prog_name}{sep}prune-src-snapshots{sep}"]
         else:
+            opts = ["--delete-dst-snapshots=bookmarks", f"--delete-dst-snapshots-except-periods={src_bookmark_periods}"]
             opts += [f"--log-file-prefix={prog_name}{sep}prune-src-bookmarks{sep}"]
-        opts += [f"--log-file-suffix={sep}"]
+        opts += [f"--log-file-suffix={sep}", "--skip-replication", f"--daemon-frequency={args.daemon_prune_src_frequency}"]
         opts += unknown_args + ["--"]
         for src, dst in args.root_dataset_pairs:
             opts += ["dummy", src]
-        if args.prune_src_snapshots:
-            run_cmd(
-                ["bzfs", "--delete-dst-snapshots", f"--delete-dst-snapshots-except-periods={src_snapshot_periods}"] + opts
-            )
-        if args.prune_src_bookmarks:
-            run_cmd(
-                [
-                    "bzfs",
-                    "--delete-dst-snapshots=bookmarks",
-                    f"--delete-dst-snapshots-except-periods={src_bookmark_periods}",
-                ]
-                + opts
-            )
+        run_cmd(["bzfs"] + opts)
     if args.prune_dst_snapshots:
         dst_snapshot_periods = {  # only retain targets that belong to the host executing bzfs_cron
             org: {target: periods for target, periods in target_periods.items() if target in pull_targets}
@@ -271,9 +259,9 @@ def skip_datasets_with_nonexisting_dst_pool(root_dataset_pairs):
     def zpool(dataset: str) -> str:
         return dataset.split("/", 1)[0]
 
-    pools = {zpool(dst) for src, dst in root_dataset_pairs}
-    cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
     if len(root_dataset_pairs) > 0:
+        pools = {zpool(dst) for src, dst in root_dataset_pairs}
+        cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
         existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
     else:
         existing_pools = set()
