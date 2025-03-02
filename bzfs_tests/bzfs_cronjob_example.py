@@ -24,8 +24,8 @@ CLI that defines user specific parameters and passes them to `bzfs_cron`, along 
 "Infrastructure as Code" approach.
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
 
-Copy this (same) cronjob file onto the source host and all destination hosts, and add crontab entries (or systemd or similar 
-analogs) along these lines: 
+Copy this (same) cronjob file onto the source host and all destination hosts, and add crontab entries or systemd timers or 
+similar, along these lines: 
 
 crontab on source host:
 ```
@@ -42,13 +42,13 @@ _, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs
 unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapshots"]
 
 
-# Source and destination datasets that will be managed, in the form of (src, dst) pairs, excluding usernames and excluding
-# hostnames, which will all be auto-appended later:
+# Source and destination datasets that will be managed, in the form of one or more (src, dst) pairs, excluding
+# usernames and excluding hostnames, which will all be auto-appended later:
 # root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # replicate from tank1 to dst
 root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 to tank2
 
 
-# Include descendant datasets, i.e. datasets within the dataset tree, including children, and children of children, etc.
+# Include descendant datasets, i.e. datasets within the dataset tree, including children, children of children, etc.
 # recursive = False
 recursive = True
 
@@ -59,25 +59,28 @@ recursive = True
 src_host = "127.0.0.1"
 
 
-# Dictionary that maps logical replication target names (the infix portion of a snapshot name) to actual destination network
-# hostnames:
+# Dictionary that maps logical replication target names (the infix portion of a snapshot name) to actual destination
+# network hostnames:
 # dst_hosts = {
 #     "onsite": "nas",
 #     "us-west-1": "bak-us-west-1.example.com",
 #     "eu-west-1": "bak-eu-west-1.example.com",
 #     "offsite": "archive.example.com",
 # }
+# dst_hosts = {"onsite": "nas"}
 # dst_hosts = {"": "nas"}  # missing target name is ok
-dst_hosts = {"onsite": "nas"}
+dst_hosts = {"onsite": "nas", "": "nas"}
 
 
-# Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this is the
-# backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a prefix that will be prepended to each
-# dataset on replication to that destination host.
-# For example, dst_root_datasets = {"nas":"tank2/bak"} turns "boo/bar" into "tank2/bak/boo/bar" on dst host "nas", and with
-# root_dataset_pairs = ["tank1/foo/bar", "boo/bar" ] it turns tank1/foo/bar on src into tank2/bak/boo/bar on dst host "nas".
+# Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this
+# is the backup ZFS pool or a ZFS dataset path within that pool. The root dataset name is a prefix that will be
+# prepended to each dataset on replication to that destination host.
+# For example, dst_root_datasets = {"nas":"tank2/bak"} turns "boo/bar" into "tank2/bak/boo/bar" on dst host "nas",
+# and with root_dataset_pairs = ["tank1/foo/bar", "boo/bar" ] it turns tank1/foo/bar on src into tank2/bak/boo/bar
+# on dst host "nas".
 # For example, dst_root_datasets = {"nas":""} turns "boo/bar" into "boo/bar" on dst host "nas", and with
-# root_dataset_pairs = ["tank1/foo/bar", "tank1/foo/bar" ] it turns tank1/foo/bar on src into tank1/foo/bar on dst host "nas"
+# root_dataset_pairs = ["tank1/foo/bar", "tank1/foo/bar" ] it turns tank1/foo/bar on src into tank1/foo/bar
+# on dst host "nas".
 # dst_root_datasets = {
 #     "nas": "tank2/bak",
 #     "bak-us-west-1.example.com": "backups/bak001",
@@ -85,11 +88,11 @@ dst_hosts = {"onsite": "nas"}
 #     "archive.example.com": "archives/zoo",
 # }
 dst_root_datasets = {
-    "nas": "",  # Empty string means 'Don't prepend a prefix' (to avoid accidents the hostname must always be in the dict)
+    "nas": "",  # Empty string means 'Don't prepend a prefix' (for safety, the hostname must always be in the dict)
 }
 
 
-# organization (the prefix portion of a snapshot name)
+# Organization (the prefix portion of a snapshot name):
 # org = "autosnap"
 # org = "zrepl"
 # org = "bzfs"
@@ -155,8 +158,8 @@ ssh_dst_port = 22
 # ssh_dst_port = 40999
 
 extra_args = []
-# extra_args += ["--src-user=alice"]  # ssh username on src
-# extra_args += ["--dst-user=root"]  # ssh username on dst
+# extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
+# extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
