@@ -20,12 +20,13 @@ import sys
 
 parser = argparse.ArgumentParser(
     description=f"""
-CLI that defines user specific parameters and passes them to `bzfs_cron`, along with all unknown CLI arguments, using an
-"Infrastructure as Code" approach.
+Periodic replica management job, using an "Infrastructure as Code" approach, in the form of a CLI that generates deployment 
+specific parameters and passes the parameters to `bzfs_cron`, along with all unknown CLI arguments.
+
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
 
-Copy this (same) cronjob file onto the source host and all destination hosts, and add crontab entries or systemd timers or 
-similar, along these lines: 
+Edit this python cronjob file in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto 
+the source host and all destination hosts, and add crontab entries or systemd timers or similar, along these lines: 
 
 crontab on source host:
 ```
