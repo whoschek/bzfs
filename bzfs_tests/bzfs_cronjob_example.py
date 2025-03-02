@@ -23,6 +23,19 @@ parser = argparse.ArgumentParser(
 CLI that defines user specific parameters and passes them to `bzfs_cron`, along with all unknown CLI arguments, using an
 "Infrastructure as Code" approach.
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
+
+Copy this (same) cronjob file onto the source host and all destination hosts, and add crontab entries (or systemd or similar 
+analogs) along these lines: 
+
+crontab on source host:
+```
+* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks
+```
+
+crontab on destination host(s):
+```
+* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --replicate --prune-dst-snapshots
+```
 """
 )
 _, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_cron`
