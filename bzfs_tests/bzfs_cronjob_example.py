@@ -144,6 +144,52 @@ dst_snapshot_periods = {
 src_bookmark_periods = dst_snapshot_periods
 
 
+ssh_src_port = 22
+# ssh_src_port = 40999
+
+
+ssh_dst_port = 22
+# ssh_dst_port = 40999
+
+
+extra_args = []
+# extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
+# extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
+# extra_args += ["--include-dataset=foo"]  # see bzfs --help
+# extra_args += ["--exclude-dataset=bar"]
+# extra_args += ["--include-dataset-regex=foo.*"]
+# extra_args += ["--exclude-dataset-regex=bar.*"]
+# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
+# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds
+# extra_args += ["--create-src-snapshots-timezone=UTC"]
+# extra_args += ["--zfs-send-program-opts=''"]
+# extra_args += ["--zfs-recv-program-opts=''"]
+# extra_args += ["--force-rollback-to-latest-snapshot"]
+# extra_args += ["--force-rollback-to-latest-common-snapshot"]
+# extra_args += ["--force"]
+# extra_args += ["--force-destroy-dependents"]
+# extra_args += ["--force-unmount"]
+# extra_args += ["--force-once"]
+# extra_args += ["--skip-parent"]
+# extra_args += ["--skip-missing-snapshots=xyz"]
+# extra_args += ["--retries=2"]
+# extra_args += ["--retry-min-sleep-secs=0.125"]
+# extra_args += ["--retry-max-sleep-secs=300"]
+# extra_args += ["--retry-max-elapsed-secs=3600"]
+# extra_args += ["--skip-on-error=dataset"]
+# extra_args += ["--dryrun"]
+# extra_args += ["--verbose"]
+# extra_args += ["--quiet"]
+# extra_args += ["--no-privilege-elevation"]
+# ... and so on (include all other options from bzfs --help here too)
+# extra_args += ["--daily_hour=23"]  # take daily snapshots at 23:59
+# extra_args += ["--daily_minute=59"]
+# extra_args += ["--weekly_weekday=0"]  # take weekly snapshots on Sunday 2:00am (0=Sunday, 1=Monday, ..., 6=Saturday)
+# extra_args += ["--weekly_hour=2"]
+# extra_args += ["--weekly_minute=0"]
+# ... and so on (include all other options from bzfs --help here too)
+
+
 # daemon_replication_frequency = "minutely"
 # daemon_replication_frequency = "secondly"
 daemon_replication_frequency = "10secondly"
@@ -151,24 +197,6 @@ daemon_replication_frequency = "10secondly"
 daemon_prune_src_frequency = "minutely"
 
 daemon_prune_dst_frequency = "minutely"
-
-ssh_src_port = 22
-# ssh_src_port = 40999
-
-ssh_dst_port = 22
-# ssh_dst_port = 40999
-
-extra_args = []
-# extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
-# extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
-# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
-# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds
-# extra_args += ["--create-src-snapshots-timezone=UTC"]
-# extra_args += ["--daily_hour=23"]  # take daily snapshots at 23:59
-# extra_args += ["--daily_minute=59"]
-# extra_args += ["--weekly_weekday=5"]  # take weekly snapshots on Friday 23:59 (0=Sunday, 1=Monday, ..., 6=Saturday)
-# extra_args += ["--weekly_hour=23"]
-# extra_args += ["--weekly_minute=59"]
 
 cmd = ["bzfs_cron"]
 cmd += ["--recursive"] if recursive else []
