@@ -164,11 +164,11 @@ extra_args = []
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
-# extra_args += ["--daily_hour=4"]  # take daily snapshots at 4:30am
-# extra_args += ["--daily_minute=30"]
-# extra_args += ["--weekly_weekday=6"]  # take weekly snapshots on Saturday 4:15am (0=Sunday, 1=Monday, ..., 6=Saturday)
-# extra_args += ["--weekly_hour=4"]
-# extra_args += ["--weekly_minute=15"]
+# extra_args += ["--daily_hour=23"]  # take daily snapshots at 23:59
+# extra_args += ["--daily_minute=59"]
+# extra_args += ["--weekly_weekday=5"]  # take weekly snapshots on Friday 23:59 (0=Sunday, 1=Monday, ..., 6=Saturday)
+# extra_args += ["--weekly_hour=23"]
+# extra_args += ["--weekly_minute=59"]
 
 cmd = ["bzfs_cron"]
 cmd += ["--recursive"] if recursive else []
