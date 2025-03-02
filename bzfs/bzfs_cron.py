@@ -23,7 +23,7 @@ import socket
 import subprocess
 import sys
 from collections import defaultdict
-from typing import List, Dict
+from typing import Dict, List, Tuple
 
 prog_name = "bzfs_cron"
 
@@ -165,9 +165,9 @@ def main():
         opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
         opts += [f"--log-file-suffix={sep}"]
         opts += unknown_args + ["--"]
-        for src, dst in args.root_dataset_pairs:
-            opts += [src, "dummy"]
+        opts += dedupe([(src, "dummy") for src, dst in args.root_dataset_pairs])
         run_cmd(["bzfs"] + opts)
+
     if args.replicate:
         daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
         if len(pull_targets) > 0:  # pull mode
@@ -196,18 +196,22 @@ def main():
                     opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
                 run_cmd(["bzfs"] + daemon_opts + opts)
 
-    if args.prune_src_snapshots or args.prune_src_bookmarks:
-        if args.prune_src_snapshots:
-            opts = ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-periods={src_snapshot_periods}"]
-            opts += [f"--log-file-prefix={prog_name}{sep}prune-src-snapshots{sep}"]
-        else:
-            opts = ["--delete-dst-snapshots=bookmarks", f"--delete-dst-snapshots-except-periods={src_bookmark_periods}"]
-            opts += [f"--log-file-prefix={prog_name}{sep}prune-src-bookmarks{sep}"]
+    def prune_src(opts: List[str]):
         opts += [f"--log-file-suffix={sep}", "--skip-replication", f"--daemon-frequency={args.daemon_prune_src_frequency}"]
         opts += unknown_args + ["--"]
-        for src, dst in args.root_dataset_pairs:
-            opts += ["dummy", src]
+        opts += dedupe([("dummy", src) for src, dst in args.root_dataset_pairs])
         run_cmd(["bzfs"] + opts)
+
+    if args.prune_src_snapshots:
+        opts = ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-periods={src_snapshot_periods}"]
+        opts += [f"--log-file-prefix={prog_name}{sep}prune-src-snapshots{sep}"]
+        prune_src(opts)
+
+    if args.prune_src_bookmarks:
+        opts = ["--delete-dst-snapshots=bookmarks", f"--delete-dst-snapshots-except-periods={src_bookmark_periods}"]
+        opts += [f"--log-file-prefix={prog_name}{sep}prune-src-bookmarks{sep}"]
+        prune_src(opts)
+
     if args.prune_dst_snapshots:
         dst_snapshot_periods = {  # only retain targets that belong to the host executing bzfs_cron
             org: {target: periods for target, periods in target_periods.items() if target in pull_targets}
@@ -271,6 +275,13 @@ def skip_datasets_with_nonexisting_dst_pool(root_dataset_pairs):
             results.append((src, dst))
         else:
             print("[W]: Skipping dst dataset for which dst pool does not exist: " + dst)
+    return results
+
+
+def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
+    results = []
+    for src, dst in dict.fromkeys(root_dataset_pairs).keys():
+        results += [src, dst]
     return results
 
 
