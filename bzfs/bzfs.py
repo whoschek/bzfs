@@ -2381,7 +2381,7 @@ class Job:
             for label, datasets in datasets_to_snapshot.items():
                 cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
                 if p.recursive:
-                    # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to the non-recursive CLI flavor
+                    # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to non-recursive CLI flavor
                     root_datasets = self.root_datasets_if_recursive_zfs_snapshot_is_possible(datasets, basis_src_datasets)
                     if root_datasets is not None:
                         cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
@@ -4082,11 +4082,11 @@ class Job:
                 )
                 snapshot_names = [snapshot[-1] for snapshot in snapshots]
                 for label in labels:
-                    prefix = label.prefix + label.infix
+                    start = label.prefix + label.infix
                     end = label.suffix
                     minlen = len(label.prefix) + len(label.infix) + len(label.suffix)
                     j = find_match(  # find latest snapshot that matches this label
-                        snapshot_names, lambda s: s.endswith(end) and s.startswith(prefix) and len(s) >= minlen, reverse=True
+                        snapshot_names, lambda s: s.endswith(end) and s.startswith(start) and len(s) >= minlen, reverse=True
                     )
                     creation_unixtime = snapshots[j][1] if j >= 0 else 0
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
