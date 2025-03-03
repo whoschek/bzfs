@@ -66,10 +66,11 @@ src_host = "127.0.0.1"
 #     "onsite": "nas",
 #     "us-west-1": "bak-us-west-1.example.com",
 #     "eu-west-1": "bak-eu-west-1.example.com",
+#     "hotspare": "hotspare.example.com",
 #     "offsite": "archive.example.com",
 # }
 # dst_hosts = {"onsite": "nas"}
-# dst_hosts = {"": "nas"}  # missing target name is ok
+# dst_hosts = {"": "nas"}  # empty string as target name is ok
 dst_hosts = {"onsite": "nas", "": "nas"}
 
 
@@ -86,6 +87,7 @@ dst_hosts = {"onsite": "nas", "": "nas"}
 #     "nas": "tank2/bak",
 #     "bak-us-west-1.example.com": "backups/bak001",
 #     "bak-eu-west-1.example.com": "backups/bak999",
+#     "hotspare": "",
 #     "archive.example.com": "archives/zoo",
 # }
 dst_root_datasets = {
@@ -111,12 +113,13 @@ org = "prod"
 #         "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
 #         "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
 #         "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+#         "hotspare": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31},
 #     },
 #     "test": {
 #         "offsite": {"12hourly": 14, "weekly": 12},
 #     },
 # }
-# src_snapshot_periods = {  # missing target name is ok
+# src_snapshot_periods = {  # empty string as target name is ok
 #     org: {"": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5}}
 # }
 src_snapshot_periods = {
