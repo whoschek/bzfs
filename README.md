@@ -127,7 +127,7 @@ from a periodic `cron` job:
 
 ```
 $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
---create-src-snapshots-periods "{'prod':{'us-west-1':{'hourly':48,'daily':31}}}"
+--create-src-snapshots-periods "{'prod':{'us-west-1':{'hourly':36,'daily':31}}}"
 ```
 
 
@@ -314,24 +314,24 @@ $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 ```
 
 
-* Retain all secondly snapshots that were created less than 45 seconds ago, and ensure that the
-latest 45 secondly snapshots (per dataset) are retained regardless of creation time. Same for 45
-minutely snapshots, 48 hourly snapshots, 31 daily snapshots, 26 weekly snapshots, 18 monthly
+* Retain all secondly snapshots that were created less than 40 seconds ago, and ensure that the
+latest 40 secondly snapshots (per dataset) are retained regardless of creation time. Same for 40
+minutely snapshots, 36 hourly snapshots, 31 daily snapshots, 12 weekly snapshots, 18 monthly
 snapshots, and 5 yearly snapshots:
 
 
 ```
 $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots --delete-dst-snapshots-except --include-snapshot-regex '.*_secondly'
---include-snapshot-times-and-ranks '45 seconds ago..anytime' 'latest 45'
+--include-snapshot-times-and-ranks '40 seconds ago..anytime' 'latest 40'
 --new-snapshot-filter-group --include-snapshot-regex '.*_minutely'
---include-snapshot-times-and-ranks '45 minutes ago..anytime' 'latest 45'
+--include-snapshot-times-and-ranks '40 minutes ago..anytime' 'latest 40'
 --new-snapshot-filter-group --include-snapshot-regex '.*_hourly'
---include-snapshot-times-and-ranks '48 hours ago..anytime' 'latest 48'
+--include-snapshot-times-and-ranks '36 hours ago..anytime' 'latest 36'
 --new-snapshot-filter-group --include-snapshot-regex '.*_daily'
 --include-snapshot-times-and-ranks '31 days ago..anytime' 'latest 31'
 --new-snapshot-filter-group --include-snapshot-regex '.*_weekly'
---include-snapshot-times-and-ranks '26 weeks ago..anytime' 'latest 26'
+--include-snapshot-times-and-ranks '12 weeks ago..anytime' 'latest 12'
 --new-snapshot-filter-group --include-snapshot-regex '.*_monthly'
 --include-snapshot-times-and-ranks '18 months ago..anytime' 'latest 18'
 --new-snapshot-filter-group --include-snapshot-regex '.*_yearly'
@@ -345,7 +345,7 @@ For convenience, the lengthy command line above can be expressed in a more conci
 ```
 $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
 --delete-dst-snapshots --delete-dst-snapshots-except-periods
-"{'prod':{'onsite':{'secondly':45,'minutely':45,'hourly':48,'daily':31,'weekly':26,'monthly':18,'yearly':5}}}"
+"{'prod':{'onsite':{'secondly':40,'minutely':40,'hourly':36,'daily':31,'weekly':12,'monthly':18,'yearly':5}}}"
 ```
 
 
@@ -897,7 +897,7 @@ usage: bzfs [-h] [--recursive]
     syntax: a non-negative integer, followed by an optional space, followed by a duration unit
     that is *one* of 'seconds', 'secs', 'minutes', 'mins', 'hours', 'days',
     'weeks', 'months', 'years', followed by an optional space, followed by the word 'ago'.
-    Examples: '0secs ago', '45 mins ago', '48hours ago', '90days ago', '12weeksago'.
+    Examples: '0secs ago', '40 mins ago', '36hours ago', '90days ago', '12weeksago'.
 
     * Note: This option compares the specified time against the standard ZFS 'creation' time
     property of the snapshot (which is a UTC Unix time in integer seconds), rather than against a
@@ -978,17 +978,17 @@ usage: bzfs [-h] [--recursive]
     the UNION of all results. This option can be specified multiple times and serves as a
     separator between groups. Example:
 
-    Delete all minutely snapshots older than 45 minutes, but ensure that the latest 45 minutely
+    Delete all minutely snapshots older than 40 minutes, but ensure that the latest 40 minutely
     snapshots (per dataset) are retained regardless of creation time. Additionally, delete all
-    hourly snapshots older than 48 hours, but ensure that the latest 48 hourly snapshots (per
+    hourly snapshots older than 36 hours, but ensure that the latest 36 hourly snapshots (per
     dataset) are retained regardless of creation time. Additionally, delete all daily snapshots
     older than 31 days, but ensure that the latest 31 daily snapshots (per dataset) are retained
     regardless of creation time: `bzfs dummy tank2/boo/bar --dryrun --recursive
     --skip-replication --delete-dst-snapshots --include-snapshot-regex '.*_minutely'
-    --include-snapshot-times-and-ranks notime 'all except latest 45'
-    --include-snapshot-times-and-ranks 'anytime..45 minutes ago' --new-snapshot-filter-group
+    --include-snapshot-times-and-ranks notime 'all except latest 40'
+    --include-snapshot-times-and-ranks 'anytime..40 minutes ago' --new-snapshot-filter-group
     --include-snapshot-regex '.*_hourly' --include-snapshot-times-and-ranks notime 'all
-    except latest 48' --include-snapshot-times-and-ranks 'anytime..48 hours ago'
+    except latest 36' --include-snapshot-times-and-ranks 'anytime..36 hours ago'
     --new-snapshot-filter-group --include-snapshot-regex '.*_daily'
     --include-snapshot-times-and-ranks notime 'all except latest 31'
     --include-snapshot-times-and-ranks 'anytime..31 days ago'`
@@ -1042,11 +1042,11 @@ usage: bzfs [-h] [--recursive]
 *  Creation periods that specify a schedule for when new snapshots shall be created on src within
     the selected datasets. Has the same format as --delete-dst-snapshots-except-periods.
 
-    Example: `"{'prod': {'onsite': {'secondly': 45, 'minutely': 45, 'hourly': 48,
-    'daily': 31, 'weekly': 26, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
-    0, 'minutely': 0, 'hourly': 48, 'daily': 31, 'weekly': 26, 'monthly': 18,
-    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 48, 'daily':
-    31, 'weekly': 26, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
+    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
+    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
+    0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18,
+    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily':
+    31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
     42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
     logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots
     every minute, hourly snapshots every hour, and so on. It will also create snapshots for the
@@ -1420,15 +1420,15 @@ usage: bzfs [-h] [--recursive]
     unexpected surprises, make sure to carefully specify ALL snapshot names and periods that shall
     be retained, in combination with --dryrun.
 
-    Example: `"{'prod': {'onsite': {'secondly': 45, 'minutely': 45, 'hourly': 48,
-    'daily': 31, 'weekly': 26, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
-    0, 'minutely': 0, 'hourly': 48, 'daily': 31, 'weekly': 26, 'monthly': 18,
-    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 48, 'daily':
-    31, 'weekly': 26, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
+    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
+    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
+    0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18,
+    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily':
+    31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
     42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
-    logical target 'onsite', retain secondly snapshots that were created less than 45 seconds
-    ago, yet retain the latest 45 secondly snapshots regardless of creation time. Analog for the
-    latest 45 minutely snapshots, latest 48 hourly snapshots, etc. It will also retain snapshots
+    logical target 'onsite', retain secondly snapshots that were created less than 40 seconds
+    ago, yet retain the latest 40 secondly snapshots regardless of creation time. Analog for the
+    latest 40 minutely snapshots, latest 36 hourly snapshots, etc. It will also retain snapshots
     for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. In addition,
     within the 'test' organization, it will retain snapshots that are created every 12 hours and
     every week as specified, and name them as being intended for the 'offsite' replication

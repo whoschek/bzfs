@@ -108,25 +108,25 @@ org = "prod"
 # Uses snapshot names like 'prod_onsite_<timestamp>_daily', 'prod_onsite_<timestamp>_minutely', etc.:
 # src_snapshot_periods = {
 #     org: {
-#         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
-#         "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
-#         "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
+#         "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+#         "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+#         "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
 #     },
 #     "test": {
-#         "offsite": {"12hourly": 42, "weekly": 12},
+#         "offsite": {"12hourly": 14, "weekly": 12},
 #     },
 # }
 # src_snapshot_periods = {  # missing target name is ok
-#     org: {"": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
+#     org: {"": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5}}
 # }
 src_snapshot_periods = {
-    org: {"onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}}
+    org: {"onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5}}
 }
 
 
 # Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-periods:
 # dst_snapshot_periods = {
-#     org: {"onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
+#     org: {"onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
 # }
 N = 2  # multiply src_snapshot_periods by a factor N
 dst_snapshot_periods = {
@@ -138,7 +138,7 @@ dst_snapshot_periods = {
 # Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-periods:
 # src_bookmark_periods = {
 #     org: {
-#         "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5}
+#         "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5}
 #     }
 # }
 src_bookmark_periods = dst_snapshot_periods

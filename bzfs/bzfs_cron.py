@@ -91,10 +91,10 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              f"the empty string. Example: `{format_dict(dst_root_datasets_example)}`\n\n")
     src_snapshot_periods_example = {
         "prod": {
-            "onsite": {"secondly": 45, "minutely": 45, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18, "yearly": 5},
-            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18,
+            "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
                           "yearly": 5},
-            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 48, "daily": 31, "weekly": 26, "monthly": 18,
+            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
                           "yearly": 5}},
         "test": {
             "offsite": {"12hourly": 42, "weekly": 12},
@@ -106,8 +106,8 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
              "that no snapshots shall be retained (or even be created) for the given period.\n\n"
              f"Example: `{format_dict(src_snapshot_periods_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', create and then retain secondly snapshots that were created less "
-             "than 45 seconds ago, yet retain the latest 45 secondly snapshots regardless of creation time. Analog for "
-             "the latest 45 minutely snapshots, 48 hourly snapshots, etc. "
+             "than 40 seconds ago, yet retain the latest 40 secondly snapshots regardless of creation time. Analog for "
+             "the latest 40 minutely snapshots, 36 hourly snapshots, etc. "
              "It will also create and retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' "
              "organization. "
              "In addition, it will create and retain snapshots every 12 hours and every week for the 'test' organization, "
