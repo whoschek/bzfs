@@ -630,7 +630,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered "
              "non-periodic and is thus created immediately regardless of the creation time of any existing snapshot.\n\n"
              "The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command "
-             "line, using case-insensitive sort order, and using 'zfs snapshot -r' to the extent that this is compatible "
+             "line, using string sort order, and using 'zfs snapshot -r' to the extent that this is compatible "
              "with the actual results of the schedule and the actual results of the --{include|exclude}-dataset* pruning "
              "policy. The snapshots of all datasets that fit "
              "within the same single 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction group, and "
@@ -2363,7 +2363,7 @@ class Job:
 
         # Optionally, atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
         # The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
-        # using case-insensitive sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
+        # using string sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
         # --{include|exclude}-dataset* pruning policy. The snapshots of all datasets that fit within the same single
         # 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction group, and correspondingly have
         # identical 'createtxg' ZFS property (but not necessarily identical 'creation' ZFS time property as ZFS actually
@@ -2375,7 +2375,7 @@ class Job:
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
-            datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = self.find_datasets_to_snapshot(src_datasets)
+            datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = self.find_datasets_to_snapshot(sorted(src_datasets))
             basis_datasets_to_snapshot = datasets_to_snapshot.copy()  # shallow copy
             commands = {}
             for label, datasets in datasets_to_snapshot.items():
@@ -4070,12 +4070,12 @@ class Job:
         for lines in self.zfs_list_snapshots_in_parallel(src, cmd, sorted_datasets):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
-                while sorted_datasets[i] < dataset:  # Take snapshots for datasets whose snapshot stream is empty
-                    for label in labels:
-                        datasets_to_snapshot[label].append(sorted_datasets[i])
-                    i += 1
-                assert sorted_datasets[i] == dataset
-                i += 1
+                k = bisect.bisect_left(sorted_datasets, dataset, lo=i)  # first k where sorted_datasets[k] >= dataset
+                assert sorted_datasets[k] == dataset
+                datasets_without_snapshots = sorted_datasets[i:k]
+                for label in labels:  # Take snapshots for datasets whose snapshot stream is empty
+                    datasets_to_snapshot[label].extend(datasets_without_snapshots)
+                i = k + 1
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     (int(createtxg), int(creation), name[name.index("@") + 1 :])
                     for createtxg, creation, name in (line.split("\t", 2) for line in group)
@@ -4136,7 +4136,7 @@ class Job:
                 src_datasets_set.update(datasets)  # union
                 for dataset in datasets:
                     dataset_labels[dataset].append(label)
-        src_datasets = isorted(src_datasets_set)
+        src_datasets: List[str] = sorted(src_datasets_set)
 
         for src_dataset, snapshots_changed in self.zfs_get_snapshots_changed(src, src_datasets).items():
             if snapshots_changed == 0:

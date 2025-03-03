@@ -1018,15 +1018,15 @@ usage: bzfs [-h] [--recursive]
     snapshot.
 
     The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs
-    snapshot' command line, using case-insensitive sort order, and using 'zfs snapshot -r' to
-    the extent that this is compatible with the actual results of the schedule and the actual
-    results of the --{include|exclude}-dataset* pruning policy. The snapshots of all datasets
-    that fit within the same single 'zfs snapshot' CLI invocation will be taken within the same
-    ZFS transaction group, and correspondingly have identical 'createtxg' ZFS property (but not
-    necessarily identical 'creation' ZFS time property as ZFS actually provides no such
-    guarantee), and thus be consistent. Dataset names that can't fit into a single command line
-    are spread over multiple command line invocations, respecting the limits that the operating
-    system places on the maximum length of a single command line, per `getconf ARG_MAX`.
+    snapshot' command line, using string sort order, and using 'zfs snapshot -r' to the extent
+    that this is compatible with the actual results of the schedule and the actual results of the
+    --{include|exclude}-dataset* pruning policy. The snapshots of all datasets that fit within
+    the same single 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction
+    group, and correspondingly have identical 'createtxg' ZFS property (but not necessarily
+    identical 'creation' ZFS time property as ZFS actually provides no such guarantee), and thus
+    be consistent. Dataset names that can't fit into a single command line are spread over
+    multiple command line invocations, respecting the limits that the operating system places on
+    the maximum length of a single command line, per `getconf ARG_MAX`.
 
     Note: All bzfs functions including snapshot creation, replication, deletion, comparison, etc.
     happily work with any snapshots in any format and with any naming convention, even created or

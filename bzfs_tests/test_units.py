@@ -833,8 +833,8 @@ class TestHelperFunctions(unittest.TestCase):
     def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self):
         def run_filter(src_datasets, basis_src_datasets):
             assert set(src_datasets).issubset(set(basis_src_datasets))
-            src_datasets = list(isorted(src_datasets))
-            basis_src_datasets = list(isorted(basis_src_datasets))
+            src_datasets = list(sorted(src_datasets))
+            basis_src_datasets = list(sorted(basis_src_datasets))
             expected = self.root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(
                 src_datasets, basis_src_datasets
             )
@@ -905,6 +905,12 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertIsNone(run_filter(["kk"], basis_src_datasets))
         self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
         self.assertIsNone(run_filter(["hh"], basis_src_datasets))
+
+        # sorted()
+        basis_src_datasets = ["a", "a/b", "a/b/c", "a/B", "a/B/c", "a/D", "a/X", "a/X/c"]
+        self.assertListEqual(["a/D", "a/b"], run_filter(["a/b", "a/b/c", "a/D"], basis_src_datasets))
+        self.assertListEqual(["a/B", "a/D", "a/b"], run_filter(["a/B", "a/B/c", "a/b", "a/b/c", "a/D"], basis_src_datasets))
+        self.assertListEqual(["a/B", "a/D", "a/X"], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
 
     def test_validate_snapshot_name(self):
         bzfs.SnapshotLabel("foo_", "", "", "").validate_label("")
