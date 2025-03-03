@@ -159,7 +159,7 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
     replication from a primary to a secondary, this can also be the empty string. Example:
     `"{'nas': 'tank2/bak', 'bak-us-west-1.example.com': 'backups/bak001',
     'bak-eu-west-1.example.com': 'backups/bak999', 'archive.example.com': 'archives/zoo',
-    'secondary': ''}"`
+    'hotspare': ''}"`
 
 <!-- -->
 

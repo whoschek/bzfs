@@ -18,10 +18,10 @@
 
 import argparse
 import ast
+import logging
 import re
 import socket
 import subprocess
-import sys
 from collections import defaultdict
 from typing import Dict, List, Tuple
 
@@ -81,7 +81,7 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
         "bak-us-west-1.example.com": "backups/bak001",
         "bak-eu-west-1.example.com": "backups/bak999",
         "archive.example.com": "archives/zoo",
-        "secondary": "",
+        "hotspare": "",
     }
     parser.add_argument("--dst-root-datasets", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a root dataset located on that destination host. The root "
@@ -141,10 +141,12 @@ This tool is just a convenience wrapper around the `bzfs` CLI.
 sep = ","
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
+first_exception = None
 
 
 def main():
-    print("WARNING: For now, `bzfs_cron` is work-in-progress, and as such may still change in incompatible ways.")
+    configure_logging()
+    log.info("WARNING: For now, `bzfs_cron` is work-in-progress, and as such may still change in incompatible ways.")
     args, unknown_args = argument_parser().parse_known_args()  # forward all unknown args to `bzfs`
     src_snapshot_periods = ast.literal_eval(args.src_snapshot_periods)
     src_bookmark_periods = ast.literal_eval(args.src_bookmark_periods)
@@ -230,10 +232,18 @@ def main():
         if len(opts) > old_len_opts:
             run_cmd(["bzfs"] + opts)
 
+    if first_exception is not None:
+        raise first_exception
+
 
 def run_cmd(*params):
-    sys.stdout.flush()
-    subprocess.run(*params, text=True, check=True)
+    try:
+        subprocess.run(*params, stdin=DEVNULL, text=True, check=True)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+        global first_exception
+        if first_exception is None:
+            first_exception = e
+        log.error("%s", str(e))  # log exception and keep on trucking
 
 
 def replication_filter_opts(
@@ -245,7 +255,7 @@ def replication_filter_opts(
     def ninfix(s: str) -> str:
         return s + "_" if s else ""
 
-    print(f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+    log.info(f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
     opts = []
     for org, target_periods in dst_snapshot_periods.items():
         for target, periods in target_periods.items():
@@ -274,7 +284,7 @@ def skip_datasets_with_nonexisting_dst_pool(root_dataset_pairs):
         if zpool(dst) in existing_pools:
             results.append((src, dst))
         else:
-            print("[W]: Skipping dst dataset for which dst pool does not exist: " + dst)
+            log.warning("Skipping dst dataset for which dst pool does not exist: " + dst)
     return results
 
 
@@ -287,6 +297,20 @@ def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
 
 def format_dict(dictionary) -> str:
     return f'"{dictionary}"'
+
+
+def configure_logging():
+    class LevelFormatter(logging.Formatter):
+        def format(self, record):
+            record.level_initial = record.levelname[0]  # Use first letter of the level name
+            return super().format(record)
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(LevelFormatter(fmt="%(asctime)s [%(level_initial)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+    global log
+    log = logging.getLogger(prog_name)
+    log.setLevel(logging.INFO)
+    log.addHandler(handler)
 
 
 #############################################################################
