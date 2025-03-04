@@ -193,10 +193,6 @@ extra_args = []
 # ... and so on (include all other options from bzfs --help here too)
 
 
-# daemon_replication_frequency = "minutely"
-# daemon_replication_frequency = "secondly"
-daemon_replication_frequency = "10secondly"
-
 cmd = ["bzfs_cron"]
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
@@ -205,7 +201,6 @@ cmd += [f"--dst-root-datasets={dst_root_datasets}"]
 cmd += [f"--src-snapshot-periods={src_snapshot_periods}"]
 cmd += [f"--src-bookmark-periods={src_bookmark_periods}"]
 cmd += [f"--dst-snapshot-periods={dst_snapshot_periods}"]
-cmd += [f"--daemon-replication-frequency={daemon_replication_frequency}"]
 cmd += [f"--ssh-src-port={ssh_src_port}", f"--ssh-dst-port={ssh_dst_port}"]
 cmd += extra_args + unknown_args + ["--"] + root_dataset_pairs
 subprocess.run(cmd, text=True, check=True)
