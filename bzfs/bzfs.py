@@ -2376,6 +2376,7 @@ class Job:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = self.find_datasets_to_snapshot(src_datasets)
+            datasets_to_snapshot = {label: datasets for label, datasets in datasets_to_snapshot.items() if len(datasets) > 0}
             basis_datasets_to_snapshot = datasets_to_snapshot.copy()  # shallow copy
             commands = {}
             for label, datasets in datasets_to_snapshot.items():
