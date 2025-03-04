@@ -29,7 +29,7 @@ ways.
 This program is a convenience wrapper around [bzfs](README.md) that automates periodic
 activities such as creating snapshots, replicating and pruning, on multiple source hosts and
 multiple destination hosts, using a single shared [deployment specification
-file](bzfs_tests/bzfs_cronjob_example.py).
+file](bzfs_tests/bzfs_cronjob_example.py) aka 'cronjob file'.
 
 Typically, a cron job on the source host runs `bzfs_cron` periodically to create new snapshots
 (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via
@@ -40,7 +40,45 @@ recently created snapshots from the source to the destination (via --replicate).
 these periodic activities can vary by activity, and is typically every second, minute, hour, day,
 week, month and/or year (or multiples thereof).
 
-This tool is just a convenience wrapper around the `bzfs` CLI.
+Edit the deployment specification file (aka python cronjob file) in a central place (e.g.
+versioned in a git repo), then copy the (very same) shared file onto the source host and all
+destination hosts, and add crontab entries or systemd timers or similar, along these lines:
+
+* crontab on source host:
+
+`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --create-src-snapshots
+--prune-src-snapshots --prune-src-bookmarks`
+
+* crontab on destination host(s):
+
+`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --replicate --prune-dst-snapshots`
+
+### High Frequency Replication (Experimental Feature)
+
+To create snapshots every second, and to replicate every 10 seconds, use the --daemon-* options
+to eliminate startup overhead, in combination with splitting the crontab entry (or better: high
+frequency systemd timer) into multiple processes, using pull replication mode, along these lines:
+
+* crontab on source host:
+
+`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --create-src-snapshots
+--daemon-lifetime=86400seconds`
+
+`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --prune-src-snapshots
+--prune-src-bookmarks`
+
+* crontab on destination host(s):
+
+`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --replicate
+--daemon-replication-frequency=10secondly --daemon-lifetime=86400seconds`
+
+`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --prune-dst-snapshots`
+
+The daemon processes loop, process events and sleep between events, and finally exit after 86400
+seconds. The daemons will subsequently be auto-restarted by 'cron', or earlier if they fail.
+While the daemons are running 'cron' will attempt to start new (unnecessary) daemons but this is
+benign as these new processes immediately exit with a message like this: "Exiting as same
+previous periodic job is still running without completion yet."
 
 <!-- END DESCRIPTION SECTION -->
 
