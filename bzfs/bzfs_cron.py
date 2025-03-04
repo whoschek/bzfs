@@ -215,7 +215,7 @@ def main():
                 opts += [src, dst]
             if len(opts) > old_len_opts:
                 run_cmd(["bzfs"] + daemon_opts + opts)
-        else:  # push mode
+        else:  # push mode (experimental feature)
             assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
             host_targets = defaultdict(list)
             for org, targetperiods in dst_snapshot_periods.items():
