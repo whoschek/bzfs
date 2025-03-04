@@ -4075,9 +4075,7 @@ class Job:
                 while sorted_datasets[i] < dataset:
                     i += 1
                 assert sorted_datasets[i] == dataset
-                datasets_without_snapshots = sorted_datasets[k:i]
-                for label in labels:  # Take snapshots for datasets whose snapshot stream is empty
-                    datasets_to_snapshot[label].extend(datasets_without_snapshots)
+                datasets_without_snapshots = sorted_datasets[k:i]  # Take snaps for datasets whose snapshot stream is empty
                 i += 1
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     (int(createtxg), int(creation), name[name.index("@") + 1 :])
@@ -4085,6 +4083,7 @@ class Job:
                 )
                 snapshot_names = [snapshot[-1] for snapshot in snapshots]
                 for label in labels:
+                    datasets_to_snapshot[label].extend(datasets_without_snapshots)
                     start = label.prefix + label.infix
                     end = label.suffix
                     minlen = len(label.prefix) + len(label.infix) + len(label.suffix)
@@ -4861,7 +4860,7 @@ class Job:
 
             while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
                 curr_future: Future = fifo_buffer.popleft()
-                next_future: Future = next(iterator, None)
+                next_future: Future = next(iterator, None)  # causes the next CLI call to be submitted
                 if next_future is not None:
                     fifo_buffer.append(next_future)
                 yield curr_future.result()  # blocks until CLI returns
