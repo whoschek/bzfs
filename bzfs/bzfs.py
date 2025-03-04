@@ -4071,12 +4071,14 @@ class Job:
         for lines in self.zfs_list_snapshots_in_parallel(src, cmd, sorted_datasets):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
-                k = bisect.bisect_left(sorted_datasets, dataset, lo=i)  # first k where sorted_datasets[k] >= dataset
-                assert sorted_datasets[k] == dataset
-                datasets_without_snapshots = sorted_datasets[i:k]
+                k = i
+                while sorted_datasets[i] < dataset:
+                    i += 1
+                assert sorted_datasets[i] == dataset
+                datasets_without_snapshots = sorted_datasets[k:i]
                 for label in labels:  # Take snapshots for datasets whose snapshot stream is empty
                     datasets_to_snapshot[label].extend(datasets_without_snapshots)
-                i = k + 1
+                i += 1
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     (int(createtxg), int(creation), name[name.index("@") + 1 :])
                     for createtxg, creation, name in (line.split("\t", 2) for line in group)
@@ -4857,7 +4859,7 @@ class Job:
             # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
             fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))
 
-            while fifo_buffer:
+            while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
                 curr_future: Future = fifo_buffer.popleft()
                 next_future: Future = next(iterator, None)
                 if next_future is not None:
