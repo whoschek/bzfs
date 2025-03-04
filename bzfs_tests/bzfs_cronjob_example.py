@@ -178,6 +178,9 @@ extra_args = []
 # extra_args += ["--weekly_hour=2"]
 # extra_args += ["--weekly_minute=0"]
 # ... and so on (include all other options from bzfs --help here too)
+# extra_args += ["--daemon-replication-frequency=minutely"]
+# extra_args += ["--daemon-replication-frequency=secondly"]
+# extra_args += ["--daemon-replication-frequency=10secondly"]
 
 
 cmd = ["bzfs_cron"]

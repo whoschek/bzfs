@@ -288,7 +288,7 @@ def replication_filter_opts(
     def ninfix(s: str) -> str:
         return s + "_" if s else ""
 
-    log.info(f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+    log.info("%s", f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
     opts = []
     for org, target_periods in dst_snapshot_periods.items():
         for target, periods in target_periods.items():
@@ -317,7 +317,7 @@ def skip_datasets_with_nonexisting_dst_pool(root_dataset_pairs):
         if zpool(dst) in existing_pools:
             results.append((src, dst))
         else:
-            log.warning("Skipping dst dataset for which dst pool does not exist: " + dst)
+            log.warning("Skipping dst dataset for which dst pool does not exist: %s", dst)
     return results
 
 
