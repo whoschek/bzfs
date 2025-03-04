@@ -423,7 +423,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots in parallel across datasets and serially within a dataset. All child datasets of a dataset "
              "may be processed in parallel. For consistency, processing of a dataset only starts after processing of "
              "all its ancestor datasets has completed. Further, when a thread is ready to start processing another "
-             "dataset, it chooses the next dataset wrt. case-insensitive sort order from the datasets that are "
+             "dataset, it chooses the next dataset wrt. string sort order from the datasets that are "
              "currently available for start of processing. Initially, only the roots of the selected dataset subtrees "
              "are available for start of processing. The degree of parallelism is configurable with the --threads "
              "option (see below).\n\n")
@@ -2335,7 +2335,7 @@ class Job:
 
     def run_task(self) -> None:
         def filter_src_datasets() -> List[str]:  # apply --{include|exclude}-dataset policy
-            return isorted(self.filter_datasets(src, basis_src_datasets)) if src_datasets is None else src_datasets
+            return sorted(self.filter_datasets(src, basis_src_datasets)) if src_datasets is None else src_datasets
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
@@ -2359,7 +2359,7 @@ class Job:
                     "snapshots_changed": int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 }
                 basis_src_datasets.append(src_dataset)
-            basis_src_datasets = isorted(basis_src_datasets)
+            basis_src_datasets = sorted(basis_src_datasets)
 
         # Optionally, atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
         # The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
@@ -2375,7 +2375,7 @@ class Job:
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
-            datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = self.find_datasets_to_snapshot(sorted(src_datasets))
+            datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = self.find_datasets_to_snapshot(src_datasets)
             basis_datasets_to_snapshot = datasets_to_snapshot.copy()  # shallow copy
             commands = {}
             for label, datasets in datasets_to_snapshot.items():
@@ -2446,8 +2446,8 @@ class Job:
         if basis_dst_datasets is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
             basis_dst_datasets = ""
-        basis_dst_datasets = isorted(basis_dst_datasets.splitlines())
-        dst_datasets = isorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
+        basis_dst_datasets = sorted(basis_dst_datasets.splitlines())
+        dst_datasets = sorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset* policy. Do not recurse without --recursive. With --recursive,
@@ -2466,8 +2466,8 @@ class Job:
                 {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
             )
             self.delete_datasets(dst, to_delete)
-            dst_datasets = isorted(set(dst_datasets).difference(to_delete))
-            basis_dst_datasets = isorted(set(basis_dst_datasets).difference(to_delete))
+            dst_datasets = sorted(set(dst_datasets).difference(to_delete))
+            basis_dst_datasets = sorted(set(basis_dst_datasets).difference(to_delete))
 
         # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
         # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
@@ -2575,14 +2575,14 @@ class Job:
                 if run == 0:
                     # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
                     cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                    for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(dst, cmd, isorted(orphans)):
+                    for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(dst, cmd, sorted(orphans)):
                         if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                             replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
                         datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
                         dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
                 else:
                     self.delete_datasets(dst, orphans)
-                    dst_datasets = isorted(set(dst_datasets).difference(orphans))
+                    dst_datasets = sorted(set(dst_datasets).difference(orphans))
 
         if p.compare_snapshot_lists and not failed:
             log.info("--compare-snapshot-lists: %s", task_description)
@@ -3617,7 +3617,7 @@ class Job:
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
         p, log = self.params, self.params.log
         last_deleted_dataset = DONT_SKIP_DATASET
-        for dataset in isorted(datasets):
+        for dataset in sorted(datasets):
             if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
                 continue
             log.info(p.dry("Deleting dataset tree: %s"), f"{dataset} ...")
@@ -4464,7 +4464,7 @@ class Job:
         and parallel execution. Assumes that the input dataset list is sorted. All children of a dataset may be
         processed in parallel. For consistency (even during parallel dataset replication/deletion), processing of a
         dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is
-        ready to start processing another dataset, it chooses the "smallest" dataset wrt. case-insensitive sort order
+        ready to start processing another dataset, it chooses the "smallest" dataset wrt. string sort order
         from the datasets that are currently available for start of processing. Initially, only the roots of the
         selected dataset subtrees are available for start of processing."""
         p, log = self.params, self.params.log
@@ -4477,7 +4477,7 @@ class Job:
                 elapsed_nanos = time.time_ns() - start_time_nanos
                 log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
 
-        def build_dataset_tree_and_find_roots() -> List[Tuple[str, str, Tree]]:
+        def build_dataset_tree_and_find_roots() -> List[Tuple[str, Tree]]:
             """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
             tree: Tree = self.build_dataset_tree(datasets)  # tree consists of nested dictionaries
             skip_dataset = DONT_SKIP_DATASET
@@ -4489,11 +4489,11 @@ class Job:
                 children = tree
                 for component in dataset.split("/"):
                     children = children[component]
-                roots.append((dataset.casefold(), dataset, children))
+                roots.append((dataset, children))
             return roots
 
-        priority_queue: List[Tuple[str, str, Tree]] = build_dataset_tree_and_find_roots()
-        heapq.heapify(priority_queue)  # same order as isorted(), i.e. sorted by dataset.casefold()
+        priority_queue: List[Tuple[str, Tree]] = build_dataset_tree_and_find_roots()
+        heapq.heapify(priority_queue)  # same order as sorted()
         log.trace("Retry policy: %s", p.retry_policy)
         max_workers = min(self.max_workers[p.src.location], self.max_workers[p.dst.location])
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -4503,8 +4503,8 @@ class Job:
             def submit_datasets() -> bool:
                 while len(priority_queue) > 0 and len(todo_futures) < max_workers:
                     # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
-                    node: Tuple[str, str, Tree] = heapq.heappop(priority_queue)
-                    _, dataset, children = node
+                    node: Tuple[str, Tree] = heapq.heappop(priority_queue)
+                    dataset, children = node
                     nonlocal submitted
                     submitted += 1
                     tid = f"{submitted}/{len(datasets)}"
@@ -4517,7 +4517,7 @@ class Job:
             while submit_datasets():
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                 for done_future in done_futures:
-                    _, dataset, children = done_future.node
+                    dataset, children = done_future.node
                     try:
                         no_skip: bool = done_future.result()  # does not block as processing has already completed
                     except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
@@ -4532,7 +4532,7 @@ class Job:
                     if no_skip and children:  # make child datasets available for start of processing ...
                         for child, grandchildren in children.items():  # as processing of parent has now completed
                             child = f"{dataset}/{child}"
-                            heapq.heappush(priority_queue, (child.casefold(), child, grandchildren))
+                            heapq.heappush(priority_queue, (child, grandchildren))
             assert len(priority_queue) == 0
             return failed
 
@@ -5382,11 +5382,6 @@ def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
 def replace_in_lines(lines: List[str], old: str, new: str) -> None:
     for i in range(len(lines)):
         lines[i] = lines[i].replace(old, new)
-
-
-def isorted(iterable: Iterable[str], reverse: bool = False) -> List[str]:
-    """case-insensitive sort (A < a < B < b and so on)."""
-    return sorted(iterable, key=str.casefold, reverse=reverse)
 
 
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:

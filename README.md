@@ -688,11 +688,10 @@ usage: bzfs [-h] [--recursive]
     replicates snapshots in parallel across datasets and serially within a dataset. All child
     datasets of a dataset may be processed in parallel. For consistency, processing of a dataset
     only starts after processing of all its ancestor datasets has completed. Further, when a
-    thread is ready to start processing another dataset, it chooses the next dataset wrt.
-    case-insensitive sort order from the datasets that are currently available for start of
-    processing. Initially, only the roots of the selected dataset subtrees are available for start
-    of processing. The degree of parallelism is configurable with the --threads option (see
-    below).
+    thread is ready to start processing another dataset, it chooses the next dataset wrt. string
+    sort order from the datasets that are currently available for start of processing. Initially,
+    only the roots of the selected dataset subtrees are available for start of processing. The
+    degree of parallelism is configurable with the --threads option (see below).
 
 
 

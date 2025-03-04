@@ -35,7 +35,7 @@ from typing import Optional, Dict, List
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
-from bzfs.bzfs import find_match, getenv_any, isorted, Remote, round_datetime_up_to_duration_multiple
+from bzfs.bzfs import find_match, getenv_any, Remote, round_datetime_up_to_duration_multiple
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
@@ -1277,7 +1277,7 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 class TestBuildTree(unittest.TestCase):
     def assert_keys_sorted(self, tree: Dict[str, Optional[Dict]]):
         keys = list(tree.keys())
-        self.assertEqual(keys, isorted(keys), f"Keys are not sorted: {keys}")
+        self.assertEqual(keys, sorted(keys), f"Keys are not sorted: {keys}")
         for value in tree.values():
             if isinstance(value, dict):
                 self.assert_keys_sorted(value)
