@@ -3,4 +3,4 @@
 set -e
 cd $(realpath $(dirname "$0"))
 python3 -m bzfs_docs.update_readme bzfs/bzfs.py README.md
-python3 -m bzfs_docs.update_readme bzfs/bzfs_cron.py README_bzfs_cron.md
+python3 -m bzfs_docs.update_readme bzfs/bzfs_jobrunner.py README_bzfs_jobrunner.md

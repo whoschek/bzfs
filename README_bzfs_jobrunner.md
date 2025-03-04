@@ -19,39 +19,39 @@
  under the License.
 -->
 
-# bzfs_cron
+# bzfs_jobrunner
 
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN DESCRIPTION SECTION -->
-WARNING: For now, `bzfs_cron` is work-in-progress, and as such may still change in incompatible
-ways.
+WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in
+incompatible ways.
 
 This program is a convenience wrapper around [bzfs](README.md) that automates periodic
 activities such as creating snapshots, replicating and pruning, on multiple source hosts and
-multiple destination hosts, using a single shared [deployment specification
-file](bzfs_tests/bzfs_cronjob_example.py) aka 'cronjob file'.
+multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py)
+file.
 
-Typically, a cron job on the source host runs `bzfs_cron` periodically to create new snapshots
-(via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via
---prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on the destination
-host runs `bzfs_cron` periodically to prune outdated destination snapshots (via
---prune-dst-snapshots). Yet another cron job runs `bzfs_cron` periodically to replicate the
-recently created snapshots from the source to the destination (via --replicate). The frequency of
-these periodic activities can vary by activity, and is typically every second, minute, hour, day,
-week, month and/or year (or multiples thereof).
+Typically, a cron job on the source host runs `bzfs_jobrunner` periodically to create new
+snapshots (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source
+(via --prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on the
+destination host runs `bzfs_jobrunner` periodically to prune outdated destination snapshots (via
+--prune-dst-snapshots). Yet another cron job runs `bzfs_jobrunner` periodically to replicate
+the recently created snapshots from the source to the destination (via --replicate). The
+frequency of these periodic activities can vary by activity, and is typically every second,
+minute, hour, day, week, month and/or year (or multiples thereof).
 
-Edit the deployment specification file (aka python cronjob file) in a central place (e.g.
-versioned in a git repo), then copy the (very same) shared file onto the source host and all
-destination hosts, and add crontab entries or systemd timers or similar, along these lines:
+Edit the jobconfig file in a central place (e.g. versioned in a git repo), then copy the (very
+same) shared file onto the source host and all destination hosts, and add crontab entries or
+systemd timers or similar, along these lines:
 
 * crontab on source host:
 
-`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --create-src-snapshots
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots
 --prune-src-snapshots --prune-src-bookmarks`
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --replicate --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate --prune-dst-snapshots`
 
 ### High Frequency Replication (Experimental Feature)
 
@@ -61,24 +61,24 @@ frequency systemd timer) into multiple processes, using pull replication mode, a
 
 * crontab on source host:
 
-`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --create-src-snapshots
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots
 --daemon-lifetime=86400seconds`
 
-`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --prune-src-snapshots
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-snapshots
 --prune-src-bookmarks`
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --replicate
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate
 --daemon-replication-frequency=10secondly --daemon-lifetime=86400seconds`
 
-`* * * * * testuser /etc/bzfs/bzfs_cronjob_example.py --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
 
-The daemon processes loop, process events and sleep between events, and finally exit after 86400
-seconds. The daemons will subsequently be auto-restarted by 'cron', or earlier if they fail.
-While the daemons are running 'cron' will attempt to start new (unnecessary) daemons but this is
-benign as these new processes immediately exit with a message like this: "Exiting as same
-previous periodic job is still running without completion yet."
+The daemon processes loop, process time events and sleep between events, and finally exit after
+86400 seconds. The daemons will subsequently be auto-restarted by 'cron', or earlier if they
+fail. While the daemons are running 'cron' will attempt to start new (unnecessary) daemons but
+this is benign as these new processes immediately exit with a message like this: "Exiting as same
+previous periodic job is still running without completion yet"
 
 <!-- END DESCRIPTION SECTION -->
 
@@ -90,19 +90,20 @@ previous periodic job is still running without completion yet."
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
-usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
-                 [--prune-src-snapshots] [--prune-src-bookmarks]
-                 [--prune-dst-snapshots] [--src-host STRING]
-                 [--dst-hosts DICT_STRING]
-                 [--dst-root-datasets DICT_STRING]
-                 [--src-snapshot-periods DICT_STRING]
-                 [--src-bookmark-periods DICT_STRING]
-                 [--dst-snapshot-periods DICT_STRING]
-                 [--src-user STRING] [--dst-user STRING]
-                 [--daemon-replication-frequency STRING]
-                 [--daemon-prune-src-frequency STRING]
-                 [--daemon-prune-dst-frequency STRING]
-                 SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
+usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
+                      [--prune-src-snapshots] [--prune-src-bookmarks]
+                      [--prune-dst-snapshots] [--src-host STRING]
+                      [--dst-hosts DICT_STRING]
+                      [--dst-root-datasets DICT_STRING]
+                      [--src-snapshot-periods DICT_STRING]
+                      [--src-bookmark-periods DICT_STRING]
+                      [--dst-snapshot-periods DICT_STRING]
+                      [--src-user STRING] [--dst-user STRING]
+                      [--daemon-replication-frequency STRING]
+                      [--daemon-prune-src-frequency STRING]
+                      [--daemon-prune-dst-frequency STRING]
+                      SRC_DATASET DST_DATASET
+                      [SRC_DATASET DST_DATASET ...]
 ```
 <!-- END HELP OVERVIEW SECTION -->
 
@@ -181,8 +182,8 @@ usage: bzfs_cron [-h] [--create-src-snapshots] [--replicate]
     network hostname to which the snapshot shall be replicated. Also, given a snapshot name and
     its own hostname, a destination host can determine if it shall 'pull' replicate the given
     snapshot from the --src-host, or if the snapshot is intended for another target host, in
-    which case it skips the snapshot. A destination host running bzfs_cron will 'pull' snapshots
-    for all targets that map to its own hostname.
+    which case it skips the snapshot. A destination host running bzfs_jobrunner will 'pull'
+    snapshots for all targets that map to its own hostname.
 
 <!-- -->
 

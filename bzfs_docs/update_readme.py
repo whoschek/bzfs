@@ -20,7 +20,7 @@ import sys
 import subprocess
 
 from bzfs import bzfs
-from bzfs import bzfs_cron
+from bzfs import bzfs_jobrunner
 from bzfs.bzfs import find_match
 
 
@@ -127,7 +127,9 @@ def main():
     )
     os.environ["COLUMNS"] = "72"
     help_msg = (
-        bzfs.argument_parser().format_usage() if "_cron" not in bzfs_py_file else bzfs_cron.argument_parser().format_usage()
+        bzfs.argument_parser().format_usage()
+        if "_jobrunner" not in bzfs_py_file
+        else bzfs_jobrunner.argument_parser().format_usage()
     )
     help_msg = ["```\n"] + help_msg.splitlines(keepends=True) + ["```\n"]
     readme = readme[: begin_help_overview_idx + 1] + help_msg + readme[end_help_overview_idx:]

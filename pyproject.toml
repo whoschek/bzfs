@@ -68,7 +68,7 @@ dev = [  # for development only
 
 [project.scripts]
 bzfs = "bzfs.bzfs:main"
-bzfs_cron = "bzfs.bzfs_cron:main"
+bzfs_jobrunner = "bzfs.bzfs_jobrunner:main"
 bzfs-test = "bzfs_tests.test_bzfs:main"
 
 [tool.setuptools.packages.find]

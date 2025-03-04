@@ -20,13 +20,13 @@ import sys
 
 parser = argparse.ArgumentParser(
     description=f"""
-Periodic replica management job, using an "Infrastructure as Code" approach, in the form of a CLI that generates deployment 
-specific parameters and passes the parameters to `bzfs_cron`, along with all unknown CLI arguments.
+Periodic replica management jobconfig file, using an "Infrastructure as Code" approach, in the form of a CLI that generates 
+deployment specific parameters and passes the parameters to `bzfs_jobrunner`, along with all unknown CLI arguments.
 
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
 """
 )
-_, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_cron`
+_, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`
 unknown_args = unknown_args if len(unknown_args) > 0 else ["--create-src-snapshots"]
 
 
@@ -183,7 +183,7 @@ extra_args = []
 # extra_args += ["--daemon-replication-frequency=10secondly"]
 
 
-cmd = ["bzfs_cron"]
+cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
