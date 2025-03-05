@@ -59,7 +59,7 @@ source host and all destination hosts, and add crontab entries or systemd timers
 
 ### High Frequency Replication (Experimental Feature)
 
-To create snapshots every second, and to replicate every 10 seconds, use the --daemon-* options to 
+To create snapshots every second, and to replicate every second, use the --daemon-* options to 
 eliminate startup overhead, in combination with splitting the crontab entry (or better: high frequency systemd timer) into 
 multiple processes, using pull replication mode, along these lines:
 
@@ -71,7 +71,9 @@ multiple processes, using pull replication mode, along these lines:
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate --daemon-replication-frequency=10secondly --daemon-lifetime=86400seconds`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate --daemon-replication-frequency=secondly --daemon-lifetime=86400seconds`
+
+`# * * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate --daemon-replication-frequency=5secondly --daemon-lifetime=86400seconds`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
 
