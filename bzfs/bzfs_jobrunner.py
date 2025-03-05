@@ -172,6 +172,7 @@ start new (unnecessary) daemons but this is benign as these new processes immedi
     # fmt: on
 
 
+still_running_status = 4
 sep = ","
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
@@ -266,7 +267,8 @@ def main():
         if len(opts) > old_len_opts:
             run_cmd(["bzfs"] + opts)
 
-    if first_exception is not None:
+    ex = first_exception
+    if ex is not None and ((not isinstance(ex, subprocess.CalledProcessError)) or ex.returncode != still_running_status):
         raise first_exception
 
 

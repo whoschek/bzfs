@@ -2289,7 +2289,7 @@ class LocalTestCase(BZFSTestCase):
             fcntl.flock(lock_file_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
             try:
                 # job will fail because the lock is already held
-                self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=die_status)
+                self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=bzfs.still_running_status)
                 self.assertTrue(os.path.exists(lock_file))
             finally:
                 bzfs.unlink_missing_ok(lock_file)  # avoid accumulation of stale lock files

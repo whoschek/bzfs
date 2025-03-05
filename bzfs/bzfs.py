@@ -87,6 +87,7 @@ __version__ = "1.10.0-dev"
 prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
+still_running_status = 4
 min_python_version = (3, 7)
 if sys.version_info < min_python_version:
     print(f"ERROR: {prog_name} requires Python version >= {'.'.join(map(str, min_python_version))}!")
@@ -2072,7 +2073,7 @@ class Job:
                         except BlockingIOError as e:
                             msg = "Exiting as same previous periodic job is still running without completion yet"
                             log.error(f"{msg} per %s", lock_file)
-                            raise SystemExit(die_status) from e
+                            raise SystemExit(still_running_status) from e
                         try:
                             # On CTRL-C send signal to the entire process group to also terminate child processes
                             old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: self.terminate())
