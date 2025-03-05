@@ -1689,6 +1689,7 @@ class Params:
                tuple(self.args.include_dataset_regex), tuple(self.args.exclude_dataset_regex),
                tuple(tuple(f) for f in self.snapshot_filters), self.args.skip_replication, self.args.create_src_snapshots,
                self.args.create_src_snapshots_periods, self.args.create_src_snapshots_timeformat,
+               self.create_src_snapshots_config.anchors,
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
                self.args.delete_empty_dst_datasets,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
@@ -2264,7 +2265,7 @@ class Job:
             p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=suffix),
         )
         if len(p.include_dataset_regexes) == 0:
-            p.include_dataset_regexes = compile_regexes([".*"], suffix=suffix)
+            p.include_dataset_regexes = [(re.compile(".*"), False)]
 
         self.detect_available_programs()
 
@@ -2431,9 +2432,8 @@ class Job:
             )
             log.info(
                 p.dry("Replication done: %s"),
-                task_description
-                + f" [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots "
-                f"within {len(src_datasets)} datasets; took {human_readable_duration(time.time_ns() - start_time_nanos)}]",
+                f"{task_description} [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots"
+                f" within {len(src_datasets)} datasets; took {human_readable_duration(time.time_ns() - start_time_nanos)}]",
             )
 
         if failed or not (
@@ -6006,21 +6006,8 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or dataset.endswith("/..")
         or "/./" in dataset
         or "/../" in dataset
-        or "@" in dataset
-        or "#" in dataset
         or '"' in dataset
-        or "'" in dataset
-        or "`" in dataset
-        or "%" in dataset
-        or "$" in dataset
-        or "^" in dataset
-        or "&" in dataset
-        or "*" in dataset
-        or "+" in dataset
-        or "=" in dataset
-        or "|" in dataset
-        or "," in dataset
-        or "\\" in dataset
+        or any(char in "'@#`%$^&*+=|,\\" for char in dataset)
         or any(char.isspace() and char != " " for char in dataset)
         or not dataset[0].isalpha()
     ):
