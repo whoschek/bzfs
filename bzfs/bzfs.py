@@ -2346,12 +2346,14 @@ class Job:
         basis_src_datasets = []
         self.src_properties = {}
         if not self.is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
+            snaps_changed_avail = (
+                not p.create_src_snapshots_config.skip_create_src_snapshots
+            ) and self.is_snapshots_changed_zfs_property_available(src)
             props = "volblocksize,recordsize,name"
-            props = "snapshots_changed," + props if self.is_snapshots_changed_zfs_property_available(src) else props
+            props = "snapshots_changed," + props if snaps_changed_avail else props
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
             )
-            snaps_changed_avail = self.is_snapshots_changed_zfs_property_available(src)
             for line in (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines():
                 cols = line.split("\t")
                 snapshots_changed, volblocksize, recordsize, src_dataset = cols if snaps_changed_avail else ["-"] + cols
