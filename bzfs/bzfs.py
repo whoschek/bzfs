@@ -4141,9 +4141,14 @@ class Job:
                 src_datasets_set.update(datasets)  # union
                 for dataset in datasets:
                     dataset_labels[dataset].append(label)
-        src_datasets: List[str] = sorted(src_datasets_set)
 
-        for src_dataset, snapshots_changed in self.zfs_get_snapshots_changed(src, src_datasets).items():
+        src_datasets: List[str] = sorted(src_datasets_set)
+        if p.create_src_snapshots_config.create_src_snapshots_even_if_not_due:
+            snapshots_changed_items = [(src_dataset, 0) for src_dataset in src_datasets]
+        else:
+            snapshots_changed_items = self.zfs_get_snapshots_changed(src, src_datasets).items()
+
+        for src_dataset, snapshots_changed in snapshots_changed_items:
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
