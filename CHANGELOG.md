@@ -4,6 +4,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.10.0] - TBD
 
+This release contains some fixes and a lot of new features, including ...
+
+- Improved compat with rsync.net.
+- Added daemon support for periodic activities every N milliseconds, including for taking snapshots, replicating and pruning.
+- Added the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience wrapper around `bzfs` that 
+simplifies periodically creating snapshots, replicating and pruning, on multiple source hosts and multiple destination 
+hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
+- Added `--create-src-snapshots-*` CLI options for efficiently creating periodic (and adhoc) atomic snapshots of datasets, 
+including recursive snapshots.
+- Added `--delete-dst-snapshots-except-periods` CLI option to specify retention periods like sanoid, and prune snapshots accordingly.
+- Added `--delete-dst-snapshots-except` CLI flag to specify which snapshots to retain instead of which snapshots to delete.
+- Added `--new-snapshot-filter-group` CLI option, which starts a new snapshot filter group containing separate 
+`--{include|exclude}-snapshot-*` filter options, which are UNIONized.
+- Added `anytime` and `notime` keywords to `--include-snapshot-times-and-ranks`.
+- Added `all except` keyword to `--include-snapshot-times-and-ranks`, as a more user-friendly filter syntax to say 
+"include all snapshots except the oldest N (or latest N) snapshots".
+- Log pv transfer stats even for tiny snapshots.
+- Delete bookmarks in parallel.
+- Perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible.
+- For more clarity, renamed `--force-hard` to `--force-destroy-dependents`. `--force-hard` will continue to work as-is for 
+now, in deprecated status, but the old name will be completely removed in a future release.
+- Use string sort order instead of case-insensitive sort order throughout.
+- Fix too-many-arguments error when deleting thousands of snapshots in the same 'zfs destroy' CLI invocation.
+- Make 'zfs rollback' work even if the previous 'zfs receive -s' was interrupted.
+- Skip partial or bad 'pv' log file lines when calculating stats.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.9.0...v1.10.0
+
 ## [1.9.0] - January 20, 2025
 
 This release contains performance and documentation enhancements as well as bug fixes and new features, including ...
