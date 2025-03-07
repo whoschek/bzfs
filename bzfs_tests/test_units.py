@@ -941,7 +941,7 @@ class TestHelperFunctions(unittest.TestCase):
             [
                 "src",
                 "dst",
-                "--create-src-snapshots-periods=" + str({"foo": {"onsite": {"adhoc": 1}}}),
+                "--create-src-snapshots-plan=" + str({"foo": {"onsite": {"adhoc": 1}}}),
                 "--create-src-snapshots-timeformat=xxx",
             ]
         )
@@ -955,7 +955,7 @@ class TestHelperFunctions(unittest.TestCase):
             [
                 "src",
                 "dst",
-                "--create-src-snapshots-periods=" + str(periods),
+                "--create-src-snapshots-plan=" + str(periods),
                 "--create-src-snapshots-timeformat=xxx",
             ]
         )
@@ -978,7 +978,7 @@ class TestHelperFunctions(unittest.TestCase):
             [
                 "src",
                 "dst",
-                "--create-src-snapshots-periods=" + str({"prod": {"onsite": {"daily": 0}}}),  # retention_amount == 0
+                "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"daily": 0}}}),  # retention_amount == 0
                 "--create-src-snapshots-timeformat=xxx",
             ]
         )
@@ -989,7 +989,7 @@ class TestHelperFunctions(unittest.TestCase):
             [
                 "src",
                 "dst",
-                "--create-src-snapshots-periods=" + str({"prod": {"": {"": 1}}}),  # empty infix and suffix
+                "--create-src-snapshots-plan=" + str({"prod": {"": {"": 1}}}),  # empty infix and suffix
                 "--create-src-snapshots-timeformat=xxx",
             ]
         )
@@ -1018,7 +1018,7 @@ class TestHelperFunctions(unittest.TestCase):
             [
                 "src",
                 "dst",
-                "--create-src-snapshots-periods=" + str({"..": {"onsite": {"adhoc": 1}}}),
+                "--create-src-snapshots-plan=" + str({"..": {"onsite": {"adhoc": 1}}}),
                 "--create-src-snapshots-timeformat=",
             ]
         )
@@ -1030,7 +1030,7 @@ class TestHelperFunctions(unittest.TestCase):
             [
                 "src",
                 "dst",
-                "--create-src-snapshots-periods=" + str({"": {"onsite": {"adhoc": 1}}}),
+                "--create-src-snapshots-plan=" + str({"": {"onsite": {"adhoc": 1}}}),
                 "--create-src-snapshots-timeformat=",
             ]
         )
@@ -1039,35 +1039,35 @@ class TestHelperFunctions(unittest.TestCase):
 
         # Period amount must not be negative
         bad_args = bzfs.argument_parser().parse_args(
-            ["src", "dst", "--create-src-snapshots-periods=" + str({"prod": {"onsite": {"hourly": -1}}})]
+            ["src", "dst", "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"hourly": -1}}})]
         )
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(bad_args, p=None)
 
         # Period duration should be a divisor of 86400 seconds without remainder so snapshot timestamps repeat every day
         bad_args = bzfs.argument_parser().parse_args(
-            ["src", "dst", "--create-src-snapshots-periods=" + str({"prod": {"onsite": {"7hourly": 1}}})]
+            ["src", "dst", "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"7hourly": 1}}})]
         )
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(bad_args, p=None)
 
         # Period duration should be a divisor of 86400 seconds without remainder so snapshot timestamps repeat every day
         bad_args = bzfs.argument_parser().parse_args(
-            ["src", "dst", "--create-src-snapshots-periods=" + str({"prod": {"onsite": {"7minutely": 1}}})]
+            ["src", "dst", "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"7minutely": 1}}})]
         )
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(bad_args, p=None)
 
         # Period duration should be a divisor of 86400 seconds without remainder so snapshot timestamps repeat every day
         bad_args = bzfs.argument_parser().parse_args(
-            ["src", "dst", "--create-src-snapshots-periods=" + str({"prod": {"onsite": {"7secondly": 1}}})]
+            ["src", "dst", "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"7secondly": 1}}})]
         )
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(bad_args, p=None)
 
         # Period duration should be a divisor of 86400 seconds without remainder so snapshot timestamps repeat every day
         bad_args = bzfs.argument_parser().parse_args(
-            ["src", "dst", "--create-src-snapshots-periods=" + str({"prod": {"onsite": {"86401secondly": 1}}})]
+            ["src", "dst", "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"86401secondly": 1}}})]
         )
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(bad_args, p=None)

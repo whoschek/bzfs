@@ -104,9 +104,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
                       [--prune-dst-snapshots] [--src-host STRING]
                       [--dst-hosts DICT_STRING]
                       [--dst-root-datasets DICT_STRING]
-                      [--src-snapshot-periods DICT_STRING]
-                      [--src-bookmark-periods DICT_STRING]
-                      [--dst-snapshot-periods DICT_STRING]
+                      [--src-snapshot-plan DICT_STRING]
+                      [--src-bookmark-plan DICT_STRING]
+                      [--dst-snapshot-plan DICT_STRING]
                       [--src-user STRING] [--dst-user STRING]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
@@ -211,9 +211,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 
 <!-- -->
 
-<div id="--src-snapshot-periods"></div>
+<div id="--src-snapshot-plan"></div>
 
-**--src-snapshot-periods** *DICT_STRING*
+**--src-snapshot-plan** *DICT_STRING*
 
 *  Retention periods for snapshots to be used if pruning src, and when creating new snapshots on
     src. Snapshots that do not match a retention period will be deleted. A zero within a retention
@@ -240,21 +240,21 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 
 <!-- -->
 
-<div id="--src-bookmark-periods"></div>
+<div id="--src-bookmark-plan"></div>
 
-**--src-bookmark-periods** *DICT_STRING*
+**--src-bookmark-plan** *DICT_STRING*
 
 *  Retention periods for bookmarks to be used if pruning src. Has same format as
-    --src-snapshot-periods.
+    --src-snapshot-plan.
 
 <!-- -->
 
-<div id="--dst-snapshot-periods"></div>
+<div id="--dst-snapshot-plan"></div>
 
-**--dst-snapshot-periods** *DICT_STRING*
+**--dst-snapshot-plan** *DICT_STRING*
 
 *  Retention periods for snapshots to be used if pruning dst. Has same format as
-    --src-snapshot-periods.
+    --src-snapshot-plan.
 
 <!-- -->
 

@@ -597,8 +597,8 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_delete_dst_snapshots_except_periods(self):
-        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_periods()
+    def test_delete_dst_snapshots_except_plan(self):
+        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
 
     def test_daemon_frequency(self):
         LocalTestCase(param=self.param).test_daemon_frequency()
@@ -865,7 +865,7 @@ class LocalTestCase(BZFSTestCase):
                     bzfs.dummy_dataset,
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"s1": {"onsite": localperiods}}),
+                    "--create-src-snapshots-plan=" + str({"s1": {"onsite": localperiods}}),
                     "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
                     dry_run=(i == 0 or i == 5),
                 )
@@ -929,7 +929,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
+                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     "--yearly_month=6",
                     dry_run=(i == 0),
@@ -966,7 +966,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
+                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
@@ -998,7 +998,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
+                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
@@ -1031,7 +1031,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"z": {"onsite": {"yearly": 1}}}),
+                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"yearly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )
@@ -1070,7 +1070,7 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--skip-replication",
             "--create-src-snapshots",
-            "--create-src-snapshots-periods=" + str({"z": {"onsite": {"foo": 1}}}),
+            "--create-src-snapshots-plan=" + str({"z": {"onsite": {"foo": 1}}}),
             "--create-src-snapshots-timeformat=",
         )
         print(f"Snapshotting took {bzfs.human_readable_duration(time.time_ns() - start_time_nanos)}")
@@ -1101,7 +1101,7 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-replication",
                     "--exclude-dataset-regex=.*",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
+                    "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"secondly": 1}}}),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
                 self.assertSnapshots(src_root_dataset, 0)
@@ -1114,7 +1114,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--skip-replication",
             "--create-src-snapshots",
-            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
+            "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"secondly": 1}}}),
             expected_status=die_status,
         )
 
@@ -1127,7 +1127,7 @@ class LocalTestCase(BZFSTestCase):
             "--skip-replication",
             "--create-src-snapshots-even-if-not-due",
             "--create-src-snapshots",
-            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"hourly": 1}}}),
+            "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"hourly": 1}}}),
         )
         self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_hourly", "s1.*_daily", "s1.*_hourly"])
 
@@ -1137,7 +1137,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             "--create-src-snapshots",
-            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
+            "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"secondly": 1}}}),
             "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
             "--daemon-lifetime=2seconds",
         )
@@ -1164,12 +1164,12 @@ class LocalTestCase(BZFSTestCase):
             bzfs.dummy_dataset,
             "--skip-replication",
             "--create-src-snapshots",
-            "--create-src-snapshots-periods=" + str({"s1": {"onsite": {"secondly": 1}}}),
+            "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"secondly": 1}}}),
             expected_status=die_status,
         )
         self.run_bzfs(bzfs.dummy_dataset, bzfs.dummy_dataset, expected_status=die_status)
 
-    def test_delete_dst_snapshots_except_periods(self):
+    def test_delete_dst_snapshots_except_plan(self):
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
@@ -1195,21 +1195,21 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
         )
         self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly"])
 
-        # multiple --delete-dst-snapshots-except-periods expressions are UNIONized:
+        # multiple --delete-dst-snapshots-except-plan expressions are UNIONized:
         take_snapshot(src_root_dataset, "s2_onsite_2024-01-01_00:02:00_secondly")
         self.run_bzfs(
             bzfs.dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 1}}}),
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({"s2": {"onsite": {"secondly": 1}}}),
         )
         self.assertSnapshotNames(
@@ -1221,7 +1221,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 0, "hourly": 1}}}),
         )
         self.assertSnapshotNames(src_root_dataset, [])
@@ -1232,7 +1232,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 1, "adhoc": 1}}}),  # adhoc is retained despite no time period
         )
         self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
@@ -1242,7 +1242,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"adhoc": 0}}}),  # zero amount
         )
         self.assertSnapshotNames(src_root_dataset, [])
@@ -1253,7 +1253,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({}),  # error out on empty dict as deleting all snapshots is likely a pilot error rather than intended
             expected_status=2,
         )
@@ -1264,7 +1264,7 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
-            "--delete-dst-snapshots-except-periods",
+            "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": -1, "hourly": 1}}}),  # parser error: negative int isn't accepted
             expected_status=2,
         )

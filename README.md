@@ -110,7 +110,7 @@ reliably without the corresponding auxiliary feature.
 
 ```
 $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
---create-src-snapshots-periods "{'test':{'':{'adhoc':1}}}"
+--create-src-snapshots-plan "{'test':{'':{'adhoc':1}}}"
 ```
 
 
@@ -127,7 +127,7 @@ from a periodic `cron` job:
 
 ```
 $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
---create-src-snapshots-periods "{'prod':{'us-west-1':{'hourly':36,'daily':31}}}"
+--create-src-snapshots-plan "{'prod':{'us-west-1':{'hourly':36,'daily':31}}}"
 ```
 
 
@@ -140,8 +140,8 @@ tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g.
-`_daily` or `_hourly` or `_10minutely` or `_2secondly`), or if the
---create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled
+`_daily` or `_hourly` or `_minutely` or `_2secondly` or `_100millisecondly`), or if
+the --create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled
 snapshot is somehow missing. In the latter case bzfs immediately creates a snapshot (named with
 the current time, not backdated to the missed time), and then resumes the original schedule. If
 the suffix is `_adhoc` or not a known period then a snapshot is considered non-periodic and is
@@ -344,7 +344,7 @@ For convenience, the lengthy command line above can be expressed in a more conci
 
 ```
 $ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --delete-dst-snapshots-except-periods
+--delete-dst-snapshots --delete-dst-snapshots-except-plan
 "{'prod':{'onsite':{'secondly':40,'minutely':40,'hourly':36,'daily':31,'weekly':12,'monthly':18,'yearly':5}}}"
 ```
 
@@ -584,7 +584,7 @@ usage: bzfs [-h] [--recursive]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
             [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
             [--new-snapshot-filter-group] [--create-src-snapshots]
-            [--create-src-snapshots-periods DICT_STRING]
+            [--create-src-snapshots-plan DICT_STRING]
             [--create-src-snapshots-timeformat STRFTIME_SPEC]
             [--create-src-snapshots-timezone TZ_SPEC]
             [--create-src-snapshots-even-if-not-due]
@@ -604,7 +604,7 @@ usage: bzfs [-h] [--recursive]
             [--delete-dst-snapshots [{snapshots,bookmarks}]]
             [--delete-dst-snapshots-no-crosscheck]
             [--delete-dst-snapshots-except]
-            [--delete-dst-snapshots-except-periods DICT_STRING]
+            [--delete-dst-snapshots-except-plan DICT_STRING]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
             [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
@@ -1007,12 +1007,11 @@ usage: bzfs [-h] [--recursive]
     --skip-replication flag.
 
     A periodic snapshot is created if it is due per the schedule indicated by
-    --create-src-snapshots-periods (for example '_daily' or '_hourly' or _'10minutely'
-    or '_2secondly' or '_100millisecondly'), or if the
-    --create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled
-    snapshot is somehow missing. In the latter case bzfs immediately creates a snapshot (tagged
-    with the current time, not backdated to the missed time), and then resumes the original
-    schedule.
+    --create-src-snapshots-plan (for example '_daily' or '_hourly' or _'10minutely' or
+    '_2secondly' or '_100millisecondly'), or if the --create-src-snapshots-even-if-not-due
+    flag is specified, or if the most recent scheduled snapshot is somehow missing. In the latter
+    case bzfs immediately creates a snapshot (tagged with the current time, not backdated to the
+    missed time), and then resumes the original schedule.
 
     If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered
     non-periodic and is thus created immediately regardless of the creation time of any existing
@@ -1036,12 +1035,12 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--create-src-snapshots-periods"></div>
+<div id="--create-src-snapshots-plan"></div>
 
-**--create-src-snapshots-periods** *DICT_STRING*
+**--create-src-snapshots-plan** *DICT_STRING*
 
 *  Creation periods that specify a schedule for when new snapshots shall be created on src within
-    the selected datasets. Has the same format as --delete-dst-snapshots-except-periods.
+    the selected datasets. Has the same format as --delete-dst-snapshots-except-plan.
 
     Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
     'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
@@ -1054,7 +1053,8 @@ usage: bzfs [-h] [--recursive]
     so on. It will also create snapshots for the targets 'us-west-1' and 'eu-west-1' within
     the 'prod' organization. In addition, it will create snapshots every 12 hours and every week
     for the 'test' organization, and name them as being intended for the 'offsite' replication
-    target.
+    target. Analog for snapshots that are taken every 100 milliseconds within the 'test'
+    organization.
 
     The example creates ZFS snapshots with names like `prod_onsite_<timestamp>_secondly`,
     `prod_onsite_<timestamp>_minutely`, `prod_us-west-1_<timestamp>_hourly`,
@@ -1066,8 +1066,9 @@ usage: bzfs [-h] [--recursive]
     period.
 
     The period name can contain an optional positive integer immediately preceding the time period
-    unit, for example `_2secondly` or `_10minutely` to indicate that snapshots are taken
-    every 2 seconds, or every 10 minutes, respectively.
+    unit, for example `_2secondly` or `_10minutely` or `_100millisecondly` to indicate
+    that snapshots are taken every 2 seconds, or every 10 minutes, or every 100 milliseconds,
+    respectively.
 
 <!-- -->
 
@@ -1411,12 +1412,12 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--delete-dst-snapshots-except-periods"></div>
+<div id="--delete-dst-snapshots-except-plan"></div>
 
-**--delete-dst-snapshots-except-periods** *DICT_STRING*
+**--delete-dst-snapshots-except-plan** *DICT_STRING*
 
 *  Retention periods to be used if pruning snapshots or bookmarks within the selected destination
-    datastes via --delete-dst-snapshots. Has the same format as --create-src-snapshots-periods.
+    datastes via --delete-dst-snapshots. Has the same format as --create-src-snapshots-plan.
     Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with
     --delete-dst-snapshots=bookmarks) that do not match a period will be deleted. To avoid
     unexpected surprises, make sure to carefully specify ALL snapshot names and periods that shall
@@ -1434,8 +1435,9 @@ usage: bzfs [-h] [--recursive]
     snapshots, etc. It will also retain snapshots for the targets 'us-west-1' and 'eu-west-1'
     within the 'prod' organization. In addition, within the 'test' organization, it will
     retain snapshots that are created every 12 hours and every week as specified, and name them as
-    being intended for the 'offsite' replication target. All other snapshots within the selected
-    datasets will be deleted - you've been warned!
+    being intended for the 'offsite' replication target. Analog for snapshots that are taken
+    every 100 milliseconds within the 'test' organization. All other snapshots within the
+    selected datasets will be deleted - you've been warned!
 
     The example scans the selected ZFS datasets for snapshots with names like
     `prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`,
@@ -1447,9 +1449,9 @@ usage: bzfs [-h] [--recursive]
     Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be
     retained for the given period.
 
-    Note: --delete-dst-snapshots-except-periods is a convenience option that auto-generates a
-    series of the following other options: --delete-dst-snapshots-except,
-    --new-snapshot-filter-group, --include-snapshot-regex, --include-snapshot-times-and-ranks
+    Note: --delete-dst-snapshots-except-plan is a convenience option that auto-generates a series
+    of the following other options: --delete-dst-snapshots-except, --new-snapshot-filter-group,
+    --include-snapshot-regex, --include-snapshot-times-and-ranks
 
 <!-- -->
 

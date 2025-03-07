@@ -120,9 +120,9 @@ PIPE = subprocess.PIPE
 
 
 def argument_parser() -> argparse.ArgumentParser:
-    create_src_snapshots_periods_example1 = str({"test": {"": {"adhoc": 1}}}).replace(" ", "")
-    create_src_snapshots_periods_example2 = str({"prod": {"us-west-1": {"hourly": 36, "daily": 31}}}).replace(" ", "")
-    delete_dst_snapshots_except_periods_example1 = str(
+    create_src_snapshots_plan_example1 = str({"test": {"": {"adhoc": 1}}}).replace(" ", "")
+    create_src_snapshots_plan_example2 = str({"prod": {"us-west-1": {"hourly": 36, "daily": 31}}}).replace(" ", "")
+    delete_dst_snapshots_except_plan_example1 = str(
         {
             "prod": {
                 "onsite": {
@@ -217,7 +217,7 @@ feature.
 * Create adhoc atomic snapshots without a schedule:
 
 ```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots 
---create-src-snapshots-periods "{create_src_snapshots_periods_example1}"```
+--create-src-snapshots-plan "{create_src_snapshots_plan_example1}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
@@ -227,7 +227,7 @@ tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
 * Create periodic atomic snapshots on a schedule, every hour and every day, by launching this from a periodic `cron` job:
 
 ```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots 
---create-src-snapshots-periods "{create_src_snapshots_periods_example2}"```
+--create-src-snapshots-plan "{create_src_snapshots_plan_example2}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
@@ -237,10 +237,10 @@ tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 ```
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly` 
-or `_10minutely` or `_2secondly`), or if the --create-src-snapshots-even-if-not-due flag is specified, or if the most 
-recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates a snapshot (named with 
-the current time, not backdated to the missed time), and then resumes the original schedule. If the suffix is `_adhoc` 
-or not a known period then a snapshot is considered non-periodic and is thus created immediately regardless of the 
+or `_minutely` or `_2secondly` or `_100millisecondly`), or if the --create-src-snapshots-even-if-not-due flag is specified,
+or if the most recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates a snapshot 
+(named with the current time, not backdated to the missed time), and then resumes the original schedule. If the suffix is 
+`_adhoc` or not a known period then a snapshot is considered non-periodic and is thus created immediately regardless of the 
 creation time of any existing snapshot.
 
 * Replication example in local mode (no network, no ssh), to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
@@ -370,7 +370,7 @@ snapshots, 31 daily snapshots, 12 weekly snapshots, 18 monthly snapshots, and 5 
 For convenience, the lengthy command line above can be expressed in a more concise way, like so:
 
 ```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots 
---delete-dst-snapshots-except-periods "{delete_dst_snapshots_except_periods_example1}"```
+--delete-dst-snapshots-except-plan "{delete_dst_snapshots_except_plan_example1}"```
 
 * Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
 been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'), 
@@ -623,7 +623,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "The names of the snapshots can be configured via --create-src-snapshots-* suboptions (see below). "
              "To create snapshots only, without any other processing such as replication, etc, consider using this flag "
              "together with the --skip-replication flag.\n\n"
-             "A periodic snapshot is created if it is due per the schedule indicated by --create-src-snapshots-periods "
+             "A periodic snapshot is created if it is due per the schedule indicated by --create-src-snapshots-plan "
              "(for example '_daily' or '_hourly' or _'10minutely' or '_2secondly' or '_100millisecondly'), or if the "
              "--create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled snapshot "
              f"is somehow missing. In the latter case {prog_name} immediately creates a snapshot (tagged with the current "
@@ -646,7 +646,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     def format_dict(dictionary):
         return f'"{dictionary}"'
 
-    src_snapshot_periods_example = {
+    src_snapshot_plan_example = {
         "prod": {
             "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
             "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
@@ -659,15 +659,16 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         },
     }
     parser.add_argument(
-        "--create-src-snapshots-periods", default=None, type=str, metavar="DICT_STRING",
+        "--create-src-snapshots-plan", default=None, type=str, metavar="DICT_STRING",
         help="Creation periods that specify a schedule for when new snapshots shall be created on src within the selected "
-             "datasets. Has the same format as --delete-dst-snapshots-except-periods.\n\n"
-             f"Example: `{format_dict(src_snapshot_periods_example)}`. This example will, for the organization 'prod' and "
+             "datasets. Has the same format as --delete-dst-snapshots-except-plan.\n\n"
+             f"Example: `{format_dict(src_snapshot_plan_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots every "
              "minute, hourly snapshots every hour, and so on. " 
              "It will also create snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
              "In addition, it will create snapshots every 12 hours and every week for the 'test' organization, "
-             "and name them as being intended for the 'offsite' replication target.\n\n"
+             "and name them as being intended for the 'offsite' replication target. Analog for snapshots that are taken "
+             "every 100 milliseconds within the 'test' organization.\n\n"
              "The example creates ZFS snapshots with names like "
              "`prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`, "
              "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
@@ -675,8 +676,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on.\n\n"
              "Note: A period name that is missing indicates that no snapshots shall be created for the given period.\n\n"
              "The period name can contain an optional positive integer immediately preceding the time period unit, for "
-             "example `_2secondly` or `_10minutely` to indicate that snapshots are taken every 2 seconds, or every 10 "
-             "minutes, respectively.\n\n")
+             "example `_2secondly` or `_10minutely` or `_100millisecondly` to indicate that snapshots are taken every 2 "
+             "seconds, or every 10 minutes, or every 100 milliseconds, respectively.\n\n")
 
     def argparser_escape(text: str) -> str:
         return text.replace('%', '%%')
@@ -893,20 +894,21 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other"
              " words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n")
     parser.add_argument(
-        "--delete-dst-snapshots-except-periods", action=DeleteDstSnapshotsExceptPeriodsAction, default=None,
+        "--delete-dst-snapshots-except-plan", action=DeleteDstSnapshotsExceptPlanAction, default=None,
         metavar="DICT_STRING",
         help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datastes via "
-             "--delete-dst-snapshots. Has the same format as --create-src-snapshots-periods. "
+             "--delete-dst-snapshots. Has the same format as --create-src-snapshots-plan. "
              "Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with --delete-dst-snapshots=bookmarks) that "
              "do not match a period will be deleted. To avoid unexpected surprises, make sure to carefully specify ALL "
              "snapshot names and periods that shall be retained, in combination with --dryrun.\n\n"
-             f"Example: `{format_dict(src_snapshot_periods_example)}`. This example will, for the organization 'prod' and "
+             f"Example: `{format_dict(src_snapshot_plan_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', retain secondly snapshots that were created less than 40 seconds ago, "
              "yet retain the latest 40 secondly snapshots regardless of creation time. Analog for the latest 40 minutely "
              "snapshots, latest 36 hourly snapshots, etc. "
              "It will also retain snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
              "In addition, within the 'test' organization, it will retain snapshots that are created every 12 hours and "
-             "every week as specified, and name them as being intended for the 'offsite' replication target. "
+             "every week as specified, and name them as being intended for the 'offsite' replication target. Analog for "
+             "snapshots that are taken every 100 milliseconds within the 'test' organization. "
              "All other snapshots within the selected datasets will be deleted - you've been warned!\n\n"
              "The example scans the selected ZFS datasets for snapshots with names like "
              "`prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`, "
@@ -916,7 +918,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "that do not match a retention rule.\n\n"
              "Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be retained for the given "
              "period.\n\n"
-             "Note: --delete-dst-snapshots-except-periods is a convenience option that auto-generates a series of the "
+             "Note: --delete-dst-snapshots-except-plan is a convenience option that auto-generates a series of the "
              "following other options: --delete-dst-snapshots-except, "
              "--new-snapshot-filter-group, --include-snapshot-regex, --include-snapshot-times-and-ranks\n\n")
     parser.add_argument(
@@ -1689,7 +1691,7 @@ class Params:
                tuple(self.args.include_dataset), tuple(self.args.exclude_dataset),
                tuple(self.args.include_dataset_regex), tuple(self.args.exclude_dataset_regex),
                tuple(tuple(f) for f in self.snapshot_filters), self.args.skip_replication, self.args.create_src_snapshots,
-               self.args.create_src_snapshots_periods, self.args.create_src_snapshots_timeformat,
+               self.args.create_src_snapshots_plan, self.args.create_src_snapshots_timeformat,
                self.create_src_snapshots_config.anchors,
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
                self.args.delete_empty_dst_datasets,
@@ -1931,8 +1933,8 @@ class CreateSrcSnapshotConfig:
 
         suffixes: List[str] = []
         labels = []
-        create_src_snapshots_periods = args.create_src_snapshots_periods or str({"bzfs": {"onsite": {"adhoc": 1}}})
-        for org, target_periods in ast.literal_eval(create_src_snapshots_periods).items():
+        create_src_snapshots_plan = args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}})
+        for org, target_periods in ast.literal_eval(create_src_snapshots_plan).items():
             for target, periods in target_periods.items():
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
@@ -1941,7 +1943,7 @@ class CreateSrcSnapshotConfig:
                         suffix = nsuffix(period_unit)
                         suffixes.append(suffix)
                         labels.append(SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=suffix))
-        if args.daemon_frequency and not args.create_src_snapshots_periods:
+        if args.daemon_frequency and not args.create_src_snapshots_plan:
             suffixes = [nsuffix(args.daemon_frequency)]
             labels = []
 
@@ -1954,7 +1956,7 @@ class CreateSrcSnapshotConfig:
             if suffix.endswith("hourly") or suffix.endswith("minutely") or suffix.endswith("secondly"):
                 if duration_milliseconds != 0 and 86400 * 1000 % duration_milliseconds != 0:
                     die(
-                        "Invalid --create-src-snapshots-periods: Period duration should be a divisor of 86400 seconds "
+                        "Invalid --create-src-snapshots-plan: Period duration should be a divisor of 86400 seconds "
                         f"without remainder so that snapshots will be created at the same time of day every day: {suffix}"
                     )
             return duration_milliseconds, suffix
@@ -2053,10 +2055,10 @@ class Job:
         try:
             log = get_logger(log_params, args, log)
             log.info("%s", "Log file is: " + log_params.log_file)
-            if getattr(args, "delete_dst_snapshots_except_periods", None):
-                log.info("Auxiliary CLI arguments: %s", " ".join(args.delete_dst_snapshots_except_periods))
+            if getattr(args, "delete_dst_snapshots_except_plan", None):
+                log.info("Auxiliary CLI arguments: %s", " ".join(args.delete_dst_snapshots_except_plan))
                 args = argument_parser().parse_args(
-                    xappend(args.delete_dst_snapshots_except_periods, "--", args.root_dataset_pairs), namespace=args
+                    xappend(args.delete_dst_snapshots_except_plan, "--", args.root_dataset_pairs), namespace=args
                 )
             log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
             log.debug("Parsed CLI arguments: %s", args)
@@ -6423,7 +6425,7 @@ class FileOrLiteralAction(argparse.Action):
 
 
 #############################################################################
-class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
+class DeleteDstSnapshotsExceptPlanAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         # Generates extra options to be parsed later during second parse_args() pass, within run_main()
         opts = getattr(namespace, self.dest, None)
@@ -6455,7 +6457,7 @@ class DeleteDstSnapshotsExceptPeriodsAction(argparse.Action):
         if not has_at_least_one_filter_clause:
             parser.error(
                 f"{option_string}: Cowardly refusing to delete all snapshots on "
-                f"--delete-dst-snapshots-except-periods='{values}' (which means 'retain no snapshots' aka "
+                f"--delete-dst-snapshots-except-plan='{values}' (which means 'retain no snapshots' aka "
                 "'delete all snapshots'). Assuming this is an unintended pilot error rather than intended carnage. "
                 "Aborting. If this is really what is intended, use `--delete-dst-snapshots --include-snapshot-regex=.*` "
                 "instead to force the deletion."

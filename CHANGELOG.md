@@ -13,7 +13,7 @@ simplifies periodically creating snapshots, replicating and pruning, on multiple
 hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
 - Added `--create-src-snapshots-*` CLI options for efficiently creating periodic (and adhoc) atomic snapshots of datasets, 
 including recursive snapshots.
-- Added `--delete-dst-snapshots-except-periods` CLI option to specify retention periods like sanoid, and prune snapshots accordingly.
+- Added `--delete-dst-snapshots-except-plan` CLI option to specify retention periods like sanoid, and prune snapshots accordingly.
 - Added `--delete-dst-snapshots-except` CLI flag to specify which snapshots to retain instead of which snapshots to delete.
 - Added `--new-snapshot-filter-group` CLI option, which starts a new snapshot filter group containing separate 
 `--{include|exclude}-snapshot-*` filter options, which are UNIONized.
@@ -26,7 +26,7 @@ including recursive snapshots.
 - For more clarity, renamed `--force-hard` to `--force-destroy-dependents`. `--force-hard` will continue to work as-is for 
 now, in deprecated status, but the old name will be completely removed in a future release.
 - Use string sort order instead of case-insensitive sort order throughout.
-- Fix too-many-arguments error when deleting thousands of snapshots in the same 'zfs destroy' CLI invocation.
+- Fixed "Too many arguments" error when deleting thousands of snapshots in the same 'zfs destroy' CLI invocation.
 - Make 'zfs rollback' work even if the previous 'zfs receive -s' was interrupted.
 - Skip partial or bad 'pv' log file lines when calculating stats.
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.9.0...v1.10.0

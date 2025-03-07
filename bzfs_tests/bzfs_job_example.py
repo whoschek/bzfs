@@ -96,7 +96,7 @@ org = "prod"
 # ensure that the latest 31 daily snapshots (per dataset) are retained regardless of creation time.
 # Each target of each organization can have separate retention periods.
 # Uses snapshot names like 'prod_onsite_<timestamp>_daily', 'prod_onsite_<timestamp>_minutely', etc.:
-# src_snapshot_periods = {
+# src_snapshot_plan = {
 #     org: {
 #         "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
 #         "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
@@ -108,32 +108,32 @@ org = "prod"
 #         "onsite": {"100millisecondly": 40},
 #     },
 # }
-# src_snapshot_periods = {  # empty string as target name is ok
+# src_snapshot_plan = {  # empty string as target name is ok
 #     org: {"": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5}}
 # }
-src_snapshot_periods = {
+src_snapshot_plan = {
     org: {"onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5}}
 }
 
 
-# Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-periods:
-# dst_snapshot_periods = {
+# Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-plan:
+# dst_snapshot_plan = {
 #     org: {"onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 62, "weekly": 52, "monthly": 36, "yearly": 5}}
 # }
-N = 2  # multiply src_snapshot_periods by a factor N
-dst_snapshot_periods = {
+N = 2  # multiply src_snapshot_plan by a factor N
+dst_snapshot_plan = {
     org: {target: {period: round(N * M) for period, M in periods.items()} for target, periods in target_periods.items()}
-    for org, target_periods in src_snapshot_periods.items()
+    for org, target_periods in src_snapshot_plan.items()
 }
 
 
-# Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-periods:
-# src_bookmark_periods = {
+# Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-plan:
+# src_bookmark_plan = {
 #     org: {
 #         "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5}
 #     }
 # }
-src_bookmark_periods = dst_snapshot_periods
+src_bookmark_plan = dst_snapshot_plan
 
 
 ssh_src_port = 22
@@ -208,9 +208,9 @@ cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
 cmd += [f"--dst-root-datasets={dst_root_datasets}"]
-cmd += [f"--src-snapshot-periods={src_snapshot_periods}"]
-cmd += [f"--src-bookmark-periods={src_bookmark_periods}"]
-cmd += [f"--dst-snapshot-periods={dst_snapshot_periods}"]
+cmd += [f"--src-snapshot-plan={src_snapshot_plan}"]
+cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
+cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
 cmd += [f"--ssh-src-port={ssh_src_port}", f"--ssh-dst-port={ssh_dst_port}"]
 cmd += extra_args + unknown_args + ["--"] + root_dataset_pairs
 subprocess.run(cmd, text=True, check=True)

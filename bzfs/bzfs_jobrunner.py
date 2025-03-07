@@ -131,7 +131,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "destination host. For backup use cases, this is the backup ZFS pool or a ZFS dataset path within that pool, "
              "whereas for cloning, master slave replication, or replication from a primary to a secondary, this can also be "
              f"the empty string. Example: `{format_dict(dst_root_datasets_example)}`\n\n")
-    src_snapshot_periods_example = {
+    src_snapshot_plan_example = {
         "prod": {
             "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
             "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
@@ -142,11 +142,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             "offsite": {"12hourly": 42, "weekly": 12},
         },
     }
-    parser.add_argument("--src-snapshot-periods", default="{}", metavar="DICT_STRING",
+    parser.add_argument("--src-snapshot-plan", default="{}", metavar="DICT_STRING",
         help="Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src. "
              "Snapshots that do not match a retention period will be deleted. A zero within a retention period indicates "
              "that no snapshots shall be retained (or even be created) for the given period.\n\n"
-             f"Example: `{format_dict(src_snapshot_periods_example)}`. This example will, for the organization 'prod' and "
+             f"Example: `{format_dict(src_snapshot_plan_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', create and then retain secondly snapshots that were created less "
              "than 40 seconds ago, yet retain the latest 40 secondly snapshots regardless of creation time. Analog for "
              "the latest 40 minutely snapshots, 36 hourly snapshots, etc. "
@@ -159,10 +159,10 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
              "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
              "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on.\n\n")
-    parser.add_argument("--src-bookmark-periods", default="{}", metavar="DICT_STRING",
-        help="Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-periods.\n\n")
-    parser.add_argument("--dst-snapshot-periods", default="{}", metavar="DICT_STRING",
-        help="Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-periods.\n\n")
+    parser.add_argument("--src-bookmark-plan", default="{}", metavar="DICT_STRING",
+        help="Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-plan.\n\n")
+    parser.add_argument("--dst-snapshot-plan", default="{}", metavar="DICT_STRING",
+        help="Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-plan.\n\n")
     parser.add_argument("--src-user", default="", metavar="STRING",
         help="SSH username on --src-host. Used if replicating in pull mode.\n\n")
     parser.add_argument("--dst-user", default="", metavar="STRING",
@@ -191,9 +191,9 @@ def main():
     configure_logging()
     log.info("WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.")
     args, unknown_args = argument_parser().parse_known_args()  # forward all unknown args to `bzfs`
-    src_snapshot_periods = ast.literal_eval(args.src_snapshot_periods)
-    src_bookmark_periods = ast.literal_eval(args.src_bookmark_periods)
-    dst_snapshot_periods = ast.literal_eval(args.dst_snapshot_periods)
+    src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
+    src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
+    dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
     src_host = args.src_host
     dst_hosts = ast.literal_eval(args.dst_hosts)
     dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
@@ -206,7 +206,7 @@ def main():
         return root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
 
     if args.create_src_snapshots:
-        opts = ["--create-src-snapshots", f"--create-src-snapshots-periods={src_snapshot_periods}", "--skip-replication"]
+        opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
         opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
         opts += [f"--log-file-suffix={sep}"]
         opts += unknown_args + ["--"]
@@ -216,7 +216,7 @@ def main():
     if args.replicate:
         daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
         if len(pull_targets) > 0:  # pull mode
-            opts = replication_filter_opts(dst_snapshot_periods, "pull", pull_targets, src_host, localhostname)
+            opts = replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
             opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
             opts += unknown_args + ["--"]
             old_len_opts = len(opts)
@@ -228,13 +228,13 @@ def main():
         else:  # push mode (experimental feature)
             assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
             host_targets = defaultdict(list)
-            for org, targetperiods in dst_snapshot_periods.items():
+            for org, targetperiods in dst_snapshot_plan.items():
                 for target in targetperiods.keys():
                     dst_hostname = dst_hosts.get(target)
                     if dst_hostname:
                         host_targets[dst_hostname].append(target)
             for dst_hostname, push_targets in host_targets.items():
-                opts = replication_filter_opts(dst_snapshot_periods, "push", push_targets, localhostname, dst_hostname)
+                opts = replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
                 opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                 opts += unknown_args + ["--"]
                 for src, dst in args.root_dataset_pairs:
@@ -248,22 +248,22 @@ def main():
         run_cmd(["bzfs"] + opts)
 
     if args.prune_src_snapshots:
-        opts = ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-periods={src_snapshot_periods}"]
+        opts = ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-plan={src_snapshot_plan}"]
         opts += [f"--log-file-prefix={prog_name}{sep}prune-src-snapshots{sep}"]
         prune_src(opts)
 
     if args.prune_src_bookmarks:
-        opts = ["--delete-dst-snapshots=bookmarks", f"--delete-dst-snapshots-except-periods={src_bookmark_periods}"]
+        opts = ["--delete-dst-snapshots=bookmarks", f"--delete-dst-snapshots-except-plan={src_bookmark_plan}"]
         opts += [f"--log-file-prefix={prog_name}{sep}prune-src-bookmarks{sep}"]
         prune_src(opts)
 
     if args.prune_dst_snapshots:
-        dst_snapshot_periods = {  # only retain targets that belong to the host executing bzfs_jobrunner
+        dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
             org: {target: periods for target, periods in target_periods.items() if target in pull_targets}
-            for org, target_periods in dst_snapshot_periods.items()
+            for org, target_periods in dst_snapshot_plan.items()
         }
         opts = ["--delete-dst-snapshots", "--skip-replication"]
-        opts += [f"--delete-dst-snapshots-except-periods={dst_snapshot_periods}"]
+        opts += [f"--delete-dst-snapshots-except-plan={dst_snapshot_plan}"]
         opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
         opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
         opts += [f"--log-file-suffix={sep}"]
@@ -291,7 +291,7 @@ def run_cmd(*params):
 
 
 def replication_filter_opts(
-    dst_snapshot_periods: Dict, kind: str, targets: List[str], src_hostname: str, dst_hostname: str
+    dst_snapshot_plan: Dict, kind: str, targets: List[str], src_hostname: str, dst_hostname: str
 ) -> List[str]:
     def nsuffix(s: str) -> str:
         return "_" + s if s else ""
@@ -301,7 +301,7 @@ def replication_filter_opts(
 
     log.info("%s", f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
     opts = []
-    for org, target_periods in dst_snapshot_periods.items():
+    for org, target_periods in dst_snapshot_plan.items():
         for target, periods in target_periods.items():
             if target in targets:
                 for duration_unit, duration_amount in periods.items():
