@@ -170,8 +170,8 @@ select which datasets, snapshots and properties to create, replicate, delete or 
 Typically, a `cron` job on the source host runs `{prog_name}` periodically to create new snapshots and prune outdated
 snapshots on the source, whereas another `cron` job on the destination host runs `{prog_name}` periodically to prune
 outdated destination snapshots. Yet another `cron` job runs `{prog_name}` periodically to replicate the recently created
-snapshots from the source to the destination. The frequency of these periodic activities is typically every second, 
-minute, hour, day, week, month and/or year (or multiples thereof).
+snapshots from the source to the destination. The frequency of these periodic activities is typically every N milliseconds, 
+every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
 All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
 snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot
@@ -202,7 +202,7 @@ any stand-alone shell script or binary executable.
 
 {prog_name} automatically replicates the snapshots of multiple datasets in parallel for best performance.
 Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be 
-created as frequently as every second.
+created as frequently as every N milliseconds.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
 send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
@@ -624,7 +624,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "To create snapshots only, without any other processing such as replication, etc, consider using this flag "
              "together with the --skip-replication flag.\n\n"
              "A periodic snapshot is created if it is due per the schedule indicated by --create-src-snapshots-periods "
-             "(for example '_daily' or '_hourly' or _'10minutely' or '_2secondly'), or if the "
+             "(for example '_daily' or '_hourly' or _'10minutely' or '_2secondly' or '_100millisecondly'), or if the "
              "--create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled snapshot "
              f"is somehow missing. In the latter case {prog_name} immediately creates a snapshot (tagged with the current "
              "time, not backdated to the missed time), and then resumes the original schedule.\n\n"
@@ -655,6 +655,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                           "yearly": 5}},
         "test": {
             "offsite": {"12hourly": 42, "weekly": 12},
+            "onsite": {"100millisecondly": 42},
         },
     }
     parser.add_argument(
@@ -1342,7 +1343,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"environment variables. Example: `{env_var_prefix}.*`\n\n")
 
     for period, label in {"yearly": "years", "monthly": "months", "weekly": "weeks", "daily": "days", "hourly": "hours",
-                          "minutely": "minutes", "secondly": "seconds"}.items():
+                          "minutely": "minutes", "secondly": "seconds", "millisecondly": "milliseconds"}.items():
         anchor_group = parser.add_argument_group(
             f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
             f"every N {label} are scheduled to be created on the source by the --create-src-snapshots option.")
@@ -1551,7 +1552,7 @@ class Params:
             args.delete_empty_dst_datasets == "snapshots+bookmarks"
         )
         self.compare_snapshot_lists: Optional[str] = args.compare_snapshot_lists
-        self.daemon_lifetime_nanos: int = 1_000_000_000 * parse_duration_to_seconds(args.daemon_lifetime)
+        self.daemon_lifetime_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_lifetime)
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.resume_recv: bool = not args.no_resume_recv
@@ -1873,14 +1874,15 @@ class SnapshotLabel:
 #############################################################################
 class SnapshotPeriods:
     def __init__(self):
-        self.suffix_seconds = {
-            "yearly": 365 * 86400,
-            "monthly": round(30.5 * 86400),
-            "weekly": 7 * 86400,
-            "daily": 86400,
-            "hourly": 60 * 60,
-            "minutely": 60,
-            "secondly": 1,
+        self.suffix_milliseconds = {
+            "yearly": 365 * 86400 * 1000,
+            "monthly": round(30.5 * 86400 * 1000),
+            "weekly": 7 * 86400 * 1000,
+            "daily": 86400 * 1000,
+            "hourly": 60 * 60 * 1000,
+            "minutely": 60 * 1000,
+            "secondly": 1000,
+            "millisecondly": 1,
         }
         self.period_labels = {
             "yearly": "years",
@@ -1890,8 +1892,9 @@ class SnapshotPeriods:
             "hourly": "hours",
             "minutely": "minutes",
             "secondly": "seconds",
+            "millisecondly": "milliseconds",
         }
-        self._suffix_regex0 = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_seconds.keys())})")
+        self._suffix_regex0 = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
         self._suffix_regex1 = re.compile("_" + self._suffix_regex0.pattern)
 
     def suffix_to_duration0(self, suffix: str) -> Tuple[int, str]:
@@ -1947,14 +1950,14 @@ class CreateSrcSnapshotConfig:
 
         def suffix_key(suffix: str):
             duration_amount, duration_unit = suffix_durations[suffix]
-            duration_seconds = duration_amount * xperiods.suffix_seconds.get(duration_unit, 0)
+            duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
             if suffix.endswith("hourly") or suffix.endswith("minutely") or suffix.endswith("secondly"):
-                if duration_seconds != 0 and 86400 % duration_seconds != 0:
+                if duration_milliseconds != 0 and 86400 * 1000 % duration_milliseconds != 0:
                     die(
                         "Invalid --create-src-snapshots-periods: Period duration should be a divisor of 86400 seconds "
                         f"without remainder so that snapshots will be created at the same time of day every day: {suffix}"
                     )
-            return duration_seconds, suffix
+            return duration_milliseconds, suffix
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
         self.suffix_durations: Dict[str, Tuple[int, str]] = {suffix: suffix_durations[suffix] for suffix in suffixes}  # sort
@@ -5581,24 +5584,28 @@ def human_readable_float(number: float) -> str:
     return "0" if result == "-0" else result
 
 
-def parse_duration_to_seconds(duration: str, regex_suffix: str = "") -> int:
-    unit_seconds = {
-        "seconds": 1,
-        "secs": 1,
-        "minutes": 60,
-        "mins": 60,
-        "hours": 60 * 60,
-        "days": 86400,
-        "weeks": 7 * 86400,
-        "months": round(30.5 * 86400),
-        "years": round(365 * 86400),
+def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "") -> int:
+    unit_milliseconds = {
+        "milliseconds": 1,
+        "millis": 1,
+        "seconds": 1000,
+        "secs": 1000,
+        "minutes": 60 * 1000,
+        "mins": 60 * 1000,
+        "hours": 60 * 60 * 1000,
+        "days": 86400 * 1000,
+        "weeks": 7 * 86400 * 1000,
+        "months": round(30.5 * 86400 * 1000),
+        "years": round(365 * 86400 * 1000),
     }
-    match = re.fullmatch(r"(\d+)\s*(secs|seconds|mins|minutes|hours|days|weeks|months|years)" + regex_suffix, duration)
+    match = re.fullmatch(
+        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
+    )
     if not match:
         raise ValueError("Invalid duration format")
     quantity = int(match.group(1))
     unit = match.group(2)
-    return quantity * unit_seconds[unit]
+    return quantity * unit_milliseconds[unit]
 
 
 def get_home_directory() -> str:
@@ -5721,7 +5728,8 @@ metadata_day = {"min": 1, "max": 31, "help": "The day within a month"}
 metadata_hour = {"min": 0, "max": 23, "help": "The hour within a day"}
 metadata_minute = {"min": 0, "max": 59, "help": "The minute within an hour"}
 metadata_second = {"min": 0, "max": 59, "help": "The second within a minute"}
-metadata_microsecond = {"min": 0, "max": 999999, "help": "The microsecond within a second"}
+metadata_millisecond = {"min": 0, "max": 999, "help": "The millisecond within a second"}
+metadata_microsecond = {"min": 0, "max": 999, "help": "The microsecond within a millisecond"}
 
 
 @dataclass
@@ -5759,7 +5767,10 @@ class PeriodAnchors:
     minutely_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
 
     # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.secondly_* vars
-    secondly_microsecond: int = field(default=0, metadata=metadata_microsecond)  # 0 <= x <= 999999
+    secondly_millisecond: int = field(default=0, metadata=metadata_millisecond)  # 0 <= x <= 999
+
+    # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.millisecondly_* vars
+    millisecondly_microsecond: int = field(default=0, metadata=metadata_microsecond)  # 0 <= x <= 999
 
     def parse(self, args: argparse.Namespace):
         for f in fields(PeriodAnchors):
@@ -5773,7 +5784,7 @@ def round_datetime_up_to_duration_multiple(
     """Given a timezone-aware datetime and a duration, returns a datetime (in the same timezone) that is greater than or
     equal to dt, and rounded up (ceiled) and snapped to an anchor plus a multiple of the duration. The snapping is done
     relative to the anchors object and the rules defined therein.
-    Supported units: "secondly", "minutely", "hourly", "daily", "weekly", "monthly", "yearly".
+    Supported units: "millisecondly", "secondly", "minutely", "hourly", "daily", "weekly", "monthly", "yearly".
     If dt is already exactly on a boundary (i.e. exactly on a multiple), it is returned unchanged.
     Examples:
     Default hourly anchor is midnight
@@ -5812,10 +5823,19 @@ def round_datetime_up_to_duration_multiple(
     if duration_amount == 0:
         return dt
 
-    if duration_unit in {"secondly", "minutely", "hourly", "daily", "weekly"}:
-        if duration_unit == "secondly":
+    if duration_unit in {"millisecondly", "secondly", "minutely", "hourly", "daily", "weekly"}:
+        if duration_unit == "millisecondly":
             anchor = get_anchor(
-                dt.replace(hour=0, minute=0, second=0, microsecond=anchors.secondly_microsecond), dt, timedelta(seconds=1)
+                dt.replace(hour=0, minute=0, second=0, microsecond=anchors.millisecondly_microsecond),
+                dt,
+                timedelta(milliseconds=1),
+            )
+            period = timedelta(milliseconds=duration_amount)
+        elif duration_unit == "secondly":
+            anchor = get_anchor(
+                dt.replace(hour=0, minute=0, second=0, microsecond=anchors.secondly_millisecond * 1000),
+                dt,
+                timedelta(seconds=1),
             )
             period = timedelta(seconds=duration_amount)
         elif duration_unit == "minutely":
@@ -6453,7 +6473,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             if time_spec.isdigit():
                 return int(time_spec)  # Input is a Unix time in integer seconds
             try:
-                return timedelta(seconds=parse_duration_to_seconds(time_spec, regex_suffix=r"\s*ago"))
+                return timedelta(milliseconds=parse_duration_to_milliseconds(time_spec, regex_suffix=r"\s*ago"))
             except ValueError:
                 try:  # If it's not a duration, try parsing as an ISO 8601 datetime
                     return unixtime_fromisoformat(time_spec)

@@ -60,8 +60,8 @@ Typically, a `cron` job on the source host runs `bzfs` periodically to create ne
 and prune outdated snapshots on the source, whereas another `cron` job on the destination host
 runs `bzfs` periodically to prune outdated destination snapshots. Yet another `cron` job runs
 `bzfs` periodically to replicate the recently created snapshots from the source to the
-destination. The frequency of these periodic activities is typically every second, minute, hour,
-day, week, month and/or year (or multiples thereof).
+destination. The frequency of these periodic activities is typically every N milliseconds, every
+second, minute, hour, day, week, month and/or year (or multiples thereof).
 
 All bzfs functions including snapshot creation, replication, deletion, comparison, etc. happily
 work with any snapshots in any format and with any naming convention, even created or managed by
@@ -94,7 +94,7 @@ executable.
 
 bzfs automatically replicates the snapshots of multiple datasets in parallel for best performance.
 Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel. Atomic
-snapshots can be created as frequently as every second.
+snapshots can be created as frequently as every N milliseconds.
 
 Optionally, bzfs applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during
 'zfs send/receive' data transfers. When run across the network, bzfs also transparently inserts
@@ -394,9 +394,9 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 <!-- FINE TO EDIT -->
 # bzfs_jobrunner
 
-The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience wrapper around 
-`bzfs` that automates periodic activities such as creating snapshots, replicating and pruning, on multiple source hosts 
-and multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
+The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience 
+wrapper around `bzfs` that simplifies periodic snapshot creation, replication, and pruning, across multiple source and 
+destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
 
 # How To Install and Run
 
@@ -431,7 +431,7 @@ delete mode.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
 deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently as every 
-second.
+N milliseconds.
 * For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not 
 to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates 
 over the parallel replication tasks. 
@@ -646,7 +646,8 @@ usage: bzfs [-h] [--recursive]
             [--weekly_second INT] [--daily_hour INT]
             [--daily_minute INT] [--daily_second INT]
             [--hourly_minute INT] [--hourly_second INT]
-            [--minutely_second INT] [--secondly_microsecond INT]
+            [--minutely_second INT] [--secondly_millisecond INT]
+            [--millisecondly_microsecond INT]
             [--zfs-recv-o-targets {full,incremental,full+incremental}]
             [--zfs-recv-o-sources STRING]
             [--zfs-recv-o-include-regex REGEX [REGEX ...]]
@@ -1007,10 +1008,11 @@ usage: bzfs [-h] [--recursive]
 
     A periodic snapshot is created if it is due per the schedule indicated by
     --create-src-snapshots-periods (for example '_daily' or '_hourly' or _'10minutely'
-    or '_2secondly'), or if the --create-src-snapshots-even-if-not-due flag is specified, or
-    if the most recent scheduled snapshot is somehow missing. In the latter case bzfs immediately
-    creates a snapshot (tagged with the current time, not backdated to the missed time), and then
-    resumes the original schedule.
+    or '_2secondly' or '_100millisecondly'), or if the
+    --create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled
+    snapshot is somehow missing. In the latter case bzfs immediately creates a snapshot (tagged
+    with the current time, not backdated to the missed time), and then resumes the original
+    schedule.
 
     If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered
     non-periodic and is thus created immediately regardless of the creation time of any existing
@@ -1046,12 +1048,13 @@ usage: bzfs [-h] [--recursive]
     0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18,
     'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily':
     31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
-    42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
-    logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots
-    every minute, hourly snapshots every hour, and so on. It will also create snapshots for the
-    targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. In addition, it will
-    create snapshots every 12 hours and every week for the 'test' organization, and name them as
-    being intended for the 'offsite' replication target.
+    42, 'weekly': 12}, 'onsite': {'100millisecondly': 42}}}"`. This example will, for the
+    organization 'prod' and the intended logical target 'onsite', create 'secondly'
+    snapshots every second, 'minutely' snapshots every minute, hourly snapshots every hour, and
+    so on. It will also create snapshots for the targets 'us-west-1' and 'eu-west-1' within
+    the 'prod' organization. In addition, it will create snapshots every 12 hours and every week
+    for the 'test' organization, and name them as being intended for the 'offsite' replication
+    target.
 
     The example creates ZFS snapshots with names like `prod_onsite_<timestamp>_secondly`,
     `prod_onsite_<timestamp>_minutely`, `prod_us-west-1_<timestamp>_hourly`,
@@ -1424,15 +1427,15 @@ usage: bzfs [-h] [--recursive]
     0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18,
     'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily':
     31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
-    42, 'weekly': 12}}}"`. This example will, for the organization 'prod' and the intended
-    logical target 'onsite', retain secondly snapshots that were created less than 40 seconds
-    ago, yet retain the latest 40 secondly snapshots regardless of creation time. Analog for the
-    latest 40 minutely snapshots, latest 36 hourly snapshots, etc. It will also retain snapshots
-    for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. In addition,
-    within the 'test' organization, it will retain snapshots that are created every 12 hours and
-    every week as specified, and name them as being intended for the 'offsite' replication
-    target. All other snapshots within the selected datasets will be deleted - you've been
-    warned!
+    42, 'weekly': 12}, 'onsite': {'100millisecondly': 42}}}"`. This example will, for the
+    organization 'prod' and the intended logical target 'onsite', retain secondly snapshots
+    that were created less than 40 seconds ago, yet retain the latest 40 secondly snapshots
+    regardless of creation time. Analog for the latest 40 minutely snapshots, latest 36 hourly
+    snapshots, etc. It will also retain snapshots for the targets 'us-west-1' and 'eu-west-1'
+    within the 'prod' organization. In addition, within the 'test' organization, it will
+    retain snapshots that are created every 12 hours and every week as specified, and name them as
+    being intended for the 'offsite' replication target. All other snapshots within the selected
+    datasets will be deleted - you've been warned!
 
     The example scans the selected ZFS datasets for snapshots with names like
     `prod_onsite_<timestamp>_secondly`, `prod_onsite_<timestamp>_minutely`,
@@ -2370,11 +2373,22 @@ created on the source by the --create-src-snapshots option.
 Use these options to customize when snapshots that happen every N seconds are scheduled to be
 created on the source by the --create-src-snapshots option.
 
-<div id="--secondly_microsecond"></div>
+<div id="--secondly_millisecond"></div>
 
-**--secondly_microsecond** *INT*
+**--secondly_millisecond** *INT*
 
-*  The microsecond within a second (0 ≤ x ≤ 999999, default: 0).
+*  The millisecond within a second (0 ≤ x ≤ 999, default: 0).
+
+# MILLISECONDLY PERIOD ANCHORS
+
+Use these options to customize when snapshots that happen every N milliseconds are scheduled to be
+created on the source by the --create-src-snapshots option.
+
+<div id="--millisecondly_microsecond"></div>
+
+**--millisecondly_microsecond** *INT*
+
+*  The microsecond within a millisecond (0 ≤ x ≤ 999, default: 0).
 
 # ZFS-RECV-O (EXPERIMENTAL)
 

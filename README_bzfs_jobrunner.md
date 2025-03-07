@@ -26,10 +26,9 @@
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in
 incompatible ways.
 
-This program is a convenience wrapper around [bzfs](README.md) that automates periodic
-activities such as creating snapshots, replicating and pruning, on multiple source hosts and
-multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py)
-file.
+This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic snapshot
+creation, replication, and pruning, across multiple source and destination hosts, using a single
+shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
 
 Typically, a cron job on the source host runs `bzfs_jobrunner` periodically to create new
 snapshots (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source
@@ -55,33 +54,40 @@ systemd timers or similar, along these lines:
 
 ### High Frequency Replication (Experimental Feature)
 
-To create snapshots every second, and to replicate every second, use the --daemon-* options to
-eliminate startup overhead, in combination with splitting the crontab entry (or better: high
-frequency systemd timer) into multiple processes, using pull replication mode, along these lines:
+Taking snapshots, and/or replicating, from every N milliseconds to every 15 seconds or so is
+considered high frequency. For such use cases, consider that `zfs list -t snapshot` performance
+degrades as more and more snapshots currently exist within the selected datasets, so try to keep
+the number of currently existing snapshots small, and prune them at a frequency that is
+proportional to the frequency with which snapshots are created. Consider using `--skip-parent`
+and `--exclude-dataset*` filters to limit the selected datasets only to those that require
+this level of frequency. If running with `--no-privilege-elevation` also set Unix env var
+`bzfs_no_force_convert_I_to_i` to `true` to enable batched incremental replication (requires
+permission for ZFS holds on the source dataset via `zfs allow`).
+
+In addition, use the `--daemon-*` options to reduce startup overhead, in combination with
+splitting the crontab entry (or better: high frequency systemd timer) into multiple processes,
+using pull replication mode, along these lines:
 
 * crontab on source host:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots
---daemon-lifetime=86400seconds`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-snapshots
---prune-src-bookmarks`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-snapshots`
+
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-bookmarks`
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate
---daemon-replication-frequency=secondly --daemon-lifetime=86400seconds`
-
-`# * * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate
---daemon-replication-frequency=5secondly --daemon-lifetime=86400seconds`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
 
-The daemon processes loop, process time events and sleep between events, and finally exit after
-86400 seconds. The daemons will subsequently be auto-restarted by 'cron', or earlier if they
-fail. While the daemons are running 'cron' will attempt to start new (unnecessary) daemons but
-this is benign as these new processes immediately exit with a message like this: "Exiting as same
-previous periodic job is still running without completion yet"
+The daemon processes work like non-daemon processes except that they loop, handle time events and
+sleep between events, and finally exit after, say, 86400 seconds (whatever you specify via
+`--daemon-lifetime`). The daemons will subsequently be auto-restarted by 'cron', or earlier
+if they fail. While the daemons are running 'cron' will attempt to start new (unnecessary)
+daemons but this is benign as these new processes immediately exit with a message like this:
+"Exiting as same previous periodic job is still running without completion yet"
 
 <!-- END DESCRIPTION SECTION -->
 

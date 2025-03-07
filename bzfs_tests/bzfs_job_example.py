@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import argparse
+import os
 import subprocess
 import sys
 
@@ -104,6 +105,7 @@ org = "prod"
 #     },
 #     "test": {
 #         "offsite": {"12hourly": 14, "weekly": 12},
+#         "onsite": {"100millisecondly": 40},
 #     },
 # }
 # src_snapshot_periods = {  # empty string as target name is ok
@@ -178,9 +180,27 @@ extra_args = []
 # extra_args += ["--weekly_hour=2"]
 # extra_args += ["--weekly_minute=0"]
 # ... and so on (include all other options from bzfs --help here too)
-# extra_args += ["--daemon-replication-frequency=minutely"]
-# extra_args += ["--daemon-replication-frequency=secondly"]
-# extra_args += ["--daemon-replication-frequency=10secondly"]
+
+
+# Taking snapshots, and/or replicating, from every N milliseconds to every 15 seconds or so is considered high frequency.
+# For such cases, use daemon mode and consider adding these options to improve performance:
+# extra_args += ["--daemon-lifetime=300seconds"]  # daemon exits after this much time has elapsed
+# extra_args += ["--daemon-lifetime=86400seconds"]  # daemon exits after this much time has elapsed
+# extra_args += ["--daemon-replication-frequency=secondly"]  # replicate every second
+# extra_args += ["--daemon-replication-frequency=10secondly"]  # replicate every 10 seconds
+# extra_args += ["--daemon-prune-src-frequency=10secondly"]  # prune src snapshots and src bookmarks every 10 seconds
+# extra_args += ["--daemon-prune-dst-frequency=10secondly"]  # prune dst snapshots every 10 seconds
+# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds to snapshot names
+# extra_args += ["--create-src-snapshots-even-if-not-due"]  # nomore run 'zfs list -t snapshot' before snapshot creation
+# extra_args += ["--no-resume-recv"]  # skip another 'zfs list' check
+# extra_args += ["--no-estimate-send-size"]  # skip 'zfs send -n -v'
+# extra_args += ["--pv-program=-"]  # nomore measure via 'pv' / stats
+# extra_args += ["--ps-program=-"]  # disable safety check for simultaneous 'zfs receive' to same dataset by another process
+# extra_args += ["--mbuffer-program=-"]  # shorten latency of queue handoffs and disable large buffer size allocations
+# extra_args += ["--compression-program=-"]  # save CPU by disabling compression-on-the-wire
+# extra_args += ["--compression-program=lz4"]  # use less CPU for compression-on-the-wire
+# extra_args += ["--ssh-program=hpnssh"]  # use larger TCP window size over high speed long distance networks
+# os.environ["bzfs_no_force_convert_I_to_i"] = "true"  # enable batched incremental replication w/ --no-privilege-elevation
 
 
 cmd = ["bzfs_jobrunner"]

@@ -1550,7 +1550,20 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
         self.assertEqual(result.tzinfo, self.tz)
 
-    # Fixed-length durations: second, minute, hour, day, week.
+    def test_milliseconds_non_boundary(self):
+        """Rounding up to the next millisecond when dt is not on a millisecond boundary."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "millisecondly")
+        expected = dt.replace(microsecond=0) + timedelta(milliseconds=123 + 1)
+        self.assertEqual(expected, result)
+        self.assertEqual(result.tzinfo, self.tz)
+
+    def test_milliseconds_boundary(self):
+        """Rounding up to the next second when dt is exactly on a second boundary returns dt."""
+        dt = datetime(2025, 2, 11, 14, 5, 1, 123000, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "millisecondly")
+        self.assertEqual(result, dt)
+
     def test_seconds_non_boundary(self):
         """Rounding up to the next second when dt is not on a second boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
@@ -2118,6 +2131,12 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertEqual(args.time_n_ranks[0][0], 0)
 
     def test_valid_durations(self):
+        args = self.parse_duration("5millis")
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(milliseconds=5))
+
+        args = self.parse_duration("5milliseconds")
+        self.assertEqual(args.time_n_ranks[0][0], timedelta(milliseconds=5))
+
         args = self.parse_duration("5secs")
         self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=5))
 
