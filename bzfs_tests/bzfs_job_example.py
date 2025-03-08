@@ -182,7 +182,7 @@ extra_args = []
 # ... and so on (include all other options from bzfs --help here too)
 
 
-# Taking snapshots, and/or replicating, from every N milliseconds to every 15 seconds or so is considered high frequency.
+# Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency.
 # For such cases, use daemon mode and consider adding these options to improve performance:
 # extra_args += ["--daemon-lifetime=300seconds"]  # daemon exits after this much time has elapsed
 # extra_args += ["--daemon-lifetime=86400seconds"]  # daemon exits after this much time has elapsed

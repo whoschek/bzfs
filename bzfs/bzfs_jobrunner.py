@@ -59,7 +59,7 @@ source host and all destination hosts, and add crontab entries or systemd timers
 
 ### High Frequency Replication (Experimental Feature)
 
-Taking snapshots, and/or replicating, from every N milliseconds to every 15 seconds or so is considered high frequency. For 
+Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency. For 
 such use cases, consider that `zfs list -t snapshot` performance degrades as more and more snapshots currently exist within
 the selected datasets, so try to keep the number of currently existing snapshots small, and prune them at a frequency that 
 is proportional to the frequency with which snapshots are created. Consider using `--skip-parent` and `--exclude-dataset*` 

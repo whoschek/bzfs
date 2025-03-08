@@ -2178,18 +2178,18 @@ class Job:
             return False
         self.progress_reporter.pause()
         p, log = self.params, self.params.log
-        conf = p.create_src_snapshots_config
-        curr_datetime = conf.current_datetime + timedelta(microseconds=1)
+        config = p.create_src_snapshots_config
+        curr_datetime = config.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt = min(
-            round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, conf.anchors)
-            for duration_amount, duration_unit in conf.suffix_durations.values()
+            round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, config.anchors)
+            for duration_amount, duration_unit in config.suffix_durations.values()
         )
-        offset: timedelta = next_snapshotting_event_dt - datetime.now(conf.tz)
+        offset: timedelta = next_snapshotting_event_dt - datetime.now(config.tz)
         offset_nanos = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
         sleep_nanos = min(sleep_nanos, max(0, offset_nanos))
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), f" ... [Log {p.log_params.log_file}]")
         time.sleep(sleep_nanos / 1_000_000_000)
-        conf.current_datetime = datetime.now(conf.tz)
+        config.current_datetime = datetime.now(config.tz)
         return daemon_stoptime_nanos - time.time_ns() > 0
 
     def print_replication_stats(self, start_time_nanos: int):
