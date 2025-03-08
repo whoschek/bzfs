@@ -1934,7 +1934,7 @@ class CreateSrcSnapshotConfig:
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: str = args.create_src_snapshots_timeformat
-        self.anchors = PeriodAnchors().parse(args)
+        self.anchors: PeriodAnchors = PeriodAnchors().parse(args)
 
         suffixes: List[str] = []
         labels = []
@@ -2347,7 +2347,7 @@ class Job:
 
     def run_task(self) -> None:
         def filter_src_datasets() -> List[str]:  # apply --{include|exclude}-dataset policy
-            return sorted(self.filter_datasets(src, basis_src_datasets)) if src_datasets is None else src_datasets
+            return self.filter_datasets(src, basis_src_datasets) if src_datasets is None else src_datasets
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
@@ -2375,7 +2375,7 @@ class Job:
                     "snapshots_changed": int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 }
                 basis_src_datasets.append(src_dataset)
-            basis_src_datasets = sorted(basis_src_datasets)
+            assert not self.is_test_mode or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
 
         # Optionally, atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
         # The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
@@ -2461,9 +2461,11 @@ class Job:
         basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
         if basis_dst_datasets is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
-            basis_dst_datasets = ""
-        basis_dst_datasets = sorted(basis_dst_datasets.splitlines())
-        dst_datasets = sorted(self.filter_datasets(dst, basis_dst_datasets))  # apply include/exclude policy
+            basis_dst_datasets = []
+        else:
+            basis_dst_datasets = basis_dst_datasets.splitlines()
+        assert not self.is_test_mode or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
+        dst_datasets = self.filter_datasets(dst, basis_dst_datasets)  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset* policy. Do not recurse without --recursive. With --recursive,
@@ -3375,12 +3377,12 @@ class Job:
         """shell-escapes double quotes and backticks, then surrounds with double quotes."""
         return '"' + arg.replace('"', '\\"').replace("`", "\\`") + '"'
 
-    def filter_datasets(self, remote: Remote, datasets: List[str]) -> List[str]:
+    def filter_datasets(self, remote: Remote, sorted_datasets: List[str]) -> List[str]:
         """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
-        exclude regexes."""
+        exclude regexes. Assumes the list of input datasets is sorted. The list of output datasets will be sorted too."""
         p, log = self.params, self.params.log
         results = []
-        for i, dataset in enumerate(datasets):
+        for i, dataset in enumerate(sorted_datasets):
             if i == 0 and p.skip_parent:
                 continue
             rel_dataset = relativize_dataset(dataset, remote.root_dataset)
@@ -3405,13 +3407,13 @@ class Job:
                 assert any(is_descendant(dataset, of_root_dataset=root) for root in root_datasets)
         return results
 
-    def filter_datasets_by_exclude_property(self, remote: Remote, datasets: List[str]) -> List[str]:
+    def filter_datasets_by_exclude_property(self, remote: Remote, sorted_datasets: List[str]) -> List[str]:
         """Excludes datasets that are marked with a ZFS user property value that, in effect, says 'skip me'."""
         p, log = self.params, self.params.log
         results = []
         localhostname = None
         skip_dataset = DONT_SKIP_DATASET
-        for dataset in datasets:
+        for dataset in sorted_datasets:
             if is_descendant(dataset, of_root_dataset=skip_dataset):
                 # skip_dataset shall be ignored or has been deleted by some third party while we're running
                 continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
@@ -4209,7 +4211,8 @@ class Job:
         taken snapshots have been successfully replicated by a periodic job. Lists snapshots only contained in source
         (tagged with 'src'), only contained in destination (tagged with 'dst'), and contained in both source and destination
         (tagged with 'all'), in the form of a TSV file, along with other snapshot metadata. Implemented with a time and
-        space efficient streaming algorithm; easily scales to millions of datasets and any number of snapshots."""
+        space efficient streaming algorithm; easily scales to millions of datasets and any number of snapshots.
+        Assumes that both src_datasets and dst_datasets are sorted."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         task = src.root_dataset + " vs. " + dst.root_dataset
@@ -4223,8 +4226,9 @@ class Job:
         is_first_row = True
         now = None
 
-        def zfs_list_snapshot_iterator(r: Remote, datasets: List[str]) -> Generator[str, None, None]:
+        def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: List[str]) -> Generator[str, None, None]:
             """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
+            assert not self.is_test_mode or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
             written_zfs_prop = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
             if self.is_solaris_zfs(r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
                 written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
@@ -4233,7 +4237,7 @@ class Job:
             if p.use_bookmark and r.location == "src" and self.are_bookmarks_enabled(r):
                 types = "snapshot,bookmark"
             cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
-            for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted(datasets)):
+            for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets):
                 yield from lines
 
         def snapshot_iterator(
