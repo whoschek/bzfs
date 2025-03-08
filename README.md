@@ -28,17 +28,15 @@
 [![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-# Table of Contents
-
 - [Introduction](#Introduction)
-- [Example Usage](#Example-Usage)
-- [bzfs_jobrunner](#bzfs_jobrunner)
-- [How To Install and Run](#How-To-Install-and-Run)
+- [Quick Start](#Quick-Start)
+- [Periodic Jobs with bzfs_jobrunner](#Periodic-Jobs-with-bzfs_jobrunner)
+- [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
-- [Automated Test Runs](#Automated-Test-Runs)
-- [How To Run Unit Tests on GitHub](#How-To-Run-Unit-Tests-on-GitHub)
-- [How To Run Unit Tests Locally](#How-To-Run-Unit-Tests-Locally)
-- [Usage](#Usage)
+- [Continuous Testing](#Continuous-Testing)
+- [Unit Testing on GitHub](#Unit-Testing-on-GitHub)
+- [Unit Testing Locally](#Unit-Testing-Locally)
+- [Man Page](#Man-Page)
 
 # Introduction
 
@@ -117,7 +115,7 @@ CLI) into the pipeline between network endpoints during 'zfs send/receive' netwo
 one of these utilities is not installed this is auto-detected, and the operation continues
 reliably without the corresponding auxiliary feature.
 
-# Example Usage
+# Quick Start
 
 * Create adhoc atomic snapshots without a schedule:
 
@@ -406,13 +404,13 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 
 
 <!-- FINE TO EDIT -->
-# bzfs_jobrunner
+# Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience 
 wrapper around `bzfs` that simplifies periodic snapshot creation, replication, and pruning, across multiple source and 
 destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
 
-# How To Install and Run
+# Installation
 
 ```
 # Ubuntu / Debian:
@@ -503,9 +501,9 @@ Chances are that CI tests will catch changes that have unintended side effects.
 * It's fast!
 
 
-# Automated Test Runs
+# Continuous Testing
 
-Results of automated test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
+Results of continuous test runs on a matrix of various old and new versions of ZFS/Python/Linux/FreeBSD/Solaris are
 [here](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml?query=event%3Aschedule), as generated
 by [this script](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml).
 The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, Solaris, etc.
@@ -516,7 +514,7 @@ The gist is that it should work on any flavor, with python (3.7 or higher, no ad
 only needed on the initiator host.
 
 
-# How To Run Unit Tests on GitHub
+# Unit Testing on GitHub
 
 * First, on the GitHub page of this repo, click on "Fork/Create a new fork".
 * Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
@@ -541,7 +539,7 @@ Click on any run and browse to the bottom of the resulting run page to find the 
 coverage report that merges all jobs of the run.
 
 
-# How To Run Unit Tests Locally
+# Unit Testing Locally
 ```
 # verify zfs is installed
 zfs --version
@@ -583,7 +581,7 @@ bzfs-test
 ```
 
 
-# Usage
+# Man Page
 
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->

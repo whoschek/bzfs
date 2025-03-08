@@ -212,7 +212,7 @@ installed this is auto-detected, and the operation continues reliably without th
 feature.
 
 
-# Example Usage
+# Quick Start
 
 * Create adhoc atomic snapshots without a schedule:
 

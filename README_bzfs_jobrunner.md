@@ -19,7 +19,12 @@
  under the License.
 -->
 
-# bzfs_jobrunner
+# Periodic Jobs with bzfs_jobrunner
+
+- [Introduction](#Introduction)
+- [Man Page](#Man-Page)
+
+# Introduction
 
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN DESCRIPTION SECTION -->
@@ -94,7 +99,7 @@ daemons but this is benign as these new processes immediately exit with a messag
 
 <!-- FINE TO EDIT -->
 
-# Usage
+# Man Page
 
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
