@@ -145,6 +145,7 @@ ssh_dst_port = 22
 
 
 extra_args = []
+extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', os.path.basename(sys.argv[0]))}"]
 # extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
 # extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
 # extra_args += ["--include-dataset=foo"]  # see bzfs --help
@@ -199,9 +200,9 @@ extra_args = []
 # extra_args += ["--mbuffer-program=-"]  # shorten latency of queue handoffs and disable large buffer size allocations
 # extra_args += ["--compression-program=-"]  # save CPU by disabling compression-on-the-wire
 # extra_args += ["--compression-program=lz4"]  # use less CPU for compression-on-the-wire
+# extra_args += ["--threads=200%"]  # use more CPU cores when operating on many datasets
 # extra_args += ["--ssh-program=hpnssh"]  # use larger TCP window size over high speed long distance networks
 # os.environ["bzfs_no_force_convert_I_to_i"] = "true"  # enable batched incremental replication w/ --no-privilege-elevation
-
 
 cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []
