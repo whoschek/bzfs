@@ -21,8 +21,8 @@ import sys
 
 parser = argparse.ArgumentParser(
     description=f"""
-Periodic replica management jobconfig file, using an "Infrastructure as Code" approach, in the form of a CLI that generates 
-deployment specific parameters and passes the parameters to `bzfs_jobrunner`, along with all unknown CLI arguments.
+Periodic replica management jobconfig file, in the form of a script that generates deployment specific parameters and 
+submits the parameters to `bzfs_jobrunner`, along with all unknown CLI arguments, using an "Infrastructure as Code" approach.
 
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
 """
@@ -203,6 +203,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--threads=200%"]  # use more CPU cores when operating on many datasets
 # extra_args += ["--ssh-program=hpnssh"]  # use larger TCP window size over high speed long distance networks
 # os.environ["bzfs_no_force_convert_I_to_i"] = "true"  # enable batched incremental replication w/ --no-privilege-elevation
+
 
 cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []

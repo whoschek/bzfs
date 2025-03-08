@@ -424,7 +424,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots in parallel across datasets and serially within a dataset. All child datasets of a dataset "
              "may be processed in parallel. For consistency, processing of a dataset only starts after processing of "
              "all its ancestor datasets has completed. Further, when a thread is ready to start processing another "
-             "dataset, it chooses the next dataset wrt. string sort order from the datasets that are "
+             "dataset, it chooses the next dataset wrt. case-sensitive sort order from the datasets that are "
              "currently available for start of processing. Initially, only the roots of the selected dataset subtrees "
              "are available for start of processing. The degree of parallelism is configurable with the --threads "
              "option (see below).\n\n")
@@ -631,7 +631,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered "
              "non-periodic and is thus created immediately regardless of the creation time of any existing snapshot.\n\n"
              "The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command "
-             "line, using string sort order, and using 'zfs snapshot -r' to the extent that this is compatible "
+             "line, using case-sensitive sort order, and using 'zfs snapshot -r' to the extent that this is compatible "
              "with the actual results of the schedule and the actual results of the --{include|exclude}-dataset* pruning "
              "policy. The snapshots of all datasets that fit "
              "within the same single 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction group, and "
@@ -2374,7 +2374,7 @@ class Job:
 
         # Optionally, atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
         # The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
-        # using string sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
+        # using case-sensitive sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
         # --{include|exclude}-dataset* pruning policy. The snapshots of all datasets that fit within the same single
         # 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction group, and correspondingly have
         # identical 'createtxg' ZFS property (but not necessarily identical 'creation' ZFS time property as ZFS actually
@@ -4481,7 +4481,7 @@ class Job:
         and parallel execution. Assumes that the input dataset list is sorted. All children of a dataset may be
         processed in parallel. For consistency (even during parallel dataset replication/deletion), processing of a
         dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is
-        ready to start processing another dataset, it chooses the "smallest" dataset wrt. string sort order
+        ready to start processing another dataset, it chooses the "smallest" dataset wrt. case-sensitive sort order
         from the datasets that are currently available for start of processing. Initially, only the roots of the
         selected dataset subtrees are available for start of processing."""
         p, log = self.params, self.params.log
