@@ -4616,34 +4616,34 @@ class Job:
         if params.zpool_program == disable_prg:
             self.disable_program("zpool", locations)
 
-        for key in locations:
-            for program in list(available_programs[key].keys()):
+        for key, programs in available_programs.items():
+            for program in list(programs.keys()):
                 if program.startswith("uname-"):
                     # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
                     # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
                     # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc # https://blogs.oracle.com/solaris/post/building-open-source-software-on-oracle-solaris-114-cbe-release
                     # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
                     # uname-Darwin foo 23.6.0 Darwin Kernel Version 23.6.0: Mon Jul 29 21:13:04 PDT 2024; root:xnu-10063.141.2~1/RELEASE_ARM64_T6020 arm64
-                    available_programs[key].pop(program)
+                    programs.pop(program)
                     uname = program[len("uname-") :]
-                    available_programs[key]["uname"] = uname
+                    programs["uname"] = uname
                     log.trace(f"available_programs[{key}][uname]: %s", uname)
-                    available_programs[key]["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
-                    log.trace(f"available_programs[{key}][os]: %s", available_programs[key]["os"])
+                    programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
+                    log.trace(f"available_programs[{key}][os]: %s", programs["os"])
                 elif program.startswith("default_shell-"):
-                    available_programs[key].pop(program)
+                    programs.pop(program)
                     default_shell = program[len("default_shell-") :]
-                    available_programs[key]["default_shell"] = default_shell
+                    programs["default_shell"] = default_shell
                     log.trace(f"available_programs[{key}][default_shell]: %s", default_shell)
                     validate_default_shell(default_shell, r)
                 elif program.startswith("getconf_cpu_count-"):
-                    available_programs[key].pop(program)
+                    programs.pop(program)
                     getconf_cpu_count = program[len("getconf_cpu_count-") :]
-                    available_programs[key]["getconf_cpu_count"] = getconf_cpu_count
+                    programs["getconf_cpu_count"] = getconf_cpu_count
                     log.trace(f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
 
-        for key, value in available_programs.items():
-            log.debug(f"available_programs[{key}]: %s", list_formatter(value, separator=", "))
+        for key, programs in available_programs.items():
+            log.debug(f"available_programs[{key}]: %s", list_formatter(programs, separator=", "))
 
         for r in [p.dst, p.src]:
             if r.sudo and not self.is_program_available("sudo", r.location):
