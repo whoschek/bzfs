@@ -1196,9 +1196,15 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "https://manpages.ubuntu.com/manpages/latest/en/man1/pv.1.html\n\n")
     parser.add_argument(
         "--daemon-lifetime", default="0 seconds", metavar="DURATION",
+        # help="Exit the daemon after this much time has elapsed. Default is '0 seconds', i.e. no daemon mode. "
+        #      "Examples: '600 seconds', '86400 seconds', '1000years'")
         help=argparse.SUPPRESS)
+    daemon_frequency_dflt = "minutely"
     parser.add_argument(
-        "--daemon-frequency", default=None, metavar="STRING",
+        "--daemon-frequency", default=daemon_frequency_dflt, metavar="STRING",
+        # help=f"Run a daemon iteration every N time units. Default is '{daemon_frequency_dflt}'. "
+        #      "Examples: '100 millisecondly', '10secondly, 'minutely' to request the daemon to run every 100 milliseconds, "
+        #      "or every 10 seconds, or every minute, respectively. Only has an effect if --daemon-lifetime is non-zero.")
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--no-estimate-send-size", action="store_true",
@@ -1560,6 +1566,7 @@ class Params:
         )
         self.compare_snapshot_lists: Optional[str] = args.compare_snapshot_lists
         self.daemon_lifetime_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_lifetime)
+        self.daemon_frequency: str = args.daemon_frequency
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.resume_recv: bool = not args.no_resume_recv
@@ -1943,16 +1950,18 @@ class CreateSrcSnapshotConfig:
             for target, periods in target_periods.items():
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
-                        die(f"--create-src-snapshots-period: Period amount must be a non-negative integer: {period_amount}")
+                        die(f"--create-src-snapshots-plan: Period amount must be a non-negative integer: {period_amount}")
                     if period_amount > 0:
                         suffix = nsuffix(period_unit)
                         suffixes.append(suffix)
                         labels.append(SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=suffix))
-        if args.daemon_frequency and not args.create_src_snapshots_plan:
-            suffixes = [nsuffix(args.daemon_frequency)]
-            labels = []
-
         xperiods = SnapshotPeriods()
+        if self.skip_create_src_snapshots:
+            duration_amount, duration_unit = xperiods.suffix_to_duration0(p.daemon_frequency)
+            if duration_amount <= 0 or not duration_unit:
+                die(f"Invalid --daemon-frequency: {p.daemon_frequency}")
+            suffixes = [nsuffix(p.daemon_frequency)]
+            labels = []
         suffix_durations = {suffix: xperiods.suffix_to_duration1(suffix) for suffix in suffixes}
 
         def suffix_key(suffix: str):
@@ -2186,8 +2195,11 @@ class Job:
         config = p.create_src_snapshots_config
         curr_datetime = config.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt = min(
-            round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, config.anchors)
-            for duration_amount, duration_unit in config.suffix_durations.values()
+            (
+                round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, config.anchors)
+                for duration_amount, duration_unit in config.suffix_durations.values()
+            ),
+            default=curr_datetime + timedelta(days=1000 * 365),  # infinity
         )
         offset: timedelta = next_snapshotting_event_dt - datetime.now(config.tz)
         offset_nanos = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000

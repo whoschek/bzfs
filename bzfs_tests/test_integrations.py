@@ -603,6 +603,9 @@ class AdhocTestCase(BZFSTestCase):
     def test_daemon_frequency(self):
         LocalTestCase(param=self.param).test_daemon_frequency()
 
+    def test_daemon_frequency_invalid(self):
+        LocalTestCase(param=self.param).test_daemon_frequency_invalid()
+
     def test_basic_snapshotting_flat_simple(self):
         LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
 
@@ -1152,7 +1155,11 @@ class LocalTestCase(BZFSTestCase):
 
     def test_daemon_frequency(self):
         self.setup_basic()
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--daemon-frequency=1seconds")
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--daemon-frequency=1secondly")
+
+    def test_daemon_frequency_invalid(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--daemon-frequency=1second", expected_status=die_status)
 
     def test_invalid_use_of_dummy(self):
         self.run_bzfs(src_root_dataset, bzfs.dummy_dataset, expected_status=die_status)
