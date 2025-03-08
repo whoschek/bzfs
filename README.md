@@ -29,8 +29,8 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 - [Introduction](#Introduction)
-- [Quick Start](#Quick-Start)
 - [Periodic Jobs with bzfs_jobrunner](#Periodic-Jobs-with-bzfs_jobrunner)
+- [Quick Start](#Quick-Start)
 - [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
 - [Continuous Testing](#Continuous-Testing)
@@ -114,6 +114,13 @@ lightweight data compression (via 'zstd -1' CLI) and efficient data buffering (v
 CLI) into the pipeline between network endpoints during 'zfs send/receive' network transfers. If
 one of these utilities is not installed this is auto-detected, and the operation continues
 reliably without the corresponding auxiliary feature.
+
+# Periodic Jobs with bzfs_jobrunner
+
+The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program,
+which is a convenience wrapper around `bzfs` that simplifies periodic snapshot creation,
+replication, and pruning, across multiple source and destination hosts, using a single shared
+[jobconfig](bzfs_tests/bzfs_job_example.py) file.
 
 # Quick Start
 
@@ -404,12 +411,6 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 
 
 <!-- FINE TO EDIT -->
-# Periodic Jobs with bzfs_jobrunner
-
-The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience 
-wrapper around `bzfs` that simplifies periodic snapshot creation, replication, and pruning, across multiple source and 
-destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
-
 # Installation
 
 ```

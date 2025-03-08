@@ -211,6 +211,11 @@ between network endpoints during 'zfs send/receive' network transfers. If one of
 installed this is auto-detected, and the operation continues reliably without the corresponding auxiliary
 feature.
 
+# Periodic Jobs with bzfs_jobrunner
+
+The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience 
+wrapper around `{prog_name}` that simplifies periodic snapshot creation, replication, and pruning, across multiple 
+source and destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
 
 # Quick Start
 
