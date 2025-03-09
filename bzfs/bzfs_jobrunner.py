@@ -332,12 +332,10 @@ class Job:
         def zpool(dataset: str) -> str:
             return dataset.split("/", 1)[0]
 
-        if len(root_dataset_pairs) > 0:
-            pools = {zpool(dst) for src, dst in root_dataset_pairs}
-            cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
-            existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
-        else:
-            existing_pools = set()
+        assert len(root_dataset_pairs) > 0
+        pools = {zpool(dst) for src, dst in root_dataset_pairs}
+        cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
+        existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
         results = []
         for src, dst in root_dataset_pairs:
             if zpool(dst) in existing_pools:
