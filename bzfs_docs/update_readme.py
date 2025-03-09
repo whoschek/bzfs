@@ -61,6 +61,12 @@ def main():
 
     triple_backticks = "\\`\\`\\`"
     re_triple_backticks = r"\\`\\`\\`"
+    content = re.sub(  # Multiline CLI examples: Replace \n between non-newline chars, with a backslash followed by newline
+        re_triple_backticks + r"(.*?)" + re_triple_backticks,
+        lambda m: triple_backticks + re.sub(r"(?<=.)(\n)(?=.)", r" \\\n", m.group(1)) + triple_backticks,
+        content,
+        flags=re.DOTALL,
+    )
     content = re.sub(
         re_triple_backticks + r"(.*?)" + re_triple_backticks,
         lambda m: triple_backticks + m.group(1).replace("\n\n", "\n") + triple_backticks,

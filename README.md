@@ -128,7 +128,7 @@ replication, and pruning, across multiple source and destination hosts, using a 
 
 
 ```
-$ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
+$ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots \
 --create-src-snapshots-plan "{'test':{'':{'adhoc':1}}}"
 ```
 
@@ -145,7 +145,7 @@ from a periodic `cron` job:
 
 
 ```
-$ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
+$ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots \
 --create-src-snapshots-plan "{'prod':{'us-west-1':{'hourly':36,'daily':31}}}"
 ```
 
@@ -248,7 +248,7 @@ tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets
+$ bzfs tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets \
 --delete-dst-snapshots
 ```
 
@@ -258,7 +258,7 @@ the latest 7 daily snapshots (per dataset) are replicated regardless of creation
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily'
+$ bzfs tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily' \
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'
 ```
 
@@ -272,9 +272,9 @@ dataset) are retained regardless of creation time:
 
 
 ```
-$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks notime 'all except latest 7'
+$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
+--delete-dst-snapshots --include-snapshot-regex '.*_daily' \
+--include-snapshot-times-and-ranks notime 'all except latest 7' \
 --include-snapshot-times-and-ranks 'anytime..7 days ago'
 ```
 
@@ -289,9 +289,9 @@ corresponding snapshot or bookmark exists in the source dataset (same as above e
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks notime 'all except latest 7'
+$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication \
+--delete-dst-snapshots --include-snapshot-regex '.*_daily' \
+--include-snapshot-times-and-ranks notime 'all except latest 7' \
 --include-snapshot-times-and-ranks '7 days ago..anytime'
 ```
 
@@ -303,10 +303,10 @@ corresponding snapshot exists in the source dataset (same as above except append
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks notime 'all except latest 7'
---include-snapshot-times-and-ranks 'anytime..7 days ago'
+$ bzfs tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication \
+--delete-dst-snapshots --include-snapshot-regex '.*_daily' \
+--include-snapshot-times-and-ranks notime 'all except latest 7' \
+--include-snapshot-times-and-ranks 'anytime..7 days ago' \
 --delete-dst-snapshots-no-crosscheck
 ```
 
@@ -316,9 +316,9 @@ dataset) regardless of creation time:
 
 
 ```
-$ bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots=bookmarks --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks notime 'all except latest 200'
+$ bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication \
+--delete-dst-snapshots=bookmarks --include-snapshot-regex '.*_daily' \
+--include-snapshot-times-and-ranks notime 'all except latest 200' \
 --include-snapshot-times-and-ranks 'anytime..90 days ago'
 ```
 
@@ -327,8 +327,8 @@ $ bzfs dummy tank1/foo/bar --dryrun --recursive --skip-replication
 
 
 ```
-$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex
+$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
+--delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex \
 '!.*'
 ```
 
@@ -340,20 +340,20 @@ snapshots, and 5 yearly snapshots:
 
 
 ```
-$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --delete-dst-snapshots-except --include-snapshot-regex '.*_secondly'
---include-snapshot-times-and-ranks '40 seconds ago..anytime' 'latest 40'
---new-snapshot-filter-group --include-snapshot-regex '.*_minutely'
---include-snapshot-times-and-ranks '40 minutes ago..anytime' 'latest 40'
---new-snapshot-filter-group --include-snapshot-regex '.*_hourly'
---include-snapshot-times-and-ranks '36 hours ago..anytime' 'latest 36'
---new-snapshot-filter-group --include-snapshot-regex '.*_daily'
---include-snapshot-times-and-ranks '31 days ago..anytime' 'latest 31'
---new-snapshot-filter-group --include-snapshot-regex '.*_weekly'
---include-snapshot-times-and-ranks '12 weeks ago..anytime' 'latest 12'
---new-snapshot-filter-group --include-snapshot-regex '.*_monthly'
---include-snapshot-times-and-ranks '18 months ago..anytime' 'latest 18'
---new-snapshot-filter-group --include-snapshot-regex '.*_yearly'
+$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
+--delete-dst-snapshots --delete-dst-snapshots-except --include-snapshot-regex '.*_secondly' \
+--include-snapshot-times-and-ranks '40 seconds ago..anytime' 'latest 40' \
+--new-snapshot-filter-group --include-snapshot-regex '.*_minutely' \
+--include-snapshot-times-and-ranks '40 minutes ago..anytime' 'latest 40' \
+--new-snapshot-filter-group --include-snapshot-regex '.*_hourly' \
+--include-snapshot-times-and-ranks '36 hours ago..anytime' 'latest 36' \
+--new-snapshot-filter-group --include-snapshot-regex '.*_daily' \
+--include-snapshot-times-and-ranks '31 days ago..anytime' 'latest 31' \
+--new-snapshot-filter-group --include-snapshot-regex '.*_weekly' \
+--include-snapshot-times-and-ranks '12 weeks ago..anytime' 'latest 12' \
+--new-snapshot-filter-group --include-snapshot-regex '.*_monthly' \
+--include-snapshot-times-and-ranks '18 months ago..anytime' 'latest 18' \
+--new-snapshot-filter-group --include-snapshot-regex '.*_yearly' \
 --include-snapshot-times-and-ranks '5 years ago..anytime' 'latest 5'
 ```
 
@@ -362,8 +362,8 @@ For convenience, the lengthy command line above can be expressed in a more conci
 
 
 ```
-$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication
---delete-dst-snapshots --delete-dst-snapshots-except-plan
+$ bzfs dummy tank2/boo/bar --dryrun --recursive --skip-replication \
+--delete-dst-snapshots --delete-dst-snapshots-except-plan \
 "{'prod':{'onsite':{'secondly':40,'minutely':40,'hourly':36,'daily':31,'weekly':12,'monthly':18,'yearly':5}}}"
 ```
 
@@ -377,9 +377,9 @@ datasets:
 
 
 ```
-$ bzfs tank1/foo/bar tank2/boo/bar --skip-replication
---compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex
-'.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
+$ bzfs tank1/foo/bar tank2/boo/bar --skip-replication \
+--compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex \
+'.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' \
 --exclude-dataset-regex '(.*/)?tmp.*'
 ```
 
@@ -399,11 +399,11 @@ of data are missing on dst, etc.
 
 
 ```
-$ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
---exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*'
---include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset
-/tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex
-'(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'
+$ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive \
+--exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*' \
+--include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset \
+/tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex \
+'(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' \
 --ssh-dst-private-key /root/.ssh/id_rsa
 ```
 
