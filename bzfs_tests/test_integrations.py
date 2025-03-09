@@ -4507,12 +4507,14 @@ class LocalTestCase(BZFSTestCase):
         # next iteration:
         self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(0, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(0, len(bookmarks(src_root_dataset)))
         self.assertFalse(dataset_exists(dst_root_dataset))
 
         self.run_bzfs("--replicate", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs("--prune-src-snapshots", *pull_args, use_jobrunner=True)
@@ -4520,7 +4522,8 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs("--prune-dst-snapshots", *pull_args, use_jobrunner=True)
@@ -4536,12 +4539,14 @@ class LocalTestCase(BZFSTestCase):
             "--replicate", *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[2:]), use_jobrunner=True
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs("--replicate", *pull_args, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs("--prune-src-snapshots", *pull_args, use_jobrunner=True)
@@ -4549,7 +4554,8 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs(
@@ -4571,12 +4577,14 @@ class LocalTestCase(BZFSTestCase):
 
         self.run_bzfs("--replicate", *push_args_bad, use_jobrunner=True)  # replicate in push mode
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs("--replicate", *push_args, use_jobrunner=True)  # replicate in push mode
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs(
@@ -4587,7 +4595,8 @@ class LocalTestCase(BZFSTestCase):
             expected_status=2,
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         self.run_bzfs(
@@ -4597,7 +4606,8 @@ class LocalTestCase(BZFSTestCase):
             expected_status=2,
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
 
