@@ -15,15 +15,13 @@
 # limitations under the License.
 
 #############################################################################
-# Quick Start: Edit this script. Replace the value of src_host with your source hostname. Next, replace all occurances of
-# the word "nas" with the hostname of the destination machine. Copy the final version of the script to both source and
-# destination host, and run it on both hosts. Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH.
+# Quick Start for local replication: Edit this script. Replace all occurances of the word "nas" with the hostname of your
+# local machine. Edit root_dataset_pairs to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH.
+# Run the final script like so:
 #
-# Run this on src host: /etc/bzfs/bzfs_job_example.py --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks
+# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots
 #
-# Run this on dst host: /etc/bzfs/bzfs_job_example.py --replicate --prune-dst-snapshots
-#
-# Add these commands to you crontab files such that the commands run every minute, or every hour, or every day, or similar.
+# Add this command to your crontab file such that the command runs every minute, or every hour, or every day, or similar.
 #############################################################################
 
 import argparse
@@ -61,7 +59,7 @@ src_host = "-"  # for local mode (no ssh, no network)
 
 
 # Dictionary that maps logical replication target names (the infix portion of a snapshot name) to actual destination
-# network hostnames. A target will not be replicated if it has no mapping in this dictionary:
+# network hostnames. A snapshot will not be replicated if its target has no mapping in this dictionary:
 # dst_hosts = {
 #     "onsite": "nas",
 #     "us-west-1": "bak-us-west-1.example.com",
