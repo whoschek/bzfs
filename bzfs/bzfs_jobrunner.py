@@ -22,10 +22,15 @@ import logging
 import re
 import socket
 import subprocess
+import sys
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 prog_name = "bzfs_jobrunner"
+still_running_status = 4
+sep = ","
+DEVNULL = subprocess.DEVNULL
+PIPE = subprocess.PIPE
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -180,158 +185,169 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # fmt: on
 
 
-still_running_status = 4
-sep = ","
-DEVNULL = subprocess.DEVNULL
-PIPE = subprocess.PIPE
-first_exception = None
-
-
 def main():
-    configure_logging()
-    log.info("WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.")
-    args, unknown_args = argument_parser().parse_known_args()  # forward all unknown args to `bzfs`
-    src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
-    src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
-    dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
-    src_host = args.src_host
-    dst_hosts = ast.literal_eval(args.dst_hosts)
-    dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
-    localhostname = socket.getfqdn()
-    pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
+    Job().run_main(sys.argv[1:])
 
-    def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
-        root_dataset = dst_root_datasets.get(dst_hostname)
-        assert root_dataset is not None, f"Hostname '{dst_hostname}' is missing in --dst-root-datasets: {dst_root_datasets}"
-        return root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
 
-    if args.create_src_snapshots:
-        opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
-        opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
-        opts += [f"--log-file-suffix={sep}"]
-        opts += unknown_args + ["--"]
-        opts += dedupe([(src, "dummy") for src, dst in args.root_dataset_pairs])
-        run_cmd(["bzfs"] + opts)
+#############################################################################
+class Job:
+    def __init__(self, log: Optional[logging.Logger] = None):
+        self.first_exception = None
+        self.log = log if log is not None else get_logger()
 
-    if args.replicate:
-        daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-        if len(pull_targets) > 0:  # pull mode
-            opts = replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
-            opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
+    def run_main(self, sys_argv: List[str]):
+        self.log.info(
+            "WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."
+        )
+        args, unknown_args = argument_parser().parse_known_args(sys_argv)  # forward all unknown args to `bzfs`
+        src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
+        src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
+        dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
+        src_host = args.src_host
+        dst_hosts = ast.literal_eval(args.dst_hosts)
+        dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
+        localhostname = socket.getfqdn()
+        pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
+
+        def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
+            root_dataset = dst_root_datasets.get(dst_hostname)
+            assert (
+                root_dataset is not None
+            ), f"Hostname '{dst_hostname}' is missing in --dst-root-datasets: {dst_root_datasets}"
+            return root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
+
+        if args.create_src_snapshots:
+            opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
+            opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
+            opts += [f"--log-file-suffix={sep}"]
+            opts += unknown_args + ["--"]
+            opts += dedupe([(src, "dummy") for src, dst in args.root_dataset_pairs])
+            self.run_cmd(["bzfs"] + opts)
+
+        if args.replicate:
+            daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
+            if len(pull_targets) > 0:  # pull mode
+                opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
+                opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
+                opts += unknown_args + ["--"]
+                old_len_opts = len(opts)
+                pairs = [
+                    (f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs
+                ]
+                for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
+                    opts += [src, dst]
+                if len(opts) > old_len_opts:
+                    self.run_cmd(["bzfs"] + daemon_opts + opts)
+            else:  # push mode (experimental feature)
+                assert src_host in [localhostname, "-"], (
+                    "Local hostname must be --src-host or in --dst-hosts: " + localhostname
+                )
+                host_targets = defaultdict(list)
+                for org, targetperiods in dst_snapshot_plan.items():
+                    for target in targetperiods.keys():
+                        dst_hostname = dst_hosts.get(target)
+                        if dst_hostname:
+                            host_targets[dst_hostname].append(target)
+                for dst_hostname, push_targets in host_targets.items():
+                    opts = self.replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
+                    opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
+                    opts += unknown_args + ["--"]
+                    for src, dst in args.root_dataset_pairs:
+                        opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
+                    self.run_cmd(["bzfs"] + daemon_opts + opts)
+
+        def prune_src(opts: List[str]):
+            opts += [
+                f"--log-file-suffix={sep}",
+                "--skip-replication",
+                f"--daemon-frequency={args.daemon_prune_src_frequency}",
+            ]
+            opts += unknown_args + ["--"]
+            opts += dedupe([("dummy", src) for src, dst in args.root_dataset_pairs])
+            self.run_cmd(["bzfs"] + opts)
+
+        if args.prune_src_snapshots:
+            opts = ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-plan={src_snapshot_plan}"]
+            opts += [f"--log-file-prefix={prog_name}{sep}prune-src-snapshots{sep}"]
+            prune_src(opts)
+
+        if args.prune_src_bookmarks:
+            opts = ["--delete-dst-snapshots=bookmarks", f"--delete-dst-snapshots-except-plan={src_bookmark_plan}"]
+            opts += [f"--log-file-prefix={prog_name}{sep}prune-src-bookmarks{sep}"]
+            prune_src(opts)
+
+        if args.prune_dst_snapshots:
+            dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
+                org: {target: periods for target, periods in target_periods.items() if target in pull_targets}
+                for org, target_periods in dst_snapshot_plan.items()
+            }
+            opts = ["--delete-dst-snapshots", "--skip-replication"]
+            opts += [f"--delete-dst-snapshots-except-plan={dst_snapshot_plan}"]
+            opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
+            opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
+            opts += [f"--log-file-suffix={sep}"]
             opts += unknown_args + ["--"]
             old_len_opts = len(opts)
-            pairs = [(f"{src_host}:{src}", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
-            for src, dst in skip_datasets_with_nonexisting_dst_pool(pairs):
+            pairs = [("dummy", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
+            for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                 opts += [src, dst]
             if len(opts) > old_len_opts:
-                run_cmd(["bzfs"] + daemon_opts + opts)
-        else:  # push mode (experimental feature)
-            assert src_host in [localhostname, "-"], "Local hostname must be --src-host or in --dst-hosts: " + localhostname
-            host_targets = defaultdict(list)
-            for org, targetperiods in dst_snapshot_plan.items():
-                for target in targetperiods.keys():
-                    dst_hostname = dst_hosts.get(target)
-                    if dst_hostname:
-                        host_targets[dst_hostname].append(target)
-            for dst_hostname, push_targets in host_targets.items():
-                opts = replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
-                opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
-                opts += unknown_args + ["--"]
-                for src, dst in args.root_dataset_pairs:
-                    opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
-                run_cmd(["bzfs"] + daemon_opts + opts)
+                self.run_cmd(["bzfs"] + opts)
 
-    def prune_src(opts: List[str]):
-        opts += [f"--log-file-suffix={sep}", "--skip-replication", f"--daemon-frequency={args.daemon_prune_src_frequency}"]
-        opts += unknown_args + ["--"]
-        opts += dedupe([("dummy", src) for src, dst in args.root_dataset_pairs])
-        run_cmd(["bzfs"] + opts)
+        ex = self.first_exception
+        if ex is not None and ((not isinstance(ex, subprocess.CalledProcessError)) or ex.returncode != still_running_status):
+            raise ex
 
-    if args.prune_src_snapshots:
-        opts = ["--delete-dst-snapshots", f"--delete-dst-snapshots-except-plan={src_snapshot_plan}"]
-        opts += [f"--log-file-prefix={prog_name}{sep}prune-src-snapshots{sep}"]
-        prune_src(opts)
+    def run_cmd(self, *params):
+        try:
+            subprocess.run(*params, stdin=DEVNULL, text=True, check=True)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+            if self.first_exception is None:
+                self.first_exception = e
+            self.log.error("%s", str(e))  # log exception and keep on trucking
 
-    if args.prune_src_bookmarks:
-        opts = ["--delete-dst-snapshots=bookmarks", f"--delete-dst-snapshots-except-plan={src_bookmark_plan}"]
-        opts += [f"--log-file-prefix={prog_name}{sep}prune-src-bookmarks{sep}"]
-        prune_src(opts)
+    def replication_filter_opts(
+        self, dst_snapshot_plan: Dict, kind: str, targets: List[str], src_hostname: str, dst_hostname: str
+    ) -> List[str]:
+        def nsuffix(s: str) -> str:
+            return "_" + s if s else ""
 
-    if args.prune_dst_snapshots:
-        dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
-            org: {target: periods for target, periods in target_periods.items() if target in pull_targets}
-            for org, target_periods in dst_snapshot_plan.items()
-        }
-        opts = ["--delete-dst-snapshots", "--skip-replication"]
-        opts += [f"--delete-dst-snapshots-except-plan={dst_snapshot_plan}"]
-        opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
-        opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
-        opts += [f"--log-file-suffix={sep}"]
-        opts += unknown_args + ["--"]
-        old_len_opts = len(opts)
-        pairs = [("dummy", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
-        for src, dst in skip_datasets_with_nonexisting_dst_pool(pairs):
-            opts += [src, dst]
-        if len(opts) > old_len_opts:
-            run_cmd(["bzfs"] + opts)
+        def ninfix(s: str) -> str:
+            return s + "_" if s else ""
 
-    ex = first_exception
-    if ex is not None and ((not isinstance(ex, subprocess.CalledProcessError)) or ex.returncode != still_running_status):
-        raise first_exception
+        self.log.info("%s", f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+        opts = []
+        for org, target_periods in dst_snapshot_plan.items():
+            for target, periods in target_periods.items():
+                if target in targets:
+                    for duration_unit, duration_amount in periods.items():
+                        if duration_amount > 0:
+                            regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(duration_unit))}"
+                            opts.append(f"--include-snapshot-regex={regex}")
+        opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
+        opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
+        return opts
 
+    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs):
+        def zpool(dataset: str) -> str:
+            return dataset.split("/", 1)[0]
 
-def run_cmd(*params):
-    try:
-        subprocess.run(*params, stdin=DEVNULL, text=True, check=True)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-        global first_exception
-        if first_exception is None:
-            first_exception = e
-        log.error("%s", str(e))  # log exception and keep on trucking
-
-
-def replication_filter_opts(
-    dst_snapshot_plan: Dict, kind: str, targets: List[str], src_hostname: str, dst_hostname: str
-) -> List[str]:
-    def nsuffix(s: str) -> str:
-        return "_" + s if s else ""
-
-    def ninfix(s: str) -> str:
-        return s + "_" if s else ""
-
-    log.info("%s", f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
-    opts = []
-    for org, target_periods in dst_snapshot_plan.items():
-        for target, periods in target_periods.items():
-            if target in targets:
-                for duration_unit, duration_amount in periods.items():
-                    if duration_amount > 0:
-                        regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(duration_unit))}"
-                        opts.append(f"--include-snapshot-regex={regex}")
-    opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
-    opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
-    return opts
-
-
-def skip_datasets_with_nonexisting_dst_pool(root_dataset_pairs):
-    def zpool(dataset: str) -> str:
-        return dataset.split("/", 1)[0]
-
-    if len(root_dataset_pairs) > 0:
-        pools = {zpool(dst) for src, dst in root_dataset_pairs}
-        cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
-        existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
-    else:
-        existing_pools = set()
-    results = []
-    for src, dst in root_dataset_pairs:
-        if zpool(dst) in existing_pools:
-            results.append((src, dst))
+        if len(root_dataset_pairs) > 0:
+            pools = {zpool(dst) for src, dst in root_dataset_pairs}
+            cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
+            existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
         else:
-            log.warning("Skipping dst dataset for which dst pool does not exist: %s", dst)
-    return results
+            existing_pools = set()
+        results = []
+        for src, dst in root_dataset_pairs:
+            if zpool(dst) in existing_pools:
+                results.append((src, dst))
+            else:
+                self.log.warning("Skipping dst dataset for which dst pool does not exist: %s", dst)
+        return results
 
 
+#############################################################################
 def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
     results = []
     for src, dst in dict.fromkeys(root_dataset_pairs).keys():
@@ -343,18 +359,20 @@ def format_dict(dictionary) -> str:
     return f'"{dictionary}"'
 
 
-def configure_logging():
+def get_logger():
     class LevelFormatter(logging.Formatter):
         def format(self, record):
             record.level_initial = record.levelname[0]  # Use first letter of the level name
             return super().format(record)
 
-    handler = logging.StreamHandler()
-    handler.setFormatter(LevelFormatter(fmt="%(asctime)s [%(level_initial)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
-    global log
     log = logging.getLogger(prog_name)
     log.setLevel(logging.INFO)
-    log.addHandler(handler)
+    log.propagate = False
+    if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(LevelFormatter(fmt="%(asctime)s [%(level_initial)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+        log.addHandler(handler)
+    return log
 
 
 #############################################################################
