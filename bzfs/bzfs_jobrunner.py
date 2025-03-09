@@ -28,6 +28,7 @@ from typing import Dict, List, Tuple, Optional
 
 prog_name = "bzfs_jobrunner"
 still_running_status = 4
+localhostname = socket.getfqdn()
 sep = ","
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
@@ -195,7 +196,7 @@ class Job:
         self.first_exception = None
         self.log = log if log is not None else get_logger()
 
-    def run_main(self, sys_argv: List[str]):
+    def run_main(self, sys_argv: List[str]) -> None:
         self.log.info(
             "WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."
         )
@@ -206,7 +207,6 @@ class Job:
         src_host = args.src_host
         dst_hosts = ast.literal_eval(args.dst_hosts)
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
-        localhostname = socket.getfqdn()
         pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
@@ -256,7 +256,7 @@ class Job:
                         opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
                     self.run_cmd(["bzfs"] + daemon_opts + opts)
 
-        def prune_src(opts: List[str]):
+        def prune_src(opts: List[str]) -> None:
             opts += [
                 f"--log-file-suffix={sep}",
                 "--skip-replication",
@@ -298,7 +298,7 @@ class Job:
         if ex is not None and ((not isinstance(ex, subprocess.CalledProcessError)) or ex.returncode != still_running_status):
             raise ex
 
-    def run_cmd(self, *params):
+    def run_cmd(self, *params) -> None:
         try:
             subprocess.run(*params, stdin=DEVNULL, text=True, check=True)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
@@ -328,16 +328,14 @@ class Job:
         opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
         return opts
 
-    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs):
+    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs) -> List[Tuple[str, str]]:
         def zpool(dataset: str) -> str:
             return dataset.split("/", 1)[0]
 
-        if len(root_dataset_pairs) > 0:
-            pools = {zpool(dst) for src, dst in root_dataset_pairs}
-            cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
-            existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
-        else:
-            existing_pools = set()
+        assert len(root_dataset_pairs) > 0
+        pools = {zpool(dst) for src, dst in root_dataset_pairs}
+        cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(pools)
+        existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
         results = []
         for src, dst in root_dataset_pairs:
             if zpool(dst) in existing_pools:
@@ -359,7 +357,7 @@ def format_dict(dictionary) -> str:
     return f'"{dictionary}"'
 
 
-def get_logger():
+def get_logger() -> logging.Logger:
     class LevelFormatter(logging.Formatter):
         def format(self, record):
             record.level_initial = record.levelname[0]  # Use first letter of the level name

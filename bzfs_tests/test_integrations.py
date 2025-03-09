@@ -35,7 +35,7 @@ import unittest
 from collections import Counter
 from unittest.mock import patch
 
-from bzfs import bzfs
+from bzfs import bzfs, bzfs_jobrunner
 from bzfs.bzfs import die_status, find_match, getenv_any, getenv_bool
 from bzfs_tests.test_units import TestIncrementalSendSteps, stop_on_failure_subtest
 from bzfs_tests.zfs_util import (
@@ -307,6 +307,7 @@ class BZFSTestCase(ParametrizedTestCase):
         isatty=None,
         progress_update_intervals=None,
         use_select=None,
+        use_jobrunner=False,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -420,8 +421,15 @@ class BZFSTestCase(ParametrizedTestCase):
 
         args = args + ["--exclude-envvar-regex=EDITOR"]
 
-        job = bzfs.Job()
-        job.is_test_mode = True
+        if use_jobrunner:
+            job = bzfs_jobrunner.Job()
+            bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
+            if bzfs_dir not in os.environ["PATH"]:
+                os.environ["PATH"] = bzfs_dir + os.pathsep + os.environ["PATH"]
+        else:
+            job = bzfs.Job()
+            job.is_test_mode = True
+
         if error_injection_triggers is not None:
             job.error_injection_triggers = error_injection_triggers
             args = args + ["--threads=1"]
@@ -477,7 +485,10 @@ class BZFSTestCase(ParametrizedTestCase):
 
         returncode = 0
         try:
-            job.run_main(bzfs.argument_parser().parse_args(args), args)
+            if use_jobrunner:
+                job.run_main(args)
+            else:
+                job.run_main(bzfs.argument_parser().parse_args(args), args)
         except subprocess.CalledProcessError as e:
             returncode = e.returncode
             if expected_status != returncode:
@@ -638,6 +649,12 @@ class AdhocTestCase(BZFSTestCase):
 
     def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
         LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
+
+    def test_jobrunner_flat_simple(self):
+        LocalTestCase(param=self.param).test_jobrunner_flat_simple()
+
+    def test_jobrunner_main(self):
+        LocalTestCase(param=self.param).test_jobrunner_main()
 
 
 #############################################################################
@@ -4462,6 +4479,161 @@ class LocalTestCase(BZFSTestCase):
         if not self.param or self.param.get("ssh_mode", "local") == "local" or ssh_program != "ssh":
             self.skipTest("ssh is only required in nonlocal mode")
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs.disable_prg, expected_status=die_status)
+
+    def test_jobrunner_flat_simple(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("Destroying snapshots on src needs extra permissions")
+        destroy(dst_root_dataset, recursive=True)
+        self.assertSnapshots(src_root_dataset, 0)
+
+        localhostname = socket.getfqdn()
+        src_host = "-"  # for local mode (no ssh, no network)
+        dst_hosts_pull = {"onsite": localhostname, "": localhostname}
+        dst_hosts_push = {"onsite": "-"}
+        dst_hosts_push_bad = {"xxxonsite": "-"}
+        dst_root_datasets = {localhostname: "", "-": ""}
+        src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}
+        dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}, "offsite": {}}}
+        src_bookmark_plan = dst_snapshot_plan
+        args = [
+            src_root_dataset,
+            dst_root_dataset,
+            f"--src-host={src_host}",
+            f"--dst-root-datasets={dst_root_datasets}",
+            f"--src-snapshot-plan={src_snapshot_plan}",
+            f"--src-bookmark-plan={src_bookmark_plan}",
+            f"--dst-snapshot-plan={dst_snapshot_plan}",
+            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+        ]
+        pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
+        push_args = args + [f"--dst-hosts={dst_hosts_push}"]
+        push_args_bad = args + [f"--dst-hosts={dst_hosts_push_bad}"]
+
+        # next iteration: create a src snapshot
+        self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
+        self.assertEqual(1, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(0, len(bookmarks(src_root_dataset)))
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        # replicate from src to dst:
+        self.run_bzfs("--replicate", *pull_args, use_jobrunner=True)
+        self.assertEqual(1, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # no snapshots to prune yet on src:
+        self.run_bzfs("--prune-src-snapshots", *pull_args, use_jobrunner=True)
+        self.assertEqual(1, len(snapshots(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # no bookmarks to prune yet on src:
+        self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # no snapshots to prune yet on dst:
+        self.run_bzfs("--prune-dst-snapshots", *pull_args, use_jobrunner=True)
+        self.assertEqual(1, len(snapshots(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # next iteration: create another src snapshot
+        self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # replication to nonexistingpool destination pool does nothing:
+        self.run_bzfs(
+            "--replicate", *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[2:]), use_jobrunner=True
+        )
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # replicate new snapshot from src to dst:
+        self.run_bzfs("--replicate", *pull_args, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+        # delete one old snapshot on src:
+        self.run_bzfs("--prune-src-snapshots", *pull_args, use_jobrunner=True)
+        self.assertEqual(1, len(snapshots(src_root_dataset)))
+        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+        # delete one old bookmark on src:
+        self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+        # pruning a nonexistingpool destination pool does nothing:
+        self.run_bzfs(
+            "--prune-dst-snapshots",
+            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[2:]),
+            use_jobrunner=True,
+        )
+        self.assertEqual(1, len(snapshots(src_root_dataset)))
+        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+        # delete one old snapshot on dst:
+        self.run_bzfs("--prune-dst-snapshots", *pull_args, use_jobrunner=True)
+        self.assertEqual(1, len(snapshots(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # next iteration: create another src snapshot
+        self.run_bzfs("--create-src-snapshots", *push_args, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # replication does nothing if target isn't mapped to destination host:
+        self.run_bzfs("--replicate", *push_args_bad, use_jobrunner=True)  # replicate in push mode
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # replicate successfully from src to dst:
+        self.run_bzfs("--replicate", *push_args, use_jobrunner=True)  # replicate in push mode
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+        # non-existing CLI option will cause failure:
+        self.run_bzfs(
+            "--create-src-snapshots",
+            "--prune-src-snapshots",
+            *(["--nonexistingoption"] + push_args),
+            use_jobrunner=True,
+            expected_status=2,
+        )
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+        # Forgetting to specify src dataset (or dst dataset) will cause failure:
+        self.run_bzfs(
+            "--create-src-snapshots",
+            *(push_args[1:]),  # Each SRC_DATASET must have a corresponding DST_DATASET
+            use_jobrunner=True,
+            expected_status=2,
+        )
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+    @patch("sys.argv", ["bzfs_jobrunner.py"])
+    def test_jobrunner_main(self):
+        with self.assertRaises(SystemExit) as e:
+            bzfs_jobrunner.main()
+        self.assertEqual(e.exception.code, 2)
 
 
 #############################################################################

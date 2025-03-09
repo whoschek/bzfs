@@ -137,10 +137,12 @@ src_bookmark_plan = dst_snapshot_plan
 
 
 ssh_src_port = 22
+# ssh_src_port = 2222  # for hpnssh
 # ssh_src_port = 40999
 
 
 ssh_dst_port = 22
+# ssh_dst_port = 2222  # for hpnssh
 # ssh_dst_port = 40999
 
 
