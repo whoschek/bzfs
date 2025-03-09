@@ -1981,7 +1981,7 @@ class CreateSrcSnapshotConfig:
         labels.sort(key=lambda label: (suffix_indexes[label.suffix], label))  # take snapshots for dailies before hourlies
         self._snapshot_labels: List[SnapshotLabel] = labels
         for label in self.snapshot_labels():
-            label.validate_label("--create-src-snapshots-")
+            label.validate_label("--create-src-snapshots-plan ")
 
     def snapshot_labels(self) -> List[SnapshotLabel]:
         timeformat = self.timeformat

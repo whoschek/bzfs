@@ -153,7 +153,6 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--include-dataset-regex=foo.*"]
 # extra_args += ["--exclude-dataset-regex=bar.*"]
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
-# extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
 # extra_args += ["--zfs-send-program-opts=''"]
 # extra_args += ["--zfs-recv-program-opts=''"]
