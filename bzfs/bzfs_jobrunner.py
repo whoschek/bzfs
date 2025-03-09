@@ -31,6 +31,7 @@ still_running_status = 4
 sep = ","
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
+localhostname = socket.getfqdn()
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -206,7 +207,6 @@ class Job:
         src_host = args.src_host
         dst_hosts = ast.literal_eval(args.dst_hosts)
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
-        localhostname = socket.getfqdn()
         pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
