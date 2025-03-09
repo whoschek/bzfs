@@ -4478,6 +4478,8 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs.disable_prg, expected_status=die_status)
 
     def test_jobrunner_flat_simple(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("Destroying snapshots on src needs extra permissions")
         destroy(dst_root_dataset, recursive=True)
         self.assertSnapshots(src_root_dataset, 0)
 
