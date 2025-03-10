@@ -60,7 +60,7 @@ source host and all destination hosts, and add crontab entries or systemd timers
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots`
 
 ### High Frequency Replication (Experimental Feature)
 
@@ -85,7 +85,7 @@ better: high frequency systemd timer) into multiple processes, using pull replic
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
 
@@ -99,10 +99,10 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # commands:
     parser.add_argument("--create-src-snapshots", action="store_true",
         help="Take snapshots on src. This command should be called by a program (or cron job) running on the src host.\n\n")
-    parser.add_argument("--replicate", action="store_true",
-        help="Replicate recent snapshots from src to dst, either in pull mode (recommended) or push mode. For pull mode, "
-             "this command should be called by a program (or cron job) running on the dst host; for push mode on the src "
-             "host.\n\n")
+    parser.add_argument("--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?",
+        help="Replicate recent snapshots from src to dst, either in pull mode (recommended) or push mode (experimental). "
+             "For pull mode, this command should be called by a program (or cron job) running on the dst host; for push "
+             "mode, on the src host.\n\n")
     parser.add_argument("--prune-src-snapshots", action="store_true",
         help="Prune snapshots on src. This command should be called by a program (or cron job) running on the src host.\n\n")
     parser.add_argument("--prune-src-bookmarks", action="store_true",
@@ -235,11 +235,10 @@ class Job:
             opts += dedupe([(src, "dummy") for src, dst in args.root_dataset_pairs])
             self.run_cmd(["bzfs"] + opts)
 
-        if args.replicate:
+        if args.replicate == "pull":  # pull mode (recommended)
             assert src_host, "--src-host must not be empty!"
-            daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-            if len(pull_targets) > 0:  # pull mode
-                opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
+            opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
+            if len(pull_targets) > 0:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 old_len_opts = len(opts)
@@ -249,24 +248,24 @@ class Job:
                 for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                     opts += [src, dst]
                 if len(opts) > old_len_opts:
+                    daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
                     self.run_cmd(["bzfs"] + daemon_opts + opts)
-            else:  # push mode (experimental feature)
-                assert src_host in [localhostname, "-"], (
-                    "Local hostname must be --src-host or in --dst-hosts: " + localhostname
-                )
-                host_targets = defaultdict(list)
-                for org, targetperiods in dst_snapshot_plan.items():
-                    for target in targetperiods.keys():
-                        dst_hostname = dst_hosts.get(target)
-                        if dst_hostname:
-                            host_targets[dst_hostname].append(target)
-                for dst_hostname, push_targets in host_targets.items():
-                    opts = self.replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
-                    opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
-                    opts += unknown_args + ["--"]
-                    for src, dst in args.root_dataset_pairs:
-                        opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
-                    self.run_cmd(["bzfs"] + daemon_opts + opts)
+
+        elif args.replicate == "push":  # push mode (experimental feature)
+            host_targets = defaultdict(list)
+            for org, targetperiods in dst_snapshot_plan.items():
+                for target in targetperiods.keys():
+                    dst_hostname = dst_hosts.get(target)
+                    if dst_hostname:
+                        host_targets[dst_hostname].append(target)
+            for dst_hostname, push_targets in host_targets.items():
+                opts = self.replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
+                opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
+                opts += unknown_args + ["--"]
+                for src, dst in args.root_dataset_pairs:
+                    opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
+                daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
+                self.run_cmd(["bzfs"] + daemon_opts + opts)
 
         def prune_src(opts: List[str]) -> None:
             opts += [

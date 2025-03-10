@@ -4519,7 +4519,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset))
 
         # replicate from src to dst:
-        self.run_bzfs("--replicate", *pull_args, use_jobrunner=True)
+        self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
             self.assertEqual(1, len(bookmarks(src_root_dataset)))
@@ -4548,7 +4548,9 @@ class LocalTestCase(BZFSTestCase):
 
         # replication to nonexistingpool destination pool does nothing:
         self.run_bzfs(
-            "--replicate", *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[2:]), use_jobrunner=True
+            "--replicate=pull",
+            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[2:]),
+            use_jobrunner=True,
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
@@ -4556,7 +4558,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # replicate new snapshot from src to dst:
-        self.run_bzfs("--replicate", *pull_args, use_jobrunner=True)
+        self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
             self.assertEqual(2, len(bookmarks(src_root_dataset)))
@@ -4593,14 +4595,14 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # replication does nothing if target isn't mapped to destination host:
-        self.run_bzfs("--replicate", *push_args_bad, use_jobrunner=True)  # replicate in push mode
+        self.run_bzfs("--replicate=push", *push_args_bad, use_jobrunner=True)  # replicate in push mode
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
             self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # replicate successfully from src to dst:
-        self.run_bzfs("--replicate", *push_args, use_jobrunner=True)  # replicate in push mode
+        self.run_bzfs("--replicate=push", *push_args, use_jobrunner=True)  # replicate in push mode
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
             self.assertEqual(2, len(bookmarks(src_root_dataset)))

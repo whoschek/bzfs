@@ -55,7 +55,7 @@ systemd timers or similar, along these lines:
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots`
 
 ### High Frequency Replication (Experimental Feature)
 
@@ -83,7 +83,7 @@ using pull replication mode, along these lines:
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
 
@@ -104,7 +104,8 @@ daemons but this is benign as these new processes immediately exit with a messag
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
-usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
+usage: bzfs_jobrunner [-h] [--create-src-snapshots]
+                      [--replicate [{pull,push}]]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
                       [--prune-dst-snapshots] [--src-host STRING]
                       [--localhost STRING] [--dst-hosts DICT_STRING]
@@ -143,11 +144,11 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 
 <div id="--replicate"></div>
 
-**--replicate**
+**--replicate** *[{pull,push}]*
 
-*  Replicate recent snapshots from src to dst, either in pull mode (recommended) or push mode.
-    For pull mode, this command should be called by a program (or cron job) running on the dst
-    host; for push mode on the src host.
+*  Replicate recent snapshots from src to dst, either in pull mode (recommended) or push mode
+    (experimental). For pull mode, this command should be called by a program (or cron job)
+    running on the dst host; for push mode, on the src host.
 
 <!-- -->
 
