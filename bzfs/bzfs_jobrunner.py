@@ -28,7 +28,6 @@ from typing import Dict, List, Tuple, Optional
 
 prog_name = "bzfs_jobrunner"
 still_running_status = 4
-localhostname = socket.getfqdn()
 sep = ","
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
@@ -114,21 +113,28 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # options:
     parser.add_argument("--src-host", default="-", metavar="STRING",
         help="Network hostname of src. Used if replicating in pull mode.\n\n")
-    dst_hosts_example = {"onsite": "nas", "us-west-1": "bak-us-west-1.example.com",
-                         "eu-west-1": "bak-eu-west-1.example.com", "offsite": "archive.example.com"}
+    parser.add_argument("--localhost", default=None, metavar="STRING",
+        help="Hostname of localhost. Default is the hostname without the domain name.\n\n")
+    dst_hosts_example = {"onsite": "nas", "us-west-1": "bak-us-west-1",
+                         "eu-west-1": "bak-eu-west-1", "offsite": "archive"}
     parser.add_argument("--dst-hosts", default="{}", metavar="DICT_STRING",
-        help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to actual "
-             f"destination network hostnames. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot "
-             "name, we can find the destination network hostname to which the snapshot shall be replicated. Also, given a "
-             "snapshot name and its own hostname, a destination host can determine if it shall 'pull' replicate the given "
+        help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to "
+             f"destination hostnames. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot "
+             "name, we can find the destination hostname to which the snapshot shall be replicated. Also, given a "
+             "snapshot name and its --localhost name, a destination host can determine if it shall 'pull' replicate the given "
              "snapshot from the --src-host, or if the snapshot is intended for another target host, in which case it skips "
              f"the snapshot. A destination host running {prog_name} will 'pull' snapshots for all targets that map to its "
-             "own hostname.\n\n")
+             "--localhost name.\n\n")
+    parser.add_argument("--retain-dst-targets", default="{}", metavar="DICT_STRING",
+        help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to "
+             f"destination hostnames. Example: `{format_dict(dst_hosts_example)}`. As part of --prune-dst-snapshots, a "
+             "destination host will delete any snapshot it has stored whose target has no mapping to its --localhost name "
+             "in this dictionary. Do not remove a mapping unless you are sure it's ok to delete all those snapshots!\n\n")
     dst_root_datasets_example = {
         "nas": "tank2/bak",
-        "bak-us-west-1.example.com": "backups/bak001",
-        "bak-eu-west-1.example.com": "backups/bak999",
-        "archive.example.com": "archives/zoo",
+        "bak-us-west-1": "backups/bak001",
+        "bak-eu-west-1": "backups/bak999",
+        "archive": "archives/zoo",
         "hotspare": "",
     }
     parser.add_argument("--dst-root-datasets", default="{}", metavar="DICT_STRING",
@@ -205,9 +211,14 @@ class Job:
         src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
         dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
         src_host = args.src_host
+        localhostname = args.localhost if args.localhost else socket.gethostname()
+        assert localhostname, "localhostname must not be empty!"
         dst_hosts = ast.literal_eval(args.dst_hosts)
+        retain_dst_targets = ast.literal_eval(args.retain_dst_targets)
+        assert retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all your snapshots!"
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
         pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
+        retain_targets = [target for target, dst_hostname in retain_dst_targets.items() if dst_hostname == localhostname]
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
             root_dataset = dst_root_datasets.get(dst_hostname)
@@ -225,6 +236,7 @@ class Job:
             self.run_cmd(["bzfs"] + opts)
 
         if args.replicate:
+            assert src_host, "--src-host must not be empty!"
             daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
             if len(pull_targets) > 0:  # pull mode
                 opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
@@ -278,7 +290,7 @@ class Job:
 
         if args.prune_dst_snapshots:
             dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
-                org: {target: periods for target, periods in target_periods.items() if target in pull_targets}
+                org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
                 for org, target_periods in dst_snapshot_plan.items()
             }
             opts = ["--delete-dst-snapshots", "--skip-replication"]

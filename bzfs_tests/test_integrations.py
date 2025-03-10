@@ -4486,7 +4486,7 @@ class LocalTestCase(BZFSTestCase):
         destroy(dst_root_dataset, recursive=True)
         self.assertSnapshots(src_root_dataset, 0)
 
-        localhostname = socket.getfqdn()
+        localhostname = socket.gethostname()
         src_host = "-"  # for local mode (no ssh, no network)
         dst_hosts_pull = {"onsite": localhostname, "": localhostname}
         dst_hosts_push = {"onsite": "-"}
@@ -4499,6 +4499,8 @@ class LocalTestCase(BZFSTestCase):
             src_root_dataset,
             dst_root_dataset,
             f"--src-host={src_host}",
+            f"--localhost={localhostname}",
+            f"--retain-dst-targets={dst_hosts_pull}",
             f"--dst-root-datasets={dst_root_datasets}",
             f"--src-snapshot-plan={src_snapshot_plan}",
             f"--src-bookmark-plan={src_bookmark_plan}",

@@ -107,7 +107,8 @@ daemons but this is benign as these new processes immediately exit with a messag
 usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
                       [--prune-dst-snapshots] [--src-host STRING]
-                      [--dst-hosts DICT_STRING]
+                      [--localhost STRING] [--dst-hosts DICT_STRING]
+                      [--retain-dst-targets DICT_STRING]
                       [--dst-root-datasets DICT_STRING]
                       [--src-snapshot-plan DICT_STRING]
                       [--src-bookmark-plan DICT_STRING]
@@ -185,19 +186,39 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 
 <!-- -->
 
+<div id="--localhost"></div>
+
+**--localhost** *STRING*
+
+*  Hostname of localhost. Default is the hostname without the domain name.
+
+<!-- -->
+
 <div id="--dst-hosts"></div>
 
 **--dst-hosts** *DICT_STRING*
 
 *  Dictionary that maps logical replication target names (the infix portion of a snapshot name)
-    to actual destination network hostnames. Example: `"{'onsite': 'nas', 'us-west-1':
-    'bak-us-west-1.example.com', 'eu-west-1': 'bak-eu-west-1.example.com', 'offsite':
-    'archive.example.com'}"`. With this, given a snapshot name, we can find the destination
-    network hostname to which the snapshot shall be replicated. Also, given a snapshot name and
-    its own hostname, a destination host can determine if it shall 'pull' replicate the given
-    snapshot from the --src-host, or if the snapshot is intended for another target host, in
-    which case it skips the snapshot. A destination host running bzfs_jobrunner will 'pull'
-    snapshots for all targets that map to its own hostname.
+    to destination hostnames. Example: `"{'onsite': 'nas', 'us-west-1': 'bak-us-west-1',
+    'eu-west-1': 'bak-eu-west-1', 'offsite': 'archive'}"`. With this, given a snapshot
+    name, we can find the destination hostname to which the snapshot shall be replicated. Also,
+    given a snapshot name and its --localhost name, a destination host can determine if it shall
+    'pull' replicate the given snapshot from the --src-host, or if the snapshot is intended for
+    another target host, in which case it skips the snapshot. A destination host running
+    bzfs_jobrunner will 'pull' snapshots for all targets that map to its --localhost name.
+
+<!-- -->
+
+<div id="--retain-dst-targets"></div>
+
+**--retain-dst-targets** *DICT_STRING*
+
+*  Dictionary that maps logical replication target names (the infix portion of a snapshot name)
+    to destination hostnames. Example: `"{'onsite': 'nas', 'us-west-1': 'bak-us-west-1',
+    'eu-west-1': 'bak-eu-west-1', 'offsite': 'archive'}"`. As part of
+    --prune-dst-snapshots, a destination host will delete any snapshot it has stored whose target
+    has no mapping to its --localhost name in this dictionary. Do not remove a mapping unless you
+    are sure it's ok to delete all those snapshots!
 
 <!-- -->
 
@@ -210,9 +231,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
     that is replicated to that destination host. For backup use cases, this is the backup ZFS pool
     or a ZFS dataset path within that pool, whereas for cloning, master slave replication, or
     replication from a primary to a secondary, this can also be the empty string. Example:
-    `"{'nas': 'tank2/bak', 'bak-us-west-1.example.com': 'backups/bak001',
-    'bak-eu-west-1.example.com': 'backups/bak999', 'archive.example.com': 'archives/zoo',
-    'hotspare': ''}"`
+    `"{'nas': 'tank2/bak', 'bak-us-west-1': 'backups/bak001', 'bak-eu-west-1':
+    'backups/bak999', 'archive': 'archives/zoo', 'hotspare': ''}"`
 
 <!-- -->
 

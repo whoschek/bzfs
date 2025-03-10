@@ -53,23 +53,32 @@ recursive = True
 
 
 # Network hostname of src. Used if replicating in pull mode:
-# src_host = "prod001.example.com"
+# src_host = "prod001"
 # src_host = "127.0.0.1"
 src_host = "-"  # for local mode (no ssh, no network)
 
 
-# Dictionary that maps logical replication target names (the infix portion of a snapshot name) to actual destination
-# network hostnames. A snapshot will not be replicated if its target has no mapping in this dictionary:
+# Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination hostnames.
+# A destination host will 'pull' replicate snapshots for all targets that map to its --localhost name. Removing a mapping
+# can be used to temporarily suspend replication to a given destination host.
 # dst_hosts = {
 #     "onsite": "nas",
-#     "us-west-1": "bak-us-west-1.example.com",
-#     "eu-west-1": "bak-eu-west-1.example.com",
-#     "hotspare": "hotspare.example.com",
-#     "offsite": "archive.example.com",
+#     "us-west-1": "bak-us-west-1",
+#     "eu-west-1": "bak-eu-west-1",
+#     "hotspare": "hotspare",
+#     "offsite": "archive",
 # }
 # dst_hosts = {"onsite": "nas"}
 # dst_hosts = {"": "nas"}  # empty string as target name is ok
 dst_hosts = {"onsite": "nas", "": "nas"}
+
+
+# Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination hostnames.
+# Has same format as dst_hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
+# whose target has no mapping to its --localhost in this dictionary.
+# Do not remove a mapping unless you are sure it's ok to delete all those snapshots!
+# retain_dst_targets = dst_hosts
+retain_dst_targets = {"onsite": "nas", "": "nas"}
 
 
 # Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this
@@ -83,10 +92,10 @@ dst_hosts = {"onsite": "nas", "": "nas"}
 # on dst host "nas".
 # dst_root_datasets = {
 #     "nas": "tank2/bak",
-#     "bak-us-west-1.example.com": "backups/bak001",
-#     "bak-eu-west-1.example.com": "backups/bak999",
+#     "bak-us-west-1": "backups/bak001",
+#     "bak-eu-west-1": "backups/bak999",
 #     "hotspare": "",
-#     "archive.example.com": "archives/zoo",
+#     "archive": "archives/zoo",
 # }
 dst_root_datasets = {
     "nas": "",  # Empty string means 'Don't prepend a prefix' (for safety, the hostname must always be in the dict)
@@ -158,6 +167,7 @@ ssh_dst_port = 22
 
 extra_args = []
 extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', os.path.basename(sys.argv[0]))}"]
+# extra_args += ["--localhost=bak-us-west-1"]
 # extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
 # extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
 # extra_args += ["--include-dataset=foo"]  # see bzfs --help
@@ -220,6 +230,7 @@ cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
+cmd += [f"--retain-dst-targets={retain_dst_targets}"]
 cmd += [f"--dst-root-datasets={dst_root_datasets}"]
 cmd += [f"--src-snapshot-plan={src_snapshot_plan}"]
 cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
