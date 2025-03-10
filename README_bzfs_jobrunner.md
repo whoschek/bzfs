@@ -215,10 +215,11 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate]
 
 *  Dictionary that maps logical replication target names (the infix portion of a snapshot name)
     to destination hostnames. Example: `"{'onsite': 'nas', 'us-west-1': 'bak-us-west-1',
-    'eu-west-1': 'bak-eu-west-1', 'offsite': 'archive'}"`. As part of
-    --prune-dst-snapshots, a destination host will delete any snapshot it has stored whose target
-    has no mapping to its --localhost name in this dictionary. Do not remove a mapping unless you
-    are sure it's ok to delete all those snapshots!
+    'eu-west-1': 'bak-eu-west-1', 'offsite': 'archive'}"`. Has same format as
+    --dst-hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot
+    it has stored whose target has no mapping to its --localhost name in this dictionary. Do not
+    remove a mapping unless you are sure it's ok to delete all those snapshots on that
+    destination host!
 
 <!-- -->
 

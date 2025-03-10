@@ -76,7 +76,7 @@ dst_hosts = {"onsite": "nas", "": "nas"}
 # Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination hostnames.
 # Has same format as dst_hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
 # whose target has no mapping to its --localhost in this dictionary.
-# Do not remove a mapping unless you are sure it's ok to delete all those snapshots!
+# Do not remove a mapping unless you are sure it's ok to delete all those snapshots on that destination host!
 # retain_dst_targets = dst_hosts
 retain_dst_targets = {"onsite": "nas", "": "nas"}
 

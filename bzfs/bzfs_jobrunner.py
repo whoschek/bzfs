@@ -115,21 +115,21 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Network hostname of src. Used if replicating in pull mode.\n\n")
     parser.add_argument("--localhost", default=None, metavar="STRING",
         help="Hostname of localhost. Default is the hostname without the domain name.\n\n")
-    dst_hosts_example = {"onsite": "nas", "us-west-1": "bak-us-west-1",
-                         "eu-west-1": "bak-eu-west-1", "offsite": "archive"}
+    dst_hosts_example = {"onsite": "nas", "us-west-1": "bak-us-west-1", "eu-west-1": "bak-eu-west-1", "offsite": "archive"}
     parser.add_argument("--dst-hosts", default="{}", metavar="DICT_STRING",
-        help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to "
-             f"destination hostnames. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot "
-             "name, we can find the destination hostname to which the snapshot shall be replicated. Also, given a "
-             "snapshot name and its --localhost name, a destination host can determine if it shall 'pull' replicate the given "
-             "snapshot from the --src-host, or if the snapshot is intended for another target host, in which case it skips "
-             f"the snapshot. A destination host running {prog_name} will 'pull' snapshots for all targets that map to its "
-             "--localhost name.\n\n")
+        help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination "
+             f"hostnames. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot name, we can find the "
+             "destination hostname to which the snapshot shall be replicated. Also, given a snapshot name and its "
+             "--localhost name, a destination host can determine if it shall 'pull' replicate the given snapshot from the "
+             "--src-host, or if the snapshot is intended for another target host, in which case it skips the snapshot. "
+             f"A destination host running {prog_name} will 'pull' snapshots for all targets that map to its --localhost "
+             "name.\n\n")
     parser.add_argument("--retain-dst-targets", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to "
-             f"destination hostnames. Example: `{format_dict(dst_hosts_example)}`. As part of --prune-dst-snapshots, a "
-             "destination host will delete any snapshot it has stored whose target has no mapping to its --localhost name "
-             "in this dictionary. Do not remove a mapping unless you are sure it's ok to delete all those snapshots!\n\n")
+             f"destination hostnames. Example: `{format_dict(dst_hosts_example)}`. Has same format as --dst-hosts. As part "
+             "of --prune-dst-snapshots, a destination host will delete any snapshot it has stored whose target has no "
+             "mapping to its --localhost name in this dictionary. Do not remove a mapping unless you are sure it's ok to "
+             "delete all those snapshots on that destination host!\n\n")
     dst_root_datasets_example = {
         "nas": "tank2/bak",
         "bak-us-west-1": "backups/bak001",
