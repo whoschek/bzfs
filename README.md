@@ -804,10 +804,9 @@ usage: bzfs [-h] [--recursive]
 
     b) Value is 'false': Exclude the dataset and its descendants.
 
-    c) Value is a comma-separated list of fully qualified host names (no spaces, for example:
-    'store001.example.com,store002.example.com'): Include the dataset if the fully qualified
-    host name of the host executing bzfs is contained in the list, otherwise exclude the dataset
-    and its descendants.
+    c) Value is a comma-separated list of host names (no spaces, for example:
+    'store001,store002'): Include the dataset if the host name of the host executing bzfs is
+    contained in the list, otherwise exclude the dataset and its descendants.
 
     If a dataset is excluded its descendants are automatically excluded too, and the property
     values of the descendants are ignored because exclude takes precedence over include.

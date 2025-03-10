@@ -484,8 +484,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "to determine whether the dataset will be included or excluded, as follows:\n\n"
              "a) Value is 'true' or '-' or empty string or the property is missing: Include the dataset.\n\n"
              "b) Value is 'false': Exclude the dataset and its descendants.\n\n"
-             "c) Value is a comma-separated list of fully qualified host names (no spaces, for example: "
-             "'store001.example.com,store002.example.com'): Include the dataset if the fully qualified host name of "
+             "c) Value is a comma-separated list of host names (no spaces, for example: "
+             "'store001,store002'): Include the dataset if the host name of "
              f"the host executing {prog_name} is contained in the list, otherwise exclude the dataset and its "
              "descendants.\n\n"
              "If a dataset is excluded its descendants are automatically excluded too, and the property values of the "
@@ -3445,7 +3445,7 @@ class Job:
                 elif property_value.lower() == "false":
                     sync = False
                 else:
-                    localhostname = localhostname or socket.getfqdn()
+                    localhostname = localhostname or socket.gethostname()
                     sync = any(localhostname == hostname.strip() for hostname in property_value.split(","))
                     reason = f", localhostname: {localhostname}, hostnames: {property_value}"
 

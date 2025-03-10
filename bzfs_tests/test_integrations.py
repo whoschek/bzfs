@@ -1980,7 +1980,7 @@ class LocalTestCase(BZFSTestCase):
         sync_false = {"synchoid:sync": "false"}
         sync_true = {"synchoid:sync": "true"}
         sync_true_empty = {"synchoid:sync": ""}
-        sync_host_match = {"synchoid:sync": f"xxx.example.com,{socket.getfqdn()}"}
+        sync_host_match = {"synchoid:sync": f"xxx.example.com,{socket.gethostname()}"}
         sync_host_mismatch = {"synchoid:sync": "xxx.example.com"}
         zfs_set([src_root_dataset + "/foo"], sync_false)
         zfs_set([src_root_dataset + "/goo"], sync_false)

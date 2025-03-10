@@ -26,6 +26,7 @@ including recursive snapshots.
 - For more clarity, renamed `--force-hard` to `--force-destroy-dependents`. `--force-hard` will continue to work as-is for 
 now, in deprecated status, but the old name will be completely removed in a future release.
 - Use case-sensitive sort order instead of case-insensitive sort order throughout.
+- Use hostname without domain name within `--exclude-dataset-property`.
 - Fixed "Too many arguments" error when deleting thousands of snapshots in the same 'zfs destroy' CLI invocation.
 - Make 'zfs rollback' work even if the previous 'zfs receive -s' was interrupted.
 - Skip partial or bad 'pv' log file lines when calculating stats.
