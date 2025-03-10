@@ -601,6 +601,7 @@ usage: bzfs [-h] [--recursive]
             [--create-src-snapshots-timeformat STRFTIME_SPEC]
             [--create-src-snapshots-timezone TZ_SPEC]
             [--create-src-snapshots-even-if-not-due]
+            [--create-src-snapshots-enable-snapshots-changed-cache]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -1126,6 +1127,18 @@ usage: bzfs [-h] [--recursive]
 
 *  Take snapshots immediately regardless of the creation time of any existing snapshot, even if
     snapshots are periodic and not actually due per the schedule.
+
+<!-- -->
+
+<div id="--create-src-snapshots-enable-snapshots-changed-cache"></div>
+
+**--create-src-snapshots-enable-snapshots-changed-cache**
+
+*  Maintain a local cache of recent snapshot creation times, running 'zfs list -t
+    filesystem,volume -o snapshots_changed' instead of 'zfs list -t snapshot' to determine if a
+    new snapshot shall be created on the src. This flag improves performance for high-frequency
+    snapshotting use cases. Only relevant if --create-src-snapshots-even-if-not-due is not
+    specified.
 
 <!-- -->
 

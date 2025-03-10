@@ -420,6 +420,7 @@ class BZFSTestCase(ParametrizedTestCase):
             args = args + ["--skip-on-error=" + skip_on_error]
 
         args = args + ["--exclude-envvar-regex=EDITOR"]
+        args = args + ["--create-src-snapshots-enable-snapshots-changed-cache"]
 
         if use_jobrunner:
             job = bzfs_jobrunner.Job()

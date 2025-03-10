@@ -713,6 +713,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--create-src-snapshots-even-if-not-due", action="store_true",
         help="Take snapshots immediately regardless of the creation time of any existing snapshot, even if snapshots "
              "are periodic and not actually due per the schedule.\n\n")
+    parser.add_argument(
+        "--create-src-snapshots-enable-snapshots-changed-cache", action="store_true",
+        help="Maintain a local cache of recent snapshot creation times, running "
+             "'zfs list -t filesystem,volume -o snapshots_changed' instead of 'zfs list -t snapshot' to determine if a new "
+             "snapshot shall be created on the src. This flag improves performance for high-frequency snapshotting use "
+             "cases. Only relevant if --create-src-snapshots-even-if-not-due is not specified.\n\n")
     zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
@@ -1936,7 +1942,7 @@ class CreateSrcSnapshotConfig:
         # immutable variables:
         self.skip_create_src_snapshots: bool = not args.create_src_snapshots
         self.create_src_snapshots_even_if_not_due: bool = args.create_src_snapshots_even_if_not_due
-        self.enable_snapshots_changed_cache: bool = getenv_bool("enable_snapshots_changed_cache", True)
+        self.enable_snapshots_changed_cache: bool = args.create_src_snapshots_enable_snapshots_changed_cache
         tz_spec: str = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
