@@ -27,10 +27,6 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
 
 prog_name = "bzfs_jobrunner"
-still_running_status = 4
-sep = ","
-DEVNULL = subprocess.DEVNULL
-PIPE = subprocess.PIPE
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -146,10 +142,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     src_snapshot_plan_example = {
         "prod": {
             "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
-            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
-                          "yearly": 5},
-            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
-                          "yearly": 5}},
+            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+        },
         "test": {
             "offsite": {"12hourly": 42, "weekly": 12},
         },
@@ -192,6 +187,13 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # fmt: on
 
 
+still_running_status = 4
+dummy_dataset = "dummy"
+sep = ","
+DEVNULL = subprocess.DEVNULL
+PIPE = subprocess.PIPE
+
+
 def main():
     Job().run_main(sys.argv[1:])
 
@@ -211,20 +213,16 @@ class Job:
         src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
         dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
         src_host = args.src_host
+        assert src_host, "--src-host must not be empty!"
         localhostname = args.localhost if args.localhost else socket.gethostname()
         assert localhostname, "localhostname must not be empty!"
         dst_hosts = ast.literal_eval(args.dst_hosts)
         retain_dst_targets = ast.literal_eval(args.retain_dst_targets)
-        assert retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all your snapshots!"
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
-        pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
-        retain_targets = [target for target, dst_hostname in retain_dst_targets.items() if dst_hostname == localhostname]
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
             root_dataset = dst_root_datasets.get(dst_hostname)
-            assert (
-                root_dataset is not None
-            ), f"Hostname '{dst_hostname}' is missing in --dst-root-datasets: {dst_root_datasets}"
+            assert root_dataset is not None, f"Hostname '{dst_hostname}' missing in --dst-root-datasets: {dst_root_datasets}"
             return root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
 
         if args.create_src_snapshots:
@@ -232,11 +230,11 @@ class Job:
             opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
             opts += [f"--log-file-suffix={sep}"]
             opts += unknown_args + ["--"]
-            opts += dedupe([(src, "dummy") for src, dst in args.root_dataset_pairs])
+            opts += dedupe([(src, dummy_dataset) for src, dst in args.root_dataset_pairs])
             self.run_cmd(["bzfs"] + opts)
 
         if args.replicate == "pull":  # pull mode (recommended)
-            assert src_host, "--src-host must not be empty!"
+            pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
             opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
             if len(pull_targets) > 0:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
@@ -274,7 +272,7 @@ class Job:
                 f"--daemon-frequency={args.daemon_prune_src_frequency}",
             ]
             opts += unknown_args + ["--"]
-            opts += dedupe([("dummy", src) for src, dst in args.root_dataset_pairs])
+            opts += dedupe([(dummy_dataset, src) for src, dst in args.root_dataset_pairs])
             self.run_cmd(["bzfs"] + opts)
 
         if args.prune_src_snapshots:
@@ -288,6 +286,8 @@ class Job:
             prune_src(opts)
 
         if args.prune_dst_snapshots:
+            assert retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
+            retain_targets = [target for target, dst_hostname in retain_dst_targets.items() if dst_hostname == localhostname]
             dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
                 org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
                 for org, target_periods in dst_snapshot_plan.items()
@@ -299,7 +299,7 @@ class Job:
             opts += [f"--log-file-suffix={sep}"]
             opts += unknown_args + ["--"]
             old_len_opts = len(opts)
-            pairs = [("dummy", resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
+            pairs = [(dummy_dataset, resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
             for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                 opts += [src, dst]
             if len(opts) > old_len_opts:
