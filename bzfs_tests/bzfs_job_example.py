@@ -31,8 +31,10 @@ import sys
 
 parser = argparse.ArgumentParser(
     description=f"""
-Periodic replica management jobconfig file, in the form of a script that generates deployment specific parameters and 
-submits the parameters to `bzfs_jobrunner`, along with all unknown CLI arguments, using an "Infrastructure as Code" approach.
+Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication, and 
+pruning, across source host and multiple destination hosts, using the same single shared jobconfig script. This script 
+submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the actual work to 
+the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
 
 Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
 """
@@ -52,7 +54,7 @@ root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 
 recursive = True
 
 
-# Network hostname of src. Used if replicating in pull mode:
+# Network hostname of src. Used by destination host(s) if replicating in pull mode:
 # src_host = "prod001"
 # src_host = "127.0.0.1"
 src_host = "-"  # for local mode (no ssh, no network)
@@ -76,7 +78,8 @@ dst_hosts = {"onsite": "nas", "": "nas"}
 # Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination hostnames.
 # Has same format as dst_hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
 # whose target has no mapping to its --localhost in this dictionary.
-# Do not remove a mapping unless you are sure it's ok to delete all those snapshots on that destination host!
+# Do not remove a mapping unless you are sure it's ok to delete all those snapshots on that destination host! If in doubt,
+# use --dryrun mode first.
 # retain_dst_targets = dst_hosts
 retain_dst_targets = {"onsite": "nas", "": "nas"}
 

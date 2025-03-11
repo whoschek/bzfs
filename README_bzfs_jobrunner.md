@@ -31,9 +31,9 @@
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in
 incompatible ways.
 
-This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic snapshot
-creation, replication, and pruning, across multiple source and destination hosts, using a single
-shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
+This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS
+snapshot creation, replication, and pruning, across source host and multiple destination hosts,
+using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 Typically, a cron job on the source host runs `bzfs_jobrunner` periodically to create new
 snapshots (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source
@@ -44,7 +44,7 @@ the recently created snapshots from the source to the destination (via --replica
 frequency of these periodic activities can vary by activity, and is typically every second,
 minute, hour, day, week, month and/or year (or multiples thereof).
 
-Edit the jobconfig file in a central place (e.g. versioned in a git repo), then copy the (very
+Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very
 same) shared file onto the source host and all destination hosts, and add crontab entries or
 systemd timers or similar, along these lines:
 
@@ -137,8 +137,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--create-src-snapshots**
 
-*  Take snapshots on src. This command should be called by a program (or cron job) running on the
-    src host.
+*  Take snapshots on src as necessary. This command should be called by a program (or cron job)
+    running on the src host.
 
 <!-- -->
 
@@ -146,8 +146,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--replicate** *[{pull,push}]*
 
-*  Replicate recent snapshots from src to dst, either in pull mode (recommended) or push mode
-    (experimental). For pull mode, this command should be called by a program (or cron job)
+*  Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push
+    mode (experimental). For pull mode, this command should be called by a program (or cron job)
     running on the dst host; for push mode, on the src host.
 
 <!-- -->
@@ -156,8 +156,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--prune-src-snapshots**
 
-*  Prune snapshots on src. This command should be called by a program (or cron job) running on
-    the src host.
+*  Prune snapshots on src as necessary. This command should be called by a program (or cron job)
+    running on the src host.
 
 <!-- -->
 
@@ -165,8 +165,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--prune-src-bookmarks**
 
-*  Prune bookmarks on src. This command should be called by a program (or cron job) running on
-    the src host.
+*  Prune bookmarks on src as necessary. This command should be called by a program (or cron job)
+    running on the src host.
 
 <!-- -->
 
@@ -174,8 +174,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--prune-dst-snapshots**
 
-*  Prune snapshots on dst. This command should be called by a program (or cron job) running on
-    the dst host.
+*  Prune snapshots on dst as necessary. This command should be called by a program (or cron job)
+    running on the dst host.
 
 <!-- -->
 
@@ -183,7 +183,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--src-host** *STRING*
 
-*  Network hostname of src. Used if replicating in pull mode.
+*  Network hostname of src. Used by destination host(s) if replicating in pull mode.
 
 <!-- -->
 
@@ -205,7 +205,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
     name, we can find the destination hostname to which the snapshot shall be replicated. Also,
     given a snapshot name and its --localhost name, a destination host can determine if it shall
     'pull' replicate the given snapshot from the --src-host, or if the snapshot is intended for
-    another target host, in which case it skips the snapshot. A destination host running
+    another destination host, in which case it skips the snapshot. A destination host running
     bzfs_jobrunner will 'pull' snapshots for all targets that map to its --localhost name.
 
 <!-- -->
@@ -220,7 +220,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
     --dst-hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot
     it has stored whose target has no mapping to its --localhost name in this dictionary. Do not
     remove a mapping unless you are sure it's ok to delete all those snapshots on that
-    destination host!
+    destination host! If in doubt, use --dryrun mode first.
 
 <!-- -->
 
@@ -289,7 +289,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--src-user** *STRING*
 
-*  SSH username on --src-host. Used if replicating in pull mode.
+*  SSH username on --src-host. Used if replicating in pull mode. Example: 'alice'
 
 <!-- -->
 
@@ -297,7 +297,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--dst-user** *STRING*
 
-*  SSH username on dst. Used if replicating in push mode.
+*  SSH username on dst. Used if replicating in push mode. Example: 'root'
 
 <!-- -->
 

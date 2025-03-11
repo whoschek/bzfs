@@ -36,9 +36,9 @@ def argument_parser() -> argparse.ArgumentParser:
         description=f"""
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
 
-This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic snapshot creation, replication, and
-pruning, across multiple source and destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py)
-file.
+This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS snapshot creation, replication, 
+and pruning, across source host and multiple destination hosts, using a single shared 
+[jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 Typically, a cron job on the source host runs `{prog_name}` periodically to create new snapshots (via --create-src-snapshots) 
 and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and --prune-src-bookmarks), whereas 
@@ -47,7 +47,7 @@ another cron job on the destination host runs `{prog_name}` periodically to prun
 the source to the destination (via --replicate). The frequency of these periodic activities can vary by activity, and is 
 typically every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
-Edit the jobconfig file in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the 
+Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the 
 source host and all destination hosts, and add crontab entries or systemd timers or similar, along these lines: 
 
 * crontab on source host:
@@ -94,21 +94,25 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
     # commands:
     parser.add_argument("--create-src-snapshots", action="store_true",
-        help="Take snapshots on src. This command should be called by a program (or cron job) running on the src host.\n\n")
+        help="Take snapshots on src as necessary. This command should be called by a program (or cron job) running on the "
+             "src host.\n\n")
     parser.add_argument("--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?",
-        help="Replicate recent snapshots from src to dst, either in pull mode (recommended) or push mode (experimental). "
-             "For pull mode, this command should be called by a program (or cron job) running on the dst host; for push "
-             "mode, on the src host.\n\n")
+        help="Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push mode "
+             "(experimental). For pull mode, this command should be called by a program (or cron job) running on the dst "
+             "host; for push mode, on the src host.\n\n")
     parser.add_argument("--prune-src-snapshots", action="store_true",
-        help="Prune snapshots on src. This command should be called by a program (or cron job) running on the src host.\n\n")
+        help="Prune snapshots on src as necessary. This command should be called by a program (or cron job) running on the "
+             "src host.\n\n")
     parser.add_argument("--prune-src-bookmarks", action="store_true",
-        help="Prune bookmarks on src. This command should be called by a program (or cron job) running on the src host.\n\n")
+        help="Prune bookmarks on src as necessary. This command should be called by a program (or cron job) running on the "
+             "src host.\n\n")
     parser.add_argument("--prune-dst-snapshots", action="store_true",
-        help="Prune snapshots on dst. This command should be called by a program (or cron job) running on the dst host.\n\n")
+        help="Prune snapshots on dst as necessary. This command should be called by a program (or cron job) running on the "
+             "dst host.\n\n")
 
     # options:
     parser.add_argument("--src-host", default="-", metavar="STRING",
-        help="Network hostname of src. Used if replicating in pull mode.\n\n")
+        help="Network hostname of src. Used by destination host(s) if replicating in pull mode.\n\n")
     parser.add_argument("--localhost", default=None, metavar="STRING",
         help="Hostname of localhost. Default is the hostname without the domain name.\n\n")
     dst_hosts_example = {"onsite": "nas", "us-west-1": "bak-us-west-1", "eu-west-1": "bak-eu-west-1", "offsite": "archive"}
@@ -117,7 +121,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              f"hostnames. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot name, we can find the "
              "destination hostname to which the snapshot shall be replicated. Also, given a snapshot name and its "
              "--localhost name, a destination host can determine if it shall 'pull' replicate the given snapshot from the "
-             "--src-host, or if the snapshot is intended for another target host, in which case it skips the snapshot. "
+             "--src-host, or if the snapshot is intended for another destination host, in which case it skips the snapshot. "
              f"A destination host running {prog_name} will 'pull' snapshots for all targets that map to its --localhost "
              "name.\n\n")
     parser.add_argument("--retain-dst-targets", default="{}", metavar="DICT_STRING",
@@ -125,7 +129,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              f"destination hostnames. Example: `{format_dict(dst_hosts_example)}`. Has same format as --dst-hosts. As part "
              "of --prune-dst-snapshots, a destination host will delete any snapshot it has stored whose target has no "
              "mapping to its --localhost name in this dictionary. Do not remove a mapping unless you are sure it's ok to "
-             "delete all those snapshots on that destination host!\n\n")
+             "delete all those snapshots on that destination host! If in doubt, use --dryrun mode first.\n\n")
     dst_root_datasets_example = {
         "nas": "tank2/bak",
         "bak-us-west-1": "backups/bak001",
@@ -171,9 +175,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument("--dst-snapshot-plan", default="{}", metavar="DICT_STRING",
         help="Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-plan.\n\n")
     parser.add_argument("--src-user", default="", metavar="STRING",
-        help="SSH username on --src-host. Used if replicating in pull mode.\n\n")
+        help="SSH username on --src-host. Used if replicating in pull mode. Example: 'alice'\n\n")
     parser.add_argument("--dst-user", default="", metavar="STRING",
-        help="SSH username on dst. Used if replicating in push mode.\n\n")
+        help="SSH username on dst. Used if replicating in push mode. Example: 'root'\n\n")
     parser.add_argument("--daemon-replication-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-prune-src-frequency", default="minutely", metavar="STRING",

@@ -9,8 +9,8 @@ This release contains some fixes and a lot of new features, including ...
 - Improved compat with rsync.net.
 - Added daemon support for periodic activities every N milliseconds, including for taking snapshots, replicating and pruning.
 - Added the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience wrapper around `bzfs` that 
-simplifies periodically creating snapshots, replicating and pruning, on multiple source hosts and multiple destination 
-hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) file.
+simplifies periodically creating ZFS snapshots, replicating and pruning, across source host and multiple destination hosts, 
+using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 - Added `--create-src-snapshots-*` CLI options for efficiently creating periodic (and adhoc) atomic snapshots of datasets, 
 including recursive snapshots.
 - Added `--delete-dst-snapshots-except-plan` CLI option to specify retention periods like sanoid, and prune snapshots accordingly.

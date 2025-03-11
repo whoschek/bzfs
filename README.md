@@ -118,9 +118,9 @@ reliably without the corresponding auxiliary feature.
 # Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program,
-which is a convenience wrapper around `bzfs` that simplifies periodic snapshot creation,
-replication, and pruning, across multiple source and destination hosts, using a single shared
-[jobconfig](bzfs_tests/bzfs_job_example.py) file.
+which is a convenience wrapper around `bzfs` that simplifies periodic ZFS snapshot creation,
+replication, and pruning, across source host and multiple destination hosts, using a single shared
+[jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 # Quick Start
 
