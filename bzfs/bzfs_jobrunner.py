@@ -24,7 +24,7 @@ import socket
 import subprocess
 import sys
 from collections import defaultdict
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
 
@@ -238,7 +238,7 @@ class Job:
             self.run_cmd(["bzfs"] + opts)
 
         if args.replicate == "pull":  # pull mode (recommended)
-            pull_targets = [target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname]
+            pull_targets = {target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname}
             opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
             if len(pull_targets) > 0:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
@@ -254,12 +254,12 @@ class Job:
                     self.run_cmd(["bzfs"] + daemon_opts + opts)
 
         elif args.replicate == "push":  # push mode (experimental feature)
-            host_targets = defaultdict(list)
+            host_targets = defaultdict(set)
             for org, targetperiods in dst_snapshot_plan.items():
                 for target in targetperiods.keys():
                     dst_hostname = dst_hosts.get(target)
                     if dst_hostname:
-                        host_targets[dst_hostname].append(target)
+                        host_targets[dst_hostname].add(target)
             for dst_hostname, push_targets in host_targets.items():
                 opts = self.replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
                 opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
@@ -291,7 +291,7 @@ class Job:
 
         if args.prune_dst_snapshots:
             assert retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
-            retain_targets = [target for target, dst_hostname in retain_dst_targets.items() if dst_hostname == localhostname]
+            retain_targets = {target for target, dst_hostname in retain_dst_targets.items() if dst_hostname == localhostname}
             dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
                 org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
                 for org, target_periods in dst_snapshot_plan.items()
@@ -322,7 +322,7 @@ class Job:
             self.log.error("%s", str(e))  # log exception and keep on trucking
 
     def replication_filter_opts(
-        self, dst_snapshot_plan: Dict, kind: str, targets: List[str], src_hostname: str, dst_hostname: str
+        self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str
     ) -> List[str]:
         def nsuffix(s: str) -> str:
             return "_" + s if s else ""
@@ -330,7 +330,8 @@ class Job:
         def ninfix(s: str) -> str:
             return s + "_" if s else ""
 
-        self.log.info("%s", f"Replicating targets {targets} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+        log = self.log
+        log.info("%s", f"Replicating targets {sorted(targets)} in {kind} mode from {src_hostname} to {dst_hostname} ...")
         opts = []
         for org, target_periods in dst_snapshot_plan.items():
             for target, periods in target_periods.items():
