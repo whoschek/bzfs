@@ -326,10 +326,11 @@ class Job:
         self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str
     ) -> List[str]:
         def nsuffix(s: str) -> str:
-            return "_" + s if s else ""
+            return "_" + re.escape(s) if s else ""
 
         def ninfix(s: str) -> str:
-            return s + "_" if s else ""
+            year_with_four_digits_regex = r"[1-9][0-9][0-9][0-9]"  # regex for empty target shall not match non-empty target
+            return re.escape(s) + "_" if s else year_with_four_digits_regex
 
         log = self.log
         log.info("%s", f"Replicating targets {sorted(targets)} in {kind} mode from {src_hostname} to {dst_hostname} ...")
@@ -339,7 +340,7 @@ class Job:
                 if target in targets:
                     for duration_unit, duration_amount in periods.items():
                         if duration_amount > 0:
-                            regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(duration_unit))}"
+                            regex = f"{re.escape(org)}_{ninfix(target)}.*{nsuffix(duration_unit)}"
                             opts.append(f"--include-snapshot-regex={regex}")
         if len(opts) > 0:
             opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]

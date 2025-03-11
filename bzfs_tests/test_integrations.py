@@ -657,6 +657,9 @@ class AdhocTestCase(BZFSTestCase):
     def test_jobrunner_main(self):
         LocalTestCase(param=self.param).test_jobrunner_main()
 
+    def test_jobrunner_flat_simple_with_empty_targets(self):
+        LocalTestCase(param=self.param).test_jobrunner_flat_simple_with_empty_targets()
+
 
 #############################################################################
 class IncrementalSendStepsTestCase(BZFSTestCase):
@@ -4652,6 +4655,74 @@ class LocalTestCase(BZFSTestCase):
         if are_bookmarks_enabled("src"):
             self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+    def test_jobrunner_flat_simple_with_empty_targets(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("Destroying snapshots on src needs extra permissions")
+        destroy(dst_root_dataset, recursive=True)
+        self.assertSnapshots(src_root_dataset, 0)
+
+        localhostname = socket.gethostname()
+        src_host = "-"  # for local mode (no ssh, no network)
+        dst_hosts_pull = {"onsite": localhostname, "": localhostname}
+        dst_root_datasets = {localhostname: "", "-": ""}
+        src_snapshot_plan = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
+        dst_snapshot_plan = {"z": {"": {"yearly": 1, "daily": 0}}}
+        src_bookmark_plan = dst_snapshot_plan
+        args = [
+            src_root_dataset,
+            dst_root_dataset,
+            f"--src-host={src_host}",
+            f"--localhost={localhostname}",
+            f"--retain-dst-targets={dst_hosts_pull}",
+            f"--dst-root-datasets={dst_root_datasets}",
+            f"--src-snapshot-plan={src_snapshot_plan}",
+            f"--src-bookmark-plan={src_bookmark_plan}",
+            f"--dst-snapshot-plan={dst_snapshot_plan}",
+            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+        ]
+        pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
+
+        # next iteration: create a src snapshot with non-empty target
+        self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
+        self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        # next iteration: create a src snapshot with empty target
+        src_snapshot_plan_empty = {"z": {"": {"yearly": 1}}}
+        pull_args_empty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
+        pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
+        self.run_bzfs("--create-src-snapshots", *pull_args_empty, use_jobrunner=True)
+        self.assertSnapshotNameRegexes(src_root_dataset, ["z_(?!onsite).*_yearly", "z_onsite.*_yearly"])
+        self.assertFalse(dataset_exists(dst_root_dataset))
+
+        # replicate empty targets from src to dst:
+        self.run_bzfs("--replicate=pull", *pull_args_empty, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        self.assertSnapshotNameRegexes(dst_root_dataset, ["z_(?!onsite).*_yearly"])
+
+        # with empty dst, replicate non-empty targets from src to dst
+        destroy(dst_root_dataset, recursive=True)
+        dst_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
+        pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--dst-snapshot-plan=")]
+        pull_args_nonempty += [f"--dst-snapshot-plan={dst_snapshot_plan_nonempty}"]
+        self.run_bzfs("--replicate=pull", *pull_args_nonempty, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        self.assertSnapshotNameRegexes(dst_root_dataset, ["z_onsite_.*_yearly"])
+
+        # only retain src snapshots with non-empty target:
+        src_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1}}}
+        pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
+        pull_args_nonempty += [f"--src-snapshot-plan={src_snapshot_plan_nonempty}"]
+        self.run_bzfs("--prune-src-snapshots", *pull_args_nonempty, use_jobrunner=True)
+        self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
+
+        # only retain src snapshots with empty target:
+        src_snapshot_plan_empty = {"z": {"": {"yearly": 1}}}
+        pull_args_empty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
+        pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
+        self.run_bzfs("--prune-src-snapshots", *pull_args_empty, use_jobrunner=True)
+        self.assertEqual(0, len(snapshots(src_root_dataset)))
 
     @patch("sys.argv", ["bzfs_jobrunner.py"])
     def test_jobrunner_main(self):

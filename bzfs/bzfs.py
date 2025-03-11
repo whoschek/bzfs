@@ -108,6 +108,7 @@ snapshot_filters_var = "snapshot_filters_var"
 cmp_choices_items = ["src", "dst", "all"]
 inject_dst_pipe_fail_kbytes = 400
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
+year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
 log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
@@ -4117,13 +4118,23 @@ class Job:
                     for createtxg, creation, name in (line.split("\t", 2) for line in group)
                 )
                 snapshot_names = [snapshot[-1] for snapshot in snapshots]
+                year_with_4_digits_regex = year_with_four_digits_regex
                 for label in labels:
                     datasets_to_snapshot[label].extend(datasets_without_snapshots)
+                    infix = label.infix
                     start = label.prefix + label.infix
                     end = label.suffix
-                    minlen = len(label.prefix) + len(label.infix) + len(label.suffix)
+                    startlen = len(start)
+                    endlen = len(end)
+                    minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
+                    year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
                     j = find_match(  # find latest snapshot that matches this label
-                        snapshot_names, lambda s: s.endswith(end) and s.startswith(start) and len(s) >= minlen, reverse=True
+                        snapshot_names,
+                        lambda s: s.endswith(end)
+                        and s.startswith(start)
+                        and len(s) >= minlen
+                        and (infix or year_with_4_digits_regex.fullmatch(s[year_slice])),  # year_with_four_digits_regex
+                        reverse=True,
                     )
                     creation_unixtime = snapshots[j][1] if j >= 0 else 0
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
@@ -6462,7 +6473,8 @@ class DeleteDstSnapshotsExceptPlanAction(argparse.Action):
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
-                    regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(period_unit))}"
+                    infix = re.escape(ninfix(target)) if target else year_with_four_digits_regex.pattern  # disambiguate
+                    regex = f"{re.escape(org)}_{infix}.*{re.escape(nsuffix(period_unit))}"
                     duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
                     duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
                     opts += [
