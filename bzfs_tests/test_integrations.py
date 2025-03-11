@@ -4490,6 +4490,7 @@ class LocalTestCase(BZFSTestCase):
         localhostname = socket.gethostname()
         src_host = "-"  # for local mode (no ssh, no network)
         dst_hosts_pull = {"onsite": localhostname, "": localhostname}
+        dst_hosts_pull_bad = {"xxxxonsite": localhostname}
         dst_hosts_push = {"onsite": "-"}
         dst_hosts_push_bad = {"xxxonsite": "-"}
         dst_root_datasets = {localhostname: "", "-": ""}
@@ -4509,6 +4510,7 @@ class LocalTestCase(BZFSTestCase):
             "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
         ]
         pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
+        pull_args_bad = args + [f"--dst-hosts={dst_hosts_pull_bad}"]
         push_args = args + [f"--dst-hosts={dst_hosts_push}"]
         push_args_bad = args + [f"--dst-hosts={dst_hosts_push_bad}"]
 
@@ -4545,6 +4547,13 @@ class LocalTestCase(BZFSTestCase):
         # next iteration: create another src snapshot
         self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # replication to nonexistingpool target does nothing:
+        self.run_bzfs("--replicate=pull", *pull_args_bad, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # replication to nonexistingpool destination pool does nothing:
@@ -4595,15 +4604,25 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # replication does nothing if target isn't mapped to destination host:
-        self.run_bzfs("--replicate=push", *push_args_bad, use_jobrunner=True)  # replicate in push mode
+        # push replication does nothing if target isn't mapped to destination host:
+        self.run_bzfs("--replicate=push", *push_args_bad, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
             self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # replicate successfully from src to dst:
-        self.run_bzfs("--replicate=push", *push_args, use_jobrunner=True)  # replicate in push mode
+        # push replication does nothing if period isn't greater than zero:
+        dst_snapshot_plan_empty = {"z": {"onsite": {"daily": 0}}}
+        push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
+        push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
+        self.run_bzfs("--replicate=push", *push_args_empty, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        if are_bookmarks_enabled("src"):
+            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # push replicate successfully from src to dst:
+        self.run_bzfs("--replicate=push", *push_args, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
             self.assertEqual(2, len(bookmarks(src_root_dataset)))

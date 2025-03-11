@@ -240,7 +240,7 @@ class Job:
         if args.replicate == "pull":  # pull mode (recommended)
             pull_targets = {target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname}
             opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
-            if len(pull_targets) > 0:
+            if len(opts) > 0:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 old_len_opts = len(opts)
@@ -262,12 +262,13 @@ class Job:
                         host_targets[dst_hostname].add(target)
             for dst_hostname, push_targets in host_targets.items():
                 opts = self.replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
-                opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
-                opts += unknown_args + ["--"]
-                for src, dst in args.root_dataset_pairs:
-                    opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
-                daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                self.run_cmd(["bzfs"] + daemon_opts + opts)
+                if len(opts) > 0:
+                    opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
+                    opts += unknown_args + ["--"]
+                    for src, dst in args.root_dataset_pairs:
+                        opts += [src, f"{dst_hostname}:{resolve_dst_dataset(dst, dst_hostname)}"]
+                    daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
+                    self.run_cmd(["bzfs"] + daemon_opts + opts)
 
         def prune_src(opts: List[str]) -> None:
             opts += [
@@ -340,8 +341,9 @@ class Job:
                         if duration_amount > 0:
                             regex = f"{re.escape(org)}_{re.escape(ninfix(target))}.*{re.escape(nsuffix(duration_unit))}"
                             opts.append(f"--include-snapshot-regex={regex}")
-        opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
-        opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
+        if len(opts) > 0:
+            opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
+            opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
         return opts
 
     def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs) -> List[Tuple[str, str]]:
