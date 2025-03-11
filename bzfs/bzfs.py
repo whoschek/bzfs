@@ -4039,10 +4039,10 @@ class Job:
         (requires zfs >= 2.2.0), in combination with a local cache that stores this property, as well as the creation time
         of the most recent snapshot, for each SnapshotLabel and each dataset."""
 
-        def cache_get_snapshots_changed(dataset: str) -> int:  # like zfs_get_snapshots_changed() but reads from local cache
-            """perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec."""
-            try:
-                return round(os.stat(self.last_modified_cache_file(dataset)).st_mtime)
+        def cache_get_snapshots_changed(dataset: str, label: SnapshotLabel = None) -> int:
+            """Like zfs_get_snapshots_changed() but reads from local cache."""
+            try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
+                return round(os.stat(self.last_modified_cache_file(dataset, label)).st_mtime)
             except FileNotFoundError:
                 return 0  # harmless
 
@@ -4090,7 +4090,7 @@ class Job:
                     continue
                 creation_unixtimes = {}
                 for label in labels:
-                    creation_unixtime = cache_get_snapshots_changed(f"{dataset}@{label.prefix}{label.infix}{label.suffix}")
+                    creation_unixtime = cache_get_snapshots_changed(dataset, label)
                     if creation_unixtime == 0:
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
@@ -4136,13 +4136,9 @@ class Job:
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
         return datasets_to_snapshot
 
-    def last_modified_cache_file(self, dataset_or_snapshot: str) -> str:
+    def last_modified_cache_file(self, dataset: str, label: SnapshotLabel = None) -> str:
         p = self.params
-        i = dataset_or_snapshot.find("@")
-        if i >= 0:
-            cache_file = os.path.join(dataset_or_snapshot[:i], dataset_or_snapshot[i:])
-        else:
-            cache_file = os.path.join(dataset_or_snapshot, "=")
+        cache_file = os.path.join(dataset, "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}")
         userhost_dir = p.src.ssh_user_host if p.src.ssh_user_host else "-"
         return os.path.join(p.log_params.last_modified_cache_dir, userhost_dir, cache_file)
 
@@ -4192,7 +4188,7 @@ class Job:
                         set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
                         for label in dataset_labels[src_dataset]:
                             set_last_modification_time(
-                                self.last_modified_cache_file(f"{src_dataset}@{label.prefix}{label.infix}{label.suffix}"),
+                                self.last_modified_cache_file(src_dataset, label),
                                 unixtime_in_secs=snapshots_changed,
                                 if_more_recent=True,
                             )
