@@ -4506,6 +4506,8 @@ class LocalTestCase(BZFSTestCase):
     def test_jobrunner_flat_simple(self):
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
         destroy(dst_root_dataset, recursive=True)
         self.assertSnapshots(src_root_dataset, 0)
 
@@ -4539,15 +4541,13 @@ class LocalTestCase(BZFSTestCase):
         # next iteration: create a src snapshot
         self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(0, len(bookmarks(src_root_dataset)))
+        self.assertEqual(0, len(bookmarks(src_root_dataset)))
         self.assertFalse(dataset_exists(dst_root_dataset))
 
         # replicate from src to dst:
         self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # no snapshots to prune yet on src:
@@ -4557,8 +4557,7 @@ class LocalTestCase(BZFSTestCase):
 
         # no bookmarks to prune yet on src:
         self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # no snapshots to prune yet on dst:
@@ -4574,8 +4573,7 @@ class LocalTestCase(BZFSTestCase):
         # replication to nonexistingpool target does nothing:
         self.run_bzfs("--replicate=pull", *pull_args_bad, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # replication to nonexistingpool destination pool does nothing:
@@ -4585,15 +4583,13 @@ class LocalTestCase(BZFSTestCase):
             use_jobrunner=True,
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # replicate new snapshot from src to dst:
         self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         # delete one old snapshot on src:
@@ -4603,8 +4599,7 @@ class LocalTestCase(BZFSTestCase):
 
         # delete one old bookmark on src:
         self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         # pruning a nonexistingpool destination pool does nothing:
@@ -4629,8 +4624,7 @@ class LocalTestCase(BZFSTestCase):
         # push replication does nothing if target isn't mapped to destination host:
         self.run_bzfs("--replicate=push", *push_args_bad, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # push replication does nothing if period isn't greater than zero:
@@ -4639,8 +4633,7 @@ class LocalTestCase(BZFSTestCase):
         push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
         self.run_bzfs("--replicate=push", *push_args_empty, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # push replication does nothing if periods are empty:
@@ -4655,8 +4648,7 @@ class LocalTestCase(BZFSTestCase):
         # push replicate successfully from src to dst:
         self.run_bzfs("--replicate=push", *push_args, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         # non-existing CLI option will cause failure:
@@ -4668,8 +4660,7 @@ class LocalTestCase(BZFSTestCase):
             expected_status=2,
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
         # Forgetting to specify src dataset (or dst dataset) will cause failure:
@@ -4680,13 +4671,14 @@ class LocalTestCase(BZFSTestCase):
             expected_status=2,
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
-        if are_bookmarks_enabled("src"):
-            self.assertEqual(2, len(bookmarks(src_root_dataset)))
+        self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
     def test_jobrunner_flat_simple_with_empty_targets(self):
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
         destroy(dst_root_dataset, recursive=True)
         self.assertSnapshots(src_root_dataset, 0)
 
