@@ -6479,11 +6479,19 @@ class IncludeSnapshotPlanAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         opts = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
-        if not self._generate_opts(opts, parser, values, option_string=option_string):
+        # The bzfs_include_snapshot_plan_excludes_outdated_snapshots env var flag is a work-around for (rare) replication
+        # situations where a common snapshot cannot otherwise be found because bookmarks are disabled and a common
+        # snapshot is actually available but not included by the --include-snapshot-plan policy chosen by the user, and the
+        # user cannot change the content of the --include-snapshot-plan for some reason. The flag makes replication work even
+        # in this scenario, at the expense of including (and thus replicating) old snapshots that will immediately be deleted
+        # on the destination by the next pruning action. In a proper production setup, it should never be necessary to set
+        # the flag to 'False'.
+        include_snapshot_times_and_ranks = getenv_bool("include_snapshot_plan_excludes_outdated_snapshots", True)
+        if not self._add_opts(opts, include_snapshot_times_and_ranks, parser, values, option_string=option_string):
             opts += ["--new-snapshot-filter-group", "--include-snapshot-regex=!.*"]
         setattr(namespace, self.dest, opts)
 
-    def _generate_opts(self, opts: List[str], parser, values, option_string=None):
+    def _add_opts(self, opts: List[str], include_snapshot_times_and_ranks: bool, parser, values, option_string=None) -> bool:
         """Generates extra options to be parsed later during second parse_args() pass, within run_main()"""
         xperiods = SnapshotPeriods()
         has_at_least_one_filter_clause = False
@@ -6494,19 +6502,19 @@ class IncludeSnapshotPlanAction(argparse.Action):
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
                     infix = re.escape(ninfix(target)) if target else year_with_four_digits_regex.pattern  # disambiguate
                     regex = f"{re.escape(org)}_{infix}.*{re.escape(nsuffix(period_unit))}"
-                    duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
-                    duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
-                    opts += [
-                        "--new-snapshot-filter-group",
-                        f"--include-snapshot-regex={regex}",
-                        "--include-snapshot-times-and-ranks",
-                        (
-                            "notime"
-                            if duration_unit_label is None or duration_amount * period_amount == 0
-                            else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
-                        ),
-                        f"latest{period_amount}",
-                    ]
+                    opts += ["--new-snapshot-filter-group", f"--include-snapshot-regex={regex}"]
+                    if include_snapshot_times_and_ranks:
+                        duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
+                        duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
+                        opts += [
+                            "--include-snapshot-times-and-ranks",
+                            (
+                                "notime"
+                                if duration_unit_label is None or duration_amount * period_amount == 0
+                                else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
+                            ),
+                            f"latest{period_amount}",
+                        ]
                     has_at_least_one_filter_clause = True
         return has_at_least_one_filter_clause
 
@@ -6517,7 +6525,7 @@ class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
         opts = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
         opts += ["--delete-dst-snapshots-except"]
-        if not self._generate_opts(opts, parser, values, option_string=option_string):
+        if not self._add_opts(opts, True, parser, values, option_string=option_string):
             parser.error(
                 f"{option_string}: Cowardly refusing to delete all snapshots on "
                 f"--delete-dst-snapshots-except-plan='{values}' (which means 'retain no snapshots' aka "

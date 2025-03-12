@@ -308,6 +308,7 @@ class BZFSTestCase(ParametrizedTestCase):
         progress_update_intervals=None,
         use_select=None,
         use_jobrunner=False,
+        include_snapshot_plan_excludes_outdated_snapshots=None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -472,6 +473,14 @@ class BZFSTestCase(ParametrizedTestCase):
             # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
             os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfs_send"] = "false"
 
+        if include_snapshot_plan_excludes_outdated_snapshots is not None:
+            old_include_snapshot_plan_excludes_outdated_snapshots = os.environ.get(
+                bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"
+            )
+            os.environ[bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"] = str(
+                include_snapshot_plan_excludes_outdated_snapshots
+            )
+
         if control_persist_margin_secs is not None:
             job.control_persist_margin_secs = control_persist_margin_secs
 
@@ -528,6 +537,14 @@ class BZFSTestCase(ParametrizedTestCase):
                 os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfs_send"] = (
                     old_dedicated_tcp_connection_per_zfs_send
                 )
+
+            if include_snapshot_plan_excludes_outdated_snapshots is not None:
+                if old_include_snapshot_plan_excludes_outdated_snapshots is None:
+                    os.environ.pop(bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots", None)
+                else:
+                    os.environ[bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"] = (
+                        old_include_snapshot_plan_excludes_outdated_snapshots
+                    )
 
         if isinstance(expected_status, list):
             self.assertIn(returncode, expected_status)
@@ -611,6 +628,9 @@ class AdhocTestCase(BZFSTestCase):
 
     def test_include_snapshots_plan(self):
         LocalTestCase(param=self.param).test_include_snapshots_plan()
+
+    def test_include_snapshots_plan_without_excludes_outdated_snapshots(self):
+        LocalTestCase(param=self.param).test_include_snapshots_plan_without_excludes_outdated_snapshots()
 
     def test_delete_dst_snapshots_except_plan(self):
         LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
@@ -1215,6 +1235,22 @@ class LocalTestCase(BZFSTestCase):
             str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
         )
         self.assertSnapshotNames(dst_root_dataset, ["s1_onsite_2024-01-01_00:00:01_secondly"])
+
+    def test_include_snapshots_plan_without_excludes_outdated_snapshots(self):
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:01_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_daily")
+
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-plan",
+            str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
+            include_snapshot_plan_excludes_outdated_snapshots=False,
+        )
+        self.assertSnapshotNames(
+            dst_root_dataset, ["s1_onsite_2024-01-01_00:00:00_secondly", "s1_onsite_2024-01-01_00:00:01_secondly"]
+        )
 
     def test_delete_dst_snapshots_except_plan(self):
         if self.is_no_privilege_elevation():
