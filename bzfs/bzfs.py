@@ -602,6 +602,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots between source and destination. Bookmarks do not count towards N or N%% wrt. rank.\n\n"
              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
              "over include.\n\n")
+
     def format_dict(dictionary):
         return f'"{dictionary}"'
 
@@ -4143,13 +4144,13 @@ class Job:
                     minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
                     year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
                     creation_unixtime = 0
-                    for j, s in enumerate(reversed_snapshot_names):
+                    for j, s in enumerate(reversed_snapshot_names):  # find latest snapshot that matches this label
                         if (
                             s.endswith(end)
                             and s.startswith(start)
                             and len(s) >= minlen
                             and (infix or year_with_4_digits_regex.fullmatch(s[year_slice]))  # year_with_four_digits_regex
-                        ):  # found latest snapshot that matches this label
+                        ):
                             creation_unixtime = snapshots[len(snapshots) - j - 1][1]
                             break
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)

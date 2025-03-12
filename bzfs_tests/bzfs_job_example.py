@@ -15,7 +15,7 @@
 # limitations under the License.
 
 #############################################################################
-# Quick Start for local replication: Edit this script. Replace all occurances of the word "nas" with the hostname of your
+# Quickstart for local replication: Edit this script. Replace all occurances of the word "nas" with the hostname of your
 # local machine. Edit root_dataset_pairs to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH.
 # Run the final script like so:
 #
