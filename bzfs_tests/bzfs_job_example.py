@@ -228,7 +228,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--compression-program=lz4"]  # use less CPU for compression-on-the-wire
 # extra_args += ["--threads=200%"]  # use more CPU cores when operating on many datasets
 # extra_args += ["--ssh-program=hpnssh"]  # use larger TCP window size over high speed long distance networks
-# os.environ["bzfs_no_force_convert_I_to_i"] = "true"  # enable batched incremental replication w/ --no-privilege-elevation
+# os.environ["bzfs_name_of_a_unix_env_var"] = "true"  # toggle example tuning knob
 
 
 cmd = ["bzfs_jobrunner"]

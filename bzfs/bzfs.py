@@ -1030,7 +1030,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "`<NON_ROOT_USER_NAME> ALL=NOPASSWD:/path/to/zfs`\n\n"
              "Instead, the --no-privilege-elevation flag is for non-root users that have been granted corresponding "
              "ZFS permissions by administrators via 'zfs allow' delegation mechanism, like so: "
-             "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark $SRC_DATASET; "
+             "sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark,hold $SRC_DATASET; "
              "sudo zfs allow -u $DST_NON_ROOT_USER_NAME mount,create,receive,rollback,destroy,canmount,mountpoint,"
              "readonly,compression,encryption,keylocation,recordsize $DST_DATASET_OR_POOL.\n\n"
              "For extra security $SRC_NON_ROOT_USER_NAME should be different than $DST_NON_ROOT_USER_NAME, i.e. the "
@@ -3808,7 +3808,7 @@ class Job:
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
     ) -> List[Tuple[str, str, str, int]]:
         force_convert_I_to_i = False
-        if self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", False):
+        if self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True):
             # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
             # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
             force_convert_I_to_i = True

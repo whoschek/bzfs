@@ -28,6 +28,10 @@ including recursive snapshots.
 now, in deprecated status, but the old name will be completely removed in a future release.
 - Use case-sensitive sort order instead of case-insensitive sort order throughout.
 - Use hostname without domain name within `--exclude-dataset-property`.
+- For better replication performance, changed the default of `bzfs_no_force_convert_I_to_i` form `false` to `true`. If ZFS 
+complains with a "cannot hold: permission denied" error, then the fix is for the ZFS administrator to grant ZFS 'hold' 
+permission to the user on the source datasets, like so: 'sudo zfs allow -u $SRC_USER send,hold tank1/foo'. Or run with 
+'export bzfs_no_force_convert_I_to_i=false'. Also see https://github.com/openzfs/zfs/issues/16394
 - Fixed "Too many arguments" error when deleting thousands of snapshots in the same 'zfs destroy' CLI invocation.
 - Make 'zfs rollback' work even if the previous 'zfs receive -s' was interrupted.
 - Skip partial or bad 'pv' log file lines when calculating stats.

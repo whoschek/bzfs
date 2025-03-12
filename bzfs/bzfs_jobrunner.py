@@ -63,9 +63,7 @@ Taking snapshots, and/or replicating, from every N milliseconds to every 10 seco
 such use cases, consider that `zfs list -t snapshot` performance degrades as more and more snapshots currently exist within
 the selected datasets, so try to keep the number of currently existing snapshots small, and prune them at a frequency that 
 is proportional to the frequency with which snapshots are created. Consider using `--skip-parent` and `--exclude-dataset*` 
-filters to limit the selected datasets only to those that require this level of frequency. If running with 
-`--no-privilege-elevation` also set Unix env var `bzfs_no_force_convert_I_to_i` to `true` to enable batched incremental 
-replication (requires permission for ZFS holds on the source dataset via `zfs allow`).
+filters to limit the selected datasets only to those that require this level of frequency.
 
 In addition, use the `--daemon-*` options to reduce startup overhead, in combination with splitting the crontab entry (or 
 better: high frequency systemd timer) into multiple processes, using pull replication mode, along these lines:

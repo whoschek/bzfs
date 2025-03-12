@@ -1637,8 +1637,8 @@ usage: bzfs [-h] [--recursive]
 
     Instead, the --no-privilege-elevation flag is for non-root users that have been granted
     corresponding ZFS permissions by administrators via 'zfs allow' delegation mechanism, like
-    so: sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark $SRC_DATASET;
-    sudo zfs allow -u $DST_NON_ROOT_USER_NAME
+    so: sudo zfs allow -u $SRC_NON_ROOT_USER_NAME snapshot,destroy,send,bookmark,hold
+    $SRC_DATASET; sudo zfs allow -u $DST_NON_ROOT_USER_NAME
     mount,create,receive,rollback,destroy,canmount,mountpoint,readonly,compression,encryption,keylocation,recordsize
     $DST_DATASET_OR_POOL.
 

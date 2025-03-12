@@ -376,7 +376,7 @@ class BZFSTestCase(ParametrizedTestCase):
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
             args = args + ["--no-privilege-elevation"]
-            src_permissions = "send,snapshot"
+            src_permissions = "send,snapshot,hold"
             if not is_solaris_zfs():
                 src_permissions += ",bookmark"
             if delete_injection_triggers is not None:
