@@ -4131,7 +4131,7 @@ class Job:
                     (int(createtxg), int(creation), name[name.index("@") + 1 :])
                     for createtxg, creation, name in (line.split("\t", 2) for line in group)
                 )
-                snapshot_names = [snapshot[-1] for snapshot in snapshots]
+                reversed_snapshot_names = [snapshot[-1] for snapshot in reversed(snapshots)]
                 year_with_4_digits_regex = year_with_four_digits_regex
                 for label in labels:
                     datasets_to_snapshot[label].extend(datasets_without_snapshots)
@@ -4142,15 +4142,16 @@ class Job:
                     endlen = len(end)
                     minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
                     year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
-                    j = find_match(  # find latest snapshot that matches this label
-                        snapshot_names,
-                        lambda s: s.endswith(end)
-                        and s.startswith(start)
-                        and len(s) >= minlen
-                        and (infix or year_with_4_digits_regex.fullmatch(s[year_slice])),  # year_with_four_digits_regex
-                        reverse=True,
-                    )
-                    creation_unixtime = snapshots[j][1] if j >= 0 else 0
+                    creation_unixtime = 0
+                    for j, s in enumerate(reversed_snapshot_names):
+                        if (
+                            s.endswith(end)
+                            and s.startswith(start)
+                            and len(s) >= minlen
+                            and (infix or year_with_4_digits_regex.fullmatch(s[year_slice]))  # year_with_four_digits_regex
+                        ):  # found latest snapshot that matches this label
+                            creation_unixtime = snapshots[len(snapshots) - j - 1][1]
+                            break
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
             datasets_to_snapshot[lbl].extend(sorted_datasets[i:])  # Take snaps for datasets whose snapshot stream is empty
