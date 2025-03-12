@@ -175,10 +175,9 @@ snapshots from the source to the destination. The frequency of these periodic ac
 every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
 All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
-snapshots in any format and with any naming convention, even created or managed by any third party ZFS snapshot
-management tool, including manual zfs snapshot/destroy. All functions can also be used independently. That is, if you
-wish you can use {prog_name} just for creating snapshots, or just for replicating, or just for deleting/pruning,
-or just for comparing snapshot lists.
+snapshots in any format, even created or managed by third party ZFS snapshot management tools, including manual 
+zfs snapshot/destroy. All functions can also be used independently. That is, if you wish you can use {prog_name} just 
+for creating snapshots, or just for replicating, or just for deleting/pruning, or just for comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
@@ -218,7 +217,7 @@ The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) comp
 wrapper around `{prog_name}` that simplifies periodic ZFS snapshot creation, replication, and pruning, across source host 
 and multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
-# Quick Start
+# Quickstart
 
 * Create adhoc atomic snapshots without a schedule:
 
@@ -675,8 +674,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "into a single command line are spread over multiple command line invocations, respecting the limits that the "
              "operating system places on the maximum length of a single command line, per `getconf ARG_MAX`.\n\n"
              f"Note: All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily "
-             "work with any snapshots in any format and with any naming convention, even created or managed by any third "
-             "party ZFS snapshot management tool, including manual zfs snapshot/destroy.\n\n")
+             "work with any snapshots in any format, even created or managed by third party ZFS snapshot management tools, "
+             "including manual zfs snapshot/destroy.\n\n")
     parser.add_argument(
         "--create-src-snapshots-plan", default=None, type=str, metavar="DICT_STRING",
         help="Creation periods that specify a schedule for when new snapshots shall be created on src within the selected "
@@ -706,11 +705,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--create-src-snapshots-timeformat", default=create_src_snapshots_timeformat_dflt, metavar="STRFTIME_SPEC",
         help=f"Default is `{argparser_escape(create_src_snapshots_timeformat_dflt)}`. For the strftime format, see "
              "https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. "
-             "Specify the empty string to create source snapshot names that do not contain an auto-generated timestamp. "
              f"Examples: `{argparser_escape('%Y-%m-%d_%H:%M:%S.%f')}` (adds microsecond resolution), "
              f"`{argparser_escape('%Y-%m-%d_%H:%M:%S%z')}` (adds timezone offset), "
              f"`{argparser_escape('%Y-%m-%dT%H-%M-%S')}` (no colons).\n\n"
-             "The name of the snapshot created on the src is `$org_strftime(--create-src-snapshots-time*)_$target_$period`. "
+             "The name of the snapshot created on the src is `$org_$target_strftime(--create-src-snapshots-time*)_$period`. "
              "Example: `tank/foo@prod_us-west-1_2024-09-03_12:26:15_daily`\n\n")
     parser.add_argument(
         "--create-src-snapshots-timezone", default="", type=str, metavar="TZ_SPEC",

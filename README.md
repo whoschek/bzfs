@@ -30,7 +30,7 @@
 
 - [Introduction](#Introduction)
 - [Periodic Jobs with bzfs_jobrunner](#Periodic-Jobs-with-bzfs_jobrunner)
-- [Quick Start](#Quick-Start)
+- [Quickstart](#Quickstart)
 - [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
 - [Continuous Testing](#Continuous-Testing)
@@ -76,10 +76,10 @@ destination. The frequency of these periodic activities is typically every N mil
 second, minute, hour, day, week, month and/or year (or multiples thereof).
 
 All bzfs functions including snapshot creation, replication, deletion, comparison, etc. happily
-work with any snapshots in any format and with any naming convention, even created or managed by
-any third party ZFS snapshot management tool, including manual zfs snapshot/destroy. All functions
-can also be used independently. That is, if you wish you can use bzfs just for creating snapshots,
-or just for replicating, or just for deleting/pruning, or just for comparing snapshot lists.
+work with any snapshots in any format, even created or managed by third party ZFS snapshot
+management tools, including manual zfs snapshot/destroy. All functions can also be used
+independently. That is, if you wish you can use bzfs just for creating snapshots, or just for
+replicating, or just for deleting/pruning, or just for comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. bzfs
 is installed and executed on the 'initiator' host which can be either the host that contains the
@@ -122,7 +122,7 @@ which is a convenience wrapper around `bzfs` that simplifies periodic ZFS snapsh
 replication, and pruning, across source host and multiple destination hosts, using a single shared
 [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
-# Quick Start
+# Quickstart
 
 * Create adhoc atomic snapshots without a schedule:
 
@@ -1072,9 +1072,8 @@ usage: bzfs [-h] [--recursive]
     system places on the maximum length of a single command line, per `getconf ARG_MAX`.
 
     Note: All bzfs functions including snapshot creation, replication, deletion, comparison, etc.
-    happily work with any snapshots in any format and with any naming convention, even created or
-    managed by any third party ZFS snapshot management tool, including manual zfs
-    snapshot/destroy.
+    happily work with any snapshots in any format, even created or managed by third party ZFS
+    snapshot management tools, including manual zfs snapshot/destroy.
 
 <!-- -->
 
@@ -1120,13 +1119,12 @@ usage: bzfs [-h] [--recursive]
 **--create-src-snapshots-timeformat** *STRFTIME_SPEC*
 
 *  Default is `%Y-%m-%d_%H:%M:%S`. For the strftime format, see
-    https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. Specify the
-    empty string to create source snapshot names that do not contain an auto-generated timestamp.
-    Examples: `%Y-%m-%d_%H:%M:%S.%f` (adds microsecond resolution), `%Y-%m-%d_%H:%M:%S%z`
-    (adds timezone offset), `%Y-%m-%dT%H-%M-%S` (no colons).
+    https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. Examples:
+    `%Y-%m-%d_%H:%M:%S.%f` (adds microsecond resolution), `%Y-%m-%d_%H:%M:%S%z` (adds
+    timezone offset), `%Y-%m-%dT%H-%M-%S` (no colons).
 
     The name of the snapshot created on the src is
-    `$org_strftime(--create-src-snapshots-time*)_$target_$period`. Example:
+    `$org_$target_strftime(--create-src-snapshots-time*)_$period`. Example:
     `tank/foo@prod_us-west-1_2024-09-03_12:26:15_daily`
 
 <!-- -->

@@ -205,6 +205,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--weekly_hour=2"]
 # extra_args += ["--weekly_minute=0"]
 # ... and so on (include all other options from bzfs --help here too)
+# os.environ["TZ"] = "UTC"  # change timezone in all respects for the entire program
 
 
 # Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency.
