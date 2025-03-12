@@ -603,6 +603,35 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots between source and destination. Bookmarks do not count towards N or N%% wrt. rank.\n\n"
              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
              "over include.\n\n")
+    def format_dict(dictionary):
+        return f'"{dictionary}"'
+
+    src_snapshot_plan_example = {
+        "prod": {
+            "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
+        },
+        "test": {
+            "offsite": {"12hourly": 42, "weekly": 12},
+            "onsite": {"100millisecondly": 42},
+        },
+    }
+    parser.add_argument(
+        "--include-snapshot-plan", action=IncludeSnapshotPlanAction, default=None,
+        metavar="DICT_STRING",
+        help="Replication periods to be used if replicating snapshots within the selected destination datasets. "
+             "Has the same format as --create-src-snapshots-plan and --delete-dst-snapshots-except-plan (see below). "
+             "Snapshots that do not match a period will not be replicated. To avoid unexpected surprises, make sure to "
+             "carefully specify ALL snapshot names and periods that shall be replicated, in combination with --dryrun.\n\n"
+             f"Example: `{format_dict(src_snapshot_plan_example)}`. This example will, for the organization 'prod' and the "
+             "intended logical target 'onsite', replicate secondly snapshots that were created less than 40 seconds ago, "
+             "yet replicate the latest 40 secondly snapshots regardless of creation time. Analog for the latest 40 minutely "
+             "snapshots, latest 36 hourly snapshots, etc. "
+             "Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots shall be replicated for the given "
+             "period.\n\n"
+             "Note: --include-snapshot-plan is a convenience option that auto-generates a series of the following other "
+             "options: --new-snapshot-filter-group, --include-snapshot-regex, --include-snapshot-times-and-ranks\n\n")
     parser.add_argument(
         "--new-snapshot-filter-group", action=NewSnapshotFilterGroupAction, nargs=0,
         help="Starts a new snapshot filter group containing separate --{include|exclude}-snapshot-* filter options. The "
@@ -648,22 +677,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"Note: All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily "
              "work with any snapshots in any format and with any naming convention, even created or managed by any third "
              "party ZFS snapshot management tool, including manual zfs snapshot/destroy.\n\n")
-
-    def format_dict(dictionary):
-        return f'"{dictionary}"'
-
-    src_snapshot_plan_example = {
-        "prod": {
-            "onsite": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18, "yearly": 5},
-            "us-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
-                          "yearly": 5},
-            "eu-west-1": {"secondly": 0, "minutely": 0, "hourly": 36, "daily": 31, "weekly": 12, "monthly": 18,
-                          "yearly": 5}},
-        "test": {
-            "offsite": {"12hourly": 42, "weekly": 12},
-            "onsite": {"100millisecondly": 42},
-        },
-    }
     parser.add_argument(
         "--create-src-snapshots-plan", default=None, type=str, metavar="DICT_STRING",
         help="Creation periods that specify a schedule for when new snapshots shall be created on src within the selected "
@@ -908,7 +921,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--delete-dst-snapshots-except-plan", action=DeleteDstSnapshotsExceptPlanAction, default=None,
         metavar="DICT_STRING",
-        help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datastes via "
+        help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datasets via "
              "--delete-dst-snapshots. Has the same format as --create-src-snapshots-plan. "
              "Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with --delete-dst-snapshots=bookmarks) that "
              "do not match a period will be deleted. To avoid unexpected surprises, make sure to carefully specify ALL "
@@ -2076,11 +2089,14 @@ class Job:
         try:
             log = get_logger(log_params, args, log)
             log.info("%s", "Log file is: " + log_params.log_file)
+            aux_args = []
+            if getattr(args, "include_snapshot_plan", None):
+                aux_args += args.include_snapshot_plan
             if getattr(args, "delete_dst_snapshots_except_plan", None):
-                log.info("Auxiliary CLI arguments: %s", " ".join(args.delete_dst_snapshots_except_plan))
-                args = argument_parser().parse_args(
-                    xappend(args.delete_dst_snapshots_except_plan, "--", args.root_dataset_pairs), namespace=args
-                )
+                aux_args += args.delete_dst_snapshots_except_plan
+            if len(aux_args) > 0:
+                log.info("Auxiliary CLI arguments: %s", " ".join(aux_args))
+                args = argument_parser().parse_args(xappend(aux_args, "--", args.root_dataset_pairs), namespace=args)
             log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
             log.debug("Parsed CLI arguments: %s", args)
             try:
@@ -6459,14 +6475,17 @@ class FileOrLiteralAction(argparse.Action):
 
 
 #############################################################################
-class DeleteDstSnapshotsExceptPlanAction(argparse.Action):
+class IncludeSnapshotPlanAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
-        # Generates extra options to be parsed later during second parse_args() pass, within run_main()
         opts = getattr(namespace, self.dest, None)
-        if opts is None:
-            opts = []
+        opts = [] if opts is None else opts
+        if not self._generate_opts(opts, parser, values, option_string=option_string):
+            opts += ["--new-snapshot-filter-group", "--include-snapshot-regex=!.*"]
+        setattr(namespace, self.dest, opts)
+
+    def _generate_opts(self, opts: List[str], parser, values, option_string=None):
+        """Generates extra options to be parsed later during second parse_args() pass, within run_main()"""
         xperiods = SnapshotPeriods()
-        opts += ["--delete-dst-snapshots-except"]
         has_at_least_one_filter_clause = False
         for org, target_periods in ast.literal_eval(values).items():
             for target, periods in target_periods.items():
@@ -6489,7 +6508,16 @@ class DeleteDstSnapshotsExceptPlanAction(argparse.Action):
                         f"latest{period_amount}",
                     ]
                     has_at_least_one_filter_clause = True
-        if not has_at_least_one_filter_clause:
+        return has_at_least_one_filter_clause
+
+
+#############################################################################
+class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
+    def __call__(self, parser, namespace, values, option_string=None):
+        opts = getattr(namespace, self.dest, None)
+        opts = [] if opts is None else opts
+        opts += ["--delete-dst-snapshots-except"]
+        if not self._generate_opts(opts, parser, values, option_string=option_string):
             parser.error(
                 f"{option_string}: Cowardly refusing to delete all snapshots on "
                 f"--delete-dst-snapshots-except-plan='{values}' (which means 'retain no snapshots' aka "

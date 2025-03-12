@@ -596,6 +596,7 @@ usage: bzfs [-h] [--recursive]
             [--include-snapshot-regex REGEX [REGEX ...]]
             [--exclude-snapshot-regex REGEX [REGEX ...]]
             [--include-snapshot-times-and-ranks TIMERANGE [RANKRANGE ...]]
+            [--include-snapshot-plan DICT_STRING]
             [--new-snapshot-filter-group] [--create-src-snapshots]
             [--create-src-snapshots-plan DICT_STRING]
             [--create-src-snapshots-timeformat STRFTIME_SPEC]
@@ -980,6 +981,34 @@ usage: bzfs [-h] [--recursive]
 
     *Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes
     precedence over include.
+
+<!-- -->
+
+<div id="--include-snapshot-plan"></div>
+
+**--include-snapshot-plan** *DICT_STRING*
+
+*  Replication periods to be used if replicating snapshots within the selected destination
+    datasets. Has the same format as --create-src-snapshots-plan and
+    --delete-dst-snapshots-except-plan (see below). Snapshots that do not match a period will not
+    be replicated. To avoid unexpected surprises, make sure to carefully specify ALL snapshot
+    names and periods that shall be replicated, in combination with --dryrun.
+
+    Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
+    'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':
+    0, 'minutely': 0, 'hourly': 36, 'daily': 31, 'weekly': 12, 'monthly': 18,
+    'yearly': 5}, 'eu-west-1': {'secondly': 0, 'minutely': 0, 'hourly': 36, 'daily':
+    31, 'weekly': 12, 'monthly': 18, 'yearly': 5}}, 'test': {'offsite': {'12hourly':
+    42, 'weekly': 12}, 'onsite': {'100millisecondly': 42}}}"`. This example will, for the
+    organization 'prod' and the intended logical target 'onsite', replicate secondly snapshots
+    that were created less than 40 seconds ago, yet replicate the latest 40 secondly snapshots
+    regardless of creation time. Analog for the latest 40 minutely snapshots, latest 36 hourly
+    snapshots, etc. Note: A zero within a period (e.g. 'hourly': 0) indicates that no snapshots
+    shall be replicated for the given period.
+
+    Note: --include-snapshot-plan is a convenience option that auto-generates a series of the
+    following other options: --new-snapshot-filter-group, --include-snapshot-regex,
+    --include-snapshot-times-and-ranks
 
 <!-- -->
 
@@ -1443,7 +1472,7 @@ usage: bzfs [-h] [--recursive]
 **--delete-dst-snapshots-except-plan** *DICT_STRING*
 
 *  Retention periods to be used if pruning snapshots or bookmarks within the selected destination
-    datastes via --delete-dst-snapshots. Has the same format as --create-src-snapshots-plan.
+    datasets via --delete-dst-snapshots. Has the same format as --create-src-snapshots-plan.
     Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with
     --delete-dst-snapshots=bookmarks) that do not match a period will be deleted. To avoid
     unexpected surprises, make sure to carefully specify ALL snapshot names and periods that shall

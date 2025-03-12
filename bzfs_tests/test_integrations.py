@@ -609,6 +609,9 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
+    def test_include_snapshots_plan(self):
+        LocalTestCase(param=self.param).test_include_snapshots_plan()
+
     def test_delete_dst_snapshots_except_plan(self):
         LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
 
@@ -1196,6 +1199,22 @@ class LocalTestCase(BZFSTestCase):
             expected_status=die_status,
         )
         self.run_bzfs(bzfs.dummy_dataset, bzfs.dummy_dataset, expected_status=die_status)
+
+    def test_include_snapshots_plan(self):
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:01_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_daily")
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--include-snapshot-plan", str({"s1": {"onsite": {}}}))
+        self.assertSnapshotNames(dst_root_dataset, [])
+
+        time.sleep(1.1)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--include-snapshot-plan",
+            str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
+        )
+        self.assertSnapshotNames(dst_root_dataset, ["s1_onsite_2024-01-01_00:00:01_secondly"])
 
     def test_delete_dst_snapshots_except_plan(self):
         if self.is_no_privilege_elevation():
@@ -4622,6 +4641,15 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         if are_bookmarks_enabled("src"):
             self.assertEqual(1, len(bookmarks(src_root_dataset)))
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # push replication does nothing if periods are empty:
+        dst_snapshot_plan_empty = {"z": {"onsite": {}}}
+        push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
+        push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
+        self.run_bzfs("--replicate=push", *push_args_empty, use_jobrunner=True)
+        self.assertEqual(2, len(snapshots(src_root_dataset)))
+        self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # push replicate successfully from src to dst:

@@ -19,7 +19,6 @@
 import argparse
 import ast
 import logging
-import re
 import socket
 import subprocess
 import sys
@@ -325,24 +324,26 @@ class Job:
     def replication_filter_opts(
         self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str
     ) -> List[str]:
-        def nsuffix(s: str) -> str:
-            return "_" + re.escape(s) if s else ""
-
-        def ninfix(s: str) -> str:
-            year_with_four_digits_regex = r"[1-9][0-9][0-9][0-9]"  # regex for empty target shall not match non-empty target
-            return re.escape(s) + "_" if s else year_with_four_digits_regex
-
         log = self.log
         log.info("%s", f"Replicating targets {sorted(targets)} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+        include_snapshot_plan = {  # only replicate targets that belong to the destination host and are relevant
+            org: {
+                target: {
+                    duration_unit: duration_amount
+                    for duration_unit, duration_amount in periods.items()
+                    if duration_amount > 0
+                }
+                for target, periods in target_periods.items()
+                if target in targets
+            }
+            for org, target_periods in dst_snapshot_plan.items()
+        }
+        include_snapshot_plan = {  # only replicate orgs that have at least one relevant target_period
+            org: target_periods for org, target_periods in include_snapshot_plan.items() if len(target_periods) > 0
+        }
         opts = []
-        for org, target_periods in dst_snapshot_plan.items():
-            for target, periods in target_periods.items():
-                if target in targets:
-                    for duration_unit, duration_amount in periods.items():
-                        if duration_amount > 0:
-                            regex = f"{re.escape(org)}_{ninfix(target)}.*{nsuffix(duration_unit)}"
-                            opts.append(f"--include-snapshot-regex={regex}")
-        if len(opts) > 0:
+        if len(include_snapshot_plan) > 0:
+            opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
             opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
             opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
         return opts

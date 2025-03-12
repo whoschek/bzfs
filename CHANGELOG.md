@@ -15,6 +15,7 @@ using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 including recursive snapshots.
 - Added `--delete-dst-snapshots-except-plan` CLI option to specify retention periods like sanoid, and prune snapshots accordingly.
 - Added `--delete-dst-snapshots-except` CLI flag to specify which snapshots to retain instead of which snapshots to delete.
+- Added `--include-snapshot-plan` CLI option to specify which periods to replicate.
 - Added `--new-snapshot-filter-group` CLI option, which starts a new snapshot filter group containing separate 
 `--{include|exclude}-snapshot-*` filter options, which are UNIONized.
 - Added `anytime` and `notime` keywords to `--include-snapshot-times-and-ranks`.
