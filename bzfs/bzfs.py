@@ -3808,11 +3808,10 @@ class Job:
     def incremental_send_steps_wrapper(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
     ) -> List[Tuple[str, str, str, int]]:
-        force_convert_I_to_i = False
-        if self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True):
-            # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
-            # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
-            force_convert_I_to_i = True
+        force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True)
+        # force_convert_I_to_i == True implies that:
+        # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
+        # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
         return self.incremental_send_steps(src_snapshots, src_guids, included_guids, is_resume, force_convert_I_to_i)
 
     def incremental_send_steps(
