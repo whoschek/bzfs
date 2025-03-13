@@ -337,7 +337,9 @@ class Job:
             for org, target_periods in dst_snapshot_plan.items()
         }
         include_snapshot_plan = {  # only replicate orgs that have at least one relevant target_period
-            org: target_periods for org, target_periods in include_snapshot_plan.items() if len(target_periods) > 0
+            org: target_periods
+            for org, target_periods in include_snapshot_plan.items()
+            if any(len(periods) > 0 for target, periods in target_periods.items())
         }
         opts = []
         if len(include_snapshot_plan) > 0:
