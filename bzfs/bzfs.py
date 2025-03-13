@@ -5829,6 +5829,9 @@ class PeriodAnchors:
         return self
 
 
+round_datetime_fixed_units = frozenset({"millisecondly", "secondly", "minutely", "hourly", "daily", "weekly"})
+
+
 def round_datetime_up_to_duration_multiple(
     dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors = PeriodAnchors()
 ) -> datetime:
@@ -5867,14 +5870,15 @@ def round_datetime_up_to_duration_multiple(
     def get_anchor(anchor: datetime, dt: datetime, period: timedelta) -> datetime:
         """Adjusts anchor downward by one period if anchor is in the future relative to dt."""
         if anchor > dt:
-            assert anchor - period <= dt
-            return anchor - period
+            diff = anchor - period
+            assert diff <= dt
+            return diff
         return anchor
 
     if duration_amount == 0:
         return dt
 
-    if duration_unit in {"millisecondly", "secondly", "minutely", "hourly", "daily", "weekly"}:
+    if duration_unit in round_datetime_fixed_units:
         if duration_unit == "millisecondly":
             anchor = get_anchor(
                 dt.replace(hour=0, minute=0, second=0, microsecond=anchors.millisecondly_microsecond),
