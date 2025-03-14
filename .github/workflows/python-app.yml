@@ -321,7 +321,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.8", "3.7"]
+        python-version: ["3.9", "3.8", "3.7"]
       fail-fast: false
     timeout-minutes: 100
     steps:
