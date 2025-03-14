@@ -2627,7 +2627,9 @@ class Job:
                 if run == 0:
                     # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
                     cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                    for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(dst, cmd, sorted(orphans)):
+                    for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(
+                        dst, cmd, sorted(orphans), ordered=False
+                    ):
                         if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
                             replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
                         datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
@@ -4116,25 +4118,20 @@ class Job:
             sorted_datasets = sorted_datasets_todo
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
-        i = 0
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
-        for lines in self.zfs_list_snapshots_in_parallel(src, cmd, sorted_datasets):
+        datasets_with_snapshots = set()
+        for lines in self.zfs_list_snapshots_in_parallel(src, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
-                k = i
-                while sorted_datasets[i] < dataset:
-                    i += 1
-                assert sorted_datasets[i] == dataset
-                datasets_without_snapshots = sorted_datasets[k:i]  # Take snaps for datasets whose snapshot stream is empty
-                i += 1
+                datasets_with_snapshots.add(dataset)
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     (int(createtxg), int(creation), name[name.index("@") + 1 :])
                     for createtxg, creation, name in (line.split("\t", 2) for line in group)
                 )
+                assert len(snapshots) > 0
                 reversed_snapshot_names = [snapshot[-1] for snapshot in reversed(snapshots)]
                 year_with_4_digits_regex = year_with_four_digits_regex
                 for label in labels:
-                    datasets_to_snapshot[label].extend(datasets_without_snapshots)
                     infix = label.infix
                     start = label.prefix + label.infix
                     end = label.suffix
@@ -4153,10 +4150,13 @@ class Job:
                             creation_unixtime = snapshots[len(snapshots) - j - 1][1]
                             break
                     create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
+        datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
-            datasets_to_snapshot[lbl].extend(sorted_datasets[i:])  # Take snaps for datasets whose snapshot stream is empty
-            if lbl in cached_datasets_to_snapshot:
-                datasets_to_snapshot[lbl] = list(heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl]))
+            datasets_to_snapshot[lbl].sort()
+            if datasets_without_snapshots or (lbl in cached_datasets_to_snapshot):  # +take snaps for snapshot-less datasets
+                datasets_to_snapshot[lbl] = list(
+                    heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
+                )  # inputs to merge() are sorted, and outputs are sorted too
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes = {label: k for k, label in enumerate(config.snapshot_labels())}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
@@ -4233,6 +4233,7 @@ class Job:
             remote,
             [(cmd, datasets)],
             lambda _cmd, batch: self.run_ssh_command(remote, log_trace, cmd=_cmd + batch).splitlines(),
+            ordered=False,
         ):
             for line in lines:
                 snapshots_changed, dataset = line.split("\t", 1)
@@ -4900,7 +4901,7 @@ class Job:
         fn: Callable[[List[str], List[str]], Any],
         max_batch_items=2**29,
     ) -> None:
-        drain(self.itr_ssh_cmd_parallel(r, cmd_args_list, fn=fn, max_batch_items=max_batch_items))
+        drain(self.itr_ssh_cmd_parallel(r, cmd_args_list, fn=fn, max_batch_items=max_batch_items, ordered=False))
 
     def itr_ssh_cmd_parallel(
         self,
@@ -4908,7 +4909,9 @@ class Job:
         cmd_args_list: List[Tuple[List[str], List[str]]],
         fn: Callable[[List[str], List[str]], Any],
         max_batch_items=2**29,
+        ordered=True,
     ) -> Generator:
+        """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
         max_workers = self.max_workers[r.location]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             iterators = [
@@ -4918,20 +4921,31 @@ class Job:
                 for cmd, cmd_args in cmd_args_list
             ]
             iterator = itertools.chain(*iterators)
-
+            iterators.clear()  # help gc
             # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
             fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))
 
-            while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
-                curr_future: Future = fifo_buffer.popleft()
-                next_future: Future = next(iterator, None)  # causes the next CLI call to be submitted
-                if next_future is not None:
-                    fifo_buffer.append(next_future)
-                yield curr_future.result()  # blocks until CLI returns
+            if ordered:
+                while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
+                    curr_future: Future = fifo_buffer.popleft()
+                    next_future: Future = next(iterator, None)  # causes the next CLI call to be submitted
+                    if next_future is not None:
+                        fifo_buffer.append(next_future)
+                    yield curr_future.result()  # blocks until CLI returns
+            else:
+                todo_futures: Set[Future] = set(fifo_buffer)
+                fifo_buffer.clear()  # help gc
+                while todo_futures:
+                    done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
+                    for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
+                        next_future: Future = next(iterator, None)  # causes the next CLI call to be submitted
+                        if next_future is not None:
+                            todo_futures.add(next_future)
+                        yield done_future.result()  # does not block as processing has already completed
+            assert next(iterator, None) is None
 
-    def zfs_list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str]) -> Generator:
-        """Runs 'zfs list -t snapshot' on multiple datasets at the same time. Returns output datasets in the same order as
-        the input datasets (not in random order)."""
+    def zfs_list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str], ordered=True) -> Generator:
+        """Runs 'zfs list -t snapshot' on multiple datasets at the same time."""
         max_workers = self.max_workers[r.location]
         return self.itr_ssh_cmd_parallel(
             r,
@@ -4944,6 +4958,7 @@ class Job:
                     max_workers if r.ssh_user_host else 1,
                 ),
             ),
+            ordered=ordered,
         )
 
     @staticmethod

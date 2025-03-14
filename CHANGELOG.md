@@ -22,7 +22,9 @@ including recursive snapshots.
 - Added `all except` keyword to `--include-snapshot-times-and-ranks`, as a more user-friendly filter syntax to say 
 "include all snapshots except the oldest N (or latest N) snapshots".
 - Log pv transfer stats even for tiny snapshots.
-- Delete bookmarks in parallel.
+- Perf: Delete bookmarks in parallel.
+- Perf: Use CPU cores more efficiently when creating snapshots (in parallel) and when deleting bookmarks (in parallel) and on 
+`--delete-empty-dst-datasets` (in parallel)
 - Perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible.
 - For more clarity, renamed `--force-hard` to `--force-destroy-dependents`. `--force-hard` will continue to work as-is for 
 now, in deprecated status, but the old name will be completely removed in a future release.
