@@ -2435,7 +2435,7 @@ class Job:
                     # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to non-recursive CLI flavor
                     root_datasets = self.root_datasets_if_recursive_zfs_snapshot_is_possible(datasets, basis_src_datasets)
                     if root_datasets is not None:
-                        cmd += ["-r"]  # recursive; takes a snapshot of all datasets in the subtree(s)
+                        cmd.append("-r")  # recursive; takes a snapshot of all datasets in the subtree(s)
                         datasets_to_snapshot[label] = root_datasets
                 commands[label] = cmd
             creation_msg = f"Creating {sum(len(datasets) for datasets in basis_datasets_to_snapshot.values())} snapshots"
@@ -4154,9 +4154,9 @@ class Job:
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
             datasets_to_snapshot[lbl].sort()
             if datasets_without_snapshots or (lbl in cached_datasets_to_snapshot):  # +take snaps for snapshot-less datasets
-                datasets_to_snapshot[lbl] = list(
+                datasets_to_snapshot[lbl] = list(  # inputs to merge() are sorted, and outputs are sorted too
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
-                )  # inputs to merge() are sorted, and outputs are sorted too
+                )
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes = {label: k for k, label in enumerate(config.snapshot_labels())}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
@@ -5447,7 +5447,7 @@ def has_siblings(sorted_datasets: List[str]) -> bool:
 
 
 def is_descendant(dataset: str, of_root_dataset: str) -> bool:
-    return f"{dataset}/".startswith(f"{of_root_dataset}/")
+    return (dataset + "/").startswith(of_root_dataset + "/")
 
 
 def relativize_dataset(dataset: str, root_dataset: str) -> str:
