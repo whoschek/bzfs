@@ -4914,9 +4914,10 @@ class Job:
         """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
         max_workers = self.max_workers[r.location]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            maxitems = max_batch_items
             iterators = [
                 self.itr_ssh_cmd_batched(
-                    r, cmd, cmd_args, lambda batch: executor.submit(fn, cmd, batch), max_batch_items=max_batch_items
+                    r, cmd, cmd_args, lambda batch, cmd=cmd.copy(): executor.submit(fn, cmd, batch), max_batch_items=maxitems
                 )
                 for cmd, cmd_args in cmd_args_list
             ]
