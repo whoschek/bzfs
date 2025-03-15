@@ -35,6 +35,7 @@ on:
         options:
         - test_ubuntu_24_04_fast
         - test_ubuntu_24_04_zfs_latest
+        - test_ubuntu_24_04_zfs_2_3_latest
         - test_ubuntu_24_04_zfs_2_2_latest
         - test_ubuntu_24_04
         - test_ubuntu_22_04
@@ -129,14 +130,14 @@ jobs:
         flake8 . --count --ignore=E203,W503 --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
 
-  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.0
+  test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.1
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_latest')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.14-dev", "3.11"]
+        python-version: ["3.14-dev"]
       fail-fast: false
     timeout-minutes: 100
     steps:
@@ -172,7 +173,7 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
-        if [ "${{ matrix.python-version }}" == "3.11" ]; then export bzfs_test_ssh_program=hpnssh; fi
+        if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
         echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
         ./test.sh
     - name: Run tests and generate code coverage
@@ -180,13 +181,13 @@ jobs:
         ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
-      if: ${{ matrix.python-version == '3.11' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+      if: ${{ matrix.python-version == '3.14-dev' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.7
+  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.1
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2_latest')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3_latest')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -207,6 +208,52 @@ jobs:
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Display ZFS version and Python version
+      run: |
+        id -u -n
+        uname -a
+        zfs --version
+        python3 --version
+        ssh -V
+        zstd --version
+        pv --version | head -n 1
+        mbuffer --version |& head -n 1
+        command -v sh | xargs ls -l
+    - name: Test with unittest
+      run: |
+        ./test.sh
+    - name: Run tests and generate code coverage
+      run: |
+        ./coverage.sh
+        echo "bzfs-testrun-success"
+    - name: Upload code coverage report to workflow run page
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
+      uses: ./.github/workflows/coverage-upload
+
+
+  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.7
+    needs: create_iteration_test_matrix
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2_latest')
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
+        python-version: ["3.11"]
+      fail-fast: false
+    timeout-minutes: 100
+    steps:
+    - uses: actions/checkout@v4
+    - name: Upgrade zfs kernel + userland to specific upstream zfs version
+      run: |
+        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.2.7
+        sudo add-apt-repository ppa:weiers/openzfs-2.2.7; sudo apt update
+        sudo apt-get -y install openzfs-zfs-dkms
+        zfs --version
+    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
+      uses: ./.github/workflows/common
+      with:
+        python-version: ${{ matrix.python-version }}
+        install-zfs: false
     - name: Display ZFS version and Python version
       run: |
         id -u -n
@@ -473,6 +520,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - test_ubuntu_24_04_zfs_latest
+      - test_ubuntu_24_04_zfs_2_3_latest
       - test_ubuntu_24_04_zfs_2_2_latest
       - test_ubuntu_24_04
       - test_ubuntu_22_04
@@ -488,6 +536,11 @@ jobs:
         with:
           name: coverage-test_ubuntu_24_04_zfs_latest
           path: coverage-test_ubuntu_24_04_zfs_latest
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-test_ubuntu_24_04_zfs_2_3_latest
+          path: coverage-test_ubuntu_24_04_zfs_2_3_latest
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
