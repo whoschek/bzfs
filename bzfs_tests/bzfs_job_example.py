@@ -219,7 +219,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds to snapshot names
 # extra_args += ["--create-src-snapshots-even-if-not-due"]  # nomore run 'zfs list -t snapshot' before snapshot creation
 # extra_args += ["--create-src-snapshots-enable-snapshots-changed-cache"]  # no 'zfs list -t snapshot' before snap creation
-# extra_args += ["--no-resume-recv"]  # skip another 'zfs list' check
+# extra_args += ["--no-resume-recv"]  # skip 'zfs list' check for resume token
 # extra_args += ["--no-estimate-send-size"]  # skip 'zfs send -n -v'
 # extra_args += ["--pv-program=-"]  # nomore measure via 'pv' / stats
 # extra_args += ["--ps-program=-"]  # disable safety check for simultaneous 'zfs receive' to same dataset by another process
