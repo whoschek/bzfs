@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.10.0] - TBD
+## [1.10.0] - March 15, 2025
 
 This release contains some fixes and a lot of new features, including ...
 
