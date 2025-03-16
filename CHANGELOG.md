@@ -5,10 +5,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [1.11.0] - TBD
 
 - [bzfs_jobrunner] Also support replicating snapshots with the same target name to multiple destination hosts. 
-This changed the syntax of the `--dst-hosts` and `--retain-dst-targets parameters` to be a dictionary that maps each 
+This changed the syntax of the `--dst-hosts` and `--retain-dst-targets` parameters to be a dictionary that maps each 
 destination hostname to a list of zero or more logical replication target names (the infix portion of a snapshot name). 
-To upgrade, change your jobconfig file from
-`dst_hosts = {"onsite": "nas", "": "nas"}` to `dst_hosts = {"nas": ["", "onsite"]}` and 
+To upgrade, change your jobconfig script from something like 
+`dst_hosts = {"onsite": "nas", "": "nas"}` to `dst_hosts = {"nas": ["", "onsite"]}` and from 
 `retain_dst_targets = {"onsite": "nas", "": "nas"}` to `retain_dst_targets = {"nas": ["", "onsite"]}`
 
 ## [1.10.0] - March 15, 2025
