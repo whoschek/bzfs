@@ -197,14 +197,15 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--dst-hosts** *DICT_STRING*
 
-*  Dictionary that maps logical replication target names (the infix portion of a snapshot name)
-    to destination hostnames. Example: `"{'onsite': 'nas', 'us-west-1': 'bak-us-west-1',
-    'eu-west-1': 'bak-eu-west-1', 'offsite': 'archive'}"`. With this, given a snapshot
-    name, we can find the destination hostname to which the snapshot shall be replicated. Also,
-    given a snapshot name and its --localhost name, a destination host can determine if it shall
-    'pull' replicate the given snapshot from the --src-host, or if the snapshot is intended for
-    another destination host, in which case it skips the snapshot. A destination host running
-    bzfs_jobrunner will 'pull' snapshots for all targets that map to its --localhost name.
+*  Dictionary that maps each destination hostname to a list of zero or more logical replication
+    target names (the infix portion of snapshot name). Example: `"{'nas': ['onsite'],
+    'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'], 'archive':
+    ['offsite']}"`. With this, given a snapshot name, we can find the destination hostname
+    to which the snapshot shall be replicated. Also, given a snapshot name and its --localhost
+    name, a destination host can determine if it shall 'pull' replicate the given snapshot from
+    the --src-host, or if the snapshot is intended for another destination host, in which case it
+    skips the snapshot. A destination host running bzfs_jobrunner will 'pull' snapshots for all
+    targets that map to its --localhost name.
 
 <!-- -->
 
@@ -212,13 +213,13 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--retain-dst-targets** *DICT_STRING*
 
-*  Dictionary that maps logical replication target names (the infix portion of a snapshot name)
-    to destination hostnames. Example: `"{'onsite': 'nas', 'us-west-1': 'bak-us-west-1',
-    'eu-west-1': 'bak-eu-west-1', 'offsite': 'archive'}"`. Has same format as
-    --dst-hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot
-    it has stored whose target has no mapping to its --localhost name in this dictionary. Do not
-    remove a mapping unless you are sure it's ok to delete all those snapshots on that
-    destination host! If in doubt, use --dryrun mode first.
+*  Dictionary that maps each destination hostname to a list of zero or more logical replication
+    target names (the infix portion of snapshot name). Example: `"{'nas': ['onsite'],
+    'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'], 'archive':
+    ['offsite']}"`. Has same format as --dst-hosts. As part of --prune-dst-snapshots, a
+    destination host will delete any snapshot it has stored whose target has no mapping to its
+    --localhost name in this dictionary. Do not remove a mapping unless you are sure it's ok to
+    delete all those snapshots on that destination host! If in doubt, use --dryrun mode first.
 
 <!-- -->
 

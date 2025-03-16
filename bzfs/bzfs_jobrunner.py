@@ -22,7 +22,6 @@ import logging
 import socket
 import subprocess
 import sys
-from collections import defaultdict
 from typing import Dict, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
@@ -112,18 +111,21 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Network hostname of src. Used by destination host(s) if replicating in pull mode.\n\n")
     parser.add_argument("--localhost", default=None, metavar="STRING",
         help="Hostname of localhost. Default is the hostname without the domain name.\n\n")
-    dst_hosts_example = {"onsite": "nas", "us-west-1": "bak-us-west-1", "eu-west-1": "bak-eu-west-1", "offsite": "archive"}
+    dst_hosts_example = {"nas": ["onsite"], "bak-us-west-1": ["us-west-1"],
+                         "bak-eu-west-1": ["eu-west-1"], "archive":  ["offsite"]}
     parser.add_argument("--dst-hosts", default="{}", metavar="DICT_STRING",
-        help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination "
-             f"hostnames. Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot name, we can find the "
+        help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
+             "(the infix portion of snapshot name). "
+             f"Example: `{format_dict(dst_hosts_example)}`. With this, given a snapshot name, we can find the "
              "destination hostname to which the snapshot shall be replicated. Also, given a snapshot name and its "
              "--localhost name, a destination host can determine if it shall 'pull' replicate the given snapshot from the "
              "--src-host, or if the snapshot is intended for another destination host, in which case it skips the snapshot. "
              f"A destination host running {prog_name} will 'pull' snapshots for all targets that map to its --localhost "
              "name.\n\n")
     parser.add_argument("--retain-dst-targets", default="{}", metavar="DICT_STRING",
-        help="Dictionary that maps logical replication target names (the infix portion of a snapshot name) to "
-             f"destination hostnames. Example: `{format_dict(dst_hosts_example)}`. Has same format as --dst-hosts. As part "
+        help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
+             "(the infix portion of snapshot name). "
+             f"Example: `{format_dict(dst_hosts_example)}`. Has same format as --dst-hosts. As part "
              "of --prune-dst-snapshots, a destination host will delete any snapshot it has stored whose target has no "
              "mapping to its --localhost name in this dictionary. Do not remove a mapping unless you are sure it's ok to "
              "delete all those snapshots on that destination host! If in doubt, use --dryrun mode first.\n\n")
@@ -217,8 +219,8 @@ class Job:
         assert src_host, "--src-host must not be empty!"
         localhostname = args.localhost if args.localhost else socket.gethostname()
         assert localhostname, "localhostname must not be empty!"
-        dst_hosts = ast.literal_eval(args.dst_hosts)
-        retain_dst_targets = ast.literal_eval(args.retain_dst_targets)
+        dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
+        retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
@@ -235,8 +237,8 @@ class Job:
             self.run_cmd(["bzfs"] + opts)
 
         if args.replicate == "pull":  # pull mode (recommended)
-            pull_targets = {target for target, dst_hostname in dst_hosts.items() if dst_hostname == localhostname}
-            opts = self.replication_filter_opts(dst_snapshot_plan, "pull", pull_targets, src_host, localhostname)
+            targets = dst_hosts.get(localhostname, [])
+            opts = self.replication_filter_opts(dst_snapshot_plan, "pull", set(targets), src_host, localhostname)
             if len(opts) > 0:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
@@ -251,14 +253,8 @@ class Job:
                     self.run_cmd(["bzfs"] + daemon_opts + opts)
 
         elif args.replicate == "push":  # push mode (experimental feature)
-            host_targets = defaultdict(set)
-            for org, targetperiods in dst_snapshot_plan.items():
-                for target in targetperiods.keys():
-                    dst_hostname = dst_hosts.get(target)
-                    if dst_hostname:
-                        host_targets[dst_hostname].add(target)
-            for dst_hostname, push_targets in host_targets.items():
-                opts = self.replication_filter_opts(dst_snapshot_plan, "push", push_targets, localhostname, dst_hostname)
+            for dst_hostname, targets in dst_hosts.items():
+                opts = self.replication_filter_opts(dst_snapshot_plan, "push", set(targets), localhostname, dst_hostname)
                 if len(opts) > 0:
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
@@ -289,7 +285,7 @@ class Job:
 
         if args.prune_dst_snapshots:
             assert retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
-            retain_targets = {target for target, dst_hostname in retain_dst_targets.items() if dst_hostname == localhostname}
+            retain_targets = set(retain_dst_targets.get(localhostname, []))
             dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
                 org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
                 for org, target_periods in dst_snapshot_plan.items()
@@ -371,6 +367,16 @@ def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
     for src, dst in dict.fromkeys(root_dataset_pairs).keys():
         results += [src, dst]
     return results
+
+
+def validate_dst_hosts(dst_hosts: Dict) -> Dict:
+    assert isinstance(dst_hosts, dict)
+    for dst_hostname, targets in dst_hosts.items():
+        assert isinstance(dst_hostname, str)
+        assert isinstance(targets, list)
+        for target in targets:
+            assert isinstance(target, str)
+    return dst_hosts
 
 
 def format_dict(dictionary) -> str:

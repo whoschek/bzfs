@@ -60,28 +60,30 @@ recursive = True
 src_host = "-"  # for local mode (no ssh, no network)
 
 
-# Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination hostnames.
+# Dictionary that maps each destination hostname to a list of zero or more logical replication target names (the infix
+# portion of a snapshot name).
 # A destination host will 'pull' replicate snapshots for all targets that map to its --localhost name. Removing a mapping
 # can be used to temporarily suspend replication to a given destination host.
-# dst_hosts = {
-#     "onsite": "nas",
-#     "us-west-1": "bak-us-west-1",
-#     "eu-west-1": "bak-eu-west-1",
-#     "hotspare": "hotspare",
-#     "offsite": "archive",
-# }
-# dst_hosts = {"onsite": "nas"}
-# dst_hosts = {"": "nas"}  # empty string as target name is ok
-dst_hosts = {"onsite": "nas", "": "nas"}
+dst_hosts = {
+    "nas": ["onsite"],
+    "bak-us-west-1": ["us-west-1"],
+    "bak-eu-west-1": ["eu-west-1"],
+    "hotspare": ["hotspare"],
+    "archive": ["offsite"],
+}
+# dst_hosts = {"nas": ["onsite"]}
+# dst_hosts = {"nas": [""]}  # empty string as target name is ok
+dst_hosts = {"nas": ["", "onsite"]}
 
 
-# Dictionary that maps logical replication target names (the infix portion of a snapshot name) to destination hostnames.
-# Has same format as dst_hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
-# whose target has no mapping to its --localhost in this dictionary.
-# Do not remove a mapping unless you are sure it's ok to delete all those snapshots on that destination host! If in doubt,
-# use --dryrun mode first.
+# Dictionary that maps each destination hostname to a list of zero or more logical replication target names (the infix
+# portion of a snapshot name).
+# Has same format as dst_hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot it has
+# stored whose target has no mapping to its --localhost in this dictionary.
+# Do not remove a mapping unless you are sure it's ok to delete all those snapshots on that destination host! If in
+# doubt, use --dryrun mode first.
 # retain_dst_targets = dst_hosts
-retain_dst_targets = {"onsite": "nas", "": "nas"}
+retain_dst_targets = {"nas": ["", "onsite"]}
 
 
 # Dictionary that maps each destination hostname to a root dataset located on that destination host. Typically, this

@@ -4549,10 +4549,10 @@ class LocalTestCase(BZFSTestCase):
 
         localhostname = socket.gethostname()
         src_host = "-"  # for local mode (no ssh, no network)
-        dst_hosts_pull = {"onsite": localhostname, "": localhostname}
-        dst_hosts_pull_bad = {"xxxxonsite": localhostname}
-        dst_hosts_push = {"onsite": "-"}
-        dst_hosts_push_bad = {"xxxonsite": "-"}
+        dst_hosts_pull = {localhostname: ["", "onsite"]}
+        dst_hosts_pull_bad = {localhostname: ["xxxxonsite"]}
+        dst_hosts_push = {"-": ["onsite"]}
+        dst_hosts_push_bad = {"-": ["xxxonsite"]}
         dst_root_datasets = {localhostname: "", "-": ""}
         src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}
         dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}, "offsite": {}}}
@@ -4720,7 +4720,7 @@ class LocalTestCase(BZFSTestCase):
 
         localhostname = socket.gethostname()
         src_host = "-"  # for local mode (no ssh, no network)
-        dst_hosts_pull = {"onsite": localhostname, "": localhostname}
+        dst_hosts_pull = {localhostname: ["onsite", ""]}
         dst_root_datasets = {localhostname: "", "-": ""}
         src_snapshot_plan = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
         dst_snapshot_plan = {"z": {"": {"yearly": 1, "daily": 0}}}
