@@ -1484,7 +1484,6 @@ class LogParams:
         )
         os.close(fd)
         self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
-        Path(self.pv_log_file).touch()
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
