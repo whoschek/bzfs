@@ -242,7 +242,8 @@ class Job:
             self.run_cmd(["bzfs"] + opts)
 
         if args.replicate == "pull":  # pull mode (recommended)
-            targets = dst_hosts.get(localhostname, [])
+            assert localhostname in dst_hosts, f"Hostname '{localhostname}' missing in --dst-hosts: {dst_hosts}"
+            targets = dst_hosts[localhostname]
             opts = self.replication_filter_opts(dst_snapshot_plan, "pull", set(targets), src_host, localhostname)
             if len(opts) > 0:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
