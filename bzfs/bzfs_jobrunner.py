@@ -290,7 +290,10 @@ class Job:
 
         if args.prune_dst_snapshots:
             assert retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
-            retain_targets = set(retain_dst_targets.get(localhostname, []))
+            assert (
+                localhostname in retain_dst_targets
+            ), f"Hostname '{localhostname}' missing in --retain-dst-targets: {retain_dst_targets}"
+            retain_targets = set(retain_dst_targets[localhostname])
             dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
                 org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
                 for org, target_periods in dst_snapshot_plan.items()
