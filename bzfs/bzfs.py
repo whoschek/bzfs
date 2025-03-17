@@ -3438,6 +3438,8 @@ class Job:
             # decision is never reconsidered even for the descendants because exclude takes precedence over include.
             resultset = set(results)
             root_datasets = [dataset for dataset in results if os.path.dirname(dataset) not in resultset]  # have no parent
+            for root in root_datasets:  # each root is not a descendant of another dataset
+                assert not any(is_descendant(root, of_root_dataset=dataset) for dataset in results if dataset != root)
             for dataset in results:  # each dataset belongs to a subtree rooted at one of the roots
                 assert any(is_descendant(dataset, of_root_dataset=root) for root in root_datasets)
         return results
