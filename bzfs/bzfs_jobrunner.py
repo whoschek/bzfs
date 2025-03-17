@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# /// script
+# requires-python = ">=3.7"
+# dependencies = []
+# ///
+
 """WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."""
 
 import argparse
