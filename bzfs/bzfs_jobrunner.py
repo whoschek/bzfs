@@ -27,6 +27,7 @@ import logging
 import socket
 import subprocess
 import sys
+import uuid
 from typing import Dict, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
@@ -182,6 +183,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="SSH username on --src-host. Used if replicating in pull mode. Example: 'alice'\n\n")
     parser.add_argument("--dst-user", default="", metavar="STRING",
         help="SSH username on dst. Used if replicating in push mode. Example: 'root'\n\n")
+    parser.add_argument("--jobid", default=uuid.uuid1().hex, metavar="STRING",
+        help="The job identifier that shall be included in the log file name suffix. Default is a hex UUID. "
+             "Example: 0badc0f003a011f0a94aef02ac16083c\n\n")
     parser.add_argument("--daemon-replication-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-prune-src-frequency", default="minutely", metavar="STRING",
@@ -227,6 +231,7 @@ class Job:
         dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
         retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
+        jobid = args.jobid
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
             root_dataset = dst_root_datasets.get(dst_hostname)
@@ -236,7 +241,7 @@ class Job:
         if args.create_src_snapshots:
             opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
             opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
-            opts += [f"--log-file-suffix={sep}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{sep}"]
             opts += unknown_args + ["--"]
             opts += dedupe([(src, dummy_dataset) for src, dst in args.root_dataset_pairs])
             self.run_cmd(["bzfs"] + opts)
@@ -244,7 +249,7 @@ class Job:
         if args.replicate == "pull":  # pull mode (recommended)
             assert localhostname in dst_hosts, f"Hostname '{localhostname}' missing in --dst-hosts: {dst_hosts}"
             targets = dst_hosts[localhostname]
-            opts = self.replication_filter_opts(dst_snapshot_plan, "pull", set(targets), src_host, localhostname)
+            opts = self.replication_opts(dst_snapshot_plan, "pull", set(targets), src_host, localhostname, jobid)
             if len(opts) > 0:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
@@ -260,7 +265,7 @@ class Job:
 
         elif args.replicate == "push":  # push mode (experimental feature)
             for dst_hostname, targets in dst_hosts.items():
-                opts = self.replication_filter_opts(dst_snapshot_plan, "push", set(targets), localhostname, dst_hostname)
+                opts = self.replication_opts(dst_snapshot_plan, "push", set(targets), localhostname, dst_hostname, jobid)
                 if len(opts) > 0:
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
@@ -271,7 +276,7 @@ class Job:
 
         def prune_src(opts: List[str]) -> None:
             opts += [
-                f"--log-file-suffix={sep}",
+                f"--log-file-suffix={sep}{jobid}{sep}",
                 "--skip-replication",
                 f"--daemon-frequency={args.daemon_prune_src_frequency}",
             ]
@@ -303,7 +308,7 @@ class Job:
             opts += [f"--delete-dst-snapshots-except-plan={dst_snapshot_plan}"]
             opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
             opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
-            opts += [f"--log-file-suffix={sep}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{sep}"]
             opts += unknown_args + ["--"]
             old_len_opts = len(opts)
             pairs = [(dummy_dataset, resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
@@ -324,8 +329,8 @@ class Job:
                 self.first_exception = e
             self.log.error("%s", str(e))  # log exception and keep on trucking
 
-    def replication_filter_opts(
-        self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str
+    def replication_opts(
+        self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str, jobid: str
     ) -> List[str]:
         log = self.log
         log.info("%s", f"Replicating targets {sorted(targets)} in {kind} mode from {src_hostname} to {dst_hostname} ...")
@@ -350,7 +355,7 @@ class Job:
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
             opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
-            opts += [f"--log-file-suffix={sep}{src_hostname}{sep}{dst_hostname}{sep}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{sep}{src_hostname}{sep}{dst_hostname}{sep}"]
         return opts
 
     def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs) -> List[Tuple[str, str]]:
