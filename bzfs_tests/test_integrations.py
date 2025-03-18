@@ -1098,7 +1098,7 @@ class LocalTestCase(BZFSTestCase):
     def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
         if test_mode == "functional":
             self.skipTest("Skipping slow test")
-        # k = 30
+        # k = 50
         k = 1
         n = 100 * k
         self.setUp(pool_size_bytes=max(k * 50 * 1024 * 1024, pool_size_bytes_default))
@@ -1133,8 +1133,15 @@ class LocalTestCase(BZFSTestCase):
             if "@z" in name:
                 createtxgs.add(createtxg)
                 creations.add(creation)
-        # the following assertions nomore hold if thousands of datasets get snapshotted together, which takes too long
-        # self.assertEqual(1, len(createtxgs))
+
+        # the following assertion nomore holds if all datasets nomore fit onto a single command line (many thousands of
+        # non-recursive snapshots)
+        self.assertEqual(1, len(createtxgs))
+
+        # the following assertion nomore holds if snapshotting takes too long even if 'zfs snapshot -r' is used with a
+        # single root dataset.
+        # e.g. k=50 in test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning() on Linux
+        # even if "--exclude-dataset-regex=.*xxx" is commented out therein.
         # self.assertEqual(1, len(creations))
 
     def test_basic_snapshotting_flat_empty(self):
