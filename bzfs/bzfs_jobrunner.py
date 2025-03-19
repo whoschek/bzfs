@@ -231,7 +231,7 @@ class Job:
         dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
         retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
-        jobid = args.jobid
+        jobid = sanitize(args.jobid)
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
             root_dataset = dst_root_datasets.get(dst_hostname)
@@ -355,7 +355,7 @@ class Job:
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
             opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
-            opts += [f"--log-file-suffix={sep}{jobid}{sep}{src_hostname}{sep}{dst_hostname}{sep}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{sep}{sanitize(src_hostname)}{sep}{sanitize(dst_hostname)}{sep}"]
         return opts
 
     def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs) -> List[Tuple[str, str]]:
@@ -391,6 +391,10 @@ def validate_dst_hosts(dst_hosts: Dict) -> Dict:
         for target in targets:
             assert isinstance(target, str)
     return dst_hosts
+
+
+def sanitize(filename: str) -> str:
+    return filename.replace("..", "!").replace("/", "!").replace("\\", "!")
 
 
 def format_dict(dictionary) -> str:
