@@ -64,13 +64,13 @@ src_host = "-"  # for local mode (no ssh, no network)
 # portion of a snapshot name).
 # A destination host will 'pull' replicate snapshots for all targets that map to its --localhost name. Removing a mapping
 # can be used to temporarily suspend replication to a given destination host.
-dst_hosts = {
-    "nas": ["onsite"],
-    "bak-us-west-1": ["us-west-1"],
-    "bak-eu-west-1": ["eu-west-1"],
-    "hotspare": ["hotspare"],
-    "archive": ["offsite"],
-}
+# dst_hosts = {
+#     "nas": ["onsite"],
+#     "bak-us-west-1": ["us-west-1"],
+#     "bak-eu-west-1": ["eu-west-1"],
+#     "hotspare": ["hotspare"],
+#     "archive": ["offsite"],
+# }
 # dst_hosts = {"nas": ["onsite"]}
 # dst_hosts = {"nas": [""]}  # empty string as target name is ok
 dst_hosts = {"nas": ["", "onsite"]}
