@@ -2095,7 +2095,7 @@ class Job:
                 log.info("Auxiliary CLI arguments: %s", " ".join(aux_args))
                 args = argument_parser().parse_args(xappend(aux_args, "--", args.root_dataset_pairs), namespace=args)
             log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
-            log.debug("Parsed CLI arguments: %s", args)
+            log.trace("Parsed CLI arguments: %s", args)
             try:
                 self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
             except SystemExit as e:

@@ -199,7 +199,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # fmt: on
 
 
-still_running_status = 4
+die_status = 3
 dummy_dataset = "dummy"
 sep = ","
 DEVNULL = subprocess.DEVNULL
@@ -207,7 +207,7 @@ PIPE = subprocess.PIPE
 
 
 def main():
-    Job().run_main(sys.argv[1:])
+    Job().run_main(sys.argv)
 
 
 #############################################################################
@@ -220,7 +220,8 @@ class Job:
         self.log.info(
             "WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."
         )
-        args, unknown_args = argument_parser().parse_known_args(sys_argv)  # forward all unknown args to `bzfs`
+        self.log.info("CLI arguments: %s", " ".join(sys_argv))
+        args, unknown_args = argument_parser().parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
         src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
         src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
         dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
@@ -318,12 +319,13 @@ class Job:
                 self.run_cmd(["bzfs"] + opts)
 
         ex = self.first_exception
-        if ex is not None and ((not isinstance(ex, subprocess.CalledProcessError)) or ex.returncode != still_running_status):
-            raise ex
+        if isinstance(ex, subprocess.CalledProcessError):
+            sys.exit(ex.returncode)
+        ex is None or sys.exit(die_status)
 
-    def run_cmd(self, *params) -> None:
+    def run_cmd(self, cmd) -> None:
         try:
-            subprocess.run(*params, stdin=DEVNULL, text=True, check=True)
+            subprocess.run(cmd, stdin=DEVNULL, text=True, check=True)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
             if self.first_exception is None:
                 self.first_exception = e
@@ -402,9 +404,17 @@ def format_dict(dictionary) -> str:
 
 
 def get_logger() -> logging.Logger:
+    level_prefixes = {
+        logging.CRITICAL: "[C] CRITICAL:",
+        logging.ERROR: "[E] ERROR:",
+        logging.WARNING: "[W]",
+        logging.INFO: "[I]",
+        logging.DEBUG: "[D]",
+    }
+
     class LevelFormatter(logging.Formatter):
         def format(self, record):
-            record.level_initial = record.levelname[0]  # Use first letter of the level name
+            record.level_prefix = level_prefixes.get(record.levelno, "")
             return super().format(record)
 
     log = logging.getLogger(prog_name)
@@ -412,7 +422,7 @@ def get_logger() -> logging.Logger:
     log.propagate = False
     if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
         handler = logging.StreamHandler()
-        handler.setFormatter(LevelFormatter(fmt="%(asctime)s [%(level_initial)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+        handler.setFormatter(LevelFormatter(fmt="%(asctime)s %(level_prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
         log.addHandler(handler)
     return log
 

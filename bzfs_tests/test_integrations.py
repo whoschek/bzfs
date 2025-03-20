@@ -496,7 +496,7 @@ class BZFSTestCase(ParametrizedTestCase):
         returncode = 0
         try:
             if use_jobrunner:
-                job.run_main(args)
+                job.run_main(["bzfs_jobrunner"] + args)
             else:
                 job.run_main(bzfs.argument_parser().parse_args(args), args)
         except subprocess.CalledProcessError as e:
