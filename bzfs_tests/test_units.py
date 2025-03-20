@@ -46,6 +46,7 @@ is_functional_test = test_mode == "functional"  # run most tests but only in a s
 def suite():
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTerminateProcessSubtree))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
@@ -1121,6 +1122,36 @@ class TestHelperFunctions(unittest.TestCase):
         args = bzfs.argument_parser().parse_args(["src", "dst", "--daemon-frequency=2adhoc"])
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
+
+
+#############################################################################
+class TestTerminateProcessSubtree(unittest.TestCase):
+    def setUp(self):
+        self.children = []
+
+    def tearDown(self):
+        for child in self.children:
+            try:
+                child.kill()
+            except Exception:
+                pass
+        self.children = []
+
+    def test_get_descendant_processes(self):
+        child = subprocess.Popen(["sleep", "1"])
+        self.children.append(child)
+        time.sleep(0.1)
+        descendants = bzfs.get_descendant_processes(os.getpid())
+        self.assertIn(child.pid, descendants, "Child PID not found in descendants")
+
+    def test_terminate_process_subtree_excluding_current(self):
+        child = subprocess.Popen(["sleep", "1"])
+        self.children.append(child)
+        time.sleep(0.1)
+        self.assertIsNone(child.poll(), "Child process should be running before termination")
+        bzfs.terminate_process_subtree(except_current_process=True)
+        time.sleep(0.1)
+        self.assertIsNotNone(child.poll(), "Child process should be terminated")
 
 
 #############################################################################

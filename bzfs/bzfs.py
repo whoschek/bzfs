@@ -43,7 +43,6 @@ import fcntl
 import glob
 import hashlib
 import heapq
-import inspect
 import itertools
 import json
 import logging
@@ -71,7 +70,7 @@ import traceback
 from argparse import Namespace
 from collections import defaultdict, deque, Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, suppress
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timedelta, timezone, tzinfo
 from itertools import groupby
@@ -2077,7 +2076,7 @@ class Job:
         try:
             self.cleanup()
         finally:
-            terminate_process_group(except_current_process=except_current_process)
+            terminate_process_subtree(except_current_process=except_current_process)
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
         assert isinstance(self.error_injection_triggers, dict)
@@ -2116,7 +2115,7 @@ class Job:
                             log.error(f"{msg} per %s", lock_file)
                             raise SystemExit(still_running_status) from e
                         try:
-                            # On CTRL-C send signal to the entire process group to also terminate child processes
+                            # On CTRL-C send signal also to descendant processes to also terminate descendant processes
                             old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: self.terminate())
                             try:
                                 self.run_tasks()
@@ -4592,7 +4591,7 @@ class Job:
                         failed = True
                         if p.skip_on_error == "fail":
                             [todo_future.cancel() for todo_future in todo_futures]
-                            terminate_process_group(except_current_process=True)
+                            terminate_process_subtree(except_current_process=True)
                             raise e
                         no_skip = not (p.skip_on_error == "tree" or skip_tree_on_error(dataset))
                         log.error("%s", str(e))
@@ -5980,19 +5979,36 @@ def round_datetime_up_to_duration_multiple(
         raise ValueError(f"Unsupported duration unit: {duration_unit}")
 
 
-def terminate_process_group(except_current_process=False):
-    """Sends signal to the entire process group to also terminate child processes started via subprocess.run()"""
-    signum = signal.SIGTERM
-    old_signal_handler = (
-        signal.signal(signum, lambda signalnum, frame: None)  # temporarily disable signal handler on current process
-        if except_current_process
-        else signal.getsignal(signum)
-    )
-    try:
-        is_test = any("unittest" in frame.filename for frame in inspect.stack())
-        is_test or os.killpg(os.getpgrp(), signum)  # avoid confusing python's unit test framework with killpg()
-    finally:
-        signal.signal(signum, old_signal_handler)  # reenable and restore original handler
+def terminate_process_subtree(except_current_process=False, sig=signal.SIGTERM):
+    """Sends signal also to descendant processes to also terminate processes started via subprocess.run()"""
+    current_pid = os.getpid()
+    pids = get_descendant_processes(current_pid)
+    pids += [] if except_current_process else [current_pid]
+    for pid in pids:
+        with suppress(OSError):
+            os.kill(pid, sig)
+
+
+def get_descendant_processes(root_pid: int) -> List[int]:
+    """Returns the list of all descendant process IDs for the given root PID, on Unix systems."""
+    procs = defaultdict(list)
+    cmd = ["ps", "-Ao", "pid,ppid"]
+    lines = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
+    for line in lines[1:]:  # all lines except the header line
+        splits = line.split()
+        assert len(splits) == 2
+        pid = int(splits[0])
+        ppid = int(splits[1])
+        procs[ppid].append(pid)
+    descendants: List[int] = []
+
+    def recursive_append(ppid: int):
+        for child_pid in procs[ppid]:
+            descendants.append(child_pid)
+            recursive_append(child_pid)
+
+    recursive_append(root_pid)
+    return descendants
 
 
 arabic_decimal_separator = "\u066b"  # "٫"
