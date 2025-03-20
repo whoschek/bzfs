@@ -51,11 +51,12 @@ systemd timers or similar, along these lines:
 * crontab on source host:
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots
---prune-src-snapshots --prune-src-bookmarks`
+--prune-src-snapshots --prune-src-bookmarks --monitor-src-snapshots`
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots
+--monitor-dst-snapshots`
 
 ### High Frequency Replication (Experimental Feature)
 
@@ -79,11 +80,15 @@ using pull replication mode, along these lines:
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-bookmarks`
 
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-src-snapshots`
+
 * crontab on destination host(s):
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
+
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-dst-snapshots`
 
 The daemon processes work like non-daemon processes except that they loop, handle time events and
 sleep between events, and finally exit after, say, 86400 seconds (whatever you specify via
@@ -105,18 +110,22 @@ daemons but this is benign as these new processes immediately exit with a messag
 usage: bzfs_jobrunner [-h] [--create-src-snapshots]
                       [--replicate [{pull,push}]]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
-                      [--prune-dst-snapshots] [--src-host STRING]
+                      [--prune-dst-snapshots]
+                      [--monitor-src-snapshots]
+                      [--monitor-dst-snapshots] [--src-host STRING]
                       [--localhost STRING] [--dst-hosts DICT_STRING]
                       [--retain-dst-targets DICT_STRING]
                       [--dst-root-datasets DICT_STRING]
                       [--src-snapshot-plan DICT_STRING]
                       [--src-bookmark-plan DICT_STRING]
                       [--dst-snapshot-plan DICT_STRING]
+                      [--monitor-snapshot-plan DICT_STRING]
                       [--src-user STRING] [--dst-user STRING]
                       [--jobid STRING]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
+                      [--daemon-monitor-snapshots-frequency STRING]
                       SRC_DATASET DST_DATASET
                       [SRC_DATASET DST_DATASET ...]
 ```
@@ -175,6 +184,24 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 *  Prune snapshots on dst as necessary. This command should be called by a program (or cron job)
     running on the dst host.
+
+<!-- -->
+
+<div id="--monitor-src-snapshots"></div>
+
+**--monitor-src-snapshots**
+
+*  Alert the user if src snapshots are too old, using --monitor-snapshot-plan (see below). This
+    command should be called by a program (or cron job) running on the src host.
+
+<!-- -->
+
+<div id="--monitor-dst-snapshots"></div>
+
+**--monitor-dst-snapshots**
+
+*  Alert the user if dst snapshots are too old, using --monitor-snapshot-plan (see below). This
+    command should be called by a program (or cron job) running on the dst host.
 
 <!-- -->
 
@@ -285,6 +312,31 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 <!-- -->
 
+<div id="--monitor-snapshot-plan"></div>
+
+**--monitor-snapshot-plan** *DICT_STRING*
+
+*  Alert the user if the ZFS 'creation' time property of the latest snapshot for any specified
+    snapshot name pattern within the selected datasets is too old wrt. the specified age limit.
+    The purpose is to check if snapshots are successfully taken on schedule and successfully
+    replicated on schedule. Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively.
+    Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly': {'warn': '400
+    milliseconds', 'crit': '2 seconds'}, 'secondly': {'warn': '3 seconds', 'crit':
+    '15 seconds'}, 'minutely': {'warn': '90 seconds', 'crit': '360 seconds'},
+    'hourly': {'warn': '90 minutes', 'crit': '360 minutes'}, 'daily': {'warn': '28
+    hours', 'crit': '32 hours'}, 'weekly': {'warn': '9 days', 'crit': '15 days'},
+    'monthly': {'warn': '32 days', 'crit': '40 days'}, 'yearly': {'warn': '370
+    days', 'crit': '385 days'}, '10minutely': {'warn': '0 minutes', 'crit': '0
+    minutes'}}, '': {'daily': {'warn': '28 hours', 'crit': '32 hours'}}}}"`. This
+    example alerts the user if the latest snapshot named `prod_onsite_<timestamp>_secondly`
+    is not less than 3 seconds old (warn) or not less than 15 seconds old (crit). Analog for the
+    latest snapshot named `prod_<timestamp>_daily`, and so on.
+
+    Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots
+    shall be checked for the given snapshot name pattern.
+
+<!-- -->
+
 <div id="--src-user"></div>
 
 **--src-user** *STRING*
@@ -332,3 +384,12 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 **--daemon-prune-dst-frequency** *STRING*
 
 *  Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.
+
+<!-- -->
+
+<div id="--daemon-monitor-snapshots-frequency"></div>
+
+**--daemon-monitor-snapshots-frequency** *STRING*
+
+*  Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is
+    nonzero.

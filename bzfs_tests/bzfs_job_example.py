@@ -19,14 +19,13 @@
 # local machine. Edit root_dataset_pairs to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH.
 # Run the final script like so:
 #
-# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate=pull --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots
+# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate=pull --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
 #
 # Add this command to your crontab file such that the command runs every minute, or every hour, or every day, or similar.
 #############################################################################
 
 import argparse
 import os
-import subprocess
 import sys
 
 parser = argparse.ArgumentParser(
@@ -36,7 +35,7 @@ pruning, across source host and multiple destination hosts, using the same singl
 submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the actual work to 
 the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
 
-Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots]
+Usage: {sys.argv[0]} [--create-src-snapshots|--replicate|--prune-src-snapshots|--prune-src-bookmarks|--prune-dst-snapshots|--monitor-src-snapshots|--monitor-dst-snapshots]
 """
 )
 _, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`
@@ -160,6 +159,41 @@ dst_snapshot_plan = {
 src_bookmark_plan = dst_snapshot_plan
 
 
+# Alert the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot name pattern within
+# the selected datasets is too old wrt. the specified age limit. The purpose is to check if snapshots are successfully taken
+# on schedule and successfully replicated on schedule. Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively.
+# For example, alerts the user if the latest snapshot named `prod_onsite_<timestamp>_secondly` is not less than 3 seconds
+# old (warn) or not less than 15 seconds old (crit). Analog for the latest snapshot named `prod_<timestamp>_daily`, and
+# so on.
+# Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for the given
+# snapshot name pattern.
+# monitor_snapshot_plan = {
+#     org: {
+#         "onsite": {
+#             "100millisecondly": {"warn": "400 milliseconds", "crit": "2 seconds"},
+#             "secondly": {"warn": "3 seconds", "crit": "15 seconds"},
+#             "minutely": {"warn": "90 seconds", "crit": "360 seconds"},
+#             "hourly": {"warn": "90 minutes", "crit": "360 minutes"},
+#             "daily": {"warn": "28 hours", "crit": "32 hours"},
+#             "weekly": {"warn": "9 days", "crit": "15 days"},
+#             "monthly": {"warn": "32 days", "crit": "40 days"},
+#             "yearly": {"warn": "370 days", "crit": "385 days"},
+#         },
+#         "": {
+#             "daily": {"warn": "28 hours", "crit": "32 hours"},
+#         },
+#     }
+# }
+monitor_snapshot_plan = {
+    org: {
+        "onsite": {
+            "hourly": {"warn": "90 minutes", "crit": "360 minutes"},
+            "daily": {"warn": "28 hours", "crit": "32 hours"},
+        },
+    }
+}
+
+
 ssh_src_port = 22
 # ssh_src_port = 2222  # for hpnssh
 # ssh_src_port = 40999
@@ -207,6 +241,8 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--weekly_hour=2"]
 # extra_args += ["--weekly_minute=0"]
 # ... and so on (include all other options from bzfs --help here too)
+# extra_args += ["--monitor-snapshots-dont-warn"]
+# extra_args += ["--monitor-snapshots-dont-crit"]
 # os.environ["TZ"] = "UTC"  # change timezone in all respects for the entire program
 
 
@@ -218,6 +254,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--daemon-replication-frequency=10secondly"]  # replicate every 10 seconds
 # extra_args += ["--daemon-prune-src-frequency=10secondly"]  # prune src snapshots and src bookmarks every 10 seconds
 # extra_args += ["--daemon-prune-dst-frequency=10secondly"]  # prune dst snapshots every 10 seconds
+# extra_args += ["--daemon-monitor-snapshots-frequency=30secondly"]  # monitor snapshots every 30 seconds
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds to snapshot names
 # extra_args += ["--create-src-snapshots-even-if-not-due"]  # nomore run 'zfs list -t snapshot' before snapshot creation
 # extra_args += ["--create-src-snapshots-enable-snapshots-changed-cache"]  # no 'zfs list -t snapshot' before snap creation
@@ -233,7 +270,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # os.environ["bzfs_name_of_a_unix_env_var"] = "true"  # toggle example tuning knob
 
 
-cmd = ["bzfs_jobrunner"]
+cmd = []
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
@@ -242,6 +279,7 @@ cmd += [f"--dst-root-datasets={dst_root_datasets}"]
 cmd += [f"--src-snapshot-plan={src_snapshot_plan}"]
 cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
 cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
+cmd += [f"--monitor-snapshot-plan={monitor_snapshot_plan}"]
 cmd += [f"--ssh-src-port={ssh_src_port}", f"--ssh-dst-port={ssh_dst_port}"]
 cmd += extra_args + unknown_args + ["--"] + root_dataset_pairs
-subprocess.run(cmd, text=True, check=True)
+os.execvp("bzfs_jobrunner", cmd)

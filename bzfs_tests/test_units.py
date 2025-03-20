@@ -1123,6 +1123,67 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
 
+    def test_MonitorSnapshotsConfig(self):
+        def plan(alerts):
+            return {"z": {"onsite": {"millisecondly": alerts}}}
+
+        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        args = bzfs.argument_parser().parse_args(
+            ["src", "dst", "--monitor-snapshots=" + str(plan({"warn": "1 millis", "crit": "2 millis"}))]
+        )
+        config = bzfs.MonitorSnapshotsConfig(args, params)
+        self.assertTrue(str(config))
+        self.assertListEqual([(1, 2)], [(alert.warning_millis, alert.critical_millis) for alert in config.alerts])
+        self.assertListEqual(["z_onsite__millisecondly"], [str(alert.label) for alert in config.alerts])
+        self.assertTrue(config.enable_monitor_snapshots)
+        self.assertFalse(config.dont_warn)
+        self.assertFalse(config.dont_crit)
+
+        args = bzfs.argument_parser().parse_args(["src", "dst", "--monitor-snapshots=" + str(plan({"warn": "2 millis"}))])
+        config = bzfs.MonitorSnapshotsConfig(args, params)
+        self.assertTrue(str(config))
+        self.assertListEqual(
+            [(2, bzfs.unixtime_infinity_secs)], [(alert.warning_millis, alert.critical_millis) for alert in config.alerts]
+        )
+        self.assertListEqual(["z_onsite__millisecondly"], [str(alert.label) for alert in config.alerts])
+
+        args = bzfs.argument_parser().parse_args(["src", "dst", "--monitor-snapshots=" + str(plan({"crit": "2 millis"}))])
+        config = bzfs.MonitorSnapshotsConfig(args, params)
+        self.assertTrue(str(config))
+        self.assertListEqual(
+            [(bzfs.unixtime_infinity_secs, 2)], [(alert.warning_millis, alert.critical_millis) for alert in config.alerts]
+        )
+        self.assertListEqual(["z_onsite__millisecondly"], [str(alert.label) for alert in config.alerts])
+
+        args = bzfs.argument_parser().parse_args(["src", "dst", "--monitor-snapshots=" + str(plan({}))])
+        config = bzfs.MonitorSnapshotsConfig(args, params)
+        self.assertListEqual([], config.alerts)
+        self.assertFalse(config.enable_monitor_snapshots)
+
+        args = bzfs.argument_parser().parse_args(["src", "dst", "--monitor-snapshots={}"])
+        config = bzfs.MonitorSnapshotsConfig(args, params)
+        self.assertListEqual([], config.alerts)
+        self.assertFalse(config.enable_monitor_snapshots)
+
+        args = bzfs.argument_parser().parse_args(
+            ["src", "dst", "--monitor-snapshots=" + str(plan({"badalert": "2 millis"}))]
+        )
+        with self.assertRaises(SystemExit):
+            bzfs.MonitorSnapshotsConfig(args, params)
+
+        args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--monitor-snapshots-dont-warn",
+                "--monitor-snapshots-dont-crit",
+                "--monitor-snapshots=" + str(plan({"warn": "2 millis"})),
+            ]
+        )
+        config = bzfs.MonitorSnapshotsConfig(args, params)
+        self.assertTrue(config.dont_warn)
+        self.assertTrue(config.dont_crit)
+
 
 #############################################################################
 class TestTerminateProcessSubtree(unittest.TestCase):

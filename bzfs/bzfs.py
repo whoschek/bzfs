@@ -86,6 +86,8 @@ __version__ = "1.11.0-dev"
 prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
+critical_status = 2
+warning_status = 1
 still_running_status = 4
 min_python_version = (3, 7)
 if sys.version_info < min_python_version:
@@ -964,6 +966,42 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     cmp_choices: List[str] = []
     for i in range(0, len(cmp_choices_items)):
         cmp_choices += map(lambda item: "+".join(item), itertools.combinations(cmp_choices_items, i + 1))
+    monitor_snapshot_plan_example = {
+        "prod": {
+            "onsite": {
+                "100millisecondly": {"warn": "400 milliseconds", "crit": "2 seconds"},
+                "secondly": {"warn": "3 seconds", "crit": "15 seconds"},
+                "minutely": {"warn": "90 seconds", "crit": "360 seconds"},
+                "hourly": {"warn": "90 minutes", "crit": "360 minutes"},
+                "daily": {"warn": "28 hours", "crit": "32 hours"},
+                "weekly": {"warn": "9 days", "crit": "15 days"},
+                "monthly": {"warn": "32 days", "crit": "40 days"},
+                "yearly": {"warn": "370 days", "crit": "385 days"},
+                "10minutely": {"warn": "0 minutes", "crit": "0 minutes"},
+            },
+            "": {
+                "daily": {"warn": "28 hours", "crit": "32 hours"},
+            },
+        },
+    }
+    parser.add_argument(
+        "--monitor-snapshots", default="{}", type=str, metavar="DICT_STRING",
+        help="Do nothing if the --monitor-snapshots flag is missing. Otherwise, after all other steps, "
+             "alert the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot name "
+             "pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if "
+             "snapshots are successfully taken on schedule and successfully replicated on schedule. "
+             "Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively. "
+             f"Example DICT_STRING: `{format_dict(monitor_snapshot_plan_example)}`. This example alerts the user if the "
+             "latest snapshot named `prod_onsite_<timestamp>_secondly` is not less than 3 seconds old (warn) or not less "
+             "than 15 seconds old (crit). Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
+             "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
+             "the given snapshot name pattern.")
+    parser.add_argument(
+        "--monitor-snapshots-dont-warn", action="store_true",
+        help="Log a message for monitoring warnings but nonetheless exit with zero exit code.\n\n")
+    parser.add_argument(
+        "--monitor-snapshots-dont-crit", action="store_true",
+        help="Log a message for monitoring criticals but nonetheless exit with zero exit code.\n\n")
     parser.add_argument(
         "--compare-snapshot-lists", choices=cmp_choices, default=None, const=cmp_choices_dflt, nargs="?",
         help="Do nothing if the --compare-snapshot-lists option is missing. Otherwise, after successful replication "
@@ -1593,6 +1631,7 @@ class Params:
         self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.create_src_snapshots_config: CreateSrcSnapshotConfig = CreateSrcSnapshotConfig(args, self)
+        self.monitor_snapshots_config: MonitorSnapshotsConfig = MonitorSnapshotsConfig(args, self)
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -1724,6 +1763,7 @@ class Params:
                self.create_src_snapshots_config.anchors,
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
                self.args.delete_empty_dst_datasets,
+               self.args.compare_snapshot_lists, self.args.monitor_snapshots,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
@@ -2010,6 +2050,54 @@ class CreateSrcSnapshotConfig:
             timestamp = timestamp[0 : -len("000")]  # replace microseconds with milliseconds
         timestamp = timestamp.replace("+", "z")  # zfs CLI does not accept the '+' character in snapshot names
         return [SnapshotLabel(label.prefix, label.infix, timestamp, label.suffix) for label in self._snapshot_labels]
+
+    def __repr__(self) -> str:
+        return str(self.__dict__)
+
+
+#############################################################################
+@dataclass
+class MonitorSnapshotAlert:
+    label: SnapshotLabel
+    warning_millis: int
+    critical_millis: int
+
+
+#############################################################################
+class MonitorSnapshotsConfig:
+    def __init__(self, args: argparse.Namespace, p: Params):
+        """Option values for --monitor-snapshots*; reads from ArgumentParser via args."""
+        # immutable variables:
+        self.dont_warn = args.monitor_snapshots_dont_warn
+        self.dont_crit = args.monitor_snapshots_dont_crit
+        alerts = []
+        for org, target_periods in ast.literal_eval(args.monitor_snapshots).items():
+            for target, periods in target_periods.items():
+                for period_unit, alerts_dict in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
+                    label = SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
+                    warning_millis, critical_millis = 0, 0
+                    for kind, time_delta in alerts_dict.items():
+                        time_delta_millis: int = parse_duration_to_milliseconds(str(time_delta))
+                        if kind == "warn":
+                            warning_millis = time_delta_millis
+                        elif kind == "crit":
+                            critical_millis = time_delta_millis
+                        else:
+                            die(f"--monitor-snapshots: '{kind}' must be 'warn' or 'crit' within {args.monitor_snapshots}")
+                    if warning_millis > 0 or critical_millis > 0:
+                        warning_millis = unixtime_infinity_secs if warning_millis <= 0 else warning_millis
+                        critical_millis = unixtime_infinity_secs if critical_millis <= 0 else critical_millis
+                        alerts.append(MonitorSnapshotAlert(label, warning_millis, critical_millis))
+
+        def alert_sort_key(alert):
+            duration_amount, duration_unit = xperiods.suffix_to_duration1(alert.label.suffix)
+            duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
+            return duration_milliseconds, alert.label.suffix
+
+        xperiods = SnapshotPeriods()
+        alerts.sort(key=alert_sort_key, reverse=True)  # check snapshots for dailies before hourlies, and so on
+        self.alerts = alerts
+        self.enable_monitor_snapshots: bool = len(alerts) > 0
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -2481,7 +2569,11 @@ class Job:
             )
 
         if failed or not (
-            p.delete_dst_datasets or p.delete_dst_snapshots or p.delete_empty_dst_datasets or p.compare_snapshot_lists
+            p.delete_dst_datasets
+            or p.delete_dst_snapshots
+            or p.delete_empty_dst_datasets
+            or p.compare_snapshot_lists
+            or p.monitor_snapshots_config.enable_monitor_snapshots
         ):
             return
         log.info("Listing dst datasets: %s", task_description)
@@ -2636,12 +2728,58 @@ class Job:
                     self.delete_datasets(dst, orphans)
                     dst_datasets = sorted(set(dst_datasets).difference(orphans))
 
+        # Optionally, compare source and destination dataset trees recursively wrt. snapshots, for example to check if all
+        # recently taken snapshots have been successfully replicated by a periodic job.
         if p.compare_snapshot_lists and not failed:
             log.info("--compare-snapshot-lists: %s", task_description)
             if len(basis_src_datasets) == 0 and not self.is_dummy(src):
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.run_compare_snapshot_lists(src_datasets, dst_datasets)
+
+        # Optionally, alert the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot
+        # name pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if
+        # snapshots are successfully taken on schedule and successfully replicated on schedule.
+        # Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively.
+        if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
+            log.info("--monitor-snapshots: %s", task_description)
+            alerts: List[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
+            current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
+            is_debug = log.isEnabledFor(log_debug)
+
+            def alert_msg(dataset: str, label: SnapshotLabel, snapshot_age_millis: float, timedelta_millis: int) -> str:
+                lab = f"{label.prefix}{label.infix}<timestamp>{label.suffix}"
+                if snapshot_age_millis >= current_unixtime_millis:
+                    return f"No snapshot exists for {dataset}@{lab}"
+                msg = f"Latest snapshot for {dataset}@{lab} is {human_readable_duration(snapshot_age_millis, unit='ms')} old"
+                if timedelta_millis == -1:
+                    return msg
+                return f"{msg} but should be less than {human_readable_duration(timedelta_millis, unit='ms')} old"
+
+            def check_alert(i: int, creation_unixtime_secs: int, dataset: str) -> None:
+                alert: MonitorSnapshotAlert = alerts[i]
+                snapshot_age_millis = current_unixtime_millis - creation_unixtime_secs * 1000
+                m = "--monitor_snapshots: "
+                if snapshot_age_millis - alert.critical_millis > 0:
+                    msg = m + alert_msg(dataset, alert.label, snapshot_age_millis, alert.critical_millis)
+                    log.critical("%s", msg)
+                    if not p.monitor_snapshots_config.dont_crit:
+                        die(msg, exit_code=critical_status)
+                elif snapshot_age_millis - alert.warning_millis > 0:
+                    msg = m + alert_msg(dataset, alert.label, snapshot_age_millis, alert.warning_millis)
+                    log.warning("%s", msg)
+                    if not p.monitor_snapshots_config.dont_warn:
+                        die(msg, exit_code=warning_status)
+                elif is_debug:
+                    log.debug("%s", m + "OK. " + alert_msg(dataset, alert.label, snapshot_age_millis, timedelta_millis=-1))
+
+            labels = [alert.label for alert in alerts]
+            src_datasets = filter_src_datasets()  # apply include/exclude policy
+            for remote, datasets in [(src, src_datasets), (dst, dst_datasets)]:
+                datasets_without_snapshots = self.handle_latest_snapshots(remote, datasets, labels, fn=check_alert)
+                for dataset in datasets_without_snapshots:
+                    for i in range(len(alerts)):
+                        check_alert(i, creation_unixtime_secs=0, dataset=dataset)
 
     def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
@@ -4064,7 +4202,7 @@ class Job:
                 return 0  # harmless
 
         def create_snapshot_if_latest_is_too_old(
-            datasets_to_snapshot: Dict[SnapshotLabel, List[str]], label: SnapshotLabel, creation_unixtime: int
+            datasets_to_snapshot: Dict[SnapshotLabel, List[str]], dataset: str, label: SnapshotLabel, creation_unixtime: int
         ):
             """Schedules creation of a snapshot for the given label if the label's existing latest snapshot is too old."""
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
@@ -4114,43 +4252,16 @@ class Job:
                     creation_unixtimes[label] = creation_unixtime
                 if len(creation_unixtimes) == len(labels):
                     for label in labels:
-                        create_snapshot_if_latest_is_too_old(cached_datasets_to_snapshot, label, creation_unixtimes[label])
+                        create_snapshot_if_latest_is_too_old(
+                            cached_datasets_to_snapshot, dataset, label, creation_unixtimes[label]
+                        )
             sorted_datasets = sorted_datasets_todo
 
+        def create_snapshot_fn(i: int, creation_unixtime_secs: int, dataset: str) -> None:
+            create_snapshot_if_latest_is_too_old(datasets_to_snapshot, dataset, labels[i], creation_unixtime_secs)
+
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
-        datasets_with_snapshots = set()
-        for lines in self.zfs_list_snapshots_in_parallel(src, cmd, sorted_datasets, ordered=False):
-            # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
-                datasets_with_snapshots.add(dataset)
-                snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
-                    (int(createtxg), int(creation), name[name.index("@") + 1 :])
-                    for createtxg, creation, name in (line.split("\t", 2) for line in group)
-                )
-                assert len(snapshots) > 0
-                reversed_snapshot_names = [snapshot[-1] for snapshot in reversed(snapshots)]
-                year_with_4_digits_regex = year_with_four_digits_regex
-                for label in labels:
-                    infix = label.infix
-                    start = label.prefix + label.infix
-                    end = label.suffix
-                    startlen = len(start)
-                    endlen = len(end)
-                    minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
-                    year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
-                    creation_unixtime = 0
-                    for j, s in enumerate(reversed_snapshot_names):  # find latest snapshot that matches this label
-                        if (
-                            s.endswith(end)
-                            and s.startswith(start)
-                            and len(s) >= minlen
-                            and (infix or year_with_4_digits_regex.fullmatch(s[year_slice]))  # year_with_four_digits_regex
-                        ):
-                            creation_unixtime = snapshots[len(snapshots) - j - 1][1]
-                            break
-                    create_snapshot_if_latest_is_too_old(datasets_to_snapshot, label, creation_unixtime)
-        datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
+        datasets_without_snapshots = self.handle_latest_snapshots(src, sorted_datasets, labels, fn=create_snapshot_fn)
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
             datasets_to_snapshot[lbl].sort()
             if datasets_without_snapshots or (lbl in cached_datasets_to_snapshot):  # +take snaps for snapshot-less datasets
@@ -4161,6 +4272,45 @@ class Job:
         label_indexes = {label: k for k, label in enumerate(config.snapshot_labels())}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
         return datasets_to_snapshot
+
+    def handle_latest_snapshots(
+        self, r: Remote, sorted_datasets: List[str], labels: List[SnapshotLabel], fn: Callable[[int, int, str], None]
+    ) -> List[str]:
+        p = self.params
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
+        datasets_with_snapshots = set()
+        for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets, ordered=False):
+            # streaming group by dataset name (consumes constant memory only)
+            for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
+                snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
+                    (int(createtxg), int(creation), name[name.index("@") + 1 :])
+                    for createtxg, creation, name in (line.split("\t", 2) for line in group)
+                )
+                assert len(snapshots) > 0
+                datasets_with_snapshots.add(dataset)
+                reversed_snapshot_names = [snapshot[-1] for snapshot in reversed(snapshots)]
+                year_with_4_digits_regex = year_with_four_digits_regex
+                for i, label in enumerate(labels):
+                    infix = label.infix
+                    start = label.prefix + label.infix
+                    end = label.suffix
+                    startlen = len(start)
+                    endlen = len(end)
+                    minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
+                    year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
+                    creation_unixtime: int = 0
+                    for j, s in enumerate(reversed_snapshot_names):  # find latest snapshot that matches this label
+                        if (
+                            s.endswith(end)
+                            and s.startswith(start)
+                            and len(s) >= minlen
+                            and (infix or year_with_4_digits_regex.fullmatch(s[year_slice]))  # year_with_four_digits_regex
+                        ):
+                            creation_unixtime = snapshots[len(snapshots) - j - 1][1]
+                            break
+                    fn(i, creation_unixtime, dataset)
+        datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
+        return datasets_without_snapshots
 
     def last_modified_cache_file(self, dataset: str, label: SnapshotLabel = None) -> str:
         p = self.params
@@ -5410,9 +5560,9 @@ def delete_stale_files(root_dir: str, prefix: str, secs: int = 31 * 24 * 60 * 60
             pass  # harmless
 
 
-def die(msg: str) -> None:
+def die(msg: str, exit_code=die_status) -> None:
     ex = SystemExit(msg)
-    ex.code = die_status
+    ex.code = exit_code
     raise ex
 
 
@@ -5668,7 +5818,7 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "") -> int
         r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
     )
     if not match:
-        raise ValueError("Invalid duration format")
+        raise ValueError(f"Invalid duration format: {duration}")
     quantity = int(match.group(1))
     unit = match.group(2)
     return quantity * unit_milliseconds[unit]

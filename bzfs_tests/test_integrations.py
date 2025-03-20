@@ -4551,7 +4551,6 @@ class LocalTestCase(BZFSTestCase):
             self.skipTest("Destroying snapshots on src needs extra permissions")
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
-        destroy(dst_root_dataset, recursive=True)
         self.assertSnapshots(src_root_dataset, 0)
 
         localhostname = socket.gethostname()
@@ -4564,6 +4563,13 @@ class LocalTestCase(BZFSTestCase):
         src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}
         dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}, "offsite": {}}}
         src_bookmark_plan = dst_snapshot_plan
+        monitor_dst_snapshot_plan = {
+            "z": {
+                "onsite": {"millisecondly": {"warn": "1 hours", "crit": "2 hours"}},
+                "offsite": {"millisecondly": {"warn": "1 hours", "crit": "2 hours"}},
+            }
+        }
+        monitor_src_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warn": "1 hours", "crit": "2 hours"}}}}
         args = [
             src_root_dataset,
             dst_root_dataset,
@@ -4574,6 +4580,7 @@ class LocalTestCase(BZFSTestCase):
             f"--src-snapshot-plan={src_snapshot_plan}",
             f"--src-bookmark-plan={src_bookmark_plan}",
             f"--dst-snapshot-plan={dst_snapshot_plan}",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
             "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
         ]
         pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
@@ -4585,7 +4592,28 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
         self.assertEqual(0, len(bookmarks(src_root_dataset)))
-        self.assertFalse(dataset_exists(dst_root_dataset))
+        self.assertEqual(0, len(snapshots(dst_root_dataset)))
+
+        # monitoring says latest src snapshots aren't stale:
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        self.run_bzfs(
+            "--monitor-src-snapshots",
+            f"--monitor-snapshot-plan={monitor_src_snapshot_plan}",
+            *pull_args_no_monitoring,
+            use_jobrunner=True,
+        )
+
+        # monitoring says critical as there is no dst snapshot:
+        self.assertEqual(0, len(snapshots(dst_root_dataset)))
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"crit": "60 seconds"}}}}
+        self.run_bzfs(
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            expected_status=bzfs.critical_status,
+            use_jobrunner=True,
+        )
 
         # replicate from src to dst:
         self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
@@ -4608,6 +4636,9 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(snapshots(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
+        # monitoring says latest dst snapshots aren't stale:
+        self.run_bzfs("--verbose", "--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
+
         # next iteration: create another src snapshot
         self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
         self.assertEqual(2, len(snapshots(src_root_dataset)))
@@ -4628,6 +4659,55 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # monitoring says latest dst snapshot is critically stale:
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"crit": "1 millis"}}}}
+        self.run_bzfs(
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            expected_status=bzfs.critical_status,
+            use_jobrunner=True,
+        )
+
+        # monitoring says latest dst snapshot is critically stale, but we only inform about this rather than error out:
+        self.run_bzfs(
+            "--monitor-snapshots-dont-crit",
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            use_jobrunner=True,
+        )
+
+        # monitoring says latest dst snapshot is warning stale:
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warn": "1 millis"}}}}
+        self.run_bzfs(
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            expected_status=bzfs.warning_status,
+            use_jobrunner=True,
+        )
+
+        # monitoring says latest dst snapshot is warning stale, but we only inform about this rather than error out:
+        self.run_bzfs(
+            "--monitor-snapshots-dont-warn",
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            use_jobrunner=True,
+        )
+
+        # monitoring freshness on nonexistingpool destination pool does nothing:
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warn": "1 millis", "crit": "2 millis"}}}}
+        self.run_bzfs(
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args_no_monitoring[2:]),
+            use_jobrunner=True,
+        )
 
         # replicate new snapshot from src to dst:
         self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
@@ -4658,6 +4738,9 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs("--prune-dst-snapshots", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+        # monitoring says latest dst snapshots aren't stale:
+        self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
 
         # next iteration: create another src snapshot
         self.run_bzfs("--create-src-snapshots", *push_args, use_jobrunner=True)
@@ -4694,6 +4777,9 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
+        # monitoring says latest dst snapshots aren't stale:
+        self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
+
         # non-existing CLI option will cause failure:
         self.run_bzfs(
             "--create-src-snapshots",
@@ -4716,6 +4802,17 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, len(snapshots(src_root_dataset)))
         self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
+
+        # monitoring says critical as there is no yearly snapshot:
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"yearly": {"crit": "60 minutes"}}}}
+        self.run_bzfs(
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            expected_status=bzfs.critical_status,
+            use_jobrunner=True,
+        )
 
     def test_jobrunner_flat_simple_with_empty_targets(self):
         if self.is_no_privilege_elevation():

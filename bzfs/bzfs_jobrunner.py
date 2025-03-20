@@ -56,11 +56,11 @@ source host and all destination hosts, and add crontab entries or systemd timers
 
 * crontab on source host:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks --monitor-src-snapshots`
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots --monitor-dst-snapshots`
 
 ### High Frequency Replication (Experimental Feature)
 
@@ -81,11 +81,15 @@ better: high frequency systemd timer) into multiple processes, using pull replic
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-bookmarks`
 
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-src-snapshots`
+
 * crontab on destination host(s):
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
+
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-dst-snapshots`
 
 The daemon processes work like non-daemon processes except that they loop, handle time events and sleep between events, and 
 finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifetime`). The daemons will subsequently be 
@@ -111,6 +115,12 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument("--prune-dst-snapshots", action="store_true",
         help="Prune snapshots on dst as necessary. This command should be called by a program (or cron job) running on the "
              "dst host.\n\n")
+    parser.add_argument("--monitor-src-snapshots", action="store_true",
+        help="Alert the user if src snapshots are too old, using --monitor-snapshot-plan (see below). This command should "
+             "be called by a program (or cron job) running on the src host.\n\n")
+    parser.add_argument("--monitor-dst-snapshots", action="store_true",
+        help="Alert the user if dst snapshots are too old, using --monitor-snapshot-plan (see below). This command should "
+             "be called by a program (or cron job) running on the dst host.\n\n")
 
     # options:
     parser.add_argument("--src-host", default="-", metavar="STRING",
@@ -179,6 +189,34 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-plan.\n\n")
     parser.add_argument("--dst-snapshot-plan", default="{}", metavar="DICT_STRING",
         help="Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-plan.\n\n")
+    monitor_snapshot_plan_example = {
+        "prod": {
+            "onsite": {
+                "100millisecondly": {"warn": "400 milliseconds", "crit": "2 seconds"},
+                "secondly": {"warn": "3 seconds", "crit": "15 seconds"},
+                "minutely": {"warn": "90 seconds", "crit": "360 seconds"},
+                "hourly": {"warn": "90 minutes", "crit": "360 minutes"},
+                "daily": {"warn": "28 hours", "crit": "32 hours"},
+                "weekly": {"warn": "9 days", "crit": "15 days"},
+                "monthly": {"warn": "32 days", "crit": "40 days"},
+                "yearly": {"warn": "370 days", "crit": "385 days"},
+                "10minutely": {"warn": "0 minutes", "crit": "0 minutes"},
+            },
+            "": {
+                "daily": {"warn": "28 hours", "crit": "32 hours"},
+            },
+        },
+    }
+    parser.add_argument("--monitor-snapshot-plan", default="{}", metavar="DICT_STRING",
+        help="Alert the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot name "
+             "pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if "
+             "snapshots are successfully taken on schedule and successfully replicated on schedule. "
+             "Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively. "
+             f"Example DICT_STRING: `{format_dict(monitor_snapshot_plan_example)}`. This example alerts the user if the "
+             "latest snapshot named `prod_onsite_<timestamp>_secondly` is not less than 3 seconds old (warn) or not less "
+             "than 15 seconds old (crit). Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
+             "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
+             "the given snapshot name pattern.")
     parser.add_argument("--src-user", default="", metavar="STRING",
         help="SSH username on --src-host. Used if replicating in pull mode. Example: 'alice'\n\n")
     parser.add_argument("--dst-user", default="", metavar="STRING",
@@ -192,6 +230,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Specifies how often the bzfs daemon shall prune src if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-prune-dst-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.\n\n")
+    parser.add_argument("--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
+        help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
              "auto-appended later).\n\n")
@@ -232,6 +272,7 @@ class Job:
         dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
         retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
+        monitor_snapshot_plan = ast.literal_eval(args.monitor_snapshot_plan)
         jobid = sanitize(args.jobid)
 
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
@@ -317,6 +358,41 @@ class Job:
                 opts += [src, dst]
             if len(opts) > old_len_opts:
                 self.run_cmd(["bzfs"] + opts)
+
+        def monitor_snapshots_opts() -> List[str]:
+            opts = [f"--monitor-snapshots={monitor_snapshot_plan}", "--skip-replication"]
+            opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{sep}"]
+            return opts
+
+        if args.monitor_dst_snapshots:
+            assert localhostname in dst_hosts, f"Hostname '{localhostname}' missing in --dst-hosts: {dst_hosts}"
+            targets = set(dst_hosts[localhostname])
+            assert (
+                localhostname in retain_dst_targets
+            ), f"Hostname '{localhostname}' missing in --retain-dst-targets: {retain_dst_targets}"
+            targets = targets.intersection(set(retain_dst_targets[localhostname]))
+            monitor_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
+                org: {target: periods for target, periods in target_periods.items() if target in targets}
+                for org, target_periods in monitor_snapshot_plan.items()
+            }
+            opts = monitor_snapshots_opts()
+            opts += [f"--log-file-prefix={prog_name}{sep}monitor-dst-snapshots{sep}"]
+            opts += unknown_args + ["--"]
+            old_len_opts = len(opts)
+            pairs = [(dummy_dataset, resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
+            for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
+                opts += [src, dst]
+            if len(opts) > old_len_opts:
+                self.run_cmd(["bzfs"] + opts)
+
+        if args.monitor_src_snapshots:
+            opts = monitor_snapshots_opts()
+            opts += [f"--log-file-prefix={prog_name}{sep}monitor-src-snapshots{sep}"]
+            opts += unknown_args + ["--"]
+            for src, dst in args.root_dataset_pairs:
+                opts += [dummy_dataset, src]
+            self.run_cmd(["bzfs"] + opts)
 
         ex = self.first_exception
         if isinstance(ex, subprocess.CalledProcessError):

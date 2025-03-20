@@ -621,6 +621,9 @@ usage: bzfs [-h] [--recursive]
             [--delete-dst-snapshots-except]
             [--delete-dst-snapshots-except-plan DICT_STRING]
             [--delete-empty-dst-datasets [{snapshots,snapshots+bookmarks}]]
+            [--monitor-snapshots DICT_STRING]
+            [--monitor-snapshots-dont-warn]
+            [--monitor-snapshots-dont-crit]
             [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream]
@@ -1526,6 +1529,48 @@ usage: bzfs [-h] [--recursive]
 
     *Note:* Use --delete-empty-dst-datasets=snapshots to delete snapshot-less datasets even if
     they still contain bookmarks.
+
+<!-- -->
+
+<div id="--monitor-snapshots"></div>
+
+**--monitor-snapshots** *DICT_STRING*
+
+*  Do nothing if the --monitor-snapshots flag is missing. Otherwise, after all other steps,
+    alert the user if the ZFS 'creation' time property of the latest snapshot for any specified
+    snapshot name pattern within the selected datasets is too old wrt. the specified age limit.
+    The purpose is to check if snapshots are successfully taken on schedule and successfully
+    replicated on schedule. Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively.
+    Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly': {'warn': '400
+    milliseconds', 'crit': '2 seconds'}, 'secondly': {'warn': '3 seconds', 'crit':
+    '15 seconds'}, 'minutely': {'warn': '90 seconds', 'crit': '360 seconds'},
+    'hourly': {'warn': '90 minutes', 'crit': '360 minutes'}, 'daily': {'warn': '28
+    hours', 'crit': '32 hours'}, 'weekly': {'warn': '9 days', 'crit': '15 days'},
+    'monthly': {'warn': '32 days', 'crit': '40 days'}, 'yearly': {'warn': '370
+    days', 'crit': '385 days'}, '10minutely': {'warn': '0 minutes', 'crit': '0
+    minutes'}}, '': {'daily': {'warn': '28 hours', 'crit': '32 hours'}}}}"`. This
+    example alerts the user if the latest snapshot named `prod_onsite_<timestamp>_secondly`
+    is not less than 3 seconds old (warn) or not less than 15 seconds old (crit). Analog for the
+    latest snapshot named `prod_<timestamp>_daily`, and so on.
+
+    Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots
+    shall be checked for the given snapshot name pattern.
+
+<!-- -->
+
+<div id="--monitor-snapshots-dont-warn"></div>
+
+**--monitor-snapshots-dont-warn**
+
+*  Log a message for monitoring warnings but nonetheless exit with zero exit code.
+
+<!-- -->
+
+<div id="--monitor-snapshots-dont-crit"></div>
+
+**--monitor-snapshots-dont-crit**
+
+*  Log a message for monitoring criticals but nonetheless exit with zero exit code.
 
 <!-- -->
 
