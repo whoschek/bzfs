@@ -1340,6 +1340,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--log-file-suffix", default="", action=SafeFileNameAction, metavar="STRING",
         help="Default is the empty string. " + h_fix)
     parser.add_argument(
+        "--log-subdir", choices=["daily", "hourly", "minutely"], default="daily",
+        help="Make a new subdirectory in --log-dir every day, hour or minute; write log files there. Default is 'daily'.")
+    parser.add_argument(
         "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
              "the file system path to the syslog socket file on localhost (e.g. '/dev/log'). The default is no "
@@ -1505,11 +1508,14 @@ class LogParams:
             self.log_level = "INFO"
         self.log_config_file = args.log_config_file
         self.log_config_vars = dict(var.split(":", 1) for var in args.log_config_var)
-        self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
+        timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
+        self.timestamp: str = timestamp
         self.home_dir: str = get_home_directory()
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, prog_name + "-logs")
         self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
-        self.log_dir: str = os.path.join(log_parent_dir, self.timestamp[0 : self.timestamp.index("_")])  # 2024-09-03
+        sep = "_" if args.log_subdir == "daily" else ":"
+        subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
+        self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d) 2024-09-03_12 (h) vs 2024-09-03_12:26 (m)
         os.makedirs(self.log_dir, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
         self.log_file_infix = args.log_file_infix

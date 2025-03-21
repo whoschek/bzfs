@@ -647,6 +647,7 @@ usage: bzfs [-h] [--recursive]
             [--zfs-program STRING] [--zpool-program STRING]
             [--log-dir DIR] [--log-file-prefix STRING]
             [--log-file-infix STRING] [--log-file-suffix STRING]
+            [--log-subdir {daily,hourly,minutely}]
             [--log-syslog-address STRING]
             [--log-syslog-socktype {UDP,TCP}]
             [--log-syslog-facility INT] [--log-syslog-prefix STRING]
@@ -2161,6 +2162,15 @@ usage: bzfs [-h] [--recursive]
     `${--log-dir}/${--log-file-prefix}<timestamp>${--log-file-infix}${--log-file-suffix}-<random>.log`.
     Example: `--log-file-prefix=zrun_us-west-1_ --log-file-suffix=_daily` will generate log
     file names such as `zrun_us-west-1_2024-09-03_12:26:15_daily-bl4i1fth.log`
+
+<!-- -->
+
+<div id="--log-subdir"></div>
+
+**--log-subdir** *{daily,hourly,minutely}*
+
+*  Make a new subdirectory in --log-dir every day, hour or minute; write log files there.
+    Default is 'daily'.
 
 <!-- -->
 

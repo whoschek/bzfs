@@ -233,6 +233,8 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--weekly_weekday=0"]  # take weekly snapshots on Sunday 2:00am (0=Sunday, 1=Monday, ..., 6=Saturday)
 # extra_args += ["--weekly_hour=2"]
 # extra_args += ["--weekly_minute=0"]
+# extra_args += ["--log-subdir=hourly"]
+# extra_args += ["--log-subdir=minutely"]
 # ... and so on (include all other options from bzfs --help here too)
 # extra_args += ["--monitor-snapshots-dont-warn"]
 # extra_args += ["--monitor-snapshots-dont-crit"]
