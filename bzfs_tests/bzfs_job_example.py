@@ -194,18 +194,10 @@ monitor_snapshot_plan = {
 }
 
 
-ssh_src_port = 22
-# ssh_src_port = 2222  # for hpnssh
-# ssh_src_port = 40999
-
-
-ssh_dst_port = 22
-# ssh_dst_port = 2222  # for hpnssh
-# ssh_dst_port = 40999
-
-
 extra_args = []
 extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', os.path.basename(sys.argv[0]))}"]
+# extra_args += ["--ssh-src-port=2222"]  # for hpnssh
+# extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
 # extra_args += ["--localhost=bak-us-west-1"]
 # extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
 # extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
@@ -280,6 +272,5 @@ cmd += [f"--src-snapshot-plan={src_snapshot_plan}"]
 cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
 cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
 cmd += [f"--monitor-snapshot-plan={monitor_snapshot_plan}"]
-cmd += [f"--ssh-src-port={ssh_src_port}", f"--ssh-dst-port={ssh_dst_port}"]
 cmd += extra_args + unknown_args + ["--"] + root_dataset_pairs
 os.execvp("bzfs_jobrunner", cmd)
