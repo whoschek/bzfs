@@ -26,6 +26,7 @@
 
 import argparse
 import os
+import subprocess
 import sys
 
 parser = argparse.ArgumentParser(
@@ -262,7 +263,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # os.environ["bzfs_name_of_a_unix_env_var"] = "true"  # toggle example tuning knob
 
 
-cmd = []
+cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
@@ -273,4 +274,4 @@ cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
 cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
 cmd += [f"--monitor-snapshot-plan={monitor_snapshot_plan}"]
 cmd += extra_args + unknown_args + ["--"] + root_dataset_pairs
-os.execvp("bzfs_jobrunner", cmd)
+sys.exit(subprocess.run(cmd, text=True).returncode)
