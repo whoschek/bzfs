@@ -410,7 +410,7 @@ class Job:
             raise ex
         ex is None or sys.exit(die_status)
 
-    def run_cmd(self, cmd) -> None:
+    def run_cmd(self, cmd: List[str]) -> None:
         try:
             self.bzfs.run_main(self.bzfs.argument_parser().parse_args(cmd[1:]), cmd)
         except BaseException as e:

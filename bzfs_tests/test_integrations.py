@@ -4615,6 +4615,18 @@ class LocalTestCase(BZFSTestCase):
             use_jobrunner=True,
         )
 
+        # monitoring says critical (but with zero exit code b/c of dont-crit) as there is no dst snapshot:
+        self.assertEqual(0, len(snapshots(dst_root_dataset)))
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"crit": "60 seconds"}}}}
+        self.run_bzfs(
+            "--monitor-dst-snapshots",
+            "--monitor-snapshots-dont-crit",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            use_jobrunner=True,
+        )
+
         # replicate from src to dst:
         self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
         self.assertEqual(1, len(snapshots(src_root_dataset)))
@@ -4637,7 +4649,8 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
         # monitoring says latest dst snapshots aren't stale:
-        self.run_bzfs("--verbose", "--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
+        self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
+        self.run_bzfs("--quiet", "--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
 
         # next iteration: create another src snapshot
         self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
