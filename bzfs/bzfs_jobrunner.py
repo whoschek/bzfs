@@ -51,20 +51,26 @@ and pruning, across source host and multiple destination hosts, using a single s
 Typically, a cron job on the source host runs `{prog_name}` periodically to create new snapshots (via --create-src-snapshots) 
 and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and --prune-src-bookmarks), whereas 
 another cron job on the destination host runs `{prog_name}` periodically to prune outdated destination snapshots (via 
---prune-dst-snapshots). Yet another cron job runs `{prog_name}` periodically to replicate the recently created snapshots from 
-the source to the destination (via --replicate). The frequency of these periodic activities can vary by activity, and is 
-typically every second, minute, hour, day, week, month and/or year (or multiples thereof).
+--prune-dst-snapshots), and to replicate the recently created snapshots from the source to the destination (via --replicate).
+Yet another cron job on both source and destination runs `{prog_name}` periodically to alert the user if the latest snapshot 
+is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these periodic activities can
+vary by activity, and is typically every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the 
 source host and all destination hosts, and add crontab entries or systemd timers or similar, along these lines: 
 
 * crontab on source host:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks --monitor-src-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks`
+
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-src-snapshots`
+ 
 
 * crontab on destination host(s):
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots --monitor-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots`
+
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-dst-snapshots`
 
 ### High Frequency Replication (Experimental Feature)
 
