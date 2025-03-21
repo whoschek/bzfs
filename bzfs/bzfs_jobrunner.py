@@ -273,6 +273,7 @@ class Job:
         src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
         src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
         dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
+        monitor_snapshot_plan = ast.literal_eval(args.monitor_snapshot_plan)
         src_host = args.src_host
         assert src_host, "--src-host must not be empty!"
         localhostname = args.localhost if args.localhost else socket.gethostname()
@@ -280,7 +281,6 @@ class Job:
         dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
         retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
-        monitor_snapshot_plan = ast.literal_eval(args.monitor_snapshot_plan)
         jobid = sanitize(args.jobid)
 
         def validate_localhost_dst_hosts():
@@ -373,11 +373,19 @@ class Job:
             if len(opts) > old_len_opts:
                 self.run_cmd(["bzfs"] + opts)
 
-        def monitor_snapshots_opts() -> List[str]:
+        def monitor_snapshots_opts(tag: str) -> List[str]:
             opts = [f"--monitor-snapshots={monitor_snapshot_plan}", "--skip-replication"]
             opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
+            opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
             opts += [f"--log-file-suffix={sep}{jobid}{sep}"]
+            opts += unknown_args + ["--"]
             return opts
+
+        if args.monitor_src_snapshots:
+            opts = monitor_snapshots_opts("monitor-src-snapshots")
+            for src, dst in args.root_dataset_pairs:
+                opts += [dummy_dataset, src]
+            self.run_cmd(["bzfs"] + opts)
 
         if args.monitor_dst_snapshots:
             validate_localhost_dst_hosts()
@@ -388,23 +396,13 @@ class Job:
                 org: {target: periods for target, periods in target_periods.items() if target in targets}
                 for org, target_periods in monitor_snapshot_plan.items()
             }
-            opts = monitor_snapshots_opts()
-            opts += [f"--log-file-prefix={prog_name}{sep}monitor-dst-snapshots{sep}"]
-            opts += unknown_args + ["--"]
+            opts = monitor_snapshots_opts("monitor-dst-snapshots")
             old_len_opts = len(opts)
             pairs = [(dummy_dataset, resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
             for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                 opts += [src, dst]
             if len(opts) > old_len_opts:
                 self.run_cmd(["bzfs"] + opts)
-
-        if args.monitor_src_snapshots:
-            opts = monitor_snapshots_opts()
-            opts += [f"--log-file-prefix={prog_name}{sep}monitor-src-snapshots{sep}"]
-            opts += unknown_args + ["--"]
-            for src, dst in args.root_dataset_pairs:
-                opts += [dummy_dataset, src]
-            self.run_cmd(["bzfs"] + opts)
 
         ex = self.first_exception
         if isinstance(ex, subprocess.CalledProcessError):
@@ -486,7 +484,7 @@ def validate_dst_hosts(dst_hosts: Dict) -> Dict:
 
 
 def sanitize(filename: str) -> str:
-    return filename.replace("..", "!").replace("/", "!").replace("\\", "!")
+    return filename.strip().replace(" ", "!").replace("..", "!").replace("/", "!").replace("\\", "!")
 
 
 def format_dict(dictionary) -> str:
