@@ -260,13 +260,16 @@ class Job:
         self.first_exception = None
         self.log = log if log is not None else get_logger()
         self.bzfs = load_module("bzfs")
+        self.bzfs_argument_parser = self.bzfs.argument_parser()
+        self.argument_parser = argument_parser()
 
     def run_main(self, sys_argv: List[str]) -> None:
+        self.first_exception = None
         self.log.info(
             "WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."
         )
         self.log.info("CLI arguments: %s", " ".join(sys_argv))
-        args, unknown_args = argument_parser().parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
+        args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
         src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
         src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
         dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
@@ -412,7 +415,7 @@ class Job:
 
     def run_cmd(self, cmd: List[str]) -> None:
         try:
-            self.bzfs.run_main(self.bzfs.argument_parser().parse_args(cmd[1:]), cmd)
+            self.bzfs.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
         except BaseException as e:
             if self.first_exception is None:
                 self.first_exception = e
