@@ -275,6 +275,14 @@ class Job:
         monitor_snapshot_plan = ast.literal_eval(args.monitor_snapshot_plan)
         jobid = sanitize(args.jobid)
 
+        def validate_localhost_dst_hosts():
+            assert localhostname in dst_hosts, f"Hostname '{localhostname}' missing in --dst-hosts: {dst_hosts}"
+
+        def validate_localhost_retain_dst_targets():
+            assert (
+                localhostname in retain_dst_targets
+            ), f"Hostname '{localhostname}' missing in --retain-dst-targets: {retain_dst_targets}"
+
         def resolve_dst_dataset(dst_dataset: str, dst_hostname: str) -> str:
             root_dataset = dst_root_datasets.get(dst_hostname)
             assert root_dataset is not None, f"Hostname '{dst_hostname}' missing in --dst-root-datasets: {dst_root_datasets}"
@@ -289,7 +297,7 @@ class Job:
             self.run_cmd(["bzfs"] + opts)
 
         if args.replicate == "pull":  # pull mode (recommended)
-            assert localhostname in dst_hosts, f"Hostname '{localhostname}' missing in --dst-hosts: {dst_hosts}"
+            validate_localhost_dst_hosts()
             targets = dst_hosts[localhostname]
             opts = self.replication_opts(dst_snapshot_plan, "pull", set(targets), src_host, localhostname, jobid)
             if len(opts) > 0:
@@ -338,9 +346,7 @@ class Job:
 
         if args.prune_dst_snapshots:
             assert retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
-            assert (
-                localhostname in retain_dst_targets
-            ), f"Hostname '{localhostname}' missing in --retain-dst-targets: {retain_dst_targets}"
+            validate_localhost_retain_dst_targets()
             retain_targets = set(retain_dst_targets[localhostname])
             dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
                 org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
@@ -366,11 +372,9 @@ class Job:
             return opts
 
         if args.monitor_dst_snapshots:
-            assert localhostname in dst_hosts, f"Hostname '{localhostname}' missing in --dst-hosts: {dst_hosts}"
+            validate_localhost_dst_hosts()
+            validate_localhost_retain_dst_targets()
             targets = set(dst_hosts[localhostname])
-            assert (
-                localhostname in retain_dst_targets
-            ), f"Hostname '{localhostname}' missing in --retain-dst-targets: {retain_dst_targets}"
             targets = targets.intersection(set(retain_dst_targets[localhostname]))
             monitor_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
                 org: {target: periods for target, periods in target_periods.items() if target in targets}

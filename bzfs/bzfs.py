@@ -962,10 +962,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "can be deleted.\n\n"
              "*Note:* Use --delete-empty-dst-datasets=snapshots to delete snapshot-less datasets even if they still "
              "contain bookmarks.\n\n")
-    cmp_choices_dflt = "+".join(cmp_choices_items)
-    cmp_choices: List[str] = []
-    for i in range(0, len(cmp_choices_items)):
-        cmp_choices += map(lambda item: "+".join(item), itertools.combinations(cmp_choices_items, i + 1))
     monitor_snapshot_plan_example = {
         "prod": {
             "onsite": {
@@ -1002,6 +998,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--monitor-snapshots-dont-crit", action="store_true",
         help="Log a message for monitoring criticals but nonetheless exit with zero exit code.\n\n")
+    cmp_choices_dflt = "+".join(cmp_choices_items)
+    cmp_choices: List[str] = []
+    for i in range(0, len(cmp_choices_items)):
+        cmp_choices += map(lambda item: "+".join(item), itertools.combinations(cmp_choices_items, i + 1))
     parser.add_argument(
         "--compare-snapshot-lists", choices=cmp_choices, default=None, const=cmp_choices_dflt, nargs="?",
         help="Do nothing if the --compare-snapshot-lists option is missing. Otherwise, after successful replication "
