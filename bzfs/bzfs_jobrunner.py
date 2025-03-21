@@ -23,11 +23,15 @@
 
 import argparse
 import ast
+import importlib.util
 import logging
+import os
+import shutil
 import socket
 import subprocess
 import sys
 import uuid
+from importlib.machinery import SourceFileLoader
 from typing import Dict, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
@@ -255,6 +259,7 @@ class Job:
     def __init__(self, log: Optional[logging.Logger] = None):
         self.first_exception = None
         self.log = log if log is not None else get_logger()
+        self.bzfs = load_module("bzfs")
 
     def run_main(self, sys_argv: List[str]) -> None:
         self.log.info(
@@ -401,12 +406,14 @@ class Job:
         ex = self.first_exception
         if isinstance(ex, subprocess.CalledProcessError):
             sys.exit(ex.returncode)
+        if isinstance(ex, SystemExit):
+            raise ex
         ex is None or sys.exit(die_status)
 
     def run_cmd(self, cmd) -> None:
         try:
-            subprocess.run(cmd, stdin=DEVNULL, text=True, check=True)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+            self.bzfs.run_main(self.bzfs.argument_parser().parse_args(cmd[1:]), cmd)
+        except BaseException as e:
             if self.first_exception is None:
                 self.first_exception = e
             self.log.error("%s", str(e))  # log exception and keep on trucking
@@ -481,6 +488,17 @@ def sanitize(filename: str) -> str:
 
 def format_dict(dictionary) -> str:
     return f'"{dictionary}"'
+
+
+def load_module(progname: str):
+    prog_path = shutil.which(progname)
+    assert prog_path, f"{progname}: command not found on PATH"
+    prog_path = os.path.realpath(prog_path)
+    loader = SourceFileLoader(progname, prog_path)
+    spec = importlib.util.spec_from_loader(progname, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
 
 
 def get_logger() -> logging.Logger:

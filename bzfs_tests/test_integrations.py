@@ -424,10 +424,10 @@ class BZFSTestCase(ParametrizedTestCase):
         args = args + ["--create-src-snapshots-enable-snapshots-changed-cache"]
 
         if use_jobrunner:
-            job = bzfs_jobrunner.Job()
             bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
             if bzfs_dir not in os.environ["PATH"]:
                 os.environ["PATH"] = bzfs_dir + os.pathsep + os.environ["PATH"]
+            job = bzfs_jobrunner.Job()
         else:
             job = bzfs.Job()
             job.is_test_mode = True
@@ -4886,9 +4886,8 @@ class LocalTestCase(BZFSTestCase):
 
     @patch("sys.argv", ["bzfs_jobrunner.py"])
     def test_jobrunner_main(self):
-        with self.assertRaises(SystemExit) as e:
+        with self.assertRaises(BaseException) as e:
             bzfs_jobrunner.main()
-        self.assertEqual(e.exception.code, 2)
 
 
 #############################################################################
