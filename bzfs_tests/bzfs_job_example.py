@@ -128,8 +128,8 @@ org = "prod"
 #         "hotspare": {"secondly": 40, "minutely": 40, "hourly": 36, "daily": 31},
 #     },
 #     "test": {
-#         "offsite": {"12hourly": 14, "weekly": 12},
-#         "onsite": {"100millisecondly": 40},
+#         "offsite": {"12hourly": 14, "weekly": 12},  # take snapshots every 12 hours, and weekly
+#         "onsite": {"100millisecondly": 40},  # take snapshots every 100 milliseconds
 #     },
 # }
 # src_snapshot_plan = {  # empty string as target name is ok

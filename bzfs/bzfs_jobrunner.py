@@ -263,11 +263,11 @@ def main():
 #############################################################################
 class Job:
     def __init__(self, log: Optional[logging.Logger] = None):
-        self.first_exception = None
         self.log = log if log is not None else get_logger()
         self.bzfs = load_module("bzfs")
         self.bzfs_argument_parser = self.bzfs.argument_parser()
         self.argument_parser = argument_parser()
+        self.first_exception = None
 
     def run_main(self, sys_argv: List[str]) -> None:
         self.first_exception = None
