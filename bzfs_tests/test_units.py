@@ -3602,9 +3602,9 @@ def dummy_fn_ordered(cmd, batch):
 
 
 def dummy_fn_unordered(cmd, batch):
-    if cmd[0] == "zlist1":
+    if cmd[0] == "zfslist1":
         time.sleep(0.2)
-    elif cmd[0] == "zlist2":
+    elif cmd[0] == "zfslist2":
         time.sleep(0.1)
     return cmd, batch
 
@@ -3616,11 +3616,11 @@ def dummy_fn_raise(cmd, batch):
 
 
 def dummy_fn_race(cmd, batch):
-    if cmd[0] == "zlist1":
+    if cmd[0] == "zfslist1":
         time.sleep(0.3)
-    elif cmd[0] == "zlist2":
+    elif cmd[0] == "zfslist2":
         time.sleep(0.2)
-    elif cmd[0] == "zlist3":
+    elif cmd[0] == "zfslist3":
         time.sleep(0.1)
     return cmd, batch
 
@@ -3641,21 +3641,21 @@ class TestItrSSHCmdParallel(unittest.TestCase):
         self.r = job.src
 
         # Test data with max_batch_items=2
-        self.cmd_args_list_2 = [(["zlist1"], ["d1", "d2", "d3", "d4"]), (["zlist2"], ["d5", "d6", "d7", "d8"])]
+        self.cmd_args_list_2 = [(["zfslist1"], ["d1", "d2", "d3", "d4"]), (["zfslist2"], ["d5", "d6", "d7", "d8"])]
         self.expected_ordered_2 = [
-            (["zlist1"], ["d1", "d2"]),
-            (["zlist1"], ["d3", "d4"]),
-            (["zlist2"], ["d5", "d6"]),
-            (["zlist2"], ["d7", "d8"]),
+            (["zfslist1"], ["d1", "d2"]),
+            (["zfslist1"], ["d3", "d4"]),
+            (["zfslist2"], ["d5", "d6"]),
+            (["zfslist2"], ["d7", "d8"]),
         ]
 
         # Test data with max_batch_items=3
-        self.cmd_args_list_3 = [(["zlist1"], ["a1", "a2", "a3", "a4"]), (["zlist2"], ["b1", "b2", "b3", "b4", "b5"])]
+        self.cmd_args_list_3 = [(["zfslist1"], ["a1", "a2", "a3", "a4"]), (["zfslist2"], ["b1", "b2", "b3", "b4", "b5"])]
         self.expected_ordered_3 = [
-            (["zlist1"], ["a1", "a2", "a3"]),
-            (["zlist1"], ["a4"]),
-            (["zlist2"], ["b1", "b2", "b3"]),
-            (["zlist2"], ["b4", "b5"]),
+            (["zfslist1"], ["a1", "a2", "a3"]),
+            (["zfslist1"], ["a4"]),
+            (["zfslist2"], ["b1", "b2", "b3"]),
+            (["zfslist2"], ["b4", "b5"]),
         ]
 
     def tearDown(self):
@@ -3709,14 +3709,14 @@ class TestItrSSHCmdParallel(unittest.TestCase):
 
     def test_unordered_thread_scheduling(self):
         cmd_args_list = [
-            (["zlist1"], ["a1"]),
-            (["zlist2"], ["b1"]),
-            (["zlist3"], ["c1"]),
+            (["zfslist1"], ["a1"]),
+            (["zfslist2"], ["b1"]),
+            (["zfslist3"], ["c1"]),
         ]
         expected_ordered = [
-            (["zlist1"], ["a1"]),
-            (["zlist2"], ["b1"]),
-            (["zlist3"], ["c1"]),
+            (["zfslist1"], ["a1"]),
+            (["zfslist2"], ["b1"]),
+            (["zfslist3"], ["c1"]),
         ]
         unordered_results = list(
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_race, max_batch_items=1, ordered=False)
@@ -3732,16 +3732,16 @@ class TestItrSSHCmdParallel(unittest.TestCase):
         self.assertEqual(results, [])
 
     def test_cmd_with_empty_arguments_ordered(self):
-        cmd_args_list = [(["zlist1"], []), (["zlist2"], ["d1", "d2"])]
-        expected_ordered = [(["zlist2"], ["d1", "d2"])]
+        cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
+        expected_ordered = [(["zfslist2"], ["d1", "d2"])]
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=True)
         )
         self.assertEqual(results, expected_ordered)
 
     def test_cmd_with_empty_arguments_unordered(self):
-        cmd_args_list = [(["zlist1"], []), (["zlist2"], ["d1", "d2"])]
-        expected_ordered = [(["zlist2"], ["d1", "d2"])]
+        cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
+        expected_ordered = [(["zfslist2"], ["d1", "d2"])]
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)
         )
