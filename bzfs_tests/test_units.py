@@ -3705,7 +3705,7 @@ class TestItrSSHCmdParallel(unittest.TestCase):
         except ValueError as e:
             caught_exception = True
             self.assertEqual(str(e), "Intentional failure")
-        self.assertTrue(caught_exception, "Expected exception was not raised in unordered mode.")
+        self.assertTrue(caught_exception, "Expected exception was not raised in unordered mode..")
 
     def test_unordered_thread_scheduling(self):
         cmd_args_list = [
