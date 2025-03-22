@@ -242,7 +242,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
-    parser.add_argument("root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
+    parser.add_argument("--root-dataset-pairs", required=True, nargs="+", action=DatasetPairsAction,
+        metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
              "auto-appended later).\n\n")
     return parser

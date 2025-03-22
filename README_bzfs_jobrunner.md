@@ -131,21 +131,12 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
                       [--daemon-monitor-snapshots-frequency STRING]
-                      SRC_DATASET DST_DATASET
+                      --root-dataset-pairs SRC_DATASET DST_DATASET
                       [SRC_DATASET DST_DATASET ...]
 ```
 <!-- END HELP OVERVIEW SECTION -->
 
 <!-- BEGIN HELP DETAIL SECTION -->
-<div id="SRC_DATASET_DST_DATASET"></div>
-
-**SRC_DATASET DST_DATASET**
-
-*  Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
-    all be auto-appended later).
-
-
-
 <div id="--create-src-snapshots"></div>
 
 **--create-src-snapshots**
@@ -398,3 +389,12 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 *  Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is
     nonzero.
+
+<!-- -->
+
+<div id="--root-dataset-pairs"></div>
+
+**--root-dataset-pairs** *SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]*
+
+*  Source and destination dataset pairs (excluding usernames and excluding hostnames, which will
+    all be auto-appended later).

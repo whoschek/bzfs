@@ -280,5 +280,5 @@ cmd += [f"--src-snapshot-plan={src_snapshot_plan}"]
 cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
 cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
 cmd += [f"--monitor-snapshot-plan={monitor_snapshot_plan}"]
-cmd += extra_args + unknown_args + ["--"] + root_dataset_pairs
+cmd += extra_args + unknown_args + ["--root-dataset-pairs"] + root_dataset_pairs
 sys.exit(subprocess.run(cmd, text=True).returncode)

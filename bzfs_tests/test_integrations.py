@@ -4571,6 +4571,7 @@ class LocalTestCase(BZFSTestCase):
         }
         monitor_src_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warn": "1 hours", "crit": "2 hours"}}}}
         args = [
+            "--root-dataset-pairs",
             src_root_dataset,
             dst_root_dataset,
             f"--src-host={src_host}",
@@ -4666,7 +4667,8 @@ class LocalTestCase(BZFSTestCase):
         # replication to nonexistingpool destination pool does nothing:
         self.run_bzfs(
             "--replicate=pull",
-            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[2:]),
+            "--root-dataset-pairs",
+            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
             use_jobrunner=True,
         )
         self.assertEqual(2, len(snapshots(src_root_dataset)))
@@ -4718,7 +4720,8 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             "--monitor-dst-snapshots",
             f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args_no_monitoring[2:]),
+            "--root-dataset-pairs",
+            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args_no_monitoring[3:]),
             use_jobrunner=True,
         )
 
@@ -4741,7 +4744,8 @@ class LocalTestCase(BZFSTestCase):
         # pruning a nonexistingpool destination pool does nothing:
         self.run_bzfs(
             "--prune-dst-snapshots",
-            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[2:]),
+            "--root-dataset-pairs",
+            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
             use_jobrunner=True,
         )
         self.assertEqual(1, len(snapshots(src_root_dataset)))
@@ -4808,7 +4812,8 @@ class LocalTestCase(BZFSTestCase):
         # Forgetting to specify src dataset (or dst dataset) will cause failure:
         self.run_bzfs(
             "--create-src-snapshots",
-            *(push_args[1:]),  # Each SRC_DATASET must have a corresponding DST_DATASET
+            "--root-dataset-pairs",
+            *(push_args[2:]),  # Each SRC_DATASET must have a corresponding DST_DATASET
             use_jobrunner=True,
             expected_status=2,
         )
@@ -4843,6 +4848,7 @@ class LocalTestCase(BZFSTestCase):
         dst_snapshot_plan = {"z": {"": {"yearly": 1, "daily": 0}}}
         src_bookmark_plan = dst_snapshot_plan
         args = [
+            "--root-dataset-pairs",
             src_root_dataset,
             dst_root_dataset,
             f"--src-host={src_host}",

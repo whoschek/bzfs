@@ -85,7 +85,7 @@ def main():
     # Step 4: Replace Description Section
     # Step 4a: Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
     begin_desc_markdown_tag = "# DESCRIPTION"
-    begin_help_markdown_tag = "**SRC_DATASET"
+    begin_help_markdown_tags = ["**SRC_DATASET", "**--create-src-snapshots"]
     begin_desc_markdown_idx = find_match(
         manpage,
         lambda line: line.startswith(begin_desc_markdown_tag),
@@ -93,9 +93,9 @@ def main():
     )
     begin_help_markdown_idx = find_match(
         manpage,
-        lambda line: begin_help_markdown_tag in line,
+        lambda line: any(tag in line for tag in begin_help_markdown_tags),
         start=begin_desc_markdown_idx,
-        raises=f"{begin_help_markdown_tag} not found in the cleaned markdown",
+        raises=f"{begin_help_markdown_tags} not found in the cleaned markdown",
     )
     replacement = "".join(manpage[begin_desc_markdown_idx + 1 : begin_help_markdown_idx]).strip()
 
@@ -143,8 +143,8 @@ def main():
     # Step 6: Replace Usage Details Section
     begin_help_markdown_idx = find_match(
         manpage,
-        lambda line: begin_help_markdown_tag in line,
-        raises=f"Marker {begin_help_markdown_tag} not found in cleaned markdown.",
+        lambda line: any(tag in line for tag in begin_help_markdown_tags),
+        raises=f"Marker {begin_help_markdown_tags} not found in cleaned markdown.",
     )
     begin_help_readme_tag = "<!-- BEGIN HELP DETAIL SECTION -->"
     begin_help_readme_idx = find_match(
