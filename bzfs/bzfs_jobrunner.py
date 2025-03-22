@@ -500,12 +500,15 @@ def format_dict(dictionary) -> str:
 def load_module(progname: str):
     prog_path = shutil.which(progname)
     assert prog_path, f"{progname}: command not found on PATH"
-    prog_path = os.path.realpath(prog_path)
+    prog_path = os.path.realpath(prog_path)  # resolve symlink, if any
     loader = SourceFileLoader(progname, prog_path)
     spec = importlib.util.spec_from_loader(progname, loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)
-    return module
+    if hasattr(module, "run_main"):
+        return module
+    else:  # It's a wrapper script that was installed as a package by 'pip install'; load that installed package
+        return importlib.import_module(f"{progname}.{progname}")
 
 
 def get_logger() -> logging.Logger:
