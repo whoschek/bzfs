@@ -208,8 +208,11 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--exclude-dataset-regex=bar.*"]
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
-# extra_args += ["--zfs-send-program-opts=''"]
-# extra_args += ["--zfs-recv-program-opts=''"]
+# extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]  # this is already the default anyway
+# extra_args += ["--zfs-send-program-opts="]  # run 'zfs send' without options
+# extra_args += ["--zfs-recv-program-opts=-u"]  # this is already the default anyway
+# extra_args += ["--zfs-recv-program-opts=-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption"]
+# extra_args += ["--zfs-recv-program-opts="]  # run 'zfs receive' without options
 # extra_args += ["--force-rollback-to-latest-snapshot"]
 # extra_args += ["--force-rollback-to-latest-common-snapshot"]
 # extra_args += ["--force"]
@@ -217,7 +220,9 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--force-unmount"]
 # extra_args += ["--force-once"]
 # extra_args += ["--skip-parent"]
-# extra_args += ["--skip-missing-snapshots=xyz"]
+# extra_args += ["--skip-missing-snapshots=dataset"]
+# extra_args += ["--skip-missing-snapshots=fail"]
+# extra_args += ["--skip-missing-snapshots=continue"]
 # extra_args += ["--retries=2"]
 # extra_args += ["--retry-min-sleep-secs=0.125"]
 # extra_args += ["--retry-max-sleep-secs=300"]
