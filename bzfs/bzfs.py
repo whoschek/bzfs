@@ -2146,7 +2146,7 @@ class Job:
         self.control_persist_margin_secs: int = 2
         self.progress_reporter: ProgressReporter = None
         self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
-        self.replication_start_time_nanos: int = time.time_ns()
+        self.replication_start_time_nanos: int = time.monotonic_ns()
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix = ""  # for testing only
@@ -2237,10 +2237,10 @@ class Job:
             self.remote_conf_cache = {}
             self.isatty = self.isatty if self.isatty is not None else p.isatty
             self.validate_once()
-            self.replication_start_time_nanos = time.time_ns()
+            self.replication_start_time_nanos = time.monotonic_ns()
             self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
             try:
-                daemon_stoptime_nanos = time.time_ns() + p.daemon_lifetime_nanos
+                daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
                 while True:
                     self.progress_reporter.reset()
                     src, dst = p.src, p.dst
@@ -2301,7 +2301,7 @@ class Job:
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
 
     def sleep_until_next_daemon_iteration(self, daemon_stoptime_nanos: int) -> bool:
-        sleep_nanos = daemon_stoptime_nanos - time.time_ns()
+        sleep_nanos = daemon_stoptime_nanos - time.monotonic_ns()
         if sleep_nanos <= 0:
             return False
         self.progress_reporter.pause()
@@ -2321,11 +2321,11 @@ class Job:
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), f" ... [Log {p.log_params.log_file}]")
         time.sleep(sleep_nanos / 1_000_000_000)
         config.current_datetime = datetime.now(config.tz)
-        return daemon_stoptime_nanos - time.time_ns() > 0
+        return daemon_stoptime_nanos - time.monotonic_ns() > 0
 
     def print_replication_stats(self, start_time_nanos: int):
         p, log = self.params, self.params.log
-        elapsed_nanos = time.time_ns() - start_time_nanos
+        elapsed_nanos = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
             sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
@@ -2558,7 +2558,7 @@ class Job:
             )
             self.num_snapshots_found = 0
             self.num_snapshots_replicated = 0
-            start_time_nanos = time.time_ns()
+            start_time_nanos = time.monotonic_ns()
             # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
             failed = self.process_datasets_in_parallel_and_fault_tolerant(
                 src_datasets,
@@ -2571,7 +2571,7 @@ class Job:
             log.info(
                 p.dry("Replication done: %s"),
                 f"{task_description} [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots"
-                f" within {len(src_datasets)} datasets; took {human_readable_duration(time.time_ns() - start_time_nanos)}]",
+                f" within {len(src_datasets)} datasets; took {human_readable_duration(time.monotonic_ns() - start_time_nanos)}]",
             )
 
         if failed or not (
@@ -2672,7 +2672,7 @@ class Job:
 
             # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
             if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
-                starttime_nanos = time.time_ns()
+                starttime_nanos = time.monotonic_ns()
                 failed = self.process_datasets_in_parallel_and_fault_tolerant(
                     dst_datasets,
                     process_dataset=delete_destination_snapshots,  # lambda
@@ -2682,7 +2682,7 @@ class Job:
                 log.info(
                     p.dry("--delete-dst-snapshots: %s"),
                     task_description + f" [Deleted {num_snapshots_deleted} out of {num_snapshots_found} {kind}s "
-                    f"within {len(dst_datasets)} datasets; took {human_readable_duration(time.time_ns() - starttime_nanos)}]",
+                    f"within {len(dst_datasets)} datasets; took {human_readable_duration(time.monotonic_ns() - starttime_nanos)}]",
                 )
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
@@ -3405,7 +3405,7 @@ class Job:
             if self.is_first_replication_task.get_and_set(False):
                 if self.isatty and not p.quiet:
                     self.progress_reporter.start()
-                self.replication_start_time_nanos = time.time_ns()
+                self.replication_start_time_nanos = time.monotonic_ns()
             if self.isatty and not p.quiet:
                 self.progress_reporter.enqueue_pv_log_file(pv_log_file)
             pv_program_opts = p.pv_program_opts
@@ -3483,7 +3483,7 @@ class Job:
         # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
         # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
         control_persist_limit_nanos = (self.control_persist_secs - self.control_persist_margin_secs) * 1_000_000_000
-        now = time.time_ns()  # no real need to compute this inside the critical section of conn.lock
+        now = time.monotonic_ns()  # no real need to compute this inside the critical section of conn.lock
         with conn.lock:
             if now - conn.last_refresh_time < control_persist_limit_nanos:
                 return  # ssh master is alive, reuse its TCP connection (this is the common case & the ultra-fast path)
@@ -3507,7 +3507,7 @@ class Job:
                         f"first, considering diagnostic log file output from running {prog_name} with: "
                         "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                     )
-            conn.last_refresh_time = time.time_ns()
+            conn.last_refresh_time = time.monotonic_ns()
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
@@ -3925,12 +3925,12 @@ class Job:
         max_sleep_mark = policy.min_sleep_nanos
         retry_count = 0
         sysrandom = None
-        start_time_nanos = time.time_ns()
+        start_time_nanos = time.monotonic_ns()
         while True:
             try:
                 return fn(*args, **kwargs, retry=Retry(retry_count))  # Call the target function with provided args
             except RetryableError as retryable_error:
-                elapsed_nanos = time.time_ns() - start_time_nanos
+                elapsed_nanos = time.monotonic_ns() - start_time_nanos
                 if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
                     retry_count += 1
                     if retryable_error.no_sleep and retry_count <= 1:
@@ -4302,6 +4302,7 @@ class Job:
                     end = label.suffix
                     startlen = len(start)
                     endlen = len(end)
+                    time.monotonic()
                     minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
                     year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
                     creation_unixtime: int = 0
@@ -4693,11 +4694,11 @@ class Job:
         p, log = self.params, self.params.log
 
         def _process_dataset(dataset: str, tid: str):
-            start_time_nanos = time.time_ns()
+            start_time_nanos = time.monotonic_ns()
             try:
                 return self.run_with_retries(p.retry_policy, process_dataset, dataset, tid)
             finally:
-                elapsed_nanos = time.time_ns() - start_time_nanos
+                elapsed_nanos = time.monotonic_ns() - start_time_nanos
                 log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
 
         def build_dataset_tree_and_find_roots() -> List[Tuple[str, Tree]]:
@@ -5379,11 +5380,11 @@ class ProgressReporter:
                 is_resetting = self.is_resetting
                 self.is_resetting = False
             if is_pausing:
-                next_update_nanos = time.time_ns() + 1000 * 365 * 86400 * 1_000_000_000  # infinity
+                next_update_nanos = time.monotonic_ns() + 1000 * 365 * 86400 * 1_000_000_000  # infinity
             if is_resetting:
                 sent_bytes, last_status_len = 0, 0
                 num_lines, num_readables = 0, 0
-                start_time_nanos = time.time_ns()
+                start_time_nanos = time.monotonic_ns()
                 next_update_nanos = start_time_nanos + update_interval_nanos
                 latest_samples: Deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measurements
             for pv_log_file in local_file_name_queue:
@@ -5395,7 +5396,7 @@ class ProgressReporter:
                 etas.append(eta)
             readables = selector.select(timeout=0)  # 0 indicates "don't block"
             has_line = False
-            curr_time_nanos = time.time_ns()
+            curr_time_nanos = time.monotonic_ns()
             for selector_key, _ in readables:  # for each file that's ready for non-blocking read
                 num_readables += 1
                 key: selectors.SelectorKey = selector_key
@@ -5489,10 +5490,10 @@ class InterruptibleSleep:
 
     def sleep(self, duration_nanos: int) -> None:
         """Delays the current thread by the given number of nanoseconds."""
-        end_time_nanos = time.time_ns() + duration_nanos
+        end_time_nanos = time.monotonic_ns() + duration_nanos
         with self._lock:
             while not self.is_stopping:
-                duration_nanos = end_time_nanos - time.time_ns()
+                duration_nanos = end_time_nanos - time.monotonic_ns()
                 if duration_nanos <= 0:
                     return
                 self._condition.wait(timeout=duration_nanos / 1_000_000_000)  # release, then block until notified or timeout
