@@ -223,14 +223,16 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--force-unmount"]
 # extra_args += ["--force-once"]
 # extra_args += ["--skip-parent"]
-# extra_args += ["--skip-missing-snapshots=dataset"]
+# extra_args += ["--skip-missing-snapshots=dataset"]  # this is already the default anyway
 # extra_args += ["--skip-missing-snapshots=fail"]
 # extra_args += ["--skip-missing-snapshots=continue"]
 # extra_args += ["--retries=2"]
 # extra_args += ["--retry-min-sleep-secs=0.125"]
 # extra_args += ["--retry-max-sleep-secs=300"]
 # extra_args += ["--retry-max-elapsed-secs=3600"]
-# extra_args += ["--skip-on-error=dataset"]
+# extra_args += ["--skip-on-error=dataset"]  # this is already the default anyway
+# extra_args += ["--skip-on-error=fail"]
+# extra_args += ["--skip-on-error=tree"]
 # extra_args += ["--dryrun"]
 # extra_args += ["--verbose"]
 # extra_args += ["--quiet"]
@@ -241,6 +243,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--weekly_weekday=0"]  # take weekly snapshots on Sunday 2:00am (0=Sunday, 1=Monday, ..., 6=Saturday)
 # extra_args += ["--weekly_hour=2"]
 # extra_args += ["--weekly_minute=0"]
+# extra_args += ["--log-subdir=daily"]  # this is already the default anyway
 # extra_args += ["--log-subdir=hourly"]
 # extra_args += ["--log-subdir=minutely"]
 # ... and so on (include all other options from bzfs --help here too)

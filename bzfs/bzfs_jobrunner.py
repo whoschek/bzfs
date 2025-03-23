@@ -103,7 +103,7 @@ better: high frequency systemd timer) into multiple processes, using pull replic
 
 The daemon processes work like non-daemon processes except that they loop, handle time events and sleep between events, and 
 finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifetime`). The daemons will subsequently be 
-auto-restarted by 'cron', or earlier if they fail. While the daemons are running 'cron' will attempt to start new 
+auto-restarted by 'cron', or earlier if they fail. While the daemons are running, 'cron' will attempt to start new 
 (unnecessary) daemons but this is benign as these new processes immediately exit with a message like this: 
 "Exiting as same previous periodic job is still running without completion yet"
 """, formatter_class=argparse.RawTextHelpFormatter)
@@ -226,7 +226,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "latest snapshot named `prod_onsite_<timestamp>_secondly` is not less than 3 seconds old (warn) or not less "
              "than 15 seconds old (crit). Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
-             "the given snapshot name pattern.")
+             "the given snapshot name pattern.\n\n")
     parser.add_argument("--src-user", default="", metavar="STRING",
         help="SSH username on --src-host. Used if replicating in pull mode. Example: 'alice'\n\n")
     parser.add_argument("--dst-user", default="", metavar="STRING",
