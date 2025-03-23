@@ -37,7 +37,7 @@ submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in 
 the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
 """
 )
-_, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`
+known_args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`
 if len(unknown_args) == 0:
     print(
         "ERROR: Missing command. Usage: " + sys.argv[0] + " --create-src-snapshots|--replicate|--prune-src-snapshots|"
@@ -174,7 +174,7 @@ src_bookmark_plan = dst_snapshot_plan
 # monitor_snapshot_plan = {
 #     org: {
 #         "onsite": {
-#             "100millisecondly": {"warn": "400 milliseconds", "crit": "2 seconds"},
+#             "100millisecondly": {"warn": "750 milliseconds", "crit": "2 seconds"},
 #             "secondly": {"warn": "3 seconds", "crit": "15 seconds"},
 #             "minutely": {"warn": "90 seconds", "crit": "360 seconds"},
 #             "hourly": {"warn": "90 minutes", "crit": "360 minutes"},
@@ -186,7 +186,7 @@ src_bookmark_plan = dst_snapshot_plan
 #         "": {
 #             "daily": {"warn": "28 hours", "crit": "32 hours"},
 #         },
-#     }
+#     },
 # }
 monitor_snapshot_plan = {
     org: {
@@ -194,7 +194,7 @@ monitor_snapshot_plan = {
             "hourly": {"warn": "90 minutes", "crit": "360 minutes"},
             "daily": {"warn": "28 hours", "crit": "32 hours"},
         },
-    }
+    },
 }
 
 
@@ -205,10 +205,10 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--localhost=bak-us-west-1"]
 # extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
 # extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
-# extra_args += ["--include-dataset=foo"]  # see bzfs --help
-# extra_args += ["--exclude-dataset=bar"]
-# extra_args += ["--include-dataset-regex=foo.*"]
-# extra_args += ["--exclude-dataset-regex=bar.*"]
+# extra_args += ["--include-dataset", "foo", "zoo"]  # see bzfs --help
+# extra_args += ["--exclude-dataset", "bar", "baz"]
+# extra_args += ["--include-dataset-regex", "foo.*", "zoo.*"]
+# extra_args += ["--exclude-dataset-regex", "bar.*", "baz.*"]
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
 # extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]  # this is already the default anyway
@@ -254,10 +254,11 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--daemon-lifetime=300seconds"]  # daemon exits after this much time has elapsed
 # extra_args += ["--daemon-lifetime=86400seconds"]  # daemon exits after this much time has elapsed
 # extra_args += ["--daemon-replication-frequency=secondly"]  # replicate every second
-# extra_args += ["--daemon-replication-frequency=10secondly"]  # replicate every 10 seconds
-# extra_args += ["--daemon-prune-src-frequency=10secondly"]  # prune src snapshots and src bookmarks every 10 seconds
+# extra_args += ["--daemon-replication-frequency=750millisecondly"]  # replicate every 750 milliseconds
+# extra_args += ["--daemon-prune-src-frequency=5secondly"]  # prune src snapshots and src bookmarks every 5 seconds
 # extra_args += ["--daemon-prune-dst-frequency=10secondly"]  # prune dst snapshots every 10 seconds
-# extra_args += ["--daemon-monitor-snapshots-frequency=30secondly"]  # monitor snapshots every 30 seconds
+# extra_args += ["--daemon-monitor-snapshots-frequency=minutely"]  # monitor snapshots every minute
+# extra_args += ["--daemon-monitor-snapshots-frequency=secondly"]  # monitor snapshots every second
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds to snapshot names
 # extra_args += ["--create-src-snapshots-even-if-not-due"]  # nomore run 'zfs list -t snapshot' before snapshot creation
 # extra_args += ["--create-src-snapshots-enable-snapshots-changed-cache"]  # no 'zfs list -t snapshot' before snap creation
