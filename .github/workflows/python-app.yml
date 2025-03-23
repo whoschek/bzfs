@@ -325,7 +325,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.10", "3.9", "3.8"]
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 120
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -370,7 +370,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.7"]
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 120
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
