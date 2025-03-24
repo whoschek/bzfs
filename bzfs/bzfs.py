@@ -5023,30 +5023,34 @@ class Job:
     ) -> Generator[Any, None, None]:
         """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
+        assert isinstance(sep, str)
         # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
         max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
         fsenc = sys.getfilesystemencoding()
+        seplen = len(sep.encode(fsenc))
         conn_pool: ConnectionPool = self.params.connection_pools[r.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
         cmd = conn.ssh_cmd + cmd
         conn_pool.return_connection(conn)
         header_bytes: int = len(" ".join(cmd).encode(fsenc))
-        total_bytes: int = header_bytes
         batch: List[str] = []
+        total_bytes: int = header_bytes
+        max_items = max_batch_items
 
         def flush() -> Any:
             if len(batch) > 0:
                 return fn(batch)
 
         for cmd_arg in cmd_args:
-            curr_bytes = len(f"{sep}{cmd_arg}".encode(fsenc))
-            if total_bytes + curr_bytes > max_bytes or len(batch) >= max_batch_items:
+            curr_bytes = seplen + len(cmd_arg.encode(fsenc))
+            if total_bytes + curr_bytes > max_bytes or max_items <= 0:
                 results = flush()
                 if results is not None:
                     yield results
-                batch, total_bytes = [], header_bytes
+                batch, total_bytes, max_items = [], header_bytes, max_batch_items
             batch.append(cmd_arg)
             total_bytes += curr_bytes
+            max_items -= 1
         results = flush()
         if results is not None:
             yield results
@@ -6250,7 +6254,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
     # and https://github.com/openzfs/zfs/issues/8798
     # and (by now nomore accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
     if (
-        dataset in ["", ".", ".."]
+        dataset in ("", ".", "..")
         or "//" in dataset
         or dataset.startswith("/")
         or dataset.endswith("/")
@@ -6260,9 +6264,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or dataset.endswith("/..")
         or "/./" in dataset
         or "/../" in dataset
-        or '"' in dataset
-        or any(char in "'@#`%$^&*+=|,\\" for char in dataset)
-        or any(char.isspace() and char != " " for char in dataset)
+        or any(char in "'@#`%$^&*+=|,\\" or char == '"' or (char.isspace() and char != " ") for char in dataset)
         or not dataset[0].isalpha()
     ):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
