@@ -2221,7 +2221,7 @@ class Job:
                             for i in range(2 if self.max_command_line_bytes else 1):
                                 self.cleanup()
                         finally:
-                            unlink_missing_ok(lock_file)  # avoid accumulation of stale lock files
+                            Path(lock_file).unlink(missing_ok=True)  # avoid accumulation of stale lock files
         finally:
             reset_logger()
 
@@ -4470,9 +4470,9 @@ class Job:
             entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
                 entries,
                 key=lambda entry: (
-                    int(entry[1].cols[0]),
-                    int(entry[1].cols[2]),
-                    entry[1].cols[-1][entry[1].cols[-1].replace("#", "@").index("@") + 1 :],
+                    int((cols := entry[1].cols)[0]),
+                    int(cols[2]),
+                    (snapshot_name := cols[-1])[snapshot_name.replace("#", "@").index("@") + 1 :],
                 ),
             )
 
@@ -5450,8 +5450,7 @@ class ProgressReporter:
             line = line.split(":", 1)[1].strip()
             sent_bytes, line = pv_size_to_bytes(line)
             line = ProgressReporter.no_rates_regex.sub("", line.lstrip(), 1)  # remove pv --timer, --rate, --average-rate
-            match = ProgressReporter.time_remaining_eta_regex.fullmatch(line)  # extract pv --eta duration
-            if match:
+            if match := ProgressReporter.time_remaining_eta_regex.fullmatch(line):  # extract pv --eta duration
                 _, days, hours, minutes, secs, _ = match.groups()
                 time_remaining_secs = (86400 * int(days) if days else 0) + int(hours) * 3600 + int(minutes) * 60 + int(secs)
                 curr_time_nanos += time_remaining_secs * 1_000_000_000  # ETA timestamp = now + time remaining duration
@@ -5654,8 +5653,7 @@ def compile_regexes(regexes: List[str], suffix: str = "") -> RegexList:
                 regex = regex[0:-1]  # ok because all users of compile_regexes() call re.fullmatch()
             elif "$" in regex:
                 raise re.error("Must not use non-trailing '$' character", regex)
-        is_negation = regex.startswith("!")
-        if is_negation:
+        if is_negation := regex.startswith("!"):
             regex = regex[1:]
         regex = replace_capturing_groups_with_non_capturing_groups(regex)
         if regex != ".*" or not (suffix.startswith("(") and suffix.endswith(")?")):
@@ -5873,13 +5871,6 @@ def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> 
         log.log(level, "%s", value)
 
 
-def unlink_missing_ok(file: str) -> None:  # workaround for compat with python < 3.8
-    try:
-        Path(file).unlink()
-    except FileNotFoundError:
-        pass
-
-
 def set_last_modification_time(path: str, unixtime_in_secs: int, if_more_recent=False) -> None:
     if not os.path.exists(path):
         with open(path, "a"):
@@ -5930,8 +5921,7 @@ def get_timezone(tz_spec: str = None) -> tzinfo:
     elif tz_spec == "UTC":
         tz = timezone.utc
     else:
-        match = re.fullmatch(r"([+-])(\d\d):?(\d\d)", tz_spec)
-        if match:
+        if match := re.fullmatch(r"([+-])(\d\d):?(\d\d)", tz_spec):
             sign, hours, minutes = match.groups()
             offset = int(hours) * 60 + int(minutes)
             offset = -offset if sign == "-" else offset
@@ -6173,8 +6163,7 @@ pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s
 
 
 def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
-    match = pv_size_to_bytes_regex.fullmatch(size)
-    if match:
+    if match := pv_size_to_bytes_regex.fullmatch(size):
         number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
         i = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
@@ -6228,9 +6217,8 @@ def parse_dataset_locator(input_text: str, validate: bool = True, user: str = No
     user_host, dataset, pool = "", "", ""
 
     # Input format is [[user@]host:]dataset
-    #                      1234         5          6
-    match = re.fullmatch(r"(((([^@]*)@)?([^:]+)):)?(.*)", input_text, re.DOTALL)
-    if match:
+    #                          1234         5          6
+    if match := re.fullmatch(r"(((([^@]*)@)?([^:]+)):)?(.*)", input_text, re.DOTALL):
         if user_undefined:
             user = match.group(4) or ""
         if host_undefined:
@@ -6775,8 +6763,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
     def parse_rankranges(parser, values, option_string=None) -> List[RankRange]:
         def parse_rank(spec):
             spec = spec.strip()
-            match = re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)
-            if not match:
+            if not (match := re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)):
                 parser.error(f"{option_string}: Invalid rank format: {spec}")
             is_except = bool(match.group(1))
             kind = match.group(2)

@@ -33,6 +33,7 @@ import time
 import traceback
 import unittest
 from collections import Counter
+from pathlib import Path
 from unittest.mock import patch
 
 from bzfs import bzfs, bzfs_jobrunner
@@ -2382,7 +2383,7 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=bzfs.still_running_status)
                 self.assertTrue(os.path.exists(lock_file))
             finally:
-                bzfs.unlink_missing_ok(lock_file)  # avoid accumulation of stale lock files
+                Path(lock_file).unlink(missing_ok=True)  # avoid accumulation of stale lock files
                 self.assertFalse(os.path.exists(lock_file))
 
     def test_basic_replication_with_delegation_disabled(self):

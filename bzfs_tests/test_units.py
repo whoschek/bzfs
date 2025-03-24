@@ -447,15 +447,6 @@ class TestHelperFunctions(unittest.TestCase):
         for var in ["noColon", ":noName", "$n:v", "{:v", "}:v", "", "  ", "\t", "a\tb:v", "spa ce:v", '"k":v', "'k':v"]:
             self.assertIsNotNone(bzfs.validate_log_config_variable(var))
 
-    def test_unlink_missing_ok(self):
-        tmp_file_fd, tmp_file = tempfile.mkstemp(prefix="test_bzfs.tmpfile_")
-        os.close(tmp_file_fd)
-        self.assertTrue(os.path.exists(tmp_file))
-        bzfs.unlink_missing_ok(tmp_file)
-        self.assertFalse(os.path.exists(tmp_file))
-        bzfs.unlink_missing_ok(tmp_file)
-        self.assertFalse(os.path.exists(tmp_file))
-
     def test_has_siblings(self):
         self.assertFalse(bzfs.has_siblings([]))
         self.assertFalse(bzfs.has_siblings(["a"]))
