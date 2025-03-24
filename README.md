@@ -95,7 +95,7 @@ granted corresponding ZFS permissions by administrators via 'zfs allow' delegati
 
 bzfs is written in Python and continously runs a wide set of unit tests and integration tests to
 ensure coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris,
-on all Python versions >= 3.7 (including latest stable which is currently python-3.13).
+on all Python versions >= 3.8 (including latest stable which is currently python-3.13).
 
 bzfs is a stand-alone program with zero required dependencies, consisting of a single file, akin
 to a stand-alone shell script or binary executable. It is designed to be able to run in restricted
@@ -443,11 +443,11 @@ delete mode.
 * Continously tested on Linux, FreeBSD and Solaris.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
-deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently as every 
+deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently as every
 N milliseconds.
-* For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not 
-to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates 
-over the parallel replication tasks. 
+* For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not
+to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates
+over the parallel replication tasks.
 Example console status line:
 ```
 2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] 80% ETA 0:00:04 ETA 01:23:08
@@ -458,8 +458,8 @@ files, or scheduled via cron or similar. Does not require a daemon other than ub
 attempt to "abstract away" ZFS concepts and semantics. Keeps simple things simple, and makes complex things possible.
 * All ZFS and SSH commands (even in --dryrun mode) are logged such that they can be inspected, copy-and-pasted into
 a terminal/shell, and run manually to help anticipate or diagnose issues.
-* Supports snapshotting, replicating (or deleting) dataset subsets via powerful include/exclude regexes and other filters, 
-which can be combined into a mini filter pipeline. For example, can snapshot, replicate (or delete) all except temporary 
+* Supports snapshotting, replicating (or deleting) dataset subsets via powerful include/exclude regexes and other filters,
+which can be combined into a mini filter pipeline. For example, can snapshot, replicate (or delete) all except temporary
 datasets and private datasets. Can be told to do such deletions only if a corresponding source dataset does not exist.
 * Supports replicating (or deleting) snapshot subsets via powerful include/exclude regexes, time based filters, and
 oldest N/latest N filters, which can also be combined into a mini filter pipeline.
@@ -479,7 +479,7 @@ snapshots regardless of creation time. It can help to avoid accidental pruning o
 destination have in common.
     * Can be told to do such deletions only if a corresponding snapshot does not exist in the source dataset.
     * Optionally, deletions can specify which snapshots to retain instead of which snapshots to delete.
-    * Prints how many GB of disk space in total would be freed if the delete command were to be run for real without the 
+    * Prints how many GB of disk space in total would be freed if the delete command were to be run for real without the
 --dryrun flag.
 * Compare source and destination dataset trees recursively, in combination with snapshot filters and dataset filters.
 * Also supports replicating arbitrary dataset tree subsets by feeding it a list of flat datasets.
@@ -511,7 +511,7 @@ The script also demonstrates functioning installation steps on Ubuntu, FreeBSD, 
 The script also generates code coverage reports which are published
 [here](https://whoschek.github.io/bzfs/coverage).
 
-The gist is that it should work on any flavor, with python (3.7 or higher, no additional python packages required)
+The gist is that it should work on any flavor, with python (3.8 or higher, no additional python packages required)
 only needed on the initiator host.
 
 
@@ -520,7 +520,7 @@ only needed on the initiator host.
 * First, on the GitHub page of this repo, click on "Fork/Create a new fork".
 * Click the 'Actions' menu on your repo, and then enable GitHub Actions on your fork.
 * Then select 'All workflows' -> 'Tests' on the left side.
-* Then click the 'Run workflow' dropdown menu on the right side, which looks something like 
+* Then click the 'Run workflow' dropdown menu on the right side, which looks something like
 [this screenshot](https://raw.githubusercontent.com/whoschek/bzfs/main/bzfs_docs/run_workflow_dialog.jpg).
 * Select the name of the job to run (e.g. 'test_ubuntu_24_04' or 'test_freebsd_14_1' or 'test_solaris_11_4', etc) or
 select 'Run all jobs' to test all supported platforms, plus select the git branch to run with (typically the branch
@@ -545,7 +545,7 @@ coverage report that merges all jobs of the run.
 # verify zfs is installed
 zfs --version
 
-# verify python 3.7 or higher is installed
+# verify python 3.8 or higher is installed
 python3 --version
 
 # verify sudo is working

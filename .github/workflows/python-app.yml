@@ -82,7 +82,7 @@ jobs:
         shell: bash
         run: |
           echo "iteration_test_matrix_output=[$(seq -s ',' 1 "$NUM_RUNS")]" >> $GITHUB_OUTPUT
-          
+
 
   test_ubuntu_24_04_fast:  # currently uses zfs-2.2.2
     needs: create_iteration_test_matrix
@@ -151,7 +151,7 @@ jobs:
         ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
-        
+
         # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
         sudo add-apt-repository ppa:rapier1/hpnssh; sudo apt update
         sudo apt-get -y install hpnssh
@@ -368,7 +368,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.7"]
+        python-version: ["3.8"]
       fail-fast: false
     timeout-minutes: 120
     steps:
@@ -411,7 +411,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.8", "3.7"]
+        python-version: ["3.8"]
       fail-fast: false
     timeout-minutes: 100
     steps:

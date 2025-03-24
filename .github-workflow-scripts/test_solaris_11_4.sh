@@ -44,7 +44,7 @@ else  # it's a more recent solaris version and as such has python >= 3.7 preinst
     mkdir -p /python3/bin
     ln -s $(command -v python3.9) /python3/bin/python3
   fi
-  ##wget https://bootstrap.pypa.io/pip/3.7/get-pip.py  # see https://github.com/pypa/get-pip
+  ##wget https://bootstrap.pypa.io/pip/3.8/get-pip.py  # see https://github.com/pypa/get-pip
   ##sudo python3 get-pip.py  # for coverage.sh only: manually install pip as it is missing in the preinstalled version
 fi
 id -u -n

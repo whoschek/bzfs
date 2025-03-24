@@ -2927,14 +2927,14 @@ class TestCheckPercentRange(unittest.TestCase):
 #############################################################################
 class TestPythonVersionCheck(unittest.TestCase):
     """Test version check near top of program:
-    if sys.version_info < (3, 7):
-        print(f"ERROR: {prog_name} requires Python version >= 3.7!", file=sys.stderr)
+    if sys.version_info < (3, 8):
+        print(f"ERROR: {prog_name} requires Python version >= 3.8!", file=sys.stderr)
         sys.exit(die_status)
     """
 
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 6))
-    def test_version_below_3_7(self, mock_exit):
+    def test_version_below_3_8(self, mock_exit):
         with patch("sys.stderr"):
             import importlib
             from bzfs import bzfs
@@ -2943,8 +2943,8 @@ class TestPythonVersionCheck(unittest.TestCase):
             mock_exit.assert_called_with(bzfs.die_status)
 
     @patch("sys.exit")
-    @patch("sys.version_info", new=(3, 7))
-    def test_version_3_7_or_higher(self, mock_exit):
+    @patch("sys.version_info", new=(3, 8))
+    def test_version_3_8_or_higher(self, mock_exit):
         import importlib
         from bzfs import bzfs
 

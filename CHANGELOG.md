@@ -11,6 +11,7 @@ To upgrade, change your jobconfig script from something like
 `dst_hosts = {"onsite": "nas", "": "nas"}` to `dst_hosts = {"nas": ["", "onsite"]}` and from 
 `retain_dst_targets = {"onsite": "nas", "": "nas"}` to `retain_dst_targets = {"nas": ["", "onsite"]}`
 - [bzfs_jobrunner] jobconfig scripts have changed to now use the `--root-dataset-pairs` CLI option, in order to support options of the form `extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]`. To upgrade, change your jobconfig script from `["--"] + root_dataset_pairs` to `["--root-dataset-pairs"] + root_dataset_pairs`. See bzfs_job_example.py.
+- Nomore support python-3.7 as it has been officially EOL'd since June 27th 2023.
 
 ## [1.10.0] - March 15, 2025
 

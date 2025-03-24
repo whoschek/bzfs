@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # /// script
-# requires-python = ">=3.7"
+# requires-python = ">=3.8"
 # dependencies = []
 # ///
 
@@ -89,7 +89,7 @@ die_status = 3
 critical_status = 2
 warning_status = 1
 still_running_status = 4
-min_python_version = (3, 7)
+min_python_version = (3, 8)
 if sys.version_info < min_python_version:
     print(f"ERROR: {prog_name} requires Python version >= {'.'.join(map(str, min_python_version))}!")
     sys.exit(die_status)
@@ -172,12 +172,12 @@ select which datasets, snapshots and properties to create, replicate, delete or 
 Typically, a `cron` job on the source host runs `{prog_name}` periodically to create new snapshots and prune outdated
 snapshots on the source, whereas another `cron` job on the destination host runs `{prog_name}` periodically to prune
 outdated destination snapshots. Yet another `cron` job runs `{prog_name}` periodically to replicate the recently created
-snapshots from the source to the destination. The frequency of these periodic activities is typically every N milliseconds, 
+snapshots from the source to the destination. The frequency of these periodic activities is typically every N milliseconds,
 every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
 All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
-snapshots in any format, even created or managed by third party ZFS snapshot management tools, including manual 
-zfs snapshot/destroy. All functions can also be used independently. That is, if you wish you can use {prog_name} just 
+snapshots in any format, even created or managed by third party ZFS snapshot management tools, including manual
+zfs snapshot/destroy. All functions can also be used independently. That is, if you wish you can use {prog_name} just
 for creating snapshots, or just for replicating, or just for deleting/pruning, or just for comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
@@ -193,7 +193,7 @@ ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
 {prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
-versions >= 3.7 (including latest stable which is currently python-3.13).
+versions >= 3.8 (including latest stable which is currently python-3.13).
 
 {prog_name} is a stand-alone program with zero required dependencies, consisting of a single file, akin to a
 stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server
@@ -202,7 +202,7 @@ You can just copy the file wherever you like, for example into /usr/local/bin or
 any stand-alone shell script or binary executable.
 
 {prog_name} automatically replicates the snapshots of multiple datasets in parallel for best performance.
-Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be 
+Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be
 created as frequently as every N milliseconds.
 
 Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
@@ -215,14 +215,14 @@ feature.
 # Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience
-wrapper around `{prog_name}` that simplifies periodic ZFS snapshot creation, replication, and pruning, across source host 
+wrapper around `{prog_name}` that simplifies periodic ZFS snapshot creation, replication, and pruning, across source host
 and multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 # Quickstart
 
 * Create adhoc atomic snapshots without a schedule:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots 
+```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 --create-src-snapshots-plan "{create_src_snapshots_plan_example1}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
@@ -232,7 +232,7 @@ tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
 
 * Create periodic atomic snapshots on a schedule, every hour and every day, by launching this from a periodic `cron` job:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots 
+```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 --create-src-snapshots-plan "{create_src_snapshots_plan_example2}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
@@ -242,11 +242,11 @@ tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
 tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 ```
 
-Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly` 
+Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly`
 or `_minutely` or `_2secondly` or `_100millisecondly`), or if the --create-src-snapshots-even-if-not-due flag is specified,
-or if the most recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates a snapshot 
-(named with the current time, not backdated to the missed time), and then resumes the original schedule. If the suffix is 
-`_adhoc` or not a known period then a snapshot is considered non-periodic and is thus created immediately regardless of the 
+or if the most recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates a snapshot
+(named with the current time, not backdated to the missed time), and then resumes the original schedule. If the suffix is
+`_adhoc` or not a known period then a snapshot is considered non-periodic and is thus created immediately regardless of the
 creation time of any existing snapshot.
 
 * Replication example in local mode (no network, no ssh), to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
@@ -312,7 +312,7 @@ snapshots (per dataset) are replicated regardless of creation time:
 ```$ {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'```
 
-Note: The example above compares the specified times against the standard ZFS 'creation' time property of the snapshots 
+Note: The example above compares the specified times against the standard ZFS 'creation' time property of the snapshots
 (which is a UTC Unix time in integer seconds), rather than against a timestamp that may be part of the snapshot name.
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
@@ -322,7 +322,7 @@ regardless of creation time:
 --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
 --include-snapshot-times-and-ranks 'anytime..7 days ago'```
 
-Note: This also prints how many GB of disk space in total would be freed if the command were to be run for real without 
+Note: This also prints how many GB of disk space in total would be freed if the command were to be run for real without
 the --dryrun flag.
 
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
@@ -353,48 +353,48 @@ of creation time:
 ```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
 --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'```
 
-* Retain all secondly snapshots that were created less than 40 seconds ago, and ensure that the latest 40 
-secondly snapshots (per dataset) are retained regardless of creation time. Same for 40 minutely snapshots, 36 hourly 
+* Retain all secondly snapshots that were created less than 40 seconds ago, and ensure that the latest 40
+secondly snapshots (per dataset) are retained regardless of creation time. Same for 40 minutely snapshots, 36 hourly
 snapshots, 31 daily snapshots, 12 weekly snapshots, 18 monthly snapshots, and 5 yearly snapshots:
 
-```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots 
+```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
 --delete-dst-snapshots-except
 --include-snapshot-regex '.*_secondly' --include-snapshot-times-and-ranks '40 seconds ago..anytime' 'latest 40'
---new-snapshot-filter-group 
+--new-snapshot-filter-group
 --include-snapshot-regex '.*_minutely' --include-snapshot-times-and-ranks '40 minutes ago..anytime' 'latest 40'
---new-snapshot-filter-group 
+--new-snapshot-filter-group
 --include-snapshot-regex '.*_hourly' --include-snapshot-times-and-ranks '36 hours ago..anytime' 'latest 36'
---new-snapshot-filter-group 
+--new-snapshot-filter-group
 --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks '31 days ago..anytime' 'latest 31'
---new-snapshot-filter-group 
+--new-snapshot-filter-group
 --include-snapshot-regex '.*_weekly' --include-snapshot-times-and-ranks '12 weeks ago..anytime' 'latest 12'
---new-snapshot-filter-group 
+--new-snapshot-filter-group
 --include-snapshot-regex '.*_monthly' --include-snapshot-times-and-ranks '18 months ago..anytime' 'latest 18'
---new-snapshot-filter-group 
+--new-snapshot-filter-group
 --include-snapshot-regex '.*_yearly' --include-snapshot-times-and-ranks '5 years ago..anytime' 'latest 5'```
 
 For convenience, the lengthy command line above can be expressed in a more concise way, like so:
 
-```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots 
+```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
 --delete-dst-snapshots-except-plan "{delete_dst_snapshots_except_plan_example1}"```
 
-* Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have 
-been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'), 
-only contained in dst (tagged with 'dst'), and contained in both src and dst (tagged with 'all'), restricted to hourly 
-and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack/stragglers), 
+* Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have
+been successfully replicated by a periodic job. List snapshots only contained in src (tagged with 'src'),
+only contained in dst (tagged with 'dst'), and contained in both src and dst (tagged with 'all'), restricted to hourly
+and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack/stragglers),
 excluding temporary datasets:
 
 ```$ {prog_name} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists=src+dst+all --recursive
---include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago' 
+--include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
 --exclude-dataset-regex '(.*/)?tmp.*'```
 
-If the resulting TSV output file contains zero lines starting with the prefix 'src' and zero lines starting with the 
-prefix 'dst' then no source snapshots are missing on the destination, and no destination snapshots are missing 
-on the source, indicating that the periodic replication and pruning jobs perform as expected. The TSV output is sorted 
-by dataset, and by ZFS creation time within each dataset - the first and last line prefixed with 'all' contains the 
-metadata of the oldest and latest common snapshot, respectively. The --compare-snapshot-lists option also directly 
-logs various summary stats, such as the metadata of the latest common snapshot, latest snapshots and oldest snapshots, 
-as well as the time diff between the latest common snapshot and latest snapshot only in src (and only in dst), as well 
+If the resulting TSV output file contains zero lines starting with the prefix 'src' and zero lines starting with the
+prefix 'dst' then no source snapshots are missing on the destination, and no destination snapshots are missing
+on the source, indicating that the periodic replication and pruning jobs perform as expected. The TSV output is sorted
+by dataset, and by ZFS creation time within each dataset - the first and last line prefixed with 'all' contains the
+metadata of the oldest and latest common snapshot, respectively. The --compare-snapshot-lists option also directly
+logs various summary stats, such as the metadata of the latest common snapshot, latest snapshots and oldest snapshots,
+as well as the time diff between the latest common snapshot and latest snapshot only in src (and only in dst), as well
 as how many src snapshots and how many GB of data are missing on dst, etc.
 
 * Example with further options:
@@ -684,7 +684,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "datasets. Has the same format as --delete-dst-snapshots-except-plan.\n\n"
              f"Example: `{format_dict(src_snapshot_plan_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', create 'secondly' snapshots every second, 'minutely' snapshots every "
-             "minute, hourly snapshots every hour, and so on. " 
+             "minute, hourly snapshots every hour, and so on. "
              "It will also create snapshots for the targets 'us-west-1' and 'eu-west-1' within the 'prod' organization. "
              "In addition, it will create snapshots every 12 hours and every week for the 'test' organization, "
              "and name them as being intended for the 'offsite' replication target. Analog for snapshots that are taken "

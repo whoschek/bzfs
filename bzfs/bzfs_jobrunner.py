@@ -15,7 +15,7 @@
 # limitations under the License.
 
 # /// script
-# requires-python = ">=3.7"
+# requires-python = ">=3.8"
 # dependencies = []
 # ///
 
@@ -44,28 +44,28 @@ def argument_parser() -> argparse.ArgumentParser:
         description=f"""
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
 
-This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS snapshot creation, replication, 
-and pruning, across source host and multiple destination hosts, using a single shared 
+This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS snapshot creation, replication,
+and pruning, across source host and multiple destination hosts, using a single shared
 [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
-Typically, a cron job on the source host runs `{prog_name}` periodically to create new snapshots (via --create-src-snapshots) 
-and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and --prune-src-bookmarks), whereas 
-another cron job on the destination host runs `{prog_name}` periodically to prune outdated destination snapshots (via 
+Typically, a cron job on the source host runs `{prog_name}` periodically to create new snapshots (via --create-src-snapshots)
+and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and --prune-src-bookmarks), whereas
+another cron job on the destination host runs `{prog_name}` periodically to prune outdated destination snapshots (via
 --prune-dst-snapshots), and to replicate the recently created snapshots from the source to the destination (via --replicate).
-Yet another cron job on both source and destination runs `{prog_name}` periodically to alert the user if the latest snapshot 
+Yet another cron job on both source and destination runs `{prog_name}` periodically to alert the user if the latest snapshot
 is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these periodic activities can
 vary by activity, and is typically every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
-Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the 
-source host and all destination hosts, and add crontab entries (or systemd timers or Monit entries or similar), along these 
-lines: 
+Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the
+source host and all destination hosts, and add crontab entries (or systemd timers or Monit entries or similar), along these
+lines:
 
 * crontab on source host:
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots --prune-src-snapshots --prune-src-bookmarks`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-src-snapshots`
- 
+
 
 * crontab on destination host(s):
 
@@ -75,13 +75,13 @@ lines:
 
 ### High Frequency Replication (Experimental Feature)
 
-Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency. For 
+Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency. For
 such use cases, consider that `zfs list -t snapshot` performance degrades as more and more snapshots currently exist within
-the selected datasets, so try to keep the number of currently existing snapshots small, and prune them at a frequency that 
-is proportional to the frequency with which snapshots are created. Consider using `--skip-parent` and `--exclude-dataset*` 
+the selected datasets, so try to keep the number of currently existing snapshots small, and prune them at a frequency that
+is proportional to the frequency with which snapshots are created. Consider using `--skip-parent` and `--exclude-dataset*`
 filters to limit the selected datasets only to those that require this level of frequency.
 
-In addition, use the `--daemon-*` options to reduce startup overhead, in combination with splitting the crontab entry (or 
+In addition, use the `--daemon-*` options to reduce startup overhead, in combination with splitting the crontab entry (or
 better: high frequency systemd timer) into multiple processes, using pull replication mode, along these lines:
 
 * crontab on source host:
@@ -102,10 +102,10 @@ better: high frequency systemd timer) into multiple processes, using pull replic
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-dst-snapshots`
 
-The daemon processes work like non-daemon processes except that they loop, handle time events and sleep between events, and 
-finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifetime`). The daemons will subsequently be 
-auto-restarted by 'cron', or earlier if they fail. While the daemons are running, 'cron' will attempt to start new 
-(unnecessary) daemons but this is benign as these new processes immediately exit with a message like this: 
+The daemon processes work like non-daemon processes except that they loop, handle time events and sleep between events, and
+finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifetime`). The daemons will subsequently be
+auto-restarted by 'cron', or earlier if they fail. While the daemons are running, 'cron' will attempt to start new
+(unnecessary) daemons but this is benign as these new processes immediately exit with a message like this:
 "Exiting as same previous periodic job is still running without completion yet"
 """, formatter_class=argparse.RawTextHelpFormatter)
 
