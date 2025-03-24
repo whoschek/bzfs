@@ -21,7 +21,8 @@
 #
 # /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate=pull --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
 #
-# Add this command to your crontab file such that the command runs every minute, or every hour, or every day, or similar.
+# Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or
+# every hour, or every day, or similar.
 #############################################################################
 
 import argparse

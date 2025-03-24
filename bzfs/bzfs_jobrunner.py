@@ -57,7 +57,8 @@ is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots). Th
 vary by activity, and is typically every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the 
-source host and all destination hosts, and add crontab entries or systemd timers or similar, along these lines: 
+source host and all destination hosts, and add crontab entries (or systemd timers or Monit entries or similar), along these 
+lines: 
 
 * crontab on source host:
 
