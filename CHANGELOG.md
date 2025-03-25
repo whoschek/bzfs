@@ -17,7 +17,11 @@ To upgrade, change your [jobconfig](bzfs_tests/bzfs_job_example.py) script from 
 - [bzfs_jobrunner] The [jobconfig](bzfs_tests/bzfs_job_example.py) script has changed to now use the `--root-dataset-pairs` CLI option, in order to
 support options of the form `extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]`. To upgrade, change your
 jobconfig script from `["--"] + root_dataset_pairs` to `["--root-dataset-pairs"] + root_dataset_pairs`.
-- Nomore support python-3.7 as it has been officially EOL'd since June 27th 2023.
+- [bzfs_jobrunner] Added `--jobid` option to specify a job identifier that shall be included in the log file name suffix.
+- Added `--log-subdir {daily,hourly,minutely}` CLI option.
+- Improved startup latency.
+- Exclude parent processes from process group termination.
+- Nomore support python-3.7 as it has been officially EOL'd since June 2023.
 
 ## [1.10.0] - March 15, 2025
 
