@@ -4566,11 +4566,11 @@ class LocalTestCase(BZFSTestCase):
         src_bookmark_plan = dst_snapshot_plan
         monitor_dst_snapshot_plan = {
             "z": {
-                "onsite": {"millisecondly": {"warn": "1 hours", "crit": "2 hours"}},
-                "offsite": {"millisecondly": {"warn": "1 hours", "crit": "2 hours"}},
+                "onsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}},
+                "offsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}},
             }
         }
-        monitor_src_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warn": "1 hours", "crit": "2 hours"}}}}
+        monitor_src_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}}}}
         args = [
             "--root-dataset-pairs",
             src_root_dataset,
@@ -4596,7 +4596,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, len(bookmarks(src_root_dataset)))
         self.assertEqual(0, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest src snapshots aren't stale:
+        # monitoring says latest src snapshots aren't too old:
         pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
         self.run_bzfs(
             "--monitor-src-snapshots",
@@ -4605,11 +4605,25 @@ class LocalTestCase(BZFSTestCase):
             use_jobrunner=True,
         )
 
-        # monitoring says critical as there is no dst snapshot:
+        # monitoring says critical as there is no latest dst snapshot:
         self.assertEqual(0, len(snapshots(dst_root_dataset)))
         pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"crit": "60 seconds"}}}}
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
         self.run_bzfs(
+            "--monitor-snapshots-no-oldest-check",
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            expected_status=bzfs.critical_status,
+            use_jobrunner=True,
+        )
+
+        # monitoring says critical as there is no oldest dst snapshot:
+        self.assertEqual(0, len(snapshots(dst_root_dataset)))
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
+        self.run_bzfs(
+            "--monitor-snapshots-no-latest-check",
             "--monitor-dst-snapshots",
             f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
             *pull_args_no_monitoring,
@@ -4620,7 +4634,7 @@ class LocalTestCase(BZFSTestCase):
         # monitoring says critical (but with zero exit code b/c of dont-crit) as there is no dst snapshot:
         self.assertEqual(0, len(snapshots(dst_root_dataset)))
         pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"crit": "60 seconds"}}}}
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
         self.run_bzfs(
             "--monitor-dst-snapshots",
             "--monitor-snapshots-dont-crit",
@@ -4650,7 +4664,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(snapshots(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshots aren't stale:
+        # monitoring says latest dst snapshots aren't too old:
         self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
         self.run_bzfs("--quiet", "--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
 
@@ -4676,10 +4690,11 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(bookmarks(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshot is critically stale:
+        # monitoring says latest dst snapshot is critically too old:
         pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"crit": "1 millis"}}}}
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "1 millis"}}}}
         self.run_bzfs(
+            "--monitor-snapshots-no-oldest-check",
             "--monitor-dst-snapshots",
             f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
             *pull_args_no_monitoring,
@@ -4687,7 +4702,19 @@ class LocalTestCase(BZFSTestCase):
             use_jobrunner=True,
         )
 
-        # monitoring says latest dst snapshot is critically stale, but we only inform about this rather than error out:
+        # monitoring says oldest dst snapshot is critically too old:
+        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "1 millis"}}}}
+        self.run_bzfs(
+            "--monitor-snapshots-no-latest-check",
+            "--monitor-dst-snapshots",
+            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+            *pull_args_no_monitoring,
+            expected_status=bzfs.critical_status,
+            use_jobrunner=True,
+        )
+
+        # monitoring says latest dst snapshot is critically too old, but we only inform about this rather than error out:
         self.run_bzfs(
             "--monitor-snapshots-dont-crit",
             "--monitor-dst-snapshots",
@@ -4696,8 +4723,8 @@ class LocalTestCase(BZFSTestCase):
             use_jobrunner=True,
         )
 
-        # monitoring says latest dst snapshot is warning stale:
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warn": "1 millis"}}}}
+        # monitoring says latest dst snapshot is warning too old:
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warning": "1 millis"}}}}
         self.run_bzfs(
             "--monitor-dst-snapshots",
             f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
@@ -4706,7 +4733,7 @@ class LocalTestCase(BZFSTestCase):
             use_jobrunner=True,
         )
 
-        # monitoring says latest dst snapshot is warning stale, but we only inform about this rather than error out:
+        # monitoring says latest dst snapshot is warning too old, but we only inform about this rather than error out:
         self.run_bzfs(
             "--monitor-snapshots-dont-warn",
             "--monitor-dst-snapshots",
@@ -4717,7 +4744,7 @@ class LocalTestCase(BZFSTestCase):
 
         # monitoring freshness on nonexistingpool destination pool does nothing:
         pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warn": "1 millis", "crit": "2 millis"}}}}
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warning": "1 millis", "critical": "2 millis"}}}}
         self.run_bzfs(
             "--monitor-dst-snapshots",
             f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
@@ -4757,7 +4784,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, len(snapshots(src_root_dataset)))
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshots aren't stale:
+        # monitoring says latest dst snapshots aren't too old:
         self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
 
         # next iteration: create another src snapshot
@@ -4795,7 +4822,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, len(bookmarks(src_root_dataset)))
         self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshots aren't stale:
+        # monitoring says latest dst snapshots aren't too old:
         self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
 
         # non-existing CLI option will cause failure:
@@ -4824,7 +4851,7 @@ class LocalTestCase(BZFSTestCase):
 
         # monitoring says critical as there is no yearly snapshot:
         pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"yearly": {"crit": "60 minutes"}}}}
+        monitor_dst_snapshot_plan = {"z": {"onsite": {"yearly": {"critical": "60 minutes"}}}}
         self.run_bzfs(
             "--monitor-dst-snapshots",
             f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",

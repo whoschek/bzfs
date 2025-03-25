@@ -4,13 +4,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.11.0] - TBD
 
+- [bzfs_jobrunner] Added `--monitor-snapshot-plan` CLI option, which alerts the user if the ZFS 'creation' time property of
+the latest or oldest snapshot for any specified snapshot pattern within the selected datasets is too old wrt. the specified
+age limit. The purpose is to check if snapshots are successfully taken on schedule, successfully replicated on schedule,
+and successfully pruned on schedule. See the [jobconfig](bzfs_tests/bzfs_job_example.py) script for an example.
 - [bzfs_jobrunner] Also support replicating snapshots with the same target name to multiple destination hosts. 
 This changed the syntax of the `--dst-hosts` and `--retain-dst-targets` parameters to be a dictionary that maps each 
 destination hostname to a list of zero or more logical replication target names (the infix portion of a snapshot name). 
 To upgrade, change your [jobconfig](bzfs_tests/bzfs_job_example.py) script from something like 
 `dst_hosts = {"onsite": "nas", "": "nas"}` to `dst_hosts = {"nas": ["", "onsite"]}` and from 
 `retain_dst_targets = {"onsite": "nas", "": "nas"}` to `retain_dst_targets = {"nas": ["", "onsite"]}`
-- [bzfs_jobrunner] The [jobconfig](bzfs_tests/bzfs_job_example.py) script has changed to now use the `--root-dataset-pairs` CLI option, in order to support options of the form `extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]`. To upgrade, change your jobconfig script from `["--"] + root_dataset_pairs` to `["--root-dataset-pairs"] + root_dataset_pairs`.
+- [bzfs_jobrunner] The [jobconfig](bzfs_tests/bzfs_job_example.py) script has changed to now use the `--root-dataset-pairs` CLI option, in order to
+support options of the form `extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]`. To upgrade, change your
+jobconfig script from `["--"] + root_dataset_pairs` to `["--root-dataset-pairs"] + root_dataset_pairs`.
 - Nomore support python-3.7 as it has been officially EOL'd since June 27th 2023.
 
 ## [1.10.0] - March 15, 2025

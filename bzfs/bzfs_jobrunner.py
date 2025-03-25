@@ -203,29 +203,35 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     monitor_snapshot_plan_example = {
         "prod": {
             "onsite": {
-                "100millisecondly": {"warn": "400 milliseconds", "crit": "2 seconds"},
-                "secondly": {"warn": "3 seconds", "crit": "15 seconds"},
-                "minutely": {"warn": "90 seconds", "crit": "360 seconds"},
-                "hourly": {"warn": "90 minutes", "crit": "360 minutes"},
-                "daily": {"warn": "28 hours", "crit": "32 hours"},
-                "weekly": {"warn": "9 days", "crit": "15 days"},
-                "monthly": {"warn": "32 days", "crit": "40 days"},
-                "yearly": {"warn": "370 days", "crit": "385 days"},
-                "10minutely": {"warn": "0 minutes", "crit": "0 minutes"},
+                "100millisecondly": {"warning": "650 milliseconds", "critical": "2 seconds"},
+                "secondly": {"warning": "2 seconds", "critical": "14 seconds"},
+                "minutely": {"warning": "30 seconds", "critical": "300 seconds"},
+                "hourly": {"warning": "30 minutes", "critical": "300 minutes"},
+                "daily": {"warning": "4 hours", "critical": "8 hours"},
+                "weekly": {"warning": "2 days", "critical": "8 days"},
+                "monthly": {"warning": "2 days", "critical": "8 days"},
+                "yearly": {"warning": "5 days", "critical": "14 days"},
+                "10minutely": {"warning": "0 minutes", "critical": "0 minutes"},
             },
             "": {
-                "daily": {"warn": "28 hours", "crit": "32 hours"},
+                "daily": {"warning": "4 hours", "critical": "8 hours"},
             },
         },
     }
     parser.add_argument("--monitor-snapshot-plan", default="{}", metavar="DICT_STRING",
-        help="Alert the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot name "
-             "pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if "
-             "snapshots are successfully taken on schedule and successfully replicated on schedule. "
-             "Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively. "
-             f"Example DICT_STRING: `{format_dict(monitor_snapshot_plan_example)}`. This example alerts the user if the "
-             "latest snapshot named `prod_onsite_<timestamp>_secondly` is not less than 3 seconds old (warn) or not less "
-             "than 15 seconds old (crit). Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
+        help="Alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any specified "
+             "snapshot pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to "
+             "check if snapshots are successfully taken on schedule, successfully replicated on schedule, and successfully "
+             "pruned on schedule. "
+             "Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively. "
+             f"Example DICT_STRING: `{format_dict(monitor_snapshot_plan_example)}`. "
+             "This example alerts the user if the latest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more "
+             "than 30 minutes late (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late (i.e. more "
+             "than 300+60=360 minutes old) [critical]. In addition, the example alerts the user if the oldest src or dst "
+             "snapshot named `prod_onsite_<timestamp>_hourly` is more than 30 + 60*36 minutes old [warning] or more than "
+             "300 + 60*36 minutes old [critical], where 36 is the number of period cycles specified in `src_snapshot_plan` "
+             "or `dst_snapshot_plan`, respectively. "
+             "Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
              "the given snapshot name pattern.\n\n")
     parser.add_argument("--src-user", default="", metavar="STRING",
@@ -281,7 +287,7 @@ class Job:
         src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
         src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
         dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
-        monitor_snapshot_plan = ast.literal_eval(args.monitor_snapshot_plan)
+        monitor_snapshot_plan = validate_monitor_snapshot_plan(ast.literal_eval(args.monitor_snapshot_plan))
         src_host = args.src_host
         assert src_host, "--src-host must not be empty!"
         localhostname = args.localhost if args.localhost else socket.gethostname()
@@ -381,18 +387,33 @@ class Job:
             if len(opts) > old_len_opts:
                 self.run_cmd(["bzfs"] + opts)
 
-        def monitor_snapshots_opts(tag: str) -> List[str]:
-            opts = [f"--monitor-snapshots={monitor_snapshot_plan}", "--skip-replication"]
+        def monitor_snapshots_opts(tag: str, monitor_plan: Dict) -> List[str]:
+            opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
             opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
             opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
             opts += [f"--log-file-suffix={sep}{jobid}{sep}"]
             opts += unknown_args + ["--"]
             return opts
 
+        def build_monitor_plan(monitor_plan: Dict, snapshot_plan: Dict) -> Dict:
+            return {
+                org: {
+                    target: {
+                        periodunit: {
+                            "latest": alertdict,
+                            "oldest": {**alertdict, "cycles": snapshot_plan.get(org, {}).get(target, {}).get(periodunit, 1)},
+                        }
+                        for periodunit, alertdict in periods.items()
+                    }
+                    for target, periods in target_periods.items()
+                }
+                for org, target_periods in monitor_plan.items()
+            }
+
         if args.monitor_src_snapshots:
-            opts = monitor_snapshots_opts("monitor-src-snapshots")
-            for src, dst in args.root_dataset_pairs:
-                opts += [dummy_dataset, src]
+            monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan)
+            opts = monitor_snapshots_opts("monitor-src-snapshots", monitor_plan)
+            opts += dedupe([(dummy_dataset, src) for src, dst in args.root_dataset_pairs])
             self.run_cmd(["bzfs"] + opts)
 
         if args.monitor_dst_snapshots:
@@ -400,11 +421,12 @@ class Job:
             validate_localhost_retain_dst_targets()
             targets = set(dst_hosts[localhostname])
             targets = targets.intersection(set(retain_dst_targets[localhostname]))
-            monitor_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
+            monitor_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
                 org: {target: periods for target, periods in target_periods.items() if target in targets}
                 for org, target_periods in monitor_snapshot_plan.items()
             }
-            opts = monitor_snapshots_opts("monitor-dst-snapshots")
+            monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan)
+            opts = monitor_snapshots_opts("monitor-dst-snapshots", monitor_plan)
             old_len_opts = len(opts)
             pairs = [(dummy_dataset, resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
             for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
@@ -489,6 +511,22 @@ def validate_dst_hosts(dst_hosts: Dict) -> Dict:
         for target in targets:
             assert isinstance(target, str)
     return dst_hosts
+
+
+def validate_monitor_snapshot_plan(monitor_snapshot_plan: Dict) -> Dict:
+    assert isinstance(monitor_snapshot_plan, dict)
+    for org, target_periods in monitor_snapshot_plan.items():
+        assert isinstance(org, str)
+        assert isinstance(target_periods, dict)
+        for target, periods in target_periods.items():
+            assert isinstance(target, str)
+            assert isinstance(periods, dict)
+            for period_unit, alert_dict in periods.items():
+                assert isinstance(period_unit, str)
+                assert isinstance(alert_dict, dict)
+                for key, value in alert_dict.items():
+                    assert isinstance(key, str)
+    return monitor_snapshot_plan
 
 
 def sanitize(filename: str) -> str:

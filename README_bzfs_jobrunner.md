@@ -312,20 +312,26 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--monitor-snapshot-plan** *DICT_STRING*
 
-*  Alert the user if the ZFS 'creation' time property of the latest snapshot for any specified
-    snapshot name pattern within the selected datasets is too old wrt. the specified age limit.
-    The purpose is to check if snapshots are successfully taken on schedule and successfully
-    replicated on schedule. Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively.
-    Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly': {'warn': '400
-    milliseconds', 'crit': '2 seconds'}, 'secondly': {'warn': '3 seconds', 'crit':
-    '15 seconds'}, 'minutely': {'warn': '90 seconds', 'crit': '360 seconds'},
-    'hourly': {'warn': '90 minutes', 'crit': '360 minutes'}, 'daily': {'warn': '28
-    hours', 'crit': '32 hours'}, 'weekly': {'warn': '9 days', 'crit': '15 days'},
-    'monthly': {'warn': '32 days', 'crit': '40 days'}, 'yearly': {'warn': '370
-    days', 'crit': '385 days'}, '10minutely': {'warn': '0 minutes', 'crit': '0
-    minutes'}}, '': {'daily': {'warn': '28 hours', 'crit': '32 hours'}}}}"`. This
-    example alerts the user if the latest snapshot named `prod_onsite_<timestamp>_secondly`
-    is not less than 3 seconds old (warn) or not less than 15 seconds old (crit). Analog for the
+*  Alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any
+    specified snapshot pattern within the selected datasets is too old wrt. the specified age
+    limit. The purpose is to check if snapshots are successfully taken on schedule, successfully
+    replicated on schedule, and successfully pruned on schedule. Process exit code is 0, 1, 2 on
+    OK, WARNING, CRITICAL, respectively. Example DICT_STRING: `"{'prod': {'onsite':
+    {'100millisecondly': {'warning': '650 milliseconds', 'critical': '2 seconds'},
+    'secondly': {'warning': '2 seconds', 'critical': '14 seconds'}, 'minutely':
+    {'warning': '30 seconds', 'critical': '300 seconds'}, 'hourly': {'warning': '30
+    minutes', 'critical': '300 minutes'}, 'daily': {'warning': '4 hours', 'critical':
+    '8 hours'}, 'weekly': {'warning': '2 days', 'critical': '8 days'}, 'monthly':
+    {'warning': '2 days', 'critical': '8 days'}, 'yearly': {'warning': '5 days',
+    'critical': '14 days'}, '10minutely': {'warning': '0 minutes', 'critical': '0
+    minutes'}}, '': {'daily': {'warning': '4 hours', 'critical': '8 hours'}}}}"`.
+    This example alerts the user if the latest src or dst snapshot named
+    `prod_onsite_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90
+    minutes old) [warning] or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
+    [critical]. In addition, the example alerts the user if the oldest src or dst snapshot named
+    `prod_onsite_<timestamp>_hourly` is more than 30 + 60*36 minutes old [warning] or
+    more than 300 + 60*36 minutes old [critical], where 36 is the number of period cycles
+    specified in `src_snapshot_plan` or `dst_snapshot_plan`, respectively. Analog for the
     latest snapshot named `prod_<timestamp>_daily`, and so on.
 
     Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots

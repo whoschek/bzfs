@@ -105,8 +105,8 @@ management at all is required. You can just copy the file wherever you like, for
 executable.
 
 bzfs automatically replicates the snapshots of multiple datasets in parallel for best performance.
-Similarly, it quickly deletes (or compares) snapshots of multiple datasets in parallel. Atomic
-snapshots can be created as frequently as every N milliseconds.
+Similarly, it quickly deletes (or monitors or compares) snapshots of multiple datasets in
+parallel. Atomic snapshots can be created as frequently as every N milliseconds.
 
 Optionally, bzfs applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during
 'zfs send/receive' data transfers. When run across the network, bzfs also transparently inserts
@@ -443,8 +443,8 @@ delete mode.
 * Continously tested on Linux, FreeBSD and Solaris.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
-deletes (or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently as every
-N milliseconds.
+deletes (or monitors or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently 
+as every N milliseconds.
 * For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not
 to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates
 over the parallel replication tasks.
@@ -1540,19 +1540,23 @@ usage: bzfs [-h] [--recursive]
 *  Do nothing if the --monitor-snapshots flag is missing. Otherwise, after all other steps,
     alert the user if the ZFS 'creation' time property of the latest snapshot for any specified
     snapshot name pattern within the selected datasets is too old wrt. the specified age limit.
-    The purpose is to check if snapshots are successfully taken on schedule and successfully
-    replicated on schedule. Process exit code is 0, 1, 2 on OK, WARN, CRITICAL, respectively.
-    Example DICT_STRING: `"{'prod': {'onsite': {'100millisecondly': {'warn': '400
-    milliseconds', 'crit': '2 seconds'}, 'secondly': {'warn': '3 seconds', 'crit':
-    '15 seconds'}, 'minutely': {'warn': '90 seconds', 'crit': '360 seconds'},
-    'hourly': {'warn': '90 minutes', 'crit': '360 minutes'}, 'daily': {'warn': '28
-    hours', 'crit': '32 hours'}, 'weekly': {'warn': '9 days', 'crit': '15 days'},
-    'monthly': {'warn': '32 days', 'crit': '40 days'}, 'yearly': {'warn': '370
-    days', 'crit': '385 days'}, '10minutely': {'warn': '0 minutes', 'crit': '0
-    minutes'}}, '': {'daily': {'warn': '28 hours', 'crit': '32 hours'}}}}"`. This
-    example alerts the user if the latest snapshot named `prod_onsite_<timestamp>_secondly`
-    is not less than 3 seconds old (warn) or not less than 15 seconds old (crit). Analog for the
-    latest snapshot named `prod_<timestamp>_daily`, and so on.
+    The purpose is to check if snapshots are successfully taken on schedule, successfully
+    replicated on schedule, and successfully pruned on schedule. Process exit code is 0, 1, 2 on
+    OK, WARNING, CRITICAL, respectively. Example DICT_STRING: `"{'prod': {'onsite':
+    {'100millisecondly': {'latest': {'warning': '300 milliseconds', 'critical': '2
+    seconds'}}, 'secondly': {'latest': {'warning': '2 seconds', 'critical': '14
+    seconds'}}, 'minutely': {'latest': {'warning': '30 seconds', 'critical': '300
+    seconds'}}, 'hourly': {'latest': {'warning': '30 minutes', 'critical': '300
+    minutes'}}, 'daily': {'latest': {'warning': '4 hours', 'critical': '8 hours'}},
+    'weekly': {'latest': {'warning': '2 days', 'critical': '8 days'}}, 'monthly':
+    {'latest': {'warning': '2 days', 'critical': '8 days'}}, 'yearly': {'latest':
+    {'warning': '5 days', 'critical': '14 days'}}, '10minutely': {'latest':
+    {'warning': '0 minutes', 'critical': '0 minutes'}}}, '': {'daily': {'latest':
+    {'warning': '4 hours', 'critical': '8 hours'}}}}}"`. This example alerts the user if
+    the latest src or dst snapshot named `prod_onsite_<timestamp>_hourly` is more than 30
+    minutes late (i.e. more than 30+60=90 minutes old) [warning] or more than 300 minutes late
+    (i.e. more than 300+60=360 minutes old) [critical]. Analog for the latest snapshot named
+    `prod_<timestamp>_daily`, and so on.
 
     Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots
     shall be checked for the given snapshot name pattern.
@@ -1965,12 +1969,12 @@ usage: bzfs [-h] [--recursive]
     are relative to the number of CPU cores on the machine. Example: 200% uses twice as many
     threads as there are cores on the machine; 75% uses num_threads = num_cores * 0.75. Currently
     this option only applies to dataset and snapshot replication, --create-src-snapshots,
-    --delete-dst-snapshots, --delete-empty-dst-datasets, and --compare-snapshot-lists. The
-    ideal value for this parameter depends on the use case and its performance requirements, as
-    well as the number of available CPU cores and the parallelism offered by SSDs vs. HDDs, ZFS
-    topology and configuration, as well as the network bandwidth and other workloads
-    simultaneously running on the system. The current default is geared towards a high degreee of
-    parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%, 150%
+    --delete-dst-snapshots, --delete-empty-dst-datasets, --monitor-snapshots and
+    --compare-snapshot-lists. The ideal value for this parameter depends on the use case and its
+    performance requirements, as well as the number of available CPU cores and the parallelism
+    offered by SSDs vs. HDDs, ZFS topology and configuration, as well as the network bandwidth and
+    other workloads simultaneously running on the system. The current default is geared towards a
+    high degreee of parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%, 150%
 
 <!-- -->
 
