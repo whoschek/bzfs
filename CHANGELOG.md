@@ -2,7 +2,7 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.11.0] - TBD
+## [1.11.0] - March 26, 2025
 
 - [bzfs_jobrunner] Added `--monitor-snapshot-plan` CLI option, which alerts the user if the ZFS 'creation' time property of
 the latest or oldest snapshot for any specified snapshot pattern within the selected datasets is too old wrt. the specified
