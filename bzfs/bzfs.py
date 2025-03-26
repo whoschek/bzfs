@@ -2138,10 +2138,10 @@ class MonitorSnapshotsConfig:
                     if alert.latest is not None or alert.oldest is not None:
                         alerts.append(alert)
 
-        def alert_sort_key(alert):
+        def alert_sort_key(alert: MonitorSnapshotAlert):
             duration_amount, duration_unit = xperiods.suffix_to_duration1(alert.label.suffix)
             duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
-            return duration_milliseconds, alert.label.suffix
+            return duration_milliseconds, alert.label
 
         alerts.sort(key=alert_sort_key, reverse=True)  # check snapshots for dailies before hourlies, and so on
         self.alerts: List[MonitorSnapshotAlert] = alerts
