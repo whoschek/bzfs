@@ -26,6 +26,7 @@ jobconfig script from `["--"] + root_dataset_pairs` to `["--root-dataset-pairs"]
 - Improved startup latency.
 - Exclude parent processes from process group termination.
 - Nomore support python-3.7 as it has been officially EOL'd since June 2023.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.10.0...v1.11.0
 
 ## [1.10.0] - March 15, 2025
 
