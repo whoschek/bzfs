@@ -1916,13 +1916,13 @@ class RetryPolicy:
 
 
 #############################################################################
-@dataclass
+@dataclass(frozen=True)
 class Retry:
     count: int
 
 
 #############################################################################
-@dataclass(frozen=True, order=True)
+@dataclass(order=True, frozen=True)
 class SnapshotLabel:
     """Contains the individual parts that are concatenated into a ZFS snapshot name."""
 
@@ -2072,7 +2072,7 @@ class CreateSrcSnapshotConfig:
 
 
 #############################################################################
-@dataclass
+@dataclass(frozen=True)
 class AlertConfig:
     kind: Literal["Latest", "Oldest"]
     warning_millis: int
@@ -4468,7 +4468,7 @@ class Job:
                 results[dataset] = int(snapshots_changed)
         return results
 
-    @dataclass(order=True)
+    @dataclass(order=True, frozen=True)
     class ComparableSnapshot:
         key: Tuple[str, str]  # rel_dataset, guid
         cols: List[str] = field(compare=False)
@@ -5424,7 +5424,7 @@ class ProgressReporter:
 
     def _run_internal(self, fds: List[TextIO], selector: selectors.BaseSelector) -> None:
 
-        @dataclass
+        @dataclass(frozen=True)
         class Sample:
             sent_bytes: int
             timestamp_nanos: int
