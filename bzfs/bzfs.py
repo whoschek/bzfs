@@ -26,8 +26,8 @@
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
 * The core replication algorithm is in run_task() and especially in replicate_dataset().
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
-* The --create-src-snapshots-* and --delete-* and --compare-* algorithms also start in run_task().
-* Consider using an IDE/editor that can open multiple windows for the same file, such as PyCharm or Sublime Text, etc.
+* The --create-src-snapshots-* and --delete-* and --compare-* and --monitor-* algorithms also start in run_task().
+* Consider using an IDE/editor that can open multiple windows for the same (long) file, such as PyCharm or Sublime Text, etc.
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.py.
 Simply run that script whenever you change or add ArgumentParser help text.
 """
