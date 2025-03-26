@@ -2834,16 +2834,18 @@ class Job:
                 alert: MonitorSnapshotAlert = alerts[i]
                 check_alert(alert.label, alert.oldest, creation_unixtime_secs, dataset)
 
-            labels = [alert.label for alert in alerts]
-            src_datasets = filter_src_datasets()  # apply include/exclude policy
-            for remote, datasets in [(src, src_datasets), (dst, dst_datasets)]:
+            def alert_remote(remote, sorted_datasets):
+                labels = [alert.label for alert in alerts]
                 datasets_without_snapshots = self.handle_minmax_snapshots(
-                    remote, datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
+                    remote, sorted_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
                 )
                 for dataset in datasets_without_snapshots:
                     for i in range(len(alerts)):
                         alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset)
                         alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset)
+
+            src_datasets = filter_src_datasets()  # apply include/exclude policy
+            self.run_in_parallel(lambda: alert_remote(dst, dst_datasets), lambda: alert_remote(src, src_datasets))
 
     def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
@@ -4344,7 +4346,7 @@ class Job:
         labels: List[SnapshotLabel],
         fn_latest: Callable[[int, int, str], None],  # callback function for latest snapshot
         fn_oldest: Callable[[int, int, str], None] = None,  # callback function for oldest snapshot
-    ) -> List[str]:
+    ) -> List[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
         the callback functions on them. Ignores the timestamp of the input labels."""
         p = self.params
