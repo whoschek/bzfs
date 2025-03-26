@@ -215,8 +215,8 @@ feature.
 # Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience
-wrapper around `{prog_name}` that simplifies periodic ZFS snapshot creation, replication, and pruning, across source host
-and multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
+wrapper around `{prog_name}` that simplifies periodic ZFS snapshot creation, replication, pruning, and monitoring, across 
+source host and multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 # Quickstart
 
@@ -2785,10 +2785,10 @@ class Job:
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.run_compare_snapshot_lists(src_datasets, dst_datasets)
 
-        # Optionally, alert the user if the ZFS 'creation' time property of the latest snapshot for any specified snapshot
-        # name pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if
-        # snapshots are successfully taken on schedule and successfully replicated on schedule.
-        # Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
+        # Optionally, alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any specified
+        # snapshot name pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to
+        # check if snapshots are successfully taken on schedule, successfully replicated on schedule, and successfully
+        # pruned on schedule. Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
         if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
             log.info("--monitor-snapshots: %s", task_description)
             alerts: List[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts

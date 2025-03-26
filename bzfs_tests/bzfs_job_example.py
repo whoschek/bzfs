@@ -15,7 +15,7 @@
 # limitations under the License.
 
 #############################################################################
-# Quickstart for local replication: Edit this script. Replace all occurances of the word "nas" with the hostname of your
+# Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the hostname of your
 # local machine. Edit root_dataset_pairs to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH.
 # Run the final script like so:
 #
@@ -32,10 +32,10 @@ import sys
 
 parser = argparse.ArgumentParser(
     description=f"""
-Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication, and
-pruning, across source host and multiple destination hosts, using the same single shared jobconfig script. This script
-submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the actual work to
-the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
+Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication, 
+pruning, and monitoring, across source host and multiple destination hosts, using the same single shared jobconfig script. 
+This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the 
+actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
 """
 )
 known_args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`

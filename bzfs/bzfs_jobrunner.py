@@ -45,16 +45,17 @@ def argument_parser() -> argparse.ArgumentParser:
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
 
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS snapshot creation, replication,
-and pruning, across source host and multiple destination hosts, using a single shared
+pruning, and monitoring, across source host and multiple destination hosts, using a single shared
 [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 Typically, a cron job on the source host runs `{prog_name}` periodically to create new snapshots (via --create-src-snapshots)
 and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and --prune-src-bookmarks), whereas
 another cron job on the destination host runs `{prog_name}` periodically to prune outdated destination snapshots (via
 --prune-dst-snapshots), and to replicate the recently created snapshots from the source to the destination (via --replicate).
-Yet another cron job on both source and destination runs `{prog_name}` periodically to alert the user if the latest snapshot
-is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these periodic activities can
-vary by activity, and is typically every second, minute, hour, day, week, month and/or year (or multiples thereof).
+Yet another cron job on both source and destination runs `{prog_name}` periodically to alert the user if the latest or 
+oldest snapshot is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these 
+periodic activities can vary by activity, and is typically every second, minute, hour, day, week, month and/or year (or 
+multiples thereof).
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the
 source host and all destination hosts, and add crontab entries (or systemd timers or Monit entries or similar), along these

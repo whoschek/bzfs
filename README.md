@@ -119,8 +119,8 @@ reliably without the corresponding auxiliary feature.
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program,
 which is a convenience wrapper around `bzfs` that simplifies periodic ZFS snapshot creation,
-replication, and pruning, across source host and multiple destination hosts, using a single shared
-[jobconfig](bzfs_tests/bzfs_job_example.py) script.
+replication, pruning, and monitoring, across source host and multiple destination hosts, using a
+single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 # Quickstart
 
