@@ -103,10 +103,10 @@ dummy_dataset = "dummy"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_version_is_at_least_2_2_0 = "zfs>=2.2.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
-snapshot_regex_filter_names = {"include_snapshot_regex", "exclude_snapshot_regex"}
+snapshot_regex_filter_names = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 snapshot_regex_filter_name = "snapshot_regex"
 snapshot_filters_var = "snapshot_filters_var"
-cmp_choices_items = ["src", "dst", "all"]
+cmp_choices_items = ("src", "dst", "all")
 inject_dst_pipe_fail_kbytes = 400
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
@@ -2014,7 +2014,7 @@ class CreateSrcSnapshotConfig:
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: str = args.create_src_snapshots_timeformat
-        self.anchors: PeriodAnchors = PeriodAnchors().parse(args)
+        self.anchors: PeriodAnchors = PeriodAnchors.parse(args)
 
         suffixes: List[str] = []
         labels = []
@@ -2080,7 +2080,7 @@ class AlertConfig:
 
 
 #############################################################################
-@dataclass
+@dataclass(frozen=True)
 class MonitorSnapshotAlert:
     label: SnapshotLabel
     latest: AlertConfig
@@ -2103,7 +2103,7 @@ class MonitorSnapshotsConfig:
             for target, periods in target_periods.items():
                 for period_unit, alert_dicts in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     label = SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
-                    alert = MonitorSnapshotAlert(label, None, None)
+                    alert_latest, alert_oldest = None, None
                     for alert_type, alert_dict in alert_dicts.items():
                         m = "--monitor-snapshots: "
                         if alert_type not in ["latest", "oldest"]:
@@ -2130,13 +2130,13 @@ class MonitorSnapshotsConfig:
                             alert_config = AlertConfig(alert_type.capitalize(), warning_millis, critical_millis)
                             if alert_type == "latest":
                                 if not self.no_latest_check:
-                                    alert.latest = alert_config
+                                    alert_latest = alert_config
                             else:
                                 assert alert_type == "oldest"
                                 if not self.no_oldest_check:
-                                    alert.oldest = alert_config
-                    if alert.latest is not None or alert.oldest is not None:
-                        alerts.append(alert)
+                                    alert_oldest = alert_config
+                    if alert_latest is not None or alert_oldest is not None:
+                        alerts.append(MonitorSnapshotAlert(label, alert_latest, alert_oldest))
 
         def alert_sort_key(alert: MonitorSnapshotAlert):
             duration_amount, duration_unit = xperiods.suffix_to_duration1(alert.label.suffix)
@@ -4691,7 +4691,7 @@ class Job:
 
     def merge_sorted_iterators(
         self,
-        choices: List[str],  # ["src", "dst", "all"]
+        choices: Sequence[str],  # ["src", "dst", "all"]
         choice: str,  # Example: "src+dst+all"
         src_itr: Generator[ComparableSnapshot, None, None],
         dst_itr: Generator[ComparableSnapshot, None, None],
@@ -6018,7 +6018,7 @@ metadata_millisecond = {"min": 0, "max": 999, "help": "The millisecond within a 
 metadata_microsecond = {"min": 0, "max": 999, "help": "The microsecond within a millisecond"}
 
 
-@dataclass
+@dataclass(frozen=True)
 class PeriodAnchors:
     # The anchors for a given duration unit are computed as follows:
     # yearly: Anchor(dt) = latest T where T <= dt and T == Start of January 1 of dt + anchor.yearly_* vars
@@ -6058,10 +6058,10 @@ class PeriodAnchors:
     # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.millisecondly_* vars
     millisecondly_microsecond: int = field(default=0, metadata=metadata_microsecond)  # 0 <= x <= 999
 
-    def parse(self, args: argparse.Namespace):
-        for f in fields(PeriodAnchors):
-            setattr(self, f.name, getattr(args, f.name))
-        return self
+    @staticmethod
+    def parse(args: argparse.Namespace) -> "PeriodAnchors":
+        kwargs = {f.name: getattr(args, f.name) for f in fields(PeriodAnchors)}
+        return PeriodAnchors(**kwargs)
 
 
 def round_datetime_up_to_duration_multiple(
