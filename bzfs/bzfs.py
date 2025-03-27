@@ -3156,12 +3156,7 @@ class Job:
         return True
 
     def prepare_zfs_send_receive(
-        self,
-        src_dataset: str,
-        send_cmd: List[str],
-        recv_cmd: List[str],
-        size_estimate_bytes: int,
-        size_estimate_human: str,
+        self, src_dataset: str, send_cmd: List[str], recv_cmd: List[str], size_estimate_bytes: int, size_estimate_human: str
     ) -> Tuple[str, str, str]:
         p, log = self.params, self.params.log
         send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
