@@ -1525,7 +1525,7 @@ class LogParams:
         self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
-        self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d) 2024-09-03_12 (h) vs 2024-09-03_12:26 (m)
+        self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
         os.makedirs(self.log_dir, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
         self.log_file_infix = args.log_file_infix
@@ -2792,6 +2792,7 @@ class Job:
         if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
             log.info("--monitor-snapshots: %s", task_description)
             alerts: List[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
+            labels = [alert.label for alert in alerts]
             current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
             is_debug = log.isEnabledFor(log_debug)
 
@@ -2813,12 +2814,12 @@ class Job:
                 alert_kind = alert_cfg.kind
                 snapshot_age_millis = current_unixtime_millis - creation_unixtime_secs * 1000
                 m = "--monitor_snapshots: "
-                if snapshot_age_millis - critical_millis > 0:
+                if snapshot_age_millis > critical_millis:
                     msg = m + alert_msg(alert_kind, dataset, label, snapshot_age_millis, critical_millis)
                     log.critical("%s", msg)
                     if not p.monitor_snapshots_config.dont_crit:
                         die(msg, exit_code=critical_status)
-                elif snapshot_age_millis - warning_millis > 0:
+                elif snapshot_age_millis > warning_millis:
                     msg = m + alert_msg(alert_kind, dataset, label, snapshot_age_millis, warning_millis)
                     log.warning("%s", msg)
                     if not p.monitor_snapshots_config.dont_warn:
@@ -2835,7 +2836,6 @@ class Job:
                 check_alert(alert.label, alert.oldest, creation_unixtime_secs, dataset)
 
             def alert_remote(remote, sorted_datasets):
-                labels = [alert.label for alert in alerts]
                 datasets_without_snapshots = self.handle_minmax_snapshots(
                     remote, sorted_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
                 )
