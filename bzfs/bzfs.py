@@ -82,6 +82,7 @@ from typing import Deque, Dict, Iterable, Iterator, List, Literal, Sequence, Set
 from typing import Any, Callable, Generator, Generic, Optional
 from typing import ItemsView, TextIO, TypeVar, Union
 
+# constants:
 __version__ = "1.12.0-dev"
 prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
