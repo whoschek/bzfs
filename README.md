@@ -75,11 +75,12 @@ runs `bzfs` periodically to prune outdated destination snapshots. Yet another `c
 destination. The frequency of these periodic activities is typically every N milliseconds, every
 second, minute, hour, day, week, month and/or year (or multiples thereof).
 
-All bzfs functions including snapshot creation, replication, deletion, comparison, etc. happily
-work with any snapshots in any format, even created or managed by third party ZFS snapshot
-management tools, including manual zfs snapshot/destroy. All functions can also be used
+All bzfs functions including snapshot creation, replication, deletion, monitoring, comparison,
+etc. happily work with any snapshots in any format, even created or managed by third party ZFS
+snapshot management tools, including manual zfs snapshot/destroy. All functions can also be used
 independently. That is, if you wish you can use bzfs just for creating snapshots, or just for
-replicating, or just for deleting/pruning, or just for comparing snapshot lists.
+replicating, or just for deleting/pruning, or just for monitoring, or just for comparing snapshot
+lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. bzfs
 is installed and executed on the 'initiator' host which can be either the host that contains the
@@ -1075,9 +1076,9 @@ usage: bzfs [-h] [--recursive]
     are spread over multiple command line invocations, respecting the limits that the operating
     system places on the maximum length of a single command line, per `getconf ARG_MAX`.
 
-    Note: All bzfs functions including snapshot creation, replication, deletion, comparison, etc.
-    happily work with any snapshots in any format, even created or managed by third party ZFS
-    snapshot management tools, including manual zfs snapshot/destroy.
+    Note: All bzfs functions including snapshot creation, replication, deletion, monitoring,
+    comparison, etc. happily work with any snapshots in any format, even created or managed by
+    third party ZFS snapshot management tools, including manual zfs snapshot/destroy.
 
 <!-- -->
 

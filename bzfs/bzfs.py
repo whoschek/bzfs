@@ -176,10 +176,11 @@ outdated destination snapshots. Yet another `cron` job runs `{prog_name}` period
 snapshots from the source to the destination. The frequency of these periodic activities is typically every N milliseconds,
 every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
-All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily work with any
-snapshots in any format, even created or managed by third party ZFS snapshot management tools, including manual
+All {prog_name} functions including snapshot creation, replication, deletion, monitoring, comparison, etc. happily work 
+with any snapshots in any format, even created or managed by third party ZFS snapshot management tools, including manual
 zfs snapshot/destroy. All functions can also be used independently. That is, if you wish you can use {prog_name} just
-for creating snapshots, or just for replicating, or just for deleting/pruning, or just for comparing snapshot lists.
+for creating snapshots, or just for replicating, or just for deleting/pruning, or just for monitoring, or just for 
+comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
@@ -676,9 +677,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "property as ZFS actually provides no such guarantee), and thus be consistent. Dataset names that can't fit "
              "into a single command line are spread over multiple command line invocations, respecting the limits that the "
              "operating system places on the maximum length of a single command line, per `getconf ARG_MAX`.\n\n"
-             f"Note: All {prog_name} functions including snapshot creation, replication, deletion, comparison, etc. happily "
-             "work with any snapshots in any format, even created or managed by third party ZFS snapshot management tools, "
-             "including manual zfs snapshot/destroy.\n\n")
+             f"Note: All {prog_name} functions including snapshot creation, replication, deletion, monitoring, comparison, "
+             "etc. happily work with any snapshots in any format, even created or managed by third party ZFS snapshot "
+             "management tools, including manual zfs snapshot/destroy.\n\n")
     parser.add_argument(
         "--create-src-snapshots-plan", default=None, type=str, metavar="DICT_STRING",
         help="Creation periods that specify a schedule for when new snapshots shall be created on src within the selected "
@@ -2108,7 +2109,7 @@ class MonitorSnapshotsConfig:
                     for alert_type, alert_dict in alert_dicts.items():
                         m = "--monitor-snapshots: "
                         if alert_type not in ["latest", "oldest"]:
-                            die(f"{m}{alert_type}' must be 'latest' or 'oldest within {args.monitor_snapshots}")
+                            die(f"{m}'{alert_type}' must be 'latest' or 'oldest' within {args.monitor_snapshots}")
                         warning_millis: int = 0
                         critical_millis: int = 0
                         cycles: int = 1
