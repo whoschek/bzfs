@@ -68,7 +68,7 @@ import threading
 import time
 import traceback
 from argparse import Namespace
-from collections import defaultdict, deque, Counter, namedtuple
+from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from contextlib import redirect_stderr, suppress
 from dataclasses import dataclass, field, fields
@@ -1564,7 +1564,6 @@ RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
 RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
 Tree = Dict[str, Optional[Dict]]  # Type alias
-RemoteConfCacheItem = namedtuple("RemoteConfCacheItem", ["connection_pools", "available_programs", "zpool_features"])
 
 
 #############################################################################
@@ -1994,8 +1993,7 @@ class SnapshotPeriods:
 
     @staticmethod
     def _suffix_to_duration(suffix: str, regex: re.Pattern) -> Tuple[int, str]:
-        match = regex.fullmatch(suffix)
-        if match:
+        if match := regex.fullmatch(suffix):
             duration_amount = int(match.group(1)) if match.group(1) else 1
             assert duration_amount > 0
             duration_unit = match.group(2)
@@ -2151,6 +2149,14 @@ class MonitorSnapshotsConfig:
 
     def __repr__(self) -> str:
         return str(self.__dict__)
+
+
+#############################################################################
+@dataclass(frozen=True)
+class RemoteConfCacheItem:
+    connection_pools: "ConnectionPools"
+    available_programs: Dict[str, str]
+    zpool_features: Dict[str, str]
 
 
 #############################################################################
@@ -3454,8 +3460,7 @@ class Job:
             readable = shlex.quote(size_estimate_human)
             pv_log_file = p.log_params.pv_log_file
             thread_name = threading.current_thread().name
-            match = Job.worker_thread_number_regex.fullmatch(thread_name)
-            if match:
+            if match := Job.worker_thread_number_regex.fullmatch(thread_name):
                 worker = int(match.group(1))
                 if worker > 0:
                     pv_log_file += pv_file_thread_separator + f"{worker:04}"
@@ -4848,7 +4853,9 @@ class Job:
             cache_item: Optional[RemoteConfCacheItem] = self.remote_conf_cache.get(remote_conf_cache_key)
             if cache_item is not None:
                 # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
-                p.connection_pools[loc], available_programs[loc], p.zpool_features[loc] = cache_item
+                p.connection_pools[loc] = cache_item.connection_pools
+                available_programs[loc] = cache_item.available_programs
+                p.zpool_features[loc] = cache_item.zpool_features
                 continue
             p.connection_pools[loc] = ConnectionPools(
                 r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
