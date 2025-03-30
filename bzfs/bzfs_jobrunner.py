@@ -32,6 +32,7 @@ import subprocess
 import sys
 import uuid
 from importlib.machinery import SourceFileLoader
+from logging import Logger
 from typing import Dict, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
@@ -272,12 +273,12 @@ def main():
 
 #############################################################################
 class Job:
-    def __init__(self, log: Optional[logging.Logger] = None):
-        self.log = log if log is not None else get_logger()
+    def __init__(self, log: Optional[Logger] = None):
+        self.log: Logger = log if log is not None else get_logger()
         self.bzfs = load_module("bzfs")
-        self.bzfs_argument_parser = self.bzfs.argument_parser()
-        self.argument_parser = argument_parser()
-        self.first_exception = None
+        self.bzfs_argument_parser: argparse.ArgumentParser = self.bzfs.argument_parser()
+        self.argument_parser: argparse.ArgumentParser = argument_parser()
+        self.first_exception: Optional[BaseException] = None
 
     def run_main(self, sys_argv: List[str]) -> None:
         self.first_exception = None
@@ -553,7 +554,7 @@ def load_module(progname: str):
         return importlib.import_module(f"{progname}.{progname}")
 
 
-def get_logger() -> logging.Logger:
+def get_logger() -> Logger:
     level_prefixes = {
         logging.CRITICAL: "[C] CRITICAL:",
         logging.ERROR: "[E] ERROR:",

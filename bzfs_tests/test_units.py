@@ -31,7 +31,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs

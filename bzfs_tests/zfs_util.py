@@ -16,21 +16,22 @@
 import platform
 import re
 import subprocess
+from typing import Iterable, List
 
 sudo_cmd = []
 
 
-def set_sudo_cmd(sudo):
+def set_sudo_cmd(sudo: List[str]) -> None:
     global sudo_cmd
     sudo_cmd = sudo
 
 
-def destroy_pool(pool_name, force=False):
+def destroy_pool(pool_name: str, force=False) -> None:
     force = ["-f"] if force else []
     run_cmd(sudo_cmd + ["zpool", "destroy"] + force + [pool_name])
 
 
-def destroy(name, recursive=False, force=False):
+def destroy(name: str, recursive=False, force=False) -> None:
     cmd = sudo_cmd + ["zfs", "destroy"]
     if recursive:
         cmd.append("-r")
@@ -40,7 +41,7 @@ def destroy(name, recursive=False, force=False):
     run_cmd(cmd)
 
 
-def destroy_snapshots(dataset, snapshots=[]):
+def destroy_snapshots(dataset: str, snapshots=[]) -> None:
     if len(snapshots) == 0:
         return
     if is_solaris_zfs():  # solaris-11.4 does not support passing multiple snapshots per CLI invocation
@@ -52,7 +53,9 @@ def destroy_snapshots(dataset, snapshots=[]):
         run_cmd(cmd)
 
 
-def create_volume(dataset, path=None, mk_parents=True, size=None, props=[], blocksize=None, sparse=False):
+def create_volume(
+    dataset: str, path: str = None, mk_parents=True, size: int = None, props=[], blocksize: int = None, sparse=False
+) -> str:
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ["zfs", "create"]
@@ -72,7 +75,7 @@ def create_volume(dataset, path=None, mk_parents=True, size=None, props=[], bloc
     return dataset
 
 
-def create_filesystem_simple(dataset, path=None, mk_parents=True, no_mount=True, props=[]):
+def create_filesystem_simple(dataset: str, path: str = None, mk_parents=True, no_mount=True, props=[]) -> str:
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ["zfs", "create"]
@@ -90,7 +93,7 @@ def create_filesystem_simple(dataset, path=None, mk_parents=True, no_mount=True,
 zfs_version_is_at_least_2_1_0 = None
 
 
-def create_filesystem(dataset, path=None, no_mount=True, props=[]):
+def create_filesystem(dataset: str, path: str = None, no_mount=True, props=[]):
     """implies mk_parents=True
     if no_mount=True:
     To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
@@ -134,11 +137,11 @@ def create_filesystem(dataset, path=None, no_mount=True, props=[]):
     return dataset
 
 
-def datasets(dataset):
+def datasets(dataset: str) -> List[str]:
     return zfs_list([dataset], types=["filesystem", "volume"], max_depth=1)[1:]
 
 
-def take_snapshot(dataset, snapshot_tag, recursive=False, props=[]):
+def take_snapshot(dataset: str, snapshot_tag: str, recursive=False, props=[]) -> str:
     snapshot = dataset + "@" + snapshot_tag
     cmd = sudo_cmd + ["zfs", "snapshot"]
     if recursive:
@@ -150,41 +153,41 @@ def take_snapshot(dataset, snapshot_tag, recursive=False, props=[]):
     return snapshot
 
 
-def snapshots(dataset, max_depth=1):
+def snapshots(dataset: str, max_depth: int = 1) -> List[str]:
     return zfs_list([dataset], types=["snapshot"], max_depth=max_depth)
 
 
-def create_bookmark(dataset, snapshot_tag, bookmark_tag):
+def create_bookmark(dataset: str, snapshot_tag: str, bookmark_tag: str) -> str:
     snapshot = dataset + "@" + snapshot_tag
     bookmark = dataset + "#" + bookmark_tag
     run_cmd(sudo_cmd + ["zfs", "bookmark", snapshot, bookmark])
     return bookmark
 
 
-def bookmarks(dataset, max_depth=1):
+def bookmarks(dataset: str, max_depth: int = 1) -> List[str]:
     return zfs_list([dataset], types=["bookmark"], max_depth=max_depth)
 
 
-def snapshot_name(snapshot):
+def snapshot_name(snapshot: str) -> str:
     return snapshot[snapshot.find("@") + 1 :]
 
 
-def bookmark_name(bookmark):
+def bookmark_name(bookmark: str) -> str:
     return bookmark[bookmark.find("#") + 1 :]
 
 
-def dataset_property(dataset=None, prop=None):
+def dataset_property(dataset: str, prop: str) -> str:
     return zfs_list([dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, splitlines=False)
     # return zfs_get(
     #     [dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, fields=["value"], splitlines=False
     # )
 
 
-def snapshot_property(snapshot, prop):
+def snapshot_property(snapshot: str, prop: str) -> str:
     return zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0, splitlines=False)
 
 
-def zfs_list(names=[], props=["name"], types=[], max_depth=None, parsable=True, sort_props=[], splitlines=True):
+def zfs_list(names=[], props=["name"], types=[], max_depth: int = None, parsable=True, sort_props=[], splitlines=True):
     cmd = ["zfs", "list"]
     if max_depth is None:
         cmd.append("-r")
@@ -213,7 +216,7 @@ def zfs_list(names=[], props=["name"], types=[], max_depth=None, parsable=True, 
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_get(names=[], props=["all"], types=[], max_depth=None, parsable=True, fields=[], sources=[], splitlines=True):
+def zfs_get(names=[], props=["all"], types=[], max_depth: int = None, parsable=True, fields=[], sources=[], splitlines=True):
     cmd = ["zfs", "get"]
     if max_depth is None:
         cmd.append("-r")
@@ -246,7 +249,7 @@ def zfs_get(names=[], props=["all"], types=[], max_depth=None, parsable=True, fi
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_set(names=[], properties={}):
+def zfs_set(names: List[str] = [], properties: Iterable[str] = {}) -> None:
     def run_zfs_set(props):
         cmd = sudo_cmd + ["zfs", "set"]
         for prop in props:
@@ -262,7 +265,7 @@ def zfs_set(names=[], properties={}):
             run_zfs_set([f"{name}={value}"])
 
 
-def zfs_inherit(names=[], propname=None, recursive=False, revert=False):
+def zfs_inherit(names: List[str] = [], propname: str = None, recursive=False, revert=False) -> None:
     assert propname
     cmd = sudo_cmd + ["zfs", "inherit"]
     if recursive:
@@ -276,7 +279,7 @@ def zfs_inherit(names=[], propname=None, recursive=False, revert=False):
     run_cmd(cmd)
 
 
-def dataset_exists(dataset):
+def dataset_exists(dataset: str) -> bool:
     try:
         build(dataset)
         return True
@@ -284,7 +287,7 @@ def dataset_exists(dataset):
         return False
 
 
-def build(name, check=True):
+def build(name: str, check=True) -> str:
     if check:
         if "@" in name:
             types = ["snapshot"]
@@ -299,7 +302,7 @@ def build(name, check=True):
     return name
 
 
-def zfs_version():
+def zfs_version() -> str:
     """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5"""
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
@@ -332,7 +335,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
-def is_solaris_zfs():
+def is_solaris_zfs() -> bool:
     return platform.system() == "SunOS"
 
 

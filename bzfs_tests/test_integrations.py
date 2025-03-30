@@ -34,6 +34,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
 
 from bzfs import bzfs, bzfs_jobrunner
@@ -200,7 +201,7 @@ class ParametrizedTestCase(unittest.TestCase):
 #############################################################################
 class BZFSTestCase(ParametrizedTestCase):
 
-    def setUp(self, pool_size_bytes=pool_size_bytes_default):
+    def setUp(self, pool_size_bytes: int = pool_size_bytes_default):
         global src_pool, dst_pool
         global src_root_dataset, dst_root_dataset
         global afix
@@ -241,7 +242,7 @@ class BZFSTestCase(ParametrizedTestCase):
         self.tearDown()
         self.setUp()
 
-    def setup_basic(self, volume=False):
+    def setup_basic(self, volume=False) -> None:
         compression_props = ["-o", "compression=on"]
         encryption_props = ["-o", f"encryption={encryption_algo}"]
         if is_solaris_zfs():
@@ -263,7 +264,7 @@ class BZFSTestCase(ParametrizedTestCase):
         take_snapshot(src_foo_a, fix("u2"))
         take_snapshot(src_foo_a, fix("u3"))
 
-    def setup_basic_woo(self, w=1, q=0):
+    def setup_basic_woo(self, w=1, q=0) -> None:
         for i in range(w):
             src_woo = create_filesystem(src_root_dataset, f"woo{i}")
             take_snapshot(src_woo, fix("w1"))
@@ -275,7 +276,7 @@ class BZFSTestCase(ParametrizedTestCase):
                 take_snapshot(src_woo_qoo, fix("q2"))
                 take_snapshot(src_woo_qoo, fix("q3"))
 
-    def setup_basic_with_recursive_replication_done(self):
+    def setup_basic_with_recursive_replication_done(self) -> None:
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive")
         self.assertSnapshots(dst_root_dataset, 3, "s")
@@ -284,32 +285,32 @@ class BZFSTestCase(ParametrizedTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
     @staticmethod
-    def log_dir_opt():
+    def log_dir_opt() -> List[str]:
         return ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
 
     def run_bzfs(
         self,
         *args,
-        dry_run=None,
-        no_create_bookmark=False,
-        no_use_bookmark=False,
-        skip_on_error="fail",
-        retries=0,
-        expected_status=0,
-        error_injection_triggers=None,
-        delete_injection_triggers=None,
-        param_injection_triggers=None,
-        inject_params=None,
-        max_command_line_bytes=None,
-        creation_prefix=None,
-        max_exceptions_to_summarize=None,
-        max_datasets_per_minibatch_on_list_snaps=None,
-        control_persist_margin_secs=None,
-        isatty=None,
-        progress_update_intervals=None,
-        use_select=None,
-        use_jobrunner=False,
-        include_snapshot_plan_excludes_outdated_snapshots=None,
+        dry_run: bool = None,
+        no_create_bookmark: bool = False,
+        no_use_bookmark: bool = False,
+        skip_on_error: str = "fail",
+        retries: int = 0,
+        expected_status: int = 0,
+        error_injection_triggers: Dict[str, Counter] = None,
+        delete_injection_triggers: Dict[str, Counter] = None,
+        param_injection_triggers: Dict[str, Dict[str, bool]] = None,
+        inject_params: Dict[str, bool] = None,
+        max_command_line_bytes: int = None,
+        creation_prefix: str = None,
+        max_exceptions_to_summarize: int = None,
+        max_datasets_per_minibatch_on_list_snaps: int = None,
+        control_persist_margin_secs: int = None,
+        isatty: bool = None,
+        progress_update_intervals: Optional[Tuple[float, float]] = None,
+        use_select: bool = None,
+        use_jobrunner: bool = False,
+        include_snapshot_plan_excludes_outdated_snapshots: bool = None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -553,17 +554,17 @@ class BZFSTestCase(ParametrizedTestCase):
             self.assertEqual(expected_status, returncode)
         return job
 
-    def assertSnapshotNames(self, dataset, expected_names):
+    def assertSnapshotNames(self, dataset: str, expected_names: List[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([snapshot_name(snapshot) for snapshot in snapshots(dataset)])
         expected_names = [fix(name) for name in expected_names]
         self.assertListEqual(expected_names, snap_names)
 
-    def assertSnapshots(self, dataset, expected_num_snapshots, snapshot_prefix="", offset=0):
+    def assertSnapshots(self, dataset: str, expected_num_snapshots: int, snapshot_prefix: str = "", offset: int = 0) -> None:
         expected_names = [f"{snapshot_prefix}{i + 1 + offset}" for i in range(0, expected_num_snapshots)]
         self.assertSnapshotNames(dataset, expected_names)
 
-    def assertSnapshotNameRegexes(self, dataset, expected_names):
+    def assertSnapshotNameRegexes(self, dataset: str, expected_names: List[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([snapshot_name(snapshot) for snapshot in snapshots(dataset)])
         expected_names = [fix(name) for name in expected_names]
@@ -571,20 +572,20 @@ class BZFSTestCase(ParametrizedTestCase):
         for expected_name, snap_name in zip(expected_names, snap_names):
             self.assertRegex(snap_name, expected_name, f"{expected_names} vs. {snap_names}")
 
-    def assertBookmarkNames(self, dataset, expected_names):
+    def assertBookmarkNames(self, dataset: str, expected_names: List[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([bookmark_name(bookmark) for bookmark in bookmarks(dataset)])
         expected_names = [fix(name) for name in expected_names]
         self.assertListEqual(expected_names, snap_names)
 
-    def is_no_privilege_elevation(self):
+    def is_no_privilege_elevation(self) -> bool:
         return self.param and self.param.get("no_privilege_elevation", False)
 
-    def is_encryption_mode(self):
+    def is_encryption_mode(self) -> bool:
         return self.param and self.param.get("encrypted_dataset", False)
 
     @staticmethod
-    def properties_with_special_characters():
+    def properties_with_special_characters() -> Dict[str, str]:
         return {
             "compression": "off",
             "bzfs:prop0": "/tmp/dir with  spaces and $ dollar sign-" + str(os.getpid()),
@@ -597,7 +598,7 @@ class BZFSTestCase(ParametrizedTestCase):
             "bzfs:prop7": "/tmp/foo\\bar",
         }
 
-    def generate_recv_resume_token(self, from_snapshot, to_snapshot, dst_dataset):
+    def generate_recv_resume_token(self, from_snapshot: str, to_snapshot: str, dst_dataset: str) -> None:
         snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
         send = f"sudo -n zfs send --props --raw --compressed -v {snapshot_opts}"
         c = bzfs.inject_dst_pipe_fail_kbytes
@@ -612,7 +613,7 @@ class BZFSTestCase(ParametrizedTestCase):
         self.assertNotEqual("-", receive_resume_token)
         self.assertNotIn(dst_dataset + to_snapshot[to_snapshot.index("@") :], snapshots(dst_dataset))
 
-    def assert_receive_resume_token(self, dataset, exists) -> str:
+    def assert_receive_resume_token(self, dataset: str, exists: bool) -> str:
         receive_resume_token = dataset_property(dataset, "receive_resume_token")
         if exists:
             self.assertTrue(receive_resume_token)
@@ -5120,23 +5121,23 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
 
 #############################################################################
-def create_filesystems(path, props=None):
+def create_filesystems(path: str, props: List[str] = None) -> str:
     create_filesystem(src_root_dataset, path, props=props)
     return create_filesystem(dst_root_dataset, path, props=props)
 
 
-def recreate_filesystem(dataset, props=None):
+def recreate_filesystem(dataset: str, props: List[str] = None) -> str:
     if dataset_exists(dataset):
         destroy(dataset, recursive=True)
     return create_filesystem(dataset, props=props)
 
 
-def create_volumes(path, props=None):
+def create_volumes(path: str, props: List[str] = None) -> str:
     create_volume(src_root_dataset, path, size="1M", props=props)
     return create_volume(dst_root_dataset, path, size="1M", props=props)
 
 
-def detect_zpool_features(location, pool):
+def detect_zpool_features(location: str, pool: str) -> None:
     cmd = "zpool get -Hp -o property,value all".split(" ") + [pool]
     lines = run_cmd(cmd)
     props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
@@ -5144,26 +5145,26 @@ def detect_zpool_features(location, pool):
     zpool_features[location] = features
 
 
-def is_zpool_feature_enabled_or_active(location, feature):
+def is_zpool_feature_enabled_or_active(location: str, feature: str) -> bool:
     return zpool_features[location].get(feature) in ("active", "enabled")
 
 
-def are_bookmarks_enabled(location):
+def are_bookmarks_enabled(location: str) -> bool:
     return is_zpool_feature_enabled_or_active(location, "feature@bookmark_v2") and is_zpool_feature_enabled_or_active(
         location, "feature@bookmark_written"
     )
 
 
-def is_zpool_recv_resume_feature_enabled_or_active():
+def is_zpool_recv_resume_feature_enabled_or_active() -> bool:
     return is_zpool_feature_enabled_or_active("src", "feature@extensible_dataset") and is_zfs_at_least_2_1_0()
 
 
-def fix(s):
+def fix(s: str) -> str:
     """Generate names containing leading and trailing whitespace, forbidden characters, etc."""
     return afix + s + afix
 
 
-def natsorted(iterable, key=None, reverse=False):
+def natsorted(iterable, key=None, reverse=False) -> List:
     """
     Returns a new list containing all items from the iterable in ascending order.
     If `key` is specified, it will be used to extract a comparison key from each list element.
@@ -5185,11 +5186,11 @@ def natsort_key(s: str):
     return s, 0
 
 
-def is_solaris_zfs_at_least_11_4_42():
+def is_solaris_zfs_at_least_11_4_42() -> bool:
     return is_solaris_zfs() and bzfs.is_version_at_least(".".join(platform.version().split(".")[0:3]), "11.4.42")
 
 
-def is_zfs_at_least_2_3_0():
+def is_zfs_at_least_2_3_0() -> bool:
     if is_solaris_zfs():
         return False
     ver = zfs_version()
@@ -5198,7 +5199,7 @@ def is_zfs_at_least_2_3_0():
     return bzfs.is_version_at_least(ver, "2.3.0")
 
 
-def is_zfs_at_least_2_1_0():
+def is_zfs_at_least_2_1_0() -> bool:
     if is_solaris_zfs():
         return False
     ver = zfs_version()
@@ -5207,6 +5208,6 @@ def is_zfs_at_least_2_1_0():
     return bzfs.is_version_at_least(ver, "2.1.0")
 
 
-def os_username():
+def os_username() -> str:
     # return getpass.getuser()
     return pwd.getpwuid(os.getuid()).pw_name
