@@ -2154,7 +2154,7 @@ class MonitorSnapshotsConfig:
 #############################################################################
 @dataclass(frozen=True)
 class RemoteConfCacheItem:
-    connection_pools: "ConnectionPools"
+    connection_pools: Any  # ConnectionPools
     available_programs: Dict[str, str]
     zpool_features: Dict[str, str]
 
