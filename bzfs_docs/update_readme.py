@@ -16,8 +16,8 @@
 
 import os
 import re
-import sys
 import subprocess
+import sys
 
 from bzfs import bzfs
 from bzfs import bzfs_jobrunner

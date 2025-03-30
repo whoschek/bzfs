@@ -1265,17 +1265,18 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--daemon-lifetime", default="0 seconds", metavar="DURATION",
         # help="Exit the daemon after this much time has elapsed. Default is '0 seconds', i.e. no daemon mode. "
-        #      "Examples: '600 seconds', '86400 seconds', '1000years'")
+        #      "Examples: '600 seconds', '86400 seconds', '1000years'\n\n")
         help=argparse.SUPPRESS)
     daemon_frequency_dflt = "minutely"
     parser.add_argument(
         "--daemon-frequency", default=daemon_frequency_dflt, metavar="STRING",
         # help=f"Run a daemon iteration every N time units. Default is '{daemon_frequency_dflt}'. "
         #      "Examples: '100 millisecondly', '10secondly, 'minutely' to request the daemon to run every 100 milliseconds, "
-        #      "or every 10 seconds, or every minute, respectively. Only has an effect if --daemon-lifetime is non-zero.")
+        #      "or every 10 seconds, or every minute, respectively. Only has an effect if --daemon-lifetime is nonzero.\n\n")
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--no-estimate-send-size", action="store_true",
+        # help="Skip 'zfs send -n -v' on replication.\n\n")
         help=argparse.SUPPRESS)
 
     def hlp(program: str) -> str:
@@ -4289,7 +4290,8 @@ class Job:
         src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot = defaultdict(list)
         labels = []
-        for label in config.snapshot_labels():
+        config_labels: List[SnapshotLabel] = config.snapshot_labels()
+        for label in config_labels:
             _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
             if _duration_amount == 0 or config.create_src_snapshots_even_if_not_due:
                 datasets_to_snapshot[label] = sorted_datasets  # take snapshot regardless of creation time of existing snaps
@@ -4337,7 +4339,7 @@ class Job:
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
                 )
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
-        label_indexes = {label: k for k, label in enumerate(config.snapshot_labels())}
+        label_indexes = {label: k for k, label in enumerate(config_labels)}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
         return datasets_to_snapshot
 
