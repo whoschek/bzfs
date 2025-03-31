@@ -1553,7 +1553,7 @@ class LogParams:
         dst_file = os.path.join(current_dir, current)
         os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
         os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
-        delete_stale_files(dot_current_dir, prefix="", secs=60, dirs=True, exclude=os.path.basename(current_dir))
+        delete_stale_files(dot_current_dir, prefix="", millis=10, dirs=True, exclude=os.path.basename(current_dir))
         self.params: Params = None
 
     def __repr__(self) -> str:
@@ -5631,14 +5631,15 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     return lst
 
 
-def delete_stale_files(root_dir: str, prefix: str, secs: int = 31 * 24 * 60 * 60, dirs=False, exclude=None) -> None:
+def delete_stale_files(root_dir: str, prefix: str, millis: int = 31 * 24 * 60 * 60 * 1000, dirs=False, exclude=None) -> None:
     """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
-    now = time.time()
+    nanos = millis * 1_000_000
+    now = time.time_ns()
     for entry in os.scandir(root_dir):
         if entry.name == exclude or not entry.name.startswith(prefix):
             continue
         try:
-            if ((dirs and entry.is_dir()) or (not dirs and not entry.is_dir())) and now - entry.stat().st_mtime >= secs:
+            if ((dirs and entry.is_dir()) or (not dirs and not entry.is_dir())) and now - entry.stat().st_mtime_ns >= nanos:
                 if dirs:
                     shutil.rmtree(entry.path, ignore_errors=True)
                 else:
