@@ -552,7 +552,7 @@ def load_module(progname: str) -> ModuleType:
     loader.exec_module(module)
     if hasattr(module, "run_main"):
         return module
-    else:  # It's a wrapper script that was installed as a package by 'pip install'; load that installed package
+    else:  # It's a wrapper script as `bzfs` was installed as a package by 'pip install'; load that installed package
         return importlib.import_module(f"{progname}.{progname}")
 
 

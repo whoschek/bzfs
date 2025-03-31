@@ -79,7 +79,7 @@ from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import Deque, Dict, Iterable, Iterator, List, Literal, Sequence, Set, Tuple
-from typing import Any, Callable, Generator, Generic, Optional
+from typing import Any, Callable, Final, Generator, Generic, Optional
 from typing import ItemsView, TextIO, TypeVar, Union
 
 # constants:
@@ -995,7 +995,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "than 300+60=360 minutes old) [critical]. "
              "Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
-             "the given snapshot name pattern.")
+             "the given snapshot name pattern.\n\n")
     parser.add_argument(
         "--monitor-snapshots-dont-warn", action="store_true",
         help="Log a message for monitoring warnings but nonetheless exit with zero exit code.\n\n")
@@ -1963,7 +1963,8 @@ class SnapshotLabel:
 #############################################################################
 class SnapshotPeriods:
     def __init__(self):
-        self.suffix_milliseconds = {
+        # immutable variables:
+        self.suffix_milliseconds: Final = {
             "yearly": 365 * 86400 * 1000,
             "monthly": round(30.5 * 86400 * 1000),
             "weekly": 7 * 86400 * 1000,
@@ -1973,7 +1974,7 @@ class SnapshotPeriods:
             "secondly": 1000,
             "millisecondly": 1,
         }
-        self.period_labels = {
+        self.period_labels: Final = {
             "yearly": "years",
             "monthly": "months",
             "weekly": "weeks",
@@ -4396,20 +4397,22 @@ class Job:
 
     def last_modified_cache_file(self, dataset: str, label: Optional[SnapshotLabel] = None) -> str:
         p = self.params
-        cache_file = os.path.join(dataset, "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}")
-        userhost_dir = p.src.ssh_user_host if p.src.ssh_user_host else "-"
-        return os.path.join(p.log_params.last_modified_cache_dir, userhost_dir, cache_file)
+        cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
+        userhost_dir = p.src.ssh_user_host
+        userhost_dir = userhost_dir if userhost_dir else "-"
+        return os.path.join(p.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
         cache_file = self.last_modified_cache_file(dataset)
         if not self.params.dry_run:
             try:
-                os.utime(cache_file, times=(0, 0))  # update this before the other files
+                zero_times = (0, 0)
+                os.utime(cache_file, times=zero_times)  # update this before the other files
                 for entry in os.scandir(os.path.dirname(cache_file)):
                     if entry.path != cache_file:
-                        os.utime(entry.path, times=(0, 0))
-                os.utime(cache_file, times=(0, 0))  # and again after the other files
+                        os.utime(entry.path, times=zero_times)
+                os.utime(cache_file, times=zero_times)  # and again after the other files
             except FileNotFoundError:
                 pass  # harmless
 
