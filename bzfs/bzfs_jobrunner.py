@@ -33,6 +33,7 @@ import sys
 import uuid
 from importlib.machinery import SourceFileLoader
 from logging import Logger
+from types import ModuleType
 from typing import Dict, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
@@ -42,6 +43,7 @@ def argument_parser() -> argparse.ArgumentParser:
     # fmt: off
     parser = argparse.ArgumentParser(
         prog=prog_name,
+        allow_abbrev=False,
         description=f"""
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
 
@@ -53,9 +55,9 @@ Typically, a cron job on the source host runs `{prog_name}` periodically to crea
 and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and --prune-src-bookmarks), whereas
 another cron job on the destination host runs `{prog_name}` periodically to prune outdated destination snapshots (via
 --prune-dst-snapshots), and to replicate the recently created snapshots from the source to the destination (via --replicate).
-Yet another cron job on both source and destination runs `{prog_name}` periodically to alert the user if the latest or 
-oldest snapshot is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these 
-periodic activities can vary by activity, and is typically every second, minute, hour, day, week, month and/or year (or 
+Yet another cron job on both source and destination runs `{prog_name}` periodically to alert the user if the latest or
+oldest snapshot is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these
+periodic activities can vary by activity, and is typically every second, minute, hour, day, week, month and/or year (or
 multiples thereof).
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very same) shared file onto the
@@ -141,7 +143,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument("--localhost", default=None, metavar="STRING",
         help="Hostname of localhost. Default is the hostname without the domain name.\n\n")
     dst_hosts_example = {"nas": ["onsite"], "bak-us-west-1": ["us-west-1"],
-                         "bak-eu-west-1": ["eu-west-1"], "archive":  ["offsite"]}
+                         "bak-eu-west-1": ["eu-west-1"], "archive": ["offsite"]}
     parser.add_argument("--dst-hosts", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
              "(the infix portion of snapshot name). "
@@ -275,7 +277,7 @@ def main():
 class Job:
     def __init__(self, log: Optional[Logger] = None):
         self.log: Logger = log if log is not None else get_logger()
-        self.bzfs = load_module("bzfs")
+        self.bzfs: ModuleType = load_module("bzfs")
         self.bzfs_argument_parser: argparse.ArgumentParser = self.bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
         self.first_exception: Optional[BaseException] = None
@@ -540,7 +542,7 @@ def format_dict(dictionary) -> str:
     return f'"{dictionary}"'
 
 
-def load_module(progname: str):
+def load_module(progname: str) -> ModuleType:
     prog_path = shutil.which(progname)
     assert prog_path, f"{progname}: command not found on PATH"
     prog_path = os.path.realpath(prog_path)  # resolve symlink, if any

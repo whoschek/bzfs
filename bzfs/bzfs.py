@@ -176,10 +176,10 @@ outdated destination snapshots. Yet another `cron` job runs `{prog_name}` period
 snapshots from the source to the destination. The frequency of these periodic activities is typically every N milliseconds,
 every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
-All {prog_name} functions including snapshot creation, replication, deletion, monitoring, comparison, etc. happily work 
+All {prog_name} functions including snapshot creation, replication, deletion, monitoring, comparison, etc. happily work
 with any snapshots in any format, even created or managed by third party ZFS snapshot management tools, including manual
 zfs snapshot/destroy. All functions can also be used independently. That is, if you wish you can use {prog_name} just
-for creating snapshots, or just for replicating, or just for deleting/pruning, or just for monitoring, or just for 
+for creating snapshots, or just for replicating, or just for deleting/pruning, or just for monitoring, or just for
 comparing snapshot lists.
 
 The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
@@ -217,7 +217,7 @@ feature.
 # Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience
-wrapper around `{prog_name}` that simplifies periodic ZFS snapshot creation, replication, pruning, and monitoring, across 
+wrapper around `{prog_name}` that simplifies periodic ZFS snapshot creation, replication, pruning, and monitoring, across
 source host and multiple destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 
 # Quickstart
@@ -2598,7 +2598,7 @@ class Job:
             if len(basis_src_datasets) == 0:
                 die(f"Replication: Source dataset does not exist: {src.basis_root_dataset}")
             if self.is_dummy(dst):
-                die(f"Replication: Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
+                die("Replication: Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             log.info("Starting replication task: %s", task_description + f" [{len(src_datasets)} datasets]")
             # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
@@ -2619,10 +2619,11 @@ class Job:
                 ],
                 task_name="Replication",
             )
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
             log.info(
                 p.dry("Replication done: %s"),
                 f"{task_description} [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots"
-                f" within {len(src_datasets)} datasets; took {human_readable_duration(time.monotonic_ns() - start_time_nanos)}]",
+                f" within {len(src_datasets)} datasets; took {human_readable_duration(elapsed_nanos)}]",
             )
 
         if failed or not (
@@ -2635,7 +2636,7 @@ class Job:
             return
         log.info("Listing dst datasets: %s", task_description)
         if self.is_dummy(dst):
-            die(f"Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
+            die("Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
         cmd = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o name", p.recursive_flag, dst.root_dataset
         )
@@ -2723,17 +2724,18 @@ class Job:
 
             # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
             if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
-                starttime_nanos = time.monotonic_ns()
+                start_time_nanos = time.monotonic_ns()
                 failed = self.process_datasets_in_parallel_and_fault_tolerant(
                     dst_datasets,
                     process_dataset=delete_destination_snapshots,  # lambda
                     skip_tree_on_error=lambda dataset: False,
                     task_name="--delete-dst-snapshots",
                 )
+                elapsed_nanos = time.monotonic_ns() - start_time_nanos
                 log.info(
                     p.dry("--delete-dst-snapshots: %s"),
                     task_description + f" [Deleted {num_snapshots_deleted} out of {num_snapshots_found} {kind}s "
-                    f"within {len(dst_datasets)} datasets; took {human_readable_duration(time.monotonic_ns() - starttime_nanos)}]",
+                    f"within {len(dst_datasets)} datasets; took {human_readable_duration(elapsed_nanos)}]",
                 )
 
         # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
@@ -4288,7 +4290,7 @@ class Job:
 
         p, log = self.params, self.params.log
         src, config = p.src, p.create_src_snapshots_config
-        datasets_to_snapshot = defaultdict(list)
+        datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
         labels = []
         config_labels: List[SnapshotLabel] = config.snapshot_labels()
         for label in config_labels:
@@ -4301,7 +4303,7 @@ class Job:
             return datasets_to_snapshot  # nothing more TBD
 
         # satisfy request from local cache as much as possible
-        cached_datasets_to_snapshot = defaultdict(list)
+        cached_datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
         if self.is_snapshots_changed_zfs_property_available(src):
             sorted_datasets_todo = []
             for dataset in sorted_datasets:
@@ -4355,7 +4357,7 @@ class Job:
         the callback functions on them. Ignores the timestamp of the input labels."""
         p = self.params
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
-        datasets_with_snapshots = set()
+        datasets_with_snapshots: Set[str] = set()
         for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
@@ -4392,7 +4394,7 @@ class Job:
         datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
         return datasets_without_snapshots
 
-    def last_modified_cache_file(self, dataset: str, label: SnapshotLabel = None) -> str:
+    def last_modified_cache_file(self, dataset: str, label: Optional[SnapshotLabel] = None) -> str:
         p = self.params
         cache_file = os.path.join(dataset, "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}")
         userhost_dir = p.src.ssh_user_host if p.src.ssh_user_host else "-"
@@ -4417,8 +4419,8 @@ class Job:
         src, dst = p.src, p.dst
         if not self.is_snapshots_changed_zfs_property_available(src):
             return
-        src_datasets_set = set()
-        dataset_labels = defaultdict(list)
+        src_datasets_set: Set[str] = set()
+        dataset_labels: Dict[str, List[SnapshotLabel]] = defaultdict(list)
         for label, datasets in datasets_to_snapshot.items():
             duration_amount, duration_unit = p.create_src_snapshots_config.suffix_durations[label.suffix]
             if duration_amount > 0:  # no need to update the cache for adhoc snapshots
@@ -4929,8 +4931,8 @@ class Job:
     def find_available_programs(self) -> str:
         p = self.params
         cmds = []
-        cmds.append(f"command -v echo > /dev/null && echo echo")
-        cmds.append(f"command -v echo > /dev/null && echo default_shell-$SHELL")
+        cmds.append("command -v echo > /dev/null && echo echo")
+        cmds.append("command -v echo > /dev/null && echo default_shell-$SHELL")
         cmds.append(f"command -v {p.zpool_program} > /dev/null && echo zpool")
         cmds.append(f"command -v {p.ssh_program} > /dev/null && echo ssh")
         cmds.append(f"command -v {p.shell_program} > /dev/null && echo sh")

@@ -32,9 +32,9 @@ import sys
 
 parser = argparse.ArgumentParser(
     description=f"""
-Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication, 
-pruning, and monitoring, across source host and multiple destination hosts, using the same single shared jobconfig script. 
-This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the 
+Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication,
+pruning, and monitoring, across source host and multiple destination hosts, using the same single shared jobconfig script.
+This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
 actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
 """
 )
