@@ -30,8 +30,9 @@ import unittest
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from logging import Logger
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
@@ -74,7 +75,7 @@ def suite():
     return suite
 
 
-def argparser_parse_args(args):
+def argparser_parse_args(args: List[str]) -> argparse.Namespace:
     return bzfs.argument_parser().parse_args(args + ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")])
 
 
@@ -84,11 +85,13 @@ class TestHelperFunctions(unittest.TestCase):
     d = "d"
     a = "a"
 
-    def merge_sorted_iterators(self, src, dst, choice):
+    def merge_sorted_iterators(self, src: List[str], dst: List[str], choice: str) -> List[Tuple]:
         s, d, a = self.s, self.d, self.a
         return [item for item in bzfs.Job().merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst))]
 
-    def assert_merge_sorted_iterators(self, expected, src, dst, choice="+".join([s, d, a]), invert=True):
+    def assert_merge_sorted_iterators(
+        self, expected: List[Tuple], src: List[str], dst: List[str], choice="+".join([s, d, a]), invert=True
+    ) -> None:
         s, d, a = self.s, self.d, self.a
         self.assertListEqual(expected, self.merge_sorted_iterators(src, dst, choice))
         if invert:
@@ -332,7 +335,7 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertEqual(1000, round(os.stat(file).st_mtime))
 
     def test_recv_option_property_names(self):
-        def names(lst):
+        def names(lst: List[str]) -> Set[str]:
             return bzfs.Job().recv_option_property_names(lst)
 
         self.assertSetEqual(set(), names([]))
@@ -374,7 +377,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual(["-F"], bzfs.fix_solaris_raw_mode(["-F"]))
 
     def test_get_logger_with_cleanup(self):
-        def check(log, files):
+        def check(log: Logger, files: Set[str]) -> None:
             files_todo = files.copy()
             for handler in log.handlers:
                 if isinstance(handler, logging.FileHandler):
@@ -628,7 +631,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.reset_logger()
 
     def test_pv_size_to_bytes(self):
-        def pv_size_to_bytes(line):
+        def pv_size_to_bytes(line: str) -> int:
             num_bytes, _ = bzfs.pv_size_to_bytes(line)
             return num_bytes
 
@@ -824,7 +827,7 @@ class TestHelperFunctions(unittest.TestCase):
         return root_datasets
 
     def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self):
-        def run_filter(src_datasets, basis_src_datasets):
+        def run_filter(src_datasets: List[str], basis_src_datasets: List[str]) -> Optional[List[str]]:
             assert set(src_datasets).issubset(set(basis_src_datasets))
             src_datasets = list(sorted(src_datasets))
             basis_src_datasets = list(sorted(basis_src_datasets))
@@ -1115,7 +1118,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
 
     def test_MonitorSnapshotsConfig(self):
-        def plan(alerts):
+        def plan(alerts) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
@@ -1408,7 +1411,7 @@ class TestParseDatasetLocator(unittest.TestCase):
 
 #############################################################################
 class TestReplaceCapturingGroups(unittest.TestCase):
-    def replace_capturing_group(self, regex):
+    def replace_capturing_group(self, regex: str) -> str:
         return bzfs.replace_capturing_groups_with_non_capturing_groups(regex)
 
     def test_basic_case(self):
@@ -1646,10 +1649,10 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.tz = timezone(timedelta(hours=-5))
 
     def test_examples(self):
-        def make_dt(hour, minute, second):
+        def make_dt(hour: int, minute: int, second: int) -> datetime:
             return datetime(2024, 11, 29, hour, minute, second, 0, tzinfo=self.tz)
 
-        def round_up(dt, duration_amount):
+        def round_up(dt: datetime, duration_amount: int) -> datetime:
             return round_datetime_up_to_duration_multiple(dt, duration_amount, "hourly")
 
         """
@@ -2486,11 +2489,11 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "1000 years ago..0secondsago"))
 
     @staticmethod
-    def filter_snapshots_by_times_and_rank1(snapshots, timerange, ranks=[]):
+    def filter_snapshots_by_times_and_rank1(snapshots: List[str], timerange: str, ranks: List[str] = []) -> List[str]:
         return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
 
 
-def filter_snapshots_by_times_and_rank(snapshots, timerange, ranks=[]):
+def filter_snapshots_by_times_and_rank(snapshots: List[str], timerange: str, ranks: List[str] = []) -> List[str]:
     args = argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"])
     log_params = bzfs.LogParams(args)
     try:
@@ -2564,7 +2567,7 @@ class TestRankRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse_args("oldest99%..latest100%")
 
-    def filter_snapshots_by_rank(self, snapshots, ranks, timerange="0..0"):
+    def filter_snapshots_by_rank(self, snapshots: List[str], ranks: List[str], timerange: str = "0..0") -> List[str]:
         return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
 
     def test_filter_snapshots_by_rank(self):
@@ -3298,7 +3301,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
     def test_send_step_to_str(self):
         bzfs.Job().send_step_to_str(("-I", "d@s1", "d@s3"))
 
-    def permute_snapshot_series(self, max_length=9):
+    def permute_snapshot_series(self, max_length=9) -> List[Dict]:
         """
         Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly
         snapshots from replication. The expectation is that after replication dst contains all daily snapshots
@@ -3328,7 +3331,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     testcases.append(snaps)
         return testcases
 
-    def validate_incremental_send_steps(self, input_snapshots, expected_results):
+    def validate_incremental_send_steps(self, input_snapshots: List[str], expected_results: List[str]) -> None:
         """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input
         snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
         for is_resume in [False, True]:  # via --no-resume-recv
@@ -3347,11 +3350,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     # print(f"output_snapshots:" + ','.join(output_snapshots))
                     self.assertListEqual(expected_results, output_snapshots)
 
-    def send_step_to_str(self, step):
+    def send_step_to_str(self, step: Tuple) -> str:
         # return str(step)
         return str(step[1]) + ("-" if step[0] == "-I" else ":") + str(step[2])
 
-    def apply_incremental_send_steps(self, steps, input_snapshots):
+    def apply_incremental_send_steps(self, steps: List[Tuple], input_snapshots: List[str]) -> List[str]:
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
@@ -3367,7 +3370,9 @@ class TestIncrementalSendSteps(unittest.TestCase):
                 output_snapshots.append(input_snapshots[end])
         return output_snapshots
 
-    def incremental_send_steps1(self, input_snapshots, src_dataset=None, is_resume=False, force_convert_I_to_i=False):
+    def incremental_send_steps1(
+        self, input_snapshots: List[str], src_dataset: str, is_resume=False, force_convert_I_to_i=False
+    ) -> List[Tuple]:
         origin_src_snapshots_with_guids = []
         guid = 1
         for snapshot in input_snapshots:
@@ -3377,7 +3382,9 @@ class TestIncrementalSendSteps(unittest.TestCase):
             origin_src_snapshots_with_guids, is_resume=is_resume, force_convert_I_to_i=force_convert_I_to_i
         )
 
-    def incremental_send_steps2(self, origin_src_snapshots_with_guids, is_resume=False, force_convert_I_to_i=False):
+    def incremental_send_steps2(
+        self, origin_src_snapshots_with_guids: List[str], is_resume=False, force_convert_I_to_i=False
+    ) -> List[Tuple]:
         guids = []
         input_snapshots = []
         included_guids = set()
