@@ -4508,7 +4508,7 @@ class Job:
             props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
             types = "snapshot"
             if p.use_bookmark and r.location == "src" and self.are_bookmarks_enabled(r):
-                types = "snapshot,bookmark"
+                types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
             cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
             for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets):
                 yield from lines
