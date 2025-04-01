@@ -257,7 +257,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
     or a ZFS dataset path within that pool, whereas for cloning, master slave replication, or
     replication from a primary to a secondary, this can also be the empty string. Example:
     `"{'nas': 'tank2/bak', 'bak-us-west-1': 'backups/bak001', 'bak-eu-west-1':
-    'backups/bak999', 'archive': 'archives/zoo', 'hotspare': ''}"`
+    'backups/bak999', 'archive': 'f"archives/zoo/{src_host}"', 'hotspare': ''}"`
 
 <!-- -->
 

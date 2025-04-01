@@ -164,7 +164,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "nas": "tank2/bak",
         "bak-us-west-1": "backups/bak001",
         "bak-eu-west-1": "backups/bak999",
-        "archive": "archives/zoo",
+        "archive": 'f"archives/zoo/{src_host}"',
         "hotspare": "",
     }
     parser.add_argument("--dst-root-datasets", default="{}", metavar="DICT_STRING",
