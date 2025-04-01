@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import argparse
+import errno
 import itertools
 import logging
 import os
@@ -302,6 +303,27 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.xprint(log, "", run=False)
         bzfs.xprint(log, None)
 
+    def test_pid_exists(self):
+        self.assertTrue(bzfs.pid_exists(os.getpid()))
+        self.assertFalse(bzfs.pid_exists(-1))
+        self.assertFalse(bzfs.pid_exists(0))
+        # This fake PID is extremely unlikely to be alive because it is orders of magnitude higher than the typical
+        # range of process IDs on Unix-like systems:
+        fake_pid = 2**31 - 1  # 2147483647
+        self.assertFalse(bzfs.pid_exists(fake_pid))
+
+        # Process 1 is typically owned by root; if not running as root, this should return True because it raises EPERM
+        if os.getuid() != 0:
+            self.assertTrue(bzfs.pid_exists(1))
+
+    @patch("__main__.os.kill")
+    def test_pid_exists_with_unexpected_oserror_returns_none(self, mock_kill):
+        # Simulate an unexpected OSError (e.g., EINVAL) and verify that pid_exists returns None.
+        err = OSError()
+        err.errno = errno.EINVAL
+        mock_kill.side_effect = err
+        self.assertIsNone(bzfs.pid_exists(1234))
+
     def test_delete_stale_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             new_socket_file = os.path.join(tmpdir, "s_new_socket_file")
@@ -315,12 +337,59 @@ class TestHelperFunctions(unittest.TestCase):
             non_socket_file = os.path.join(tmpdir, "f")
             Path(non_socket_file).touch()
 
-            bzfs.delete_stale_files(tmpdir, "s")
+            bzfs.delete_stale_files(tmpdir, "s", millis=31 * 24 * 60 * 60 * 1000)
 
             self.assertTrue(os.path.exists(new_socket_file))
             self.assertFalse(os.path.exists(stale_socket_file))
             self.assertTrue(os.path.exists(dir))
             self.assertTrue(os.path.exists(non_socket_file))
+
+    def test_delete_stale_files_ssh_alive(self):
+        """Socket file with a live pid (current process) should NOT be removed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            socket_name = f"s{os.getpid()}foo"
+            socket_path = os.path.join(tmpdir, socket_name)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)  # create a real UNIX domain socket
+            try:
+                sock.bind(socket_path)
+                time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
+                # Call delete_stale_files with millis=0 to mark all files as stale.
+                bzfs.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                # The file should still exist because the current process is alive.
+                self.assertTrue(os.path.exists(socket_path))
+            finally:
+                sock.close()
+                if os.path.exists(socket_path):
+                    os.remove(socket_path)
+
+    def test_delete_stale_files_ssh_stale(self):
+        """Socket file with a non-existent pid should be removed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # This fake PID is extremely unlikely to be alive because it is orders of magnitude higher than the typical
+            # range of process IDs on Unix-like systems:
+            fake_pid = 2**31 - 1  # 2147483647
+
+            socket_name = f"s{fake_pid}foo"
+            socket_path = os.path.join(tmpdir, socket_name)
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)  # create a real UNIX domain socket
+            try:
+                sock.bind(socket_path)
+                time.sleep(0.001)  # sleep to ensure the file's mtime is in the past
+                bzfs.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+                # The file should be removed because the fake pid is not alive.
+                self.assertFalse(os.path.exists(socket_path))
+            finally:
+                sock.close()
+                if os.path.exists(socket_path):
+                    os.remove(socket_path)
+
+    def test_delete_stale_files_ssh_regular_file(self):
+        """A regular file should be removed even when ssh=True."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            regular_file = os.path.join(tmpdir, "s_regular_file")
+            Path(regular_file).touch()
+            bzfs.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
+            self.assertFalse(os.path.exists(regular_file))
 
     def test_set_last_modification_time(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -39,6 +39,7 @@ import calendar
 import collections
 import concurrent
 import copy
+import errno
 import fcntl
 import glob
 import hashlib
@@ -1818,7 +1819,7 @@ class Remote:
             os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
             os.makedirs(self.ssh_socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
             self.socket_prefix = "s"
-            delete_stale_files(self.ssh_socket_dir, self.socket_prefix)
+            delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex = re.compile(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]")  # Remove chars not in the allowed set
 
@@ -5634,7 +5635,10 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     return lst
 
 
-def delete_stale_files(root_dir: str, prefix: str, millis: int = 31 * 24 * 60 * 60 * 1000, dirs=False, exclude=None) -> None:
+ssh_master_domain_socket_file_pid_regex = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
+
+
+def delete_stale_files(root_dir: str, prefix: str, millis: int = 60 * 60 * 1000, dirs=False, exclude=None, ssh=False):
     """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
     nanos = millis * 1_000_000
     now = time.time_ns()
@@ -5645,8 +5649,12 @@ def delete_stale_files(root_dir: str, prefix: str, millis: int = 31 * 24 * 60 * 
             if ((dirs and entry.is_dir()) or (not dirs and not entry.is_dir())) and now - entry.stat().st_mtime_ns >= nanos:
                 if dirs:
                     shutil.rmtree(entry.path, ignore_errors=True)
-                else:
+                elif not (ssh and stat.S_ISSOCK(entry.stat().st_mode)):
                     os.remove(entry.path)
+                elif match := ssh_master_domain_socket_file_pid_regex.match(entry.name[len(prefix) :]):
+                    pid = int(match.group(0))
+                    if pid_exists(pid) is False or now - entry.stat().st_mtime_ns >= 31 * 24 * 60 * 60 * 1000 * 1_000_000:
+                        os.remove(entry.path)  # bzfs process is nomore alive hence its ssh master process isn't alive either
         except FileNotFoundError:
             pass  # harmless
 
@@ -6241,6 +6249,20 @@ def get_descendant_processes(root_pid: int) -> List[int]:
 
     recursive_append(root_pid)
     return descendants
+
+
+def pid_exists(pid: int) -> Optional[bool]:
+    if pid <= 0:
+        return False
+    try:  # with signal=0, no signal is actually sent, but error checking is still performed
+        os.kill(pid, 0)  # ... which can be used to check for process existence on POSIX systems
+    except OSError as err:
+        if err.errno == errno.ESRCH:  # No such process
+            return False
+        if err.errno == errno.EPERM:  # Operation not permitted
+            return True
+        return None
+    return True
 
 
 arabic_decimal_separator = "\u066b"  # "٫"
