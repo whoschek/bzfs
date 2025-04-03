@@ -4837,6 +4837,7 @@ class Job:
                             child = f"{dataset}/{child}"
                             heapq.heappush(priority_queue, (child, grandchildren))
             assert len(priority_queue) == 0
+            assert len(todo_futures) == 0
             return failed
 
     def is_program_available(self, program: str, location: str) -> bool:
@@ -6518,7 +6519,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
     terminal_cols = [0 if log_params is None else None]  # 'None' indicates "configure value later"
 
     class DefaultLogFormatter(logging.Formatter):
-        def format(self, record) -> str:
+        def format(self, record: logging.LogRecord) -> str:
             levelno = record.levelno
             if levelno != _log_stderr and levelno != _log_stdout:  # emit stdout and stderr "as-is" (no formatting)
                 timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
@@ -6559,7 +6560,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
 
 def get_simple_logger() -> Logger:
     class LevelFormatter(logging.Formatter):
-        def format(self, record):
+        def format(self, record: logging.LogRecord) -> str:
             record.level_prefix = log_level_prefixes.get(record.levelno, "")
             return super().format(record)
 
