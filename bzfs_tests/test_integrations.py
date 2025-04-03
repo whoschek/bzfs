@@ -431,6 +431,9 @@ class BZFSTestCase(ParametrizedTestCase):
                 os.environ["PATH"] = bzfs_dir + os.pathsep + os.environ["PATH"]
             from bzfs import bzfs_jobrunner
 
+            with self.assertRaises(SystemExit) as context:
+                bzfs_jobrunner.main()
+            self.assertEqual(2, context.exception.code)  # error: the following arguments are required: --root-dataset-pairs
             job = bzfs_jobrunner.Job()
         else:
             job = bzfs.Job()
@@ -680,9 +683,6 @@ class AdhocTestCase(BZFSTestCase):
 
     def test_jobrunner_flat_simple(self):
         LocalTestCase(param=self.param).test_jobrunner_flat_simple()
-
-    def test_jobrunner_main(self):
-        LocalTestCase(param=self.param).test_jobrunner_main()
 
     def test_jobrunner_flat_simple_with_empty_targets(self):
         LocalTestCase(param=self.param).test_jobrunner_flat_simple_with_empty_targets()
@@ -4933,13 +4933,6 @@ class LocalTestCase(BZFSTestCase):
         pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
         self.run_bzfs("--prune-src-snapshots", *pull_args_empty, use_jobrunner=True)
         self.assertEqual(0, len(snapshots(src_root_dataset)))
-
-    @patch("sys.argv", ["bzfs_jobrunner.py"])
-    def test_jobrunner_main(self):
-        from bzfs import bzfs_jobrunner
-
-        with self.assertRaises(BaseException) as e:
-            bzfs_jobrunner.main()
 
 
 #############################################################################
