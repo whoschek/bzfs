@@ -42,7 +42,8 @@ known_args, unknown_args = parser.parse_known_args()  # forward all unknown args
 if len(unknown_args) == 0:
     print(
         "ERROR: Missing command. Usage: " + sys.argv[0] + " --create-src-snapshots|--replicate|--prune-src-snapshots|"
-        "--prune-src-bookmarks|--prune-dst-snapshots|--monitor-src-snapshots|--monitor-dst-snapshots"
+        "--prune-src-bookmarks|--prune-dst-snapshots|--monitor-src-snapshots|--monitor-dst-snapshots",
+        sys.stderr,
     )
     sys.exit(5)
 
@@ -283,6 +284,12 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # os.environ["bzfs_name_of_a_unix_env_var"] = "true"  # toggle example tuning knob
 
 
+# If this much time has passed after the worker process has started executing, kill the straggling worker. A value of None
+# disables this feature:
+# worker_timeout_seconds = 3600
+worker_timeout_seconds = None
+
+
 cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []
 cmd += [f"--src-host={src_host}"]
@@ -294,4 +301,4 @@ cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
 cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
 cmd += [f"--monitor-snapshot-plan={monitor_snapshot_plan}"]
 cmd += extra_args + unknown_args + ["--root-dataset-pairs"] + root_dataset_pairs
-sys.exit(subprocess.run(cmd, text=True).returncode)
+sys.exit(subprocess.run(cmd, stdin=subprocess.DEVNULL, text=True, timeout=worker_timeout_seconds).returncode)
