@@ -4313,17 +4313,17 @@ class Job:
                     self.invalidate_last_modified_cache_dataset(dataset)
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
-                creation_unixtimes = {}
+                creation_unixtimes = []
                 for label in labels:
-                    creation_unixtime = cache_get_snapshots_changed(dataset, label)
+                    creation_unixtime: int = cache_get_snapshots_changed(dataset, label)
                     if creation_unixtime == 0:
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
-                    creation_unixtimes[label] = creation_unixtime
+                    creation_unixtimes.append(creation_unixtime)
                 if len(creation_unixtimes) == len(labels):
-                    for label in labels:
+                    for j, label in enumerate(labels):
                         create_snapshot_if_latest_is_too_old(
-                            cached_datasets_to_snapshot, dataset, label, creation_unixtimes[label]
+                            cached_datasets_to_snapshot, dataset, label, creation_unixtimes[j]
                         )
             sorted_datasets = sorted_datasets_todo
 
