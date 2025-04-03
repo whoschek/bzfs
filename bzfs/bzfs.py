@@ -2215,10 +2215,11 @@ class Job:
         for i, cache_item in enumerate(cache_items):
             cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
-    def terminate(self, except_current_process=False):
+    def terminate(self, old_term_handler, except_current_process=False):
         try:
             self.cleanup()
         finally:
+            signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
             terminate_process_subtree(except_current_process=except_current_process)
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
@@ -2258,15 +2259,18 @@ class Job:
                             log.error(f"{msg} per %s", lock_file)
                             raise SystemExit(still_running_status) from e
                         try:
-                            # On CTRL-C send signal also to descendant processes to also terminate descendant processes
-                            old_sigint_handler = signal.signal(signal.SIGINT, lambda signum, frame: self.terminate())
+                            # On CTRL-C and SIGTERM, send signal also to descendant processes to also terminate descendants
+                            old_term_handler = signal.getsignal(signal.SIGTERM)
+                            signal.signal(signal.SIGTERM, lambda sig, f: self.terminate(old_term_handler))
+                            old_int_handler = signal.signal(signal.SIGINT, lambda sig, f: self.terminate(old_term_handler))
                             try:
                                 self.run_tasks()
                             except BaseException as e:
-                                self.terminate(except_current_process=True)
+                                self.terminate(old_term_handler, except_current_process=True)
                                 raise e
                             finally:
-                                signal.signal(signal.SIGINT, old_sigint_handler)  # restore original signal handler
+                                signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
+                                signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
                             for i in range(2 if self.max_command_line_bytes else 1):
                                 self.cleanup()
                         finally:
