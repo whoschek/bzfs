@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
 
-from bzfs import bzfs, bzfs_jobrunner
+from bzfs import bzfs
 from bzfs.bzfs import die_status, find_match, getenv_any, getenv_bool
 from bzfs_tests.test_units import TestIncrementalSendSteps, stop_on_failure_subtest
 from bzfs_tests.zfs_util import (
@@ -429,6 +429,8 @@ class BZFSTestCase(ParametrizedTestCase):
             bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
             if bzfs_dir not in os.environ["PATH"]:
                 os.environ["PATH"] = bzfs_dir + os.pathsep + os.environ["PATH"]
+            from bzfs import bzfs_jobrunner
+
             job = bzfs_jobrunner.Job()
         else:
             job = bzfs.Job()
@@ -4934,6 +4936,8 @@ class LocalTestCase(BZFSTestCase):
 
     @patch("sys.argv", ["bzfs_jobrunner.py"])
     def test_jobrunner_main(self):
+        from bzfs import bzfs_jobrunner
+
         with self.assertRaises(BaseException) as e:
             bzfs_jobrunner.main()
 

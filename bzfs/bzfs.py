@@ -38,7 +38,9 @@ import bisect
 import calendar
 import collections
 import concurrent
+import contextlib
 import copy
+import dataclasses
 import errno
 import fcntl
 import glob
@@ -49,6 +51,7 @@ import json
 import logging
 import logging.config
 import logging.handlers
+import math
 import operator
 import os
 import platform
@@ -68,15 +71,11 @@ import tempfile
 import threading
 import time
 import traceback
-from argparse import Namespace
 from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
-from contextlib import redirect_stderr, suppress
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, tzinfo
-from itertools import groupby
 from logging import Logger
-from math import ceil
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import Deque, Dict, Iterable, Iterator, List, Literal, Sequence, Set, Tuple
@@ -606,9 +605,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots between source and destination. Bookmarks do not count towards N or N%% wrt. rank.\n\n"
              "*Note:* If a snapshot is excluded this decision is never reconsidered because exclude takes precedence "
              "over include.\n\n")
-
-    def format_dict(dictionary):
-        return f'"{dictionary}"'
 
     src_snapshot_plan_example = {
         "prod": {
@@ -1433,7 +1429,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         anchor_group = parser.add_argument_group(
             f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
             f"every N {label} are scheduled to be created on the source by the --create-src-snapshots option.")
-        for f in [f for f in fields(PeriodAnchors) if f.name.startswith(period + "_")]:
+        for f in [f for f in dataclasses.fields(PeriodAnchors) if f.name.startswith(period + "_")]:
             _min = f.metadata.get("min")
             _max = f.metadata.get("max")
             anchor_group.add_argument(
@@ -2250,7 +2246,7 @@ class Job:
                 raise
             log_params.params = p
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
-                with redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
+                with contextlib.redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
                     lock_file = p.lock_file_name()
                     with open(lock_file, "w") as lock_fd:
                         try:
@@ -3699,9 +3695,9 @@ class Job:
             assert timerange is not None
             lo, hi = timerange
             if isinstance(lo, timedelta):
-                lo = ceil(current_unixtime_in_secs - lo.total_seconds())
+                lo = math.ceil(current_unixtime_in_secs - lo.total_seconds())
             if isinstance(hi, timedelta):
-                hi = ceil(current_unixtime_in_secs - hi.total_seconds())
+                hi = math.ceil(current_unixtime_in_secs - hi.total_seconds())
             assert isinstance(lo, int)
             assert isinstance(hi, int)
             return (lo, hi) if lo <= hi else (hi, lo)
@@ -4362,7 +4358,7 @@ class Job:
         datasets_with_snapshots: Set[str] = set()
         for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
+            for dataset, group in itertools.groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
                     (int(createtxg), int(creation_unixtime_secs), name[name.index("@") + 1 :])
                     for createtxg, creation_unixtime_secs, name in (line.split("\t", 2) for line in group)
@@ -4524,7 +4520,7 @@ class Job:
             snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges
             src snapshots and dst snapshots."""
             # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in groupby(
+            for dataset, group in itertools.groupby(
                 sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.replace("#", "@").index("@")]
             ):
                 snapshots = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
@@ -4662,7 +4658,7 @@ class Job:
         log.debug("%s", f"Temporary TSV output file comparing {task} is: {tmp_tsv_file}")
         with open(tmp_tsv_file, "w", encoding="utf-8") as fd:
             # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
-            group = groupby(merge_itr, key=lambda entry: entry[1].key[0])
+            group = itertools.groupby(merge_itr, key=lambda entry: entry[1].key[0])
             self.print_datasets(group, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
         os.rename(tmp_tsv_file, tsv_file)
         log.info("%s", f"Final TSV output file comparing {task} is: {tsv_file}")
@@ -4684,7 +4680,7 @@ class Job:
         os.rename(tmp_tsv_file, tsv_file)
 
     @staticmethod
-    def print_datasets(group: groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
+    def print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
         rel_datasets = sorted(rel_datasets)
         n = len(rel_datasets)
         i = 0
@@ -5985,6 +5981,10 @@ def ninfix(s: str) -> str:
     return s + "_" if s else ""
 
 
+def format_dict(dictionary: Dict) -> str:
+    return f'"{dictionary}"'
+
+
 def unixtime_fromisoformat(datetime_str: str) -> int:
     """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds. If the datetime string does not
     contain time zone info then it is assumed to be in the local time zone."""
@@ -6080,7 +6080,7 @@ class PeriodAnchors:
 
     @staticmethod
     def parse(args: argparse.Namespace) -> "PeriodAnchors":
-        kwargs = {f.name: getattr(args, f.name) for f in fields(PeriodAnchors)}
+        kwargs = {f.name: getattr(args, f.name) for f in dataclasses.fields(PeriodAnchors)}
         return PeriodAnchors(**kwargs)
 
 
@@ -6225,7 +6225,7 @@ def terminate_process_subtree(except_current_process=False, sig=signal.SIGTERM):
     pids = get_descendant_processes(current_pid)
     pids += [] if except_current_process else [current_pid]
     for pid in pids:
-        with suppress(OSError):
+        with contextlib.suppress(OSError):
             os.kill(pid, sig)
 
 
@@ -6497,15 +6497,18 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     return log
 
 
+log_level_prefixes = {
+    logging.CRITICAL: "[C] CRITICAL:",
+    logging.ERROR: "[E] ERROR:",
+    logging.WARNING: "[W]",
+    logging.INFO: "[I]",
+    logging.DEBUG: "[D]",
+    log_trace: "[T]",
+}
+
+
 def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) -> logging.Formatter:
-    level_prefixes = {
-        logging.CRITICAL: "[C] CRITICAL:",
-        logging.ERROR: "[E] ERROR:",
-        logging.WARNING: "[W]",
-        logging.INFO: "[I]",
-        logging.DEBUG: "[D]",
-        log_trace: "[T]",
-    }
+    _level_prefixes = log_level_prefixes
     _log_stderr = log_stderr
     _log_stdout = log_stdout
     terminal_cols = [0 if log_params is None else None]  # 'None' indicates "configure value later"
@@ -6515,7 +6518,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
             levelno = record.levelno
             if levelno != _log_stderr and levelno != _log_stdout:  # emit stdout and stderr "as-is" (no formatting)
                 timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
-                ts_level = f"{timestamp} {level_prefixes.get(levelno, '')} "
+                ts_level = f"{timestamp} {_level_prefixes.get(levelno, '')} "
                 msg = record.msg
                 i = msg.find("%s")
                 msg = ts_level + msg
@@ -6548,6 +6551,22 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
             return cols
 
     return DefaultLogFormatter()
+
+
+def get_simple_logger() -> Logger:
+    class LevelFormatter(logging.Formatter):
+        def format(self, record):
+            record.level_prefix = log_level_prefixes.get(record.levelno, "")
+            return super().format(record)
+
+    log = logging.getLogger(prog_name)
+    log.setLevel(logging.INFO)
+    log.propagate = False
+    if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(LevelFormatter(fmt="%(asctime)s %(level_prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+        log.addHandler(handler)
+    return log
 
 
 def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple:
@@ -6928,7 +6947,9 @@ def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> No
     args.snapshot_filters_var[-1].append(_filter)
 
 
-def add_time_and_rank_snapshot_filter(args: Namespace, dst: str, timerange: UnixTimeRange, rankranges: List[RankRange]):
+def add_time_and_rank_snapshot_filter(
+    args: argparse.Namespace, dst: str, timerange: UnixTimeRange, rankranges: List[RankRange]
+):
     if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
         add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
     else:

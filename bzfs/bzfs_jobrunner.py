@@ -23,17 +23,16 @@
 
 import argparse
 import ast
+import importlib.machinery
 import importlib.util
-import logging
 import os
 import shutil
 import socket
 import subprocess
 import sys
+import types
 import uuid
-from importlib.machinery import SourceFileLoader
 from logging import Logger
-from types import ModuleType
 from typing import Dict, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
@@ -253,7 +252,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
-    parser.add_argument("--root-dataset-pairs", required=True, nargs="+", action=DatasetPairsAction,
+    parser.add_argument("--root-dataset-pairs", required=True, nargs="+", action=bzfs.DatasetPairsAction,
         metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
              "auto-appended later).\n\n")
@@ -261,9 +260,24 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # fmt: on
 
 
+def load_module(progname: str) -> types.ModuleType:
+    prog_path = shutil.which(progname)
+    assert prog_path, f"{progname}: command not found on PATH"
+    prog_path = os.path.realpath(prog_path)  # resolve symlink, if any
+    loader = importlib.machinery.SourceFileLoader(progname, prog_path)
+    spec = importlib.util.spec_from_loader(progname, loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    if hasattr(module, "run_main"):
+        return module
+    else:  # It's a wrapper script as `bzfs` was installed as a package by 'pip install'; load that installed package
+        return importlib.import_module(f"{progname}.{progname}")
+
+
 # constants:
-die_status = 3
-dummy_dataset = "dummy"
+bzfs: types.ModuleType = load_module("bzfs")
+die_status = bzfs.die_status
+dummy_dataset = bzfs.dummy_dataset
 sep = ","
 DEVNULL = subprocess.DEVNULL
 PIPE = subprocess.PIPE
@@ -276,9 +290,8 @@ def main():
 #############################################################################
 class Job:
     def __init__(self, log: Optional[Logger] = None):
-        self.log: Logger = log if log is not None else get_logger()
-        self.bzfs: ModuleType = load_module("bzfs")
-        self.bzfs_argument_parser: argparse.ArgumentParser = self.bzfs.argument_parser()
+        self.log: Logger = log if log is not None else bzfs.get_simple_logger()
+        self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
         self.first_exception: Optional[BaseException] = None
 
@@ -448,7 +461,7 @@ class Job:
 
     def run_cmd(self, cmd: List[str]) -> None:
         try:
-            self.bzfs.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
+            bzfs.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
         except BaseException as e:
             if self.first_exception is None:
                 self.first_exception = e
@@ -539,54 +552,7 @@ def sanitize(filename: str) -> str:
 
 
 def format_dict(dictionary) -> str:
-    return f'"{dictionary}"'
-
-
-def load_module(progname: str) -> ModuleType:
-    prog_path = shutil.which(progname)
-    assert prog_path, f"{progname}: command not found on PATH"
-    prog_path = os.path.realpath(prog_path)  # resolve symlink, if any
-    loader = SourceFileLoader(progname, prog_path)
-    spec = importlib.util.spec_from_loader(progname, loader)
-    module = importlib.util.module_from_spec(spec)
-    loader.exec_module(module)
-    if hasattr(module, "run_main"):
-        return module
-    else:  # It's a wrapper script as `bzfs` was installed as a package by 'pip install'; load that installed package
-        return importlib.import_module(f"{progname}.{progname}")
-
-
-def get_logger() -> Logger:
-    level_prefixes = {
-        logging.CRITICAL: "[C] CRITICAL:",
-        logging.ERROR: "[E] ERROR:",
-        logging.WARNING: "[W]",
-        logging.INFO: "[I]",
-        logging.DEBUG: "[D]",
-    }
-
-    class LevelFormatter(logging.Formatter):
-        def format(self, record):
-            record.level_prefix = level_prefixes.get(record.levelno, "")
-            return super().format(record)
-
-    log = logging.getLogger(prog_name)
-    log.setLevel(logging.INFO)
-    log.propagate = False
-    if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
-        handler = logging.StreamHandler()
-        handler.setFormatter(LevelFormatter(fmt="%(asctime)s %(level_prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
-        log.addHandler(handler)
-    return log
-
-
-#############################################################################
-class DatasetPairsAction(argparse.Action):
-    def __call__(self, parser, namespace, datasets, option_string=None):
-        if len(datasets) % 2 != 0:
-            parser.error(f"Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
-        root_dataset_pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
-        setattr(namespace, self.dest, root_dataset_pairs)
+    return bzfs.format_dict(dictionary)
 
 
 #############################################################################
