@@ -290,7 +290,7 @@ def main():
 #############################################################################
 class Job:
     def __init__(self, log: Optional[Logger] = None):
-        self.log: Logger = log if log is not None else bzfs.get_simple_logger()
+        self.log: Logger = log if log is not None else bzfs.get_simple_logger(prog_name)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
         self.first_exception: Optional[BaseException] = None

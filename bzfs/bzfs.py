@@ -6558,18 +6558,21 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) ->
     return DefaultLogFormatter()
 
 
-def get_simple_logger() -> Logger:
+def get_simple_logger(program: str) -> Logger:
     class LevelFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
             record.level_prefix = log_level_prefixes.get(record.levelno, "")
+            record.program = program
             return super().format(record)
 
-    log = logging.getLogger(prog_name)
+    log = logging.getLogger(program)
     log.setLevel(logging.INFO)
     log.propagate = False
     if not any(isinstance(h, logging.StreamHandler) for h in log.handlers):
         handler = logging.StreamHandler()
-        handler.setFormatter(LevelFormatter(fmt="%(asctime)s %(level_prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+        handler.setFormatter(
+            LevelFormatter(fmt="%(asctime)s %(level_prefix)s [%(program)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        )
         log.addHandler(handler)
     return log
 
