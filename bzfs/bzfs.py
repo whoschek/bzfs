@@ -76,6 +76,8 @@ from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
+from os import stat as os_stat, utime as os_utime
+from os.path import exists as os_path_exists, join as os_path_join
 from pathlib import Path
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import Deque, Dict, Iterable, Iterator, List, Literal, Sequence, Set, Tuple
@@ -4266,11 +4268,15 @@ class Job:
         An alternative, much more scalable, implementation queries the standard ZFS "snapshots_changed" dataset property
         (requires zfs >= 2.2.0), in combination with a local cache that stores this property, as well as the creation time
         of the most recent snapshot, for each SnapshotLabel and each dataset."""
+        p, log = self.params, self.params.log
+        src, config = p.src, p.create_src_snapshots_config
+        datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
+        msgs = []
 
         def cache_get_snapshots_changed(dataset: str, label: SnapshotLabel = None) -> int:
             """Like zfs_get_snapshots_changed() but reads from local cache."""
             try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
-                return round(os.stat(self.last_modified_cache_file(dataset, label)).st_mtime)
+                return round(os_stat(self.last_modified_cache_file(dataset, label)).st_mtime)
             except FileNotFoundError:
                 return 0  # harmless
 
@@ -4288,11 +4294,8 @@ class Job:
             if config.current_datetime >= next_event_dt:
                 datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
                 msg = " has passed"
-            log.info("Next scheduled snapshot time: %s for %s@%s%s", next_event_dt, dataset, label, msg)
+            msgs.append(f"Next scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}")
 
-        p, log = self.params, self.params.log
-        src, config = p.src, p.create_src_snapshots_config
-        datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
         labels = []
         config_labels: List[SnapshotLabel] = config.snapshot_labels()
         for label in config_labels:
@@ -4342,6 +4345,8 @@ class Job:
                 datasets_to_snapshot[lbl] = list(  # inputs to merge() are sorted, and outputs are sorted too
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
                 )
+        if len(msgs) > 0:
+            log.info("Next scheduled snapshot times ...\n%s", "\n".join(msgs))
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes = {label: k for k, label in enumerate(config_labels)}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
@@ -4401,7 +4406,7 @@ class Job:
         cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         userhost_dir = p.src.ssh_user_host
         userhost_dir = userhost_dir if userhost_dir else "-"
-        return os.path.join(p.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
+        return os_path_join(p.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
@@ -4409,11 +4414,11 @@ class Job:
         if not self.params.dry_run:
             try:
                 zero_times = (0, 0)
-                os.utime(cache_file, times=zero_times)  # update this before the other files
+                os_utime(cache_file, times=zero_times)  # update this before the other files
                 for entry in os.scandir(os.path.dirname(cache_file)):
                     if entry.path != cache_file:
-                        os.utime(entry.path, times=zero_times)
-                os.utime(cache_file, times=zero_times)  # and again after the other files
+                        os_utime(entry.path, times=zero_times)
+                os_utime(cache_file, times=zero_times)  # and again after the other files
             except FileNotFoundError:
                 pass  # harmless
 
@@ -5966,12 +5971,12 @@ def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> 
 
 
 def set_last_modification_time(path: str, unixtime_in_secs: int, if_more_recent=False) -> None:
-    if not os.path.exists(path):
+    if not os_path_exists(path):
         with open(path, "a"):
             pass
-    elif if_more_recent and unixtime_in_secs <= round(os.stat(path).st_mtime):
+    elif if_more_recent and unixtime_in_secs <= round(os_stat(path).st_mtime):
         return
-    os.utime(path, times=(unixtime_in_secs, unixtime_in_secs))
+    os_utime(path, times=(unixtime_in_secs, unixtime_in_secs))
 
 
 def drain(iterable: Iterable) -> None:
