@@ -30,6 +30,7 @@
 
 - [Introduction](#Introduction)
 - [Periodic Jobs with bzfs_jobrunner](#Periodic-Jobs-with-bzfs_jobrunner)
+- [Geo-Replicated Backup with bzfs_jobscheduler](#Geo-Replicated-Backup-with-bzfs_jobscheduler)
 - [Quickstart](#Quickstart)
 - [Installation](#Installation)
 - [Design Aspects](#Design-Aspects)
@@ -119,9 +120,18 @@ reliably without the corresponding auxiliary feature.
 # Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program,
-which is a convenience wrapper around `bzfs` that simplifies periodic ZFS snapshot creation,
-replication, pruning, and monitoring, across source host and multiple destination hosts, using a
-single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
+which is a convenience wrapper around `bzfs` that simplifies efficient periodic ZFS snapshot
+creation, replication, pruning, and monitoring, across source host and multiple destination hosts,
+using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
+
+# Geo-Replicated Backup with bzfs_jobscheduler
+
+The software also ships with the [bzfs_jobscheduler](README_bzfs_jobscheduler.md) companion
+program, which simplifies the deployment of an efficient geo-replicated backup service where each
+of the N destination hosts is located in a separate geographic region and pulls replicas from (the
+same set of) M source hosts, using the same shared [multisrc
+jobconfig](bzfs_tests/bzfs_job_example_multisrc.py) script. The number of source hosts can be
+large. N=2 or N=3 are typical geo-replication factors.
 
 # Quickstart
 

@@ -2,9 +2,13 @@
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.12.0] - TBD
+## [1.12.0] - Not yet released
 
-TBD
+- Added the [bzfs_jobscheduler](README_bzfs_jobscheduler.md) companion program, which simplifies the deployment of an
+efficient geo-replicated backup service where each of the N destination hosts is located in a separate geographic region
+and pulls replicas from (the same set of) M source hosts, using the same shared
+[multisrc jobconfig](bzfs_tests/bzfs_job_example_multisrc.py) script.
+The number of source hosts can be large. N=2 or N=3 are typical geo-replication factors.
 
 ## [1.11.0] - March 26, 2025
 
