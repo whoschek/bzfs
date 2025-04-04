@@ -5,3 +5,4 @@ cd $(realpath $(dirname "$0"))
 export PATH=bzfs:$PATH
 python3 -m bzfs_docs.update_readme bzfs/bzfs.py README.md
 python3 -m bzfs_docs.update_readme bzfs/bzfs_jobrunner.py README_bzfs_jobrunner.md
+python3 -m bzfs_docs.update_readme bzfs/bzfs_jobscheduler.py README_bzfs_jobscheduler.md

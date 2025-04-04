@@ -21,6 +21,7 @@ import sys
 
 from bzfs import bzfs
 from bzfs import bzfs_jobrunner
+from bzfs import bzfs_jobscheduler
 from bzfs.bzfs import find_match
 
 
@@ -85,7 +86,7 @@ def main():
     # Step 4: Replace Description Section
     # Step 4a: Extract replacement from cleaned markdown, which is the text between "# DESCRIPTION" and "**SRC_DATASET"
     begin_desc_markdown_tag = "# DESCRIPTION"
-    begin_help_markdown_tags = ["**SRC_DATASET", "**--create-src-snapshots"]
+    begin_help_markdown_tags = ["**SRC_DATASET", "**--create-src-snapshots", "**--workers"]
     begin_desc_markdown_idx = find_match(
         manpage,
         lambda line: line.startswith(begin_desc_markdown_tag),
@@ -132,11 +133,12 @@ def main():
         raises=f"{end_help_overview_tag} not found in {readme_file}",
     )
     os.environ["COLUMNS"] = "72"
-    help_msg = (
-        bzfs.argument_parser().format_usage()
-        if "_jobrunner" not in bzfs_py_file
-        else bzfs_jobrunner.argument_parser().format_usage()
-    )
+    if "_jobrunner" in bzfs_py_file:
+        help_msg = bzfs_jobrunner.argument_parser().format_usage()
+    elif "_jobscheduler" in bzfs_py_file:
+        help_msg = bzfs_jobscheduler.argument_parser().format_usage()
+    else:
+        help_msg = bzfs.argument_parser().format_usage()
     help_msg = ["```\n"] + help_msg.splitlines(keepends=True) + ["```\n"]
     readme = readme[: begin_help_overview_idx + 1] + help_msg + readme[end_help_overview_idx:]
 

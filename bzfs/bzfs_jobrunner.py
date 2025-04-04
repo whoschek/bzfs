@@ -396,7 +396,7 @@ class Job:
             opts += [f"--delete-dst-snapshots-except-plan={dst_snapshot_plan}"]
             opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
             opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
-            opts += [f"--log-file-suffix={sep}{jobid}{sep}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{sep}{sanitize(src_host)}{sep}"]
             opts += unknown_args + ["--"]
             old_len_opts = len(opts)
             pairs = [(dummy_dataset, resolve_dst_dataset(dst, localhostname)) for src, dst in args.root_dataset_pairs]
@@ -409,7 +409,7 @@ class Job:
             opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
             opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
             opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
-            opts += [f"--log-file-suffix={sep}{jobid}{sep}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{sep}{sanitize(src_host)}{sep}"]
             opts += unknown_args + ["--"]
             return opts
 
