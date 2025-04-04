@@ -37,7 +37,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import patch, mock_open
 
 from bzfs import bzfs
-from bzfs.bzfs import find_match, getenv_any, Remote, round_datetime_up_to_duration_multiple
+from bzfs.bzfs import find_match, getenv_any, Remote, round_datetime_up_to_duration_multiple, PeriodAnchors
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
@@ -1777,35 +1777,35 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt
         self.assertEqual(expected, result)
-        self.assertEqual(result.tzinfo, timezone.utc)
+        self.assertEqual(timezone.utc, result.tzinfo)
 
         tz = timezone(timedelta(hours=-7))
         dt = datetime.fromtimestamp(0, tz=tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt
         self.assertEqual(expected, result)
-        self.assertEqual(result.tzinfo, tz)
+        self.assertEqual(tz, result.tzinfo)
 
     def test_zero_unixtime_plus_one_microsecond(self):
         dt = datetime.fromtimestamp(1 / 1_000_000, tz=timezone.utc)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt.replace(microsecond=0) + timedelta(hours=1)
         self.assertEqual(expected, result)
-        self.assertEqual(result.tzinfo, timezone.utc)
+        self.assertEqual(timezone.utc, result.tzinfo)
 
         tz = timezone(timedelta(hours=-7))
         dt = datetime.fromtimestamp(1 / 1_000_000, tz=tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt.replace(microsecond=0) + timedelta(hours=1)
         self.assertEqual(expected, result)
-        self.assertEqual(result.tzinfo, tz)
+        self.assertEqual(tz, result.tzinfo)
 
     def test_zero_duration_amount(self):
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 0, "hourly")
         expected = dt
         self.assertEqual(expected, result)
-        self.assertEqual(result.tzinfo, self.tz)
+        self.assertEqual(self.tz, result.tzinfo)
 
     def test_milliseconds_non_boundary(self):
         """Rounding up to the next millisecond when dt is not on a millisecond boundary."""
@@ -1813,13 +1813,13 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "millisecondly")
         expected = dt.replace(microsecond=0) + timedelta(milliseconds=123 + 1)
         self.assertEqual(expected, result)
-        self.assertEqual(result.tzinfo, self.tz)
+        self.assertEqual(self.tz, result.tzinfo)
 
     def test_milliseconds_boundary(self):
         """Rounding up to the next second when dt is exactly on a second boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 123000, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "millisecondly")
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_seconds_non_boundary(self):
         """Rounding up to the next second when dt is not on a second boundary."""
@@ -1827,13 +1827,13 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
         expected = dt.replace(microsecond=0) + timedelta(seconds=1)
         self.assertEqual(expected, result)
-        self.assertEqual(result.tzinfo, self.tz)
+        self.assertEqual(self.tz, result.tzinfo)
 
     def test_seconds_boundary(self):
         """Rounding up to the next second when dt is exactly on a second boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_minutes_non_boundary(self):
         """Rounding up to the next minute when dt is not on a minute boundary."""
@@ -1846,7 +1846,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         """Rounding up to the next minute when dt is exactly on a minute boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_hours_non_boundary(self):
         """Rounding up to the next hour when dt is not on an hour boundary."""
@@ -1855,11 +1855,25 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         self.assertEqual(expected, result)
 
+    def test_hours_non_boundary2(self):
+        """Rounding up to the next hour when dt is not on an hour boundary."""
+        dt = datetime(2025, 2, 11, 0, 5, 1, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(**{"hourly_minute": 59}))
+        expected = dt.replace(minute=59, second=0, microsecond=0) + timedelta(hours=0)
+        self.assertEqual(expected, result)
+
+    def test_hours_non_boundary3(self):
+        """Rounding up to the next hour when dt is not on an hour boundary."""
+        dt = datetime(2025, 2, 11, 2, 5, 1, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(**{"hourly_minute": 59}))
+        expected = dt.replace(minute=59, second=0, microsecond=0) + timedelta(hours=0)
+        self.assertEqual(expected, result)
+
     def test_hours_boundary(self):
         """Rounding up to the next hour when dt is exactly on an hour boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_days_non_boundary(self):
         """Rounding up to the next day when dt is not on a day boundary."""
@@ -1868,11 +1882,18 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         self.assertEqual(expected, result)
 
+    def test_days_non_boundary2(self):
+        """Rounding up to the next day when dt is not on a day boundary."""
+        dt = datetime(2025, 2, 11, 1, 59, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "daily", PeriodAnchors(**{"daily_hour": 2}))
+        expected = dt.replace(hour=2, minute=0, second=0, microsecond=0) + timedelta(days=0)
+        self.assertEqual(expected, result)
+
     def test_days_boundary(self):
         """Rounding up to the next day when dt is exactly at midnight returns dt."""
         dt = datetime(2025, 2, 11, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_weeks_non_boundary_saturday(self):
         # anchor is the most recent between Friday and Saturday
@@ -1899,19 +1920,19 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # dt is exactly at midnight between Friday and Saturday
         dt = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=6))
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_weeks_boundary_sunday(self):
         # dt is exactly at midnight between Saturday and Sunday
         dt = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=0))
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_weeks_boundary_monday(self):
         # dt is exactly at midnight between Sunday and Monday
         dt = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=1))
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_months_non_boundary2a(self):
         """Rounding up to the next multiple of months when dt is not on a boundary."""
@@ -1933,7 +1954,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         """When dt is exactly on a month boundary that is a multiple, dt is returned unchanged."""
         dt = datetime(2025, 3, 1, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_years_non_boundary2a(self):
         """Rounding up to the next multiple of years when dt is not on a boundary."""
@@ -1956,7 +1977,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # January 1, 2025 is on a valid boundary if (2025-1) % 2 == 0.
         dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly")
-        self.assertEqual(result, dt)
+        self.assertEqual(dt, result)
 
     def test_invalid_unit(self):
         """Passing an unsupported time unit should raise a ValueError."""
@@ -1968,7 +1989,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         """The returned datetime must have the same timezone as the input."""
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
-        self.assertEqual(result.tzinfo, dt.tzinfo)
+        self.assertEqual(dt.tzinfo, result.tzinfo)
 
     def test_custom_hourly_anchor(self):
         # Custom hourly: snapshots occur at :15:30 each hour.

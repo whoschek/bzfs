@@ -6124,47 +6124,37 @@ def round_datetime_up_to_duration_multiple(
         last_day = calendar.monthrange(new_year, dt.month)[1]  # last valid day of the current month
         return dt.replace(year=new_year, day=min(dt.day, last_day))
 
-    def get_anchor(anchor: datetime, dt: datetime, period: timedelta) -> datetime:
-        """Adjusts anchor downward by one period if anchor is in the future relative to dt."""
-        if anchor > dt:
-            diff = anchor - period
-            assert diff <= dt
-            return diff
-        return anchor
-
     if duration_amount == 0:
         return dt
 
     period = None
     if duration_unit == "millisecondly":
-        anchor = get_anchor(
-            dt.replace(hour=0, minute=0, second=0, microsecond=anchors.millisecondly_microsecond),
-            dt,
-            timedelta(milliseconds=1),
-        )
+        anchor = dt.replace(hour=0, minute=0, second=0, microsecond=anchors.millisecondly_microsecond)
+        anchor = anchor if anchor <= dt else anchor - timedelta(milliseconds=1)
         period = timedelta(milliseconds=duration_amount)
+
     elif duration_unit == "secondly":
-        anchor = get_anchor(
-            dt.replace(hour=0, minute=0, second=0, microsecond=anchors.secondly_millisecond * 1000), dt, timedelta(seconds=1)
-        )
+        anchor = dt.replace(hour=0, minute=0, second=0, microsecond=anchors.secondly_millisecond * 1000)
+        anchor = anchor if anchor <= dt else anchor - timedelta(seconds=1)
         period = timedelta(seconds=duration_amount)
+
     elif duration_unit == "minutely":
-        anchor = get_anchor(dt.replace(second=anchors.minutely_second, microsecond=0), dt, timedelta(minutes=1))
+        anchor = dt.replace(second=anchors.minutely_second, microsecond=0)
+        anchor = anchor if anchor <= dt else anchor - timedelta(minutes=1)
         period = timedelta(minutes=duration_amount)
+
     elif duration_unit == "hourly":
         daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        anchor = get_anchor(
-            daily_base + timedelta(minutes=anchors.hourly_minute, seconds=anchors.hourly_second), dt, timedelta(days=1)
-        )
+        anchor = daily_base + timedelta(minutes=anchors.hourly_minute, seconds=anchors.hourly_second)
+        anchor = anchor if anchor <= dt else anchor - timedelta(days=1)
         period = timedelta(hours=duration_amount)
+
     elif duration_unit == "daily":
         daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        anchor = get_anchor(
-            daily_base + timedelta(hours=anchors.daily_hour, minutes=anchors.daily_minute, seconds=anchors.daily_second),
-            dt,
-            timedelta(days=1),
-        )
+        anchor = daily_base + timedelta(hours=anchors.daily_hour, minutes=anchors.daily_minute, seconds=anchors.daily_second)
+        anchor = anchor if anchor <= dt else anchor - timedelta(days=1)
         period = timedelta(days=duration_amount)
+
     elif duration_unit == "weekly":
         daily_base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         anchor = daily_base + timedelta(
@@ -6173,7 +6163,8 @@ def round_datetime_up_to_duration_multiple(
         # Convert cron weekday (0=Sunday, 1=Monday, ..., 6=Saturday) to Python's weekday (0=Monday, ..., 6=Sunday)
         target_py_weekday = (anchors.weekly_weekday - 1) % 7
         diff_days = (anchor.weekday() - target_py_weekday) % 7
-        anchor = get_anchor(anchor - timedelta(days=diff_days), dt, timedelta(days=7))
+        anchor = anchor - timedelta(days=diff_days)
+        anchor = anchor if anchor <= dt else anchor - timedelta(weeks=1)
         period = timedelta(weeks=duration_amount)
 
     if period is not None:  # "millisecondly", "secondly", "minutely", "hourly", "daily", "weekly"
