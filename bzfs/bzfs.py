@@ -2426,14 +2426,18 @@ class Job:
                     if pv_program_opts_set.isdisjoint(opts):
                         die(f"--pv-program-opts must contain one of {', '.join(opts)} for progress report line to function.")
 
-    def validate_task(self) -> None:
-        p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         for remote in [src, dst]:
             r, loc = remote, remote.location
             validate_user_name(r.basis_ssh_user, f"--ssh-{loc}-user")
             validate_host_name(r.basis_ssh_host, f"--ssh-{loc}-host")
             validate_port(r.ssh_port, f"--ssh-{loc}-port ")
+
+    def validate_task(self) -> None:
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+        for remote in [src, dst]:
+            r, loc = remote, remote.location
             r.ssh_user, r.ssh_host, r.ssh_user_host, r.pool, r.root_dataset = parse_dataset_locator(
                 r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
@@ -4438,7 +4442,7 @@ class Job:
                     dataset_labels[dataset].append(label)
 
         src_datasets: List[str] = sorted(src_datasets_set)
-        if p.create_src_snapshots_config.create_src_snapshots_even_if_not_due:
+        if p.create_src_snapshots_config.create_src_snapshots_even_if_not_due or len(src_datasets) == 0:
             snapshots_changed_items = [(src_dataset, 0) for src_dataset in src_datasets]
         else:
             snapshots_changed_items = self.zfs_get_snapshots_changed(src, src_datasets).items()
@@ -5851,9 +5855,10 @@ def human_readable_bytes(size: float, separator=" ", precision=None, long=False)
     sign = "-" if size < 0 else ""
     s = abs(size)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
+    n = len(units) - 1
     i = 0
     long_form = f" ({size} bytes)" if long else ""
-    while s >= 1024 and i < len(units) - 1:
+    while s >= 1024 and i < n:
         s /= 1024
         i += 1
     formatted_num = human_readable_float(s) if precision is None else f"{s:.{precision}f}"
