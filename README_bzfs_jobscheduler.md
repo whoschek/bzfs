@@ -37,7 +37,7 @@ same set of) M source hosts, using the same shared [multisrc
 jobconfig](bzfs_tests/bzfs_job_example_multisrc.py) script. The number of source hosts can be
 large. N=2 or N=3 are typical geo-replication factors.
 
-This scheduler program is a convenience wrapper around
+This scheduler program is a light-weight convenience wrapper around
 [bzfs_jobrunner](README_bzfs_jobrunner.md) that simplifies the reliable and efficient scheduling
 of a variable number of independent worker jobs. A failure of a worker job does not affect the
 operation of the other worker jobs. The scheduler is called by a [multisrc

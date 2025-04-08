@@ -17,7 +17,7 @@
 # To better debug these steps run a tmp solaris VM like so: https://github.com/vmactions/shell-solaris
 set -e # Exit immediately if a cmd returns a non-zero status
 id -u -n
-pkg install sudo pv || true
+pkg install sudo pv parallel || true
 pkgutil -y -i zstd mbuffer netcat
 uname -a
 uname -v
@@ -58,6 +58,7 @@ ssh -V
 zstd --version
 pv --version | head -n 1
 mbuffer --version |& head -n 1
+parallel --version
 command -v sh | xargs ls -l
 df -h /tmp
 

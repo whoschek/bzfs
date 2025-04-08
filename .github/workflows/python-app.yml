@@ -110,6 +110,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
@@ -170,6 +171,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
@@ -218,6 +220,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
@@ -264,6 +267,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
@@ -303,6 +307,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
@@ -342,6 +347,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
@@ -391,6 +397,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
@@ -430,6 +437,7 @@ jobs:
         zstd --version
         pv --version | head -n 1
         mbuffer --version |& head -n 1
+        parallel --version |& head -n 1
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |

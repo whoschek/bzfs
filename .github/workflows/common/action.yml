@@ -27,7 +27,7 @@ runs:
   - name: Install ssh + other dependencies
     shell: bash
     run: |
-      sudo apt-get -y install zstd pv mbuffer netcat-openbsd
+      sudo apt-get -y install zstd pv mbuffer parallel netcat-openbsd
       mkdir -p $HOME/.ssh
       rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
       ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key

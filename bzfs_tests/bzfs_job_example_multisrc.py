@@ -27,7 +27,9 @@
 #############################################################################
 
 import argparse
+import datetime
 import os
+import shlex
 import subprocess
 import sys
 import uuid
@@ -68,6 +70,7 @@ src_hosts = ["-"]  # for local mode (no ssh, no network)
 
 commands = []
 src_hosts = ["-"] if known_args.location == "src" else src_hosts
+log_dir = os.path.join(os.path.expanduser("~"), "bzfs-job-logs", os.path.basename(sys.argv[0]))
 jobid_prefix = uuid.uuid1().hex
 for i, src_host in enumerate(src_hosts):
 
@@ -214,7 +217,7 @@ for i, src_host in enumerate(src_hosts):
     }
 
     extra_args = []
-    extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', os.path.basename(sys.argv[0]))}"]
+    extra_args += [f"--log-dir={log_dir}"]
     # extra_args += ["--ssh-src-port=2222"]  # for hpnssh
     # extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
     # extra_args += ["--localhost=bak-us-west-1"]
@@ -310,7 +313,7 @@ workers = "100%"  # aka max_workers = 1.0 * num_cores
 # workers = "200%"  # aka max_workers = 2.0 * num_cores
 # workers = "25%"  # aka max_workers = 0.25 * num_cores
 # workers = 4  # aka max_workers = 4
-# workers = 1  # aka max_workers = 1
+# workers = 1  # aka max_workers = 1  # for debugging, run jobs sequentially
 
 
 # Reduce bandwidth spikes by evenly spreading the start of worker jobs over this much time; 0 disables this feature:
@@ -325,8 +328,46 @@ work_period_seconds = 0
 worker_timeout_seconds = None
 
 
-scheduler_cmd = ["bzfs_jobscheduler"]
-scheduler_cmd += [f"--workers={workers}"]
-scheduler_cmd += [f"--work-period-seconds={work_period_seconds}"]
-scheduler_cmd += [] if worker_timeout_seconds is None else [f"--worker-timeout-seconds={worker_timeout_seconds}"]
-sys.exit(subprocess.run(scheduler_cmd, input=f"{commands}", text=True).returncode)
+jobscheduler = "bzfs_jobscheduler"  # bzfs_jobscheduler is a simple, light-weight and fast parallel job scheduler CLI
+# jobscheduler = "parallel"  # If the bzfs_jobscheduler isn't sufficient, consider replacing it with the GNU `parallel` CLI,
+# which is a flexible, feature-rich parallel job scheduler. See https://manpages.ubuntu.com/manpages/man1/parallel.1.html
+# and https://www.gnu.org/software/parallel/parallel_tutorial.html
+
+
+if jobscheduler == "bzfs_jobscheduler":
+    scheduler_cmd = ["bzfs_jobscheduler"]  # see https://github.com/whoschek/bzfs/blob/main/README_bzfs_jobscheduler.md
+    scheduler_cmd += [f"--workers={workers}"]
+    scheduler_cmd += [f"--work-period-seconds={work_period_seconds}"]
+    scheduler_cmd += [] if worker_timeout_seconds is None else [f"--worker-timeout-seconds={worker_timeout_seconds}"]
+    sys.exit(subprocess.run(scheduler_cmd, input=f"{commands}", text=True).returncode)
+
+elif jobscheduler == "parallel":
+    # Make a new log subdirectory every day, hour or minute; write log files there; same as --log-subdir above
+    # log_subdir = "minutely"
+    # log_subdir = "hourly"
+    log_subdir = "daily"
+
+    parallel_cmd = ["parallel"]  # See https://manpages.ubuntu.com/manpages/man1/parallel.1.html
+    parallel_cmd += [f"--jobs={workers}"]
+    parallel_cmd += [f"--delay={max(0, work_period_seconds) / max(1, len(commands))}"]
+    parallel_cmd += [] if worker_timeout_seconds is None else [f"--timeout={worker_timeout_seconds}"]
+    # parallel_cmd += ["--dry-run"]
+    # parallel_cmd += ["--verbose"]
+    parallel_cmd += ["--progress"]
+    parallel_cmd += ["--halt=never"]
+    # parallel_cmd += ["--halt=now,done=1"]  # for debugging, exit immediately after at least one job has exited
+    # parallel_cmd += ["--halt=now,fail=1"]  # for debugging, exit immediately after at least one job has failed
+    # parallel_cmd += ["--halt=now,success=1"]  # for debugging, exit immediately after at least one job has succeeded
+    parallel_cmd += ["--term-seq=TERM,1000,KILL,25"]
+    timestamp = datetime.datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
+    sep = "_" if log_subdir == "daily" else ":"
+    subdir = timestamp[0 : timestamp.rindex(sep) if log_subdir == "minutely" else timestamp.index(sep)]
+    parallel_log_file = os.path.join(log_dir, subdir, f"parallel,{timestamp},{jobid_prefix},.log")
+    os.makedirs(os.path.dirname(parallel_log_file), exist_ok=True)
+    parallel_cmd += [f"--joblog={parallel_log_file}"]
+    parallel_cmd += ["{}"]
+    stdin_string = "\n".join(shlex.join(cmd) for cmd in commands)
+    sys.exit(subprocess.run(parallel_cmd, input=stdin_string, text=True).returncode)
+
+else:
+    assert False

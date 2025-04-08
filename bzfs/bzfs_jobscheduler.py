@@ -48,14 +48,14 @@ def argument_parser() -> argparse.ArgumentParser:
         description=f""" 
 WARNING: For now, `bzfs_jobscheduler` is work-in-progress, and as such may still change in incompatible ways.
 
-This program simplifies the deployment of an efficient geo-replicated backup service where each of the N destination hosts 
-is located in a separate geographic region and pulls replicas from (the same set of) M source hosts, using the same shared 
-[multisrc jobconfig](bzfs_tests/bzfs_job_example_multisrc.py) script. 
+This program simplifies the deployment of an efficient geo-replicated backup service where each of the N destination hosts
+is located in a separate geographic region and pulls replicas from (the same set of) M source hosts, using the same shared
+[multisrc jobconfig](bzfs_tests/bzfs_job_example_multisrc.py) script.
 The number of source hosts can be large. N=2 or N=3 are typical geo-replication factors.
 
-This scheduler program is a convenience wrapper around [bzfs_jobrunner](README_bzfs_jobrunner.md) that simplifies the
-reliable and efficient scheduling of a variable number of independent worker jobs. A failure of a worker job does not
-affect the operation of the other worker jobs. The scheduler is called by a
+This scheduler program is a light-weight convenience wrapper around [bzfs_jobrunner](README_bzfs_jobrunner.md) that
+simplifies the reliable and efficient scheduling of a variable number of independent worker jobs. A failure of a worker job
+does not affect the operation of the other worker jobs. The scheduler is called by a
 [multisrc jobconfig](bzfs_tests/bzfs_job_example_multisrc.py) script.
 
 `stdin` must contain a list of zero or more CLI commands, where each command is a list of one or more strings.
