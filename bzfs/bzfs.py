@@ -47,7 +47,6 @@ import glob
 import hashlib
 import heapq
 import itertools
-import json
 import logging
 import logging.config
 import logging.handlers
@@ -55,7 +54,6 @@ import math
 import operator
 import os
 import platform
-import pprint
 import pwd
 import random
 import re
@@ -70,7 +68,6 @@ import sys
 import tempfile
 import threading
 import time
-import traceback
 from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from dataclasses import dataclass, field
@@ -2245,7 +2242,7 @@ class Job:
             try:
                 self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
             except SystemExit as e:
-                log.error("%s", str(e))
+                log.error("%s", e)
                 raise
             log_params.params = p
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
@@ -2257,9 +2254,10 @@ class Job:
                             # The (advisory) lock is auto-released when the process terminates or the fd is closed.
                             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
                         except BlockingIOError as e:
-                            msg = "Exiting as same previous periodic job is still running without completion yet"
-                            log.error(f"{msg} per %s", lock_file)
-                            raise SystemExit(still_running_status) from e
+                            msg = "Exiting as same previous periodic job is still running without completion yet per "
+                            msg += lock_file
+                            log.error("%s", msg)
+                            die(msg, still_running_status)
                         try:
                             # On CTRL-C and SIGTERM, send signal also to descendant processes to also terminate descendants
                             old_term_handler = signal.getsignal(signal.SIGTERM)
@@ -2316,7 +2314,7 @@ class Job:
                         except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                             if p.skip_on_error == "fail":
                                 raise
-                            log.error("%s", str(e))
+                            log.error("%s", e)
                             self.append_exception(e, "task", task_description)
                     if not self.sleep_until_next_daemon_iteration(daemon_stoptime_nanos):
                         break
@@ -4839,7 +4837,7 @@ class Job:
                             terminate_process_subtree(except_current_process=True)
                             raise e
                         no_skip = not (p.skip_on_error == "tree" or skip_tree_on_error(dataset))
-                        log.error("%s", str(e))
+                        log.error("%s", e)
                         self.append_exception(e, task_name, dataset)
                     if no_skip and children:  # make child datasets available for start of processing ...
                         for child, grandchildren in children.items():  # as processing of parent has now completed
@@ -5091,7 +5089,7 @@ class Job:
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
         except SystemExit as e:
-            log.warning("%s", str(e))
+            log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
 
     zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
@@ -5431,6 +5429,8 @@ class ProgressReporter:
                     fd.close()
         except BaseException as e:
             self.exception = e  # will be reraised in stop()
+            import traceback
+
             log.error("%s%s", "ProgressReporter:\n", "".join(traceback.TracebackException.from_exception(e).format()))
 
     @dataclass
@@ -6419,6 +6419,8 @@ def list_formatter(iterable: Iterable, separator=" ", lstrip=False):  # For lazy
 def pretty_print_formatter(obj_to_format):  # For lazy/noop evaluation in disabled log levels
     class PrettyPrintFormatter:
         def __str__(self):
+            import pprint
+
             return pprint.pformat(vars(obj_to_format))
 
     return PrettyPrintFormatter()
@@ -6589,6 +6591,8 @@ def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple:
 
 
 def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+    import json
+
     prefix = prog_name + "."
     log_config_vars = {
         prefix + "sub.logger": get_logger_subname(),

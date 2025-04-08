@@ -465,7 +465,7 @@ class Job:
         except BaseException as e:
             if self.first_exception is None:
                 self.first_exception = e
-            self.log.error("%s", str(e))  # log exception and keep on trucking
+            self.log.error("%s", e)  # log exception and keep on trucking
 
     def replication_opts(
         self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str, jobid: str
