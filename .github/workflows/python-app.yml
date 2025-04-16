@@ -40,7 +40,6 @@ on:
         - test_ubuntu_24_04
         - test_ubuntu_22_04
         - test_ubuntu_22_04_zfs_0_8_x
-        - test_ubuntu_20_04
         - test_freebsd_14_2
         - test_freebsd_13_4
         - test_solaris_11_4
@@ -404,45 +403,6 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_20_04:  # currently uses zfs-0.8.3
-    needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_20_04' || contains(github.event.inputs.job_names, 'test_ubuntu_20_04')
-    runs-on: ubuntu-20.04
-    strategy:
-      matrix:
-        iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.8"]
-      fail-fast: false
-    timeout-minutes: 100
-    steps:
-    - uses: actions/checkout@v4
-    - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      uses: ./.github/workflows/common
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Display ZFS version and Python version
-      run: |
-        id -u -n
-        uname -a
-        zfs --version
-        python3 --version
-        ssh -V
-        zstd --version
-        pv --version | head -n 1
-        mbuffer --version |& head -n 1
-        command -v sh | xargs ls -l
-    - name: Test with unittest
-      run: |
-        ./test.sh
-    - name: Run tests and generate code coverage
-      run: |
-        ./coverage.sh
-        echo "bzfs-testrun-success"
-    - name: Upload code coverage report to workflow run page
-      if: ${{ matrix.python-version == '3.8' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
-      uses: ./.github/workflows/coverage-upload
-
-
   test_freebsd_14_2:  # currently uses zfs-2.2.6
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_2' || contains(github.event.inputs.job_names, 'test_freebsd_14_2')
@@ -525,7 +485,6 @@ jobs:
       - test_ubuntu_24_04
       - test_ubuntu_22_04
       - test_ubuntu_22_04_zfs_0_8_x
-      - test_ubuntu_20_04
       - test_freebsd_14_2
       - test_freebsd_13_4
       - test_solaris_11_4
@@ -561,11 +520,6 @@ jobs:
         with:
           name: coverage-test_ubuntu_22_04_zfs_0_8_x
           path: coverage-test_ubuntu_22_04_zfs_0_8_x
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-test_ubuntu_20_04
-          path: coverage-test_ubuntu_20_04
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
