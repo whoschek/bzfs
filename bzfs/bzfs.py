@@ -47,7 +47,6 @@ import glob
 import hashlib
 import heapq
 import itertools
-import json
 import logging
 import logging.config
 import logging.handlers
@@ -55,7 +54,6 @@ import math
 import operator
 import os
 import platform
-import pprint
 import pwd
 import random
 import re
@@ -70,7 +68,6 @@ import sys
 import tempfile
 import threading
 import time
-import traceback
 from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from dataclasses import dataclass, field
@@ -1249,7 +1246,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Concurrent SSH sessions are mostly used for metadata operations such as listing ZFS datasets and their "
              "snapshots. This client-side max sessions parameter must not be higher than the server-side "
              "sshd_config(5) MaxSessions parameter (which defaults to 10, see "
-             "https://manpages.ubuntu.com/manpages/latest/man5/sshd_config.5.html).\n\n"
+             "https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html).\n\n"
              f"*Note:* For better throughput, {prog_name} uses one dedicated TCP connection per ZFS "
              "send/receive operation such that the dedicated connection is never used by any other "
              "concurrent SSH session, effectively ignoring the value of the "
@@ -1258,7 +1255,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--bwlimit", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Sets 'pv' bandwidth rate limit for zfs send/receive data transfer (optional). Example: `100m` to cap "
              "throughput at 100 MB/sec. Default is unlimited. Also see "
-             "https://manpages.ubuntu.com/manpages/latest/en/man1/pv.1.html\n\n")
+             "https://manpages.ubuntu.com/manpages/man1/pv.1.html\n\n")
     parser.add_argument(
         "--daemon-lifetime", default="0 seconds", metavar="DURATION",
         # help="Exit the daemon after this much time has elapsed. Default is '0 seconds', i.e. no daemon mode. "
@@ -2243,7 +2240,7 @@ class Job:
             try:
                 self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
             except SystemExit as e:
-                log.error("%s", str(e))
+                log.error("%s", e)
                 raise
             log_params.params = p
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
@@ -2255,9 +2252,10 @@ class Job:
                             # The (advisory) lock is auto-released when the process terminates or the fd is closed.
                             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
                         except BlockingIOError as e:
-                            msg = "Exiting as same previous periodic job is still running without completion yet"
-                            log.error(f"{msg} per %s", lock_file)
-                            raise SystemExit(still_running_status) from e
+                            msg = "Exiting as same previous periodic job is still running without completion yet per "
+                            msg += lock_file
+                            log.error("%s", msg)
+                            die(msg, still_running_status)
                         try:
                             # On CTRL-C and SIGTERM, send signal also to descendant processes to also terminate descendants
                             old_term_handler = signal.getsignal(signal.SIGTERM)
@@ -2314,7 +2312,7 @@ class Job:
                         except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                             if p.skip_on_error == "fail":
                                 raise
-                            log.error("%s", str(e))
+                            log.error("%s", e)
                             self.append_exception(e, "task", task_description)
                     if not self.sleep_until_next_daemon_iteration(daemon_stoptime_nanos):
                         break
@@ -3752,12 +3750,12 @@ class Job:
                 is_debug and log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
-    def filter_snapshots_by_creation_time(self, snaps: List[str], include_snapshot_times: UnixTimeRange) -> List[str]:
+    def filter_snapshots_by_creation_time(self, snapshots: List[str], include_snapshot_times: UnixTimeRange) -> List[str]:
         p, log = self.params, self.params.log
         is_debug = log.isEnabledFor(log_debug)
         lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
         results = []
-        for snapshot in snaps:
+        for snapshot in snapshots:
             if "@" not in snapshot:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
@@ -3844,9 +3842,9 @@ class Job:
             sep=",",
         )
 
-    def delete_snapshot(self, r: Remote, dataset: str, snaps_to_delete: str) -> None:
+    def delete_snapshot(self, r: Remote, dataset: str, snapshots_to_delete: str) -> None:
         p, log = self.params, self.params.log
-        cmd = self.delete_snapshot_cmd(r, snaps_to_delete)
+        cmd = self.delete_snapshot_cmd(r, snapshots_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(r)  # solaris-11.4 knows no 'zfs destroy -n' flag
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger="zfs_delete_snapshot")
@@ -3857,10 +3855,10 @@ class Job:
             # op isn't idempotent so retries regather current state from the start
             raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
-    def delete_snapshot_cmd(self, r: Remote, snaps_to_delete: str) -> List[str]:
+    def delete_snapshot_cmd(self, r: Remote, snapshots_to_delete: str) -> List[str]:
         p = self.params
         return p.split_args(
-            f"{r.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snaps_to_delete
+            f"{r.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snapshots_to_delete
         )
 
     def delete_bookmarks(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
@@ -5089,7 +5087,7 @@ class Job:
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
         except SystemExit as e:
-            log.warning("%s", str(e))
+            log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
 
     zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
@@ -5429,6 +5427,8 @@ class ProgressReporter:
                     fd.close()
         except BaseException as e:
             self.exception = e  # will be reraised in stop()
+            import traceback
+
             log.error("%s%s", "ProgressReporter:\n", "".join(traceback.TracebackException.from_exception(e).format()))
 
     @dataclass
@@ -6417,6 +6417,8 @@ def list_formatter(iterable: Iterable, separator=" ", lstrip=False):  # For lazy
 def pretty_print_formatter(obj_to_format):  # For lazy/noop evaluation in disabled log levels
     class PrettyPrintFormatter:
         def __str__(self):
+            import pprint
+
             return pprint.pformat(vars(obj_to_format))
 
     return PrettyPrintFormatter()
@@ -6587,6 +6589,8 @@ def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple:
 
 
 def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+    import json
+
     prefix = prog_name + "."
     log_config_vars = {
         prefix + "sub.logger": get_logger_subname(),
