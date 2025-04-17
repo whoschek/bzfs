@@ -241,9 +241,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="SSH username on --src-host. Used if replicating in pull mode. Example: 'alice'\n\n")
     parser.add_argument("--dst-user", default="", metavar="STRING",
         help="SSH username on dst. Used if replicating in push mode. Example: 'root'\n\n")
-    parser.add_argument("--jobid", default=uuid.uuid1().hex, metavar="STRING",
+    parser.add_argument("--job-id", default=None, metavar="STRING",
         help="The job identifier that shall be included in the log file name suffix. Default is a hex UUID. "
              "Example: 0badc0f003a011f0a94aef02ac16083c\n\n")
+    parser.add_argument("--jobid", default=None, metavar="STRING",
+        help=argparse.SUPPRESS)   # deprecated; was renamed to --job-id
     parser.add_argument("--daemon-replication-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is nonzero.\n\n")
     parser.add_argument("--daemon-prune-src-frequency", default="minutely", metavar="STRING",
@@ -313,7 +315,8 @@ class Job:
         dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
         retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
         dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
-        jobid = sanitize(args.jobid)
+        jobid = args.job_id if args.job_id is not None else args.jobid  # --jobid is deprecated
+        jobid = sanitize(jobid) if jobid else uuid.uuid1().hex
 
         def validate_localhost_dst_hosts():
             assert localhostname in dst_hosts, f"Hostname '{localhostname}' missing in --dst-hosts: {dst_hosts}"

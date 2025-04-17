@@ -126,7 +126,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
                       [--dst-snapshot-plan DICT_STRING]
                       [--monitor-snapshot-plan DICT_STRING]
                       [--src-user STRING] [--dst-user STRING]
-                      [--jobid STRING]
+                      [--job-id STRING]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
@@ -355,9 +355,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 <!-- -->
 
-<div id="--jobid"></div>
+<div id="--job-id"></div>
 
-**--jobid** *STRING*
+**--job-id** *STRING*
 
 *  The job identifier that shall be included in the log file name suffix. Default is a hex UUID.
     Example: 0badc0f003a011f0a94aef02ac16083c
