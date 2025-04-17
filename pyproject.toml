@@ -64,6 +64,7 @@ dev = [  # for development only
   "argparse-manpage>=4.6",
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
   "genbadge[coverage]>=1.1.1",
+  "pre-commit=4.2",
 ]
 
 [project.scripts]

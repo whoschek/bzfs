@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# pre‑commit configuration for this repository; see https://github.com/pre-commit/pre-commit
+# ---------------------------------------------------------------------------
+# How to enable the Git hook on your machine (do this once per clone):
+#   1. Install the helper tool:
+#        pip install pre-commit
+#   2. From the project root run:
+#        pre-commit install
+#      This writes an executable hook into .git/hooks/pre-commit that will
+#      run the checks defined below every time you commit.
+#   3. After updating this file, run the same command again so the hook picks
+#      up the new configuration.
+#
+# Optional maintenance commands:
+#   * pre-commit run --all-files    # run hooks on the whole repo
+#   * pre-commit autoupdate         # bump pinned revs to latest released tags
+#
+# These steps should also be mirrored in CI (e.g. `pre-commit run --all-files`)
+# to guarantee that the same checks are enforced everywhere.
+# ---------------------------------------------------------------------------
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+      - id: check-yaml
+      - id: check-toml
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+  - repo: https://github.com/psf/black
+    rev: 25.1.0  # bump version number occasionally with autoupdate
+    hooks:
+      - id: black
+        # style options like line_length live in pyproject.toml
