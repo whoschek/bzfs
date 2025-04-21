@@ -301,6 +301,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
              "for real (optional). This option treats both the ZFS source and destination as read-only. Can also be used to "
              "check if the configuration options are valid.\n\n")
+    parser.add_argument(
+        "--jobrunner-log-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"], default="INFO",
+        help="Only emit jobrunner messages with equal or higher priority than this log level. Default is 'INFO'.\n\n")
     parser.add_argument("--help, -h", action="help",
         help="Show this help message and exit.\n\n")
     parser.add_argument("--daemon-replication-frequency", default="minutely", metavar="STRING",
@@ -370,6 +373,7 @@ class Job:
         )
         log.info("CLI arguments: %s", " ".join(sys_argv))
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
+        log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
         src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
         src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
@@ -579,7 +583,7 @@ class Job:
                         j += 1
                 subjob_prefix = update_subjob_prefix("monitor_dst_snapshots")
 
-        log.debug("subjobs: \n%s", pretty_print_formatter(subjobs))
+        log.trace("Ready to run subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)
         ex = self.first_exception
         if isinstance(ex, int):
@@ -592,7 +596,7 @@ class Job:
         self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str, jobid: str
     ) -> List[str]:
         log = self.log
-        log.info("%s", f"Replicating targets {sorted(targets)} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+        log.debug("%s", f"Replicating targets {sorted(targets)} in {kind} mode from {src_hostname} to {dst_hostname} ...")
         include_snapshot_plan = {  # only replicate targets that belong to the destination host and are relevant
             org: {
                 target: {
@@ -653,7 +657,7 @@ class Job:
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(bzfs.BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
-            log.debug("%s", "spawn_process_per_job: True")
+            log.trace("%s", "spawn_process_per_job: True")
             helper_args = self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"])
             helper = bzfs.Job()
             helper.params = bzfs.Params(helper_args, log=self.log)
@@ -669,7 +673,7 @@ class Job:
                 task_name="Subjob",
             )
         else:
-            log.debug("%s", "spawn_process_per_job: False")
+            log.trace("%s", "spawn_process_per_job: False")
             next_update_nanos = time.monotonic_ns()
             for subjob in sorted_subjobs:
                 time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)
@@ -735,7 +739,7 @@ class Job:
         stats = self.stats
         cmd_str = " ".join(cmd)
         try:
-            log.debug("Starting worker job: %s", cmd_str)
+            log.trace("Starting worker job: %s", cmd_str)
             with stats.lock:
                 stats.jobs_started += 1
                 stats.jobs_running += 1
@@ -755,7 +759,7 @@ class Job:
             if returncode != 0:
                 log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
             else:
-                log.info("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
+                log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
             return returncode
         finally:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos

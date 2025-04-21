@@ -6603,12 +6603,7 @@ def get_logger_subname() -> str:
 
 
 def get_logger(log_params: LogParams, args: argparse.Namespace, log: Optional[Logger] = None) -> Logger:
-    _log_trace = log_trace
-    if not hasattr(logging.Logger, "trace"):  # add convenience function for custom log level to the logger
-        logging.Logger.trace = lambda self, msg, *arguments: (
-            self._log(_log_trace, msg, arguments) if self.isEnabledFor(_log_trace) else None
-        )
-    logging.addLevelName(log_trace, "TRACE")
+    add_trace_loglevel()
     logging.addLevelName(log_stderr, "STDERR")
     logging.addLevelName(log_stdout, "STDOUT")
 
@@ -6727,6 +6722,7 @@ def get_simple_logger(program: str) -> Logger:
             record.program = program
             return super().format(record)
 
+    add_trace_loglevel()
     log = logging.getLogger(program)
     log.setLevel(logging.INFO)
     log.propagate = False
@@ -6737,6 +6733,15 @@ def get_simple_logger(program: str) -> Logger:
         )
         log.addHandler(handler)
     return log
+
+
+def add_trace_loglevel():
+    _log_trace = log_trace
+    if not hasattr(logging.Logger, "trace"):  # add convenience function for custom log level to the logger
+        logging.Logger.trace = lambda self, msg, *arguments: (
+            self._log(_log_trace, msg, arguments) if self.isEnabledFor(_log_trace) else None
+        )
+    logging.addLevelName(log_trace, "TRACE")
 
 
 def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple:

@@ -156,7 +156,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
                       [--job-id STRING] [--workers INT[%]]
                       [--work-period-seconds FLOAT]
                       [--worker-timeout-seconds FLOAT]
-                      [--jobrunner-dryrun] [--help, -h]
+                      [--jobrunner-dryrun]
+                      [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
+                      [--help, -h]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
@@ -460,6 +462,15 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 *  Do a dry run (aka 'no-op') to print what operations would happen if the command were to be
     executed for real (optional). This option treats both the ZFS source and destination as
     read-only. Can also be used to check if the configuration options are valid.
+
+<!-- -->
+
+<div id="--jobrunner-log-level"></div>
+
+**--jobrunner-log-level** *{CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}*
+
+*  Only emit jobrunner messages with equal or higher priority than this log level. Default is
+    'INFO'.
 
 <!-- -->
 
