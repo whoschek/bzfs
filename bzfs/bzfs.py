@@ -231,8 +231,7 @@ source host and multiple destination hosts, using a single shared [jobconfig](bz
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
-tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
-```
+tank1/foo/bar@test_2024-11-06_08:30:05_adhoc```
 
 * Create periodic atomic snapshots on a schedule, every hour and every day, by launching this from a periodic `cron` job:
 
@@ -243,8 +242,7 @@ tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
 
 tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
 
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
-```
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly`
 or `_minutely` or `_2secondly` or `_100millisecondly`), or if the --create-src-snapshots-even-if-not-due flag is specified,
