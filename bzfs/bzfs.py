@@ -76,7 +76,7 @@ from logging import Logger
 from os import stat as os_stat, utime as os_utime
 from os.path import exists as os_path_exists, join as os_path_join
 from pathlib import Path
-from subprocess import CalledProcessError, TimeoutExpired
+from subprocess import CalledProcessError, DEVNULL, PIPE
 from typing import Deque, Dict, Iterable, Iterator, List, Literal, Sequence, Set, Tuple
 from typing import Any, Callable, Final, Generator, Generic, Optional
 from typing import ItemsView, TextIO, TypeVar, Union
@@ -117,8 +117,6 @@ log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 SHARED = "shared"
 DEDICATED = "dedicated"
 DONT_SKIP_DATASET = ""
-DEVNULL = subprocess.DEVNULL
-PIPE = subprocess.PIPE
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -1222,6 +1220,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         parser.add_argument(
             f"--ssh-{loc}-config-file", type=str, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
+    parser.add_argument(
+        "--timeout", default=None, metavar="DURATION",
+        # help="Exit the program (or current task with non-zero --daemon-lifetime) with an error after this much time has "
+        #      "elapsed. Default is to never timeout. Examples: '600 seconds', '90 minutes', '1000years'\n\n")
+        help=argparse.SUPPRESS)
     threads_default = 100  # percent
     parser.add_argument(
         "--threads", min=1, default=(threads_default, True), action=CheckPercentRange, metavar="INT[%]",
@@ -1672,6 +1675,8 @@ class Params:
         self.max_snapshots_per_minibatch_on_delete_snaps = getenv_int("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
         self.dedicated_tcp_connection_per_zfs_send = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         self.threads: Tuple[int, bool] = args.threads
+        timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
+        self.timeout_nanos: Optional[int] = timeout_nanos
         self.no_estimate_send_size: bool = args.no_estimate_send_size
 
         self.terminal_columns: int = (
@@ -2193,6 +2198,7 @@ class Job:
         self.progress_reporter: ProgressReporter = None
         self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
+        self.timeout_nanos: Optional[int] = None
 
         self.is_test_mode: bool = False  # for testing only
         self.creation_prefix = ""  # for testing only
@@ -2293,24 +2299,30 @@ class Job:
             try:
                 daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
                 while True:
+                    self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
                     self.progress_reporter.reset()
                     src, dst = p.src, p.dst
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                         src.root_dataset = src.basis_root_dataset = src_root_dataset
                         dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
                         p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
+                        if p.daemon_lifetime_nanos > 0:
+                            self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
                         task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
                         if len(p.root_dataset_pairs) > 1:
                             log.info("Starting task: %s", task_description + " ...")
                         try:
                             try:
                                 self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
+                                self.timeout()
                                 self.validate_task()
                                 self.run_task()
                             except RetryableError as retryable_error:
                                 raise retryable_error.__cause__
-                        except (CalledProcessError, TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                            if p.skip_on_error == "fail":
+                        except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                            if p.skip_on_error == "fail" or (
+                                isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
+                            ):
                                 raise
                             log.error("%s", e)
                             self.append_exception(e, "task", task_description)
@@ -2992,7 +3004,7 @@ class Job:
                 )
                 try:
                     self.run_ssh_command(dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                     stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
                     no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
                     # op isn't idempotent so retries regather current state from the start of replicate_dataset()
@@ -3307,8 +3319,10 @@ class Job:
             if not dry_run_no_send:
                 try:
                     self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
-                    process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True)
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                    process = subprocess_run(
+                        cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=self.timeout(), check=True
+                    )
+                except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                     no_sleep = False
                     if not isinstance(e, UnicodeDecodeError):
                         xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
@@ -3506,7 +3520,9 @@ class Job:
             if is_dry:
                 return ""
             try:
-                process = subprocess.run(ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=check)
+                process = subprocess_run(
+                    ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=self.timeout(), check=check
+                )
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), run=print_stdout, end="")
@@ -3527,7 +3543,7 @@ class Job:
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger=error_trigger)
             return self.run_ssh_command(remote, level=level, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+        except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             if not isinstance(e, UnicodeDecodeError):
                 stderr = stderr_to_str(e.stderr)
                 if exists and (
@@ -3561,14 +3577,15 @@ class Job:
             ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
             # extend lifetime of ssh master by $control_persist_secs via 'ssh -O check' if master is still running.
             # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
-            if subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).returncode == 0:
+            t = self.timeout()
+            if subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=t).returncode == 0:
                 log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
             else:  # ssh master is not alive; start a new master:
                 log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                 ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 ssh_socket_cmd += ["-M", f"-oControlPersist={self.control_persist_secs}s", remote.ssh_user_host, "exit"]
                 log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
-                process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
+                process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=self.timeout())
                 if process.returncode != 0:
                     log.error("%s", process.stderr.rstrip())
                     die(
@@ -3577,6 +3594,16 @@ class Job:
                         "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
                     )
             conn.last_refresh_time = time.monotonic_ns()
+
+    def timeout(self) -> Optional[float]:
+        """Raises TimeoutExpired if necessary, else returns the number of seconds left until timeout is to occur."""
+        timeout_nanos = self.timeout_nanos
+        if timeout_nanos is None:
+            return None  # never raise a timeout
+        delta_nanos = timeout_nanos - time.monotonic_ns()
+        if delta_nanos <= 0:
+            raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=self.params.timeout_nanos / 1_000_000_000)
+        return delta_nanos / 1_000_000_000  # seconds
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
@@ -3849,7 +3876,7 @@ class Job:
         try:
             self.maybe_inject_error(cmd=cmd, error_trigger="zfs_delete_snapshot")
             self.run_ssh_command(r, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+        except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             no_sleep = self.clear_resumable_recv_state_if_necessary(dataset, stderr)
             # op isn't idempotent so retries regather current state from the start
@@ -4181,7 +4208,7 @@ class Job:
                     props = self.zfs_get(p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
                     for propnames in user_propnames:
                         props.update(self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache))
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                     raise RetryableError("Subprocess failed") from e
                 for propname in sorted(props.keys()):
                     if config is p.zfs_recv_o_config:
@@ -4835,7 +4862,7 @@ class Job:
                             terminate_process_subtree(except_current_process=True)
                             raise e
                         no_skip = not (p.skip_on_error == "tree" or skip_tree_on_error(dataset))
-                        log.error("%s", str(e))
+                        log.error("%s", e)
                         self.append_exception(e, task_name, dataset)
                     if no_skip and children:  # make child datasets available for start of processing ...
                         for child, grandchildren in children.items():  # as processing of parent has now completed
@@ -6223,11 +6250,42 @@ def round_datetime_up_to_duration_multiple(
         raise ValueError(f"Unsupported duration unit: {duration_unit}")
 
 
-def terminate_process_subtree(except_current_process=False, sig=signal.SIGTERM):
+def subprocess_run(*args, **kwargs):
+    """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
+    input = kwargs.pop("input", None)
+    timeout = kwargs.pop("timeout", None)
+    check = kwargs.pop("check", False)
+    if input is not None:
+        if kwargs.get("stdin") is not None:
+            raise ValueError("input and stdin are mutually exclusive")
+        kwargs["stdin"] = subprocess.PIPE
+
+    with subprocess.Popen(*args, **kwargs) as proc:
+        try:
+            stdout, stderr = proc.communicate(input, timeout=timeout)
+        except BaseException as e:
+            try:
+                if isinstance(e, subprocess.TimeoutExpired):
+                    terminate_process_subtree(root_pid=proc.pid)  # send SIGTERM to child process and its descendants
+            finally:
+                proc.kill()
+                raise e
+        else:
+            exitcode = proc.poll()
+            if check and exitcode:
+                raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
+
+
+def terminate_process_subtree(except_current_process=False, root_pid=None, sig=signal.SIGTERM):
     """Sends signal also to descendant processes to also terminate processes started via subprocess.run()"""
     current_pid = os.getpid()
-    pids = get_descendant_processes(current_pid)
-    pids += [] if except_current_process else [current_pid]
+    root_pid = current_pid if root_pid is None else root_pid
+    pids = get_descendant_processes(root_pid)
+    if root_pid == current_pid:
+        pids += [] if except_current_process else [current_pid]
+    else:
+        pids.insert(0, root_pid)
     for pid in pids:
         with contextlib.suppress(OSError):
             os.kill(pid, sig)

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
@@ -22,10 +21,12 @@ import os
 import random
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from collections import defaultdict
@@ -33,6 +34,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from logging import Logger
 from pathlib import Path
+from subprocess import PIPE
 from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import patch, mock_open
 
@@ -49,6 +51,7 @@ def suite():
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTerminateProcessSubtree))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSubprocessRun))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
@@ -1328,6 +1331,57 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         bzfs.terminate_process_subtree(except_current_process=True)
         time.sleep(0.1)
         self.assertIsNotNone(child.poll(), "Child process should be terminated")
+
+
+#############################################################################
+class TestSubprocessRun(unittest.TestCase):
+    def test_successful_command(self):
+        result = bzfs.subprocess_run(["true"], stdout=PIPE, stderr=PIPE)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+
+    def test_failing_command_no_check(self):
+        result = bzfs.subprocess_run(["false"], stdout=PIPE, stderr=PIPE)
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+
+    def test_failing_command_with_check(self):
+        with self.assertRaises(subprocess.CalledProcessError) as context:
+            bzfs.subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True)
+        self.assertIsInstance(context.exception, subprocess.CalledProcessError)
+        self.assertEqual(1, context.exception.returncode)
+
+    def test_input_bytes(self):
+        result = bzfs.subprocess_run(["cat"], input=b"hello", stdout=PIPE, stderr=PIPE)
+        self.assertEqual(b"hello", result.stdout)
+
+    def test_valueerror_input_and_stdin(self):
+        with self.assertRaises(ValueError):
+            bzfs.subprocess_run(["cat"], input=b"hello", stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+    def test_timeout_expired(self):
+        with self.assertRaises(subprocess.TimeoutExpired) as context:
+            bzfs.subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE)
+        self.assertIsInstance(context.exception, subprocess.TimeoutExpired)
+        self.assertEqual(["sleep", "1"], context.exception.cmd)
+
+    def test_keyboardinterrupt_signal(self):
+        old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)  # install a handler that ignores SIGINT
+        try:
+
+            def send_sigint_to_sleep_cli():
+                time.sleep(0.1)  # ensure sleep CLI has started before we kill it
+                os.kill(os.getpid(), signal.SIGINT)  # send SIGINT to all members of the process group, including `sleep` CLI
+
+            thread = threading.Thread(target=send_sigint_to_sleep_cli)
+            thread.start()
+            with self.assertRaises(KeyboardInterrupt):
+                bzfs.subprocess_run(["sleep", "1"])
+            thread.join()
+        finally:
+            signal.signal(signal.SIGINT, old_handler)  # restore original signal handler
 
 
 #############################################################################

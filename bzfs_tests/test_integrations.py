@@ -1875,6 +1875,33 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset + "/" + d1 + "/" + d2))
         self.assertSnapshotNames(dst_root_dataset + "/" + d1 + "/" + d2, [t1])
 
+    def test_basic_replication_flat_simple_with_timeout_infinity(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--timeout=1000seconds")
+        self.assertSnapshots(dst_root_dataset, 3, "s")
+
+    def test_basic_replication_flat_simple_with_timeout_zero(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--timeout=0seconds", expected_status=die_status)
+
+    def test_basic_replication_flat_simple_with_timeout_almost_zero(self):
+        self.setup_basic()
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--timeout=1milliseconds", expected_status=die_status)
+
+    def test_basic_replication_flat_simple_with_exclude_envvar(self):
+        self.setup_basic()
+        param_name = "EDITOR"
+        old_value = os.environ.get(param_name)
+        try:
+            os.environ[param_name] = "foo"
+            self.run_bzfs(src_root_dataset, dst_root_dataset)
+            self.assertSnapshots(dst_root_dataset, 3, "s")
+        finally:
+            if old_value is None:
+                os.environ.pop(param_name, None)
+            else:
+                os.environ[param_name] = old_value
+
     def test_basic_replication_flat_simple_with_multiple_root_datasets(self):
         self.setup_basic()
         param_name = bzfs.env_var_prefix + "reuse_ssh_connection"
