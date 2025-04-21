@@ -32,36 +32,54 @@ WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still ch
 incompatible ways.
 
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS
-snapshot creation, replication, pruning, and monitoring, across source host and multiple
-destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
+snapshot creation, replication, pruning, and monitoring, across N source hosts and M destination
+hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For example,
+this simplifies the deployment of an efficient geo-replicated backup service where each of the M
+destination hosts is located in a separate geographic region and pulls replicas from (the same set
+of) N source hosts. It also simplifies low latency replication from a primary to a secondary, or
+backup to removable drives, etc.
 
-Typically, a cron job on the source host runs `bzfs_jobrunner` periodically to create new
+This program can be used to efficiently replicate ...
+
+a) within a single machine, or
+
+b) from a single source host to one or more destination hosts (pull or push mode), or
+
+c) from multiple source hosts to a single destination host (pull or push mode), or
+
+d) from N source hosts to M destination hosts (pull or push mode, N can be large, M=2 or M=3 are
+typical geo-replication factors)
+
+Typically, a cron job on each source host runs `bzfs_jobrunner` periodically to create new
 snapshots (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source
-(via --prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on the
+(via --prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on each
 destination host runs `bzfs_jobrunner` periodically to prune outdated destination snapshots (via
 --prune-dst-snapshots), and to replicate the recently created snapshots from the source to the
-destination (via --replicate). Yet another cron job on both source and destination runs
+destination (via --replicate). Yet another cron job on each source and each destination runs
 `bzfs_jobrunner` periodically to alert the user if the latest or oldest snapshot is somehow too
 old (via --monitor-src-snapshots and --monitor-dst-snapshots). The frequency of these periodic
 activities can vary by activity, and is typically every second, minute, hour, day, week, month
 and/or year (or multiples thereof).
 
 Edit the jobconfig script in a central place (e.g. versioned in a git repo), then copy the (very
-same) shared file onto the source host and all destination hosts, and add crontab entries (or
+same) shared file onto all source hosts and all destination hosts, and add crontab entries (or
 systemd timers or Monit entries or similar), along these lines:
 
-* crontab on source host:
+* crontab on source hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots
---prune-src-snapshots --prune-src-bookmarks`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+--create-src-snapshots --prune-src-snapshots --prune-src-bookmarks`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-src-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+--monitor-src-snapshots`
 
-* crontab on destination host(s):
+* crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)"
+--replicate=pull --prune-dst-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)"
+--monitor-dst-snapshots`
 
 ### High Frequency Replication (Experimental Feature)
 
@@ -75,25 +93,33 @@ this level of frequency.
 
 In addition, use the `--daemon-*` options to reduce startup overhead, in combination with
 splitting the crontab entry (or better: high frequency systemd timer) into multiple processes,
-using pull replication mode, along these lines:
+using pull replication mode, from a single source host to a single destination host, along these
+lines:
 
-* crontab on source host:
+* crontab on source hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --create-src-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+--dst-host="foo" --create-src-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+--dst-host="foo" --prune-src-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-src-bookmarks`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+--dst-host="foo" --prune-src-bookmarks`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-src-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="$(hostname)"
+--dst-host="foo" --monitor-src-snapshots`
 
-* crontab on destination host(s):
+* crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --replicate=pull`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
+--dst-host="$(hostname)" --replicate=pull`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
+--dst-host="$(hostname)" --prune-dst-snapshots`
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --monitor-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
+--dst-host="$(hostname)" --monitor-dst-snapshots`
 
 The daemon processes work like non-daemon processes except that they loop, handle time events and
 sleep between events, and finally exit after, say, 86400 seconds (whatever you specify via
@@ -117,8 +143,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
                       [--prune-dst-snapshots]
                       [--monitor-src-snapshots]
-                      [--monitor-dst-snapshots] [--src-host STRING]
-                      [--localhost STRING] [--dst-hosts DICT_STRING]
+                      [--monitor-dst-snapshots] [--localhost STRING]
+                      [--src-hosts LIST_STRING] [--src-host STRING]
+                      [--dst-hosts DICT_STRING] [--dst-host STRING]
                       [--retain-dst-targets DICT_STRING]
                       [--dst-root-datasets DICT_STRING]
                       [--src-snapshot-plan DICT_STRING]
@@ -126,7 +153,10 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
                       [--dst-snapshot-plan DICT_STRING]
                       [--monitor-snapshot-plan DICT_STRING]
                       [--src-user STRING] [--dst-user STRING]
-                      [--job-id STRING]
+                      [--job-id STRING] [--workers INT[%]]
+                      [--work-period-seconds FLOAT]
+                      [--worker-timeout-seconds FLOAT]
+                      [--jobrunner-dryrun] [--help, -h]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
@@ -142,7 +172,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 **--create-src-snapshots**
 
 *  Take snapshots on src as necessary. This command should be called by a program (or cron job)
-    running on the src host.
+    running on each src host.
 
 <!-- -->
 
@@ -152,7 +182,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 *  Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push
     mode (experimental). For pull mode, this command should be called by a program (or cron job)
-    running on the dst host; for push mode, on the src host.
+    running on each dst host; for push mode, on the src host.
 
 <!-- -->
 
@@ -161,7 +191,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 **--prune-src-snapshots**
 
 *  Prune snapshots on src as necessary. This command should be called by a program (or cron job)
-    running on the src host.
+    running on each src host.
 
 <!-- -->
 
@@ -170,7 +200,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 **--prune-src-bookmarks**
 
 *  Prune bookmarks on src as necessary. This command should be called by a program (or cron job)
-    running on the src host.
+    running on each src host.
 
 <!-- -->
 
@@ -179,7 +209,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 **--prune-dst-snapshots**
 
 *  Prune snapshots on dst as necessary. This command should be called by a program (or cron job)
-    running on the dst host.
+    running on each dst host.
 
 <!-- -->
 
@@ -188,7 +218,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 **--monitor-src-snapshots**
 
 *  Alert the user if src snapshots are too old, using --monitor-snapshot-plan (see below). This
-    command should be called by a program (or cron job) running on the src host.
+    command should be called by a program (or cron job) running on each src host.
 
 <!-- -->
 
@@ -197,15 +227,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 **--monitor-dst-snapshots**
 
 *  Alert the user if dst snapshots are too old, using --monitor-snapshot-plan (see below). This
-    command should be called by a program (or cron job) running on the dst host.
-
-<!-- -->
-
-<div id="--src-host"></div>
-
-**--src-host** *STRING*
-
-*  Network hostname of src. Used by destination host(s) if replicating in pull mode.
+    command should be called by a program (or cron job) running on each dst host.
 
 <!-- -->
 
@@ -213,7 +235,25 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--localhost** *STRING*
 
-*  Hostname of localhost. Default is the hostname without the domain name.
+*  Hostname of localhost. Default is the hostname without the domain name, querying the Operating
+    System.
+
+<!-- -->
+
+<div id="--src-hosts"></div>
+
+**--src-hosts** *LIST_STRING*
+
+*  Hostnames of sources. Used by destination hosts if replicating in pull mode.
+
+<!-- -->
+
+<div id="--src-host"></div>
+
+**--src-host** *STRING*
+
+*  For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the
+    --src-hosts that are contained in the specified --src-host values (optional).
 
 <!-- -->
 
@@ -224,12 +264,23 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 *  Dictionary that maps each destination hostname to a list of zero or more logical replication
     target names (the infix portion of snapshot name). Example: `"{'nas': ['onsite'],
     'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'], 'archive':
-    ['offsite']}"`. With this, given a snapshot name, we can find the destination hostname
-    to which the snapshot shall be replicated. Also, given a snapshot name and its --localhost
-    name, a destination host can determine if it shall 'pull' replicate the given snapshot from
-    the --src-host, or if the snapshot is intended for another destination host, in which case it
-    skips the snapshot. A destination host running bzfs_jobrunner will 'pull' snapshots for all
-    targets that map to its --localhost name.
+    ['offsite']}"`.
+
+    With this, given a snapshot name, we can find the destination hostname to which the snapshot
+    shall be replicated. Also, given a snapshot name and its own name, a destination host can
+    determine if it shall 'pull' replicate the given snapshot from the source host, or if the
+    snapshot is intended for another destination host, in which case it skips the snapshot. A
+    destination host running bzfs_jobrunner will 'pull' snapshots for all targets that map to
+    that destination host.
+
+<!-- -->
+
+<div id="--dst-host"></div>
+
+**--dst-host** *STRING*
+
+*  For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the
+    --dst-hosts keys that are contained in the specified --dst-host values (optional).
 
 <!-- -->
 
@@ -240,10 +291,12 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 *  Dictionary that maps each destination hostname to a list of zero or more logical replication
     target names (the infix portion of snapshot name). Example: `"{'nas': ['onsite'],
     'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'], 'archive':
-    ['offsite']}"`. Has same format as --dst-hosts. As part of --prune-dst-snapshots, a
-    destination host will delete any snapshot it has stored whose target has no mapping to its
-    --localhost name in this dictionary. Do not remove a mapping unless you are sure it's ok to
-    delete all those snapshots on that destination host! If in doubt, use --dryrun mode first.
+    ['offsite']}"`. Has same format as --dst-hosts.
+
+    As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored
+    whose target has no mapping to that destination host in this dictionary. Do not remove a
+    mapping here unless you are sure it's ok to delete all those snapshots on that destination
+    host! If in doubt, use --dryrun mode first.
 
 <!-- -->
 
@@ -255,9 +308,15 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
     host. The root dataset name is an (optional) prefix that will be prepended to each dataset
     that is replicated to that destination host. For backup use cases, this is the backup ZFS pool
     or a ZFS dataset path within that pool, whereas for cloning, master slave replication, or
-    replication from a primary to a secondary, this can also be the empty string. Example:
-    `"{'nas': 'tank2/bak', 'bak-us-west-1': 'backups/bak001', 'bak-eu-west-1':
-    'backups/bak999', 'archive': 'f"archives/zoo/{src_host}"', 'hotspare': ''}"`
+    replication from a primary to a secondary, this can also be the empty string.
+
+    `^SRC_HOST` and `^DST_HOST` are optional placeholders that will be auto-replaced at
+    runtime with the actual hostname. This can be used to force the use of a separate destination
+    root dataset per source host or per destination host.
+
+    Example: `"{'nas': 'tank2/bak', 'bak-us-west-1': 'backups/bak001',
+    'bak-eu-west-1': 'backups/bak999', 'archive': 'archives/zoo/^SRC_HOST', 'hotspare':
+    ''}"`
 
 <!-- -->
 
@@ -343,7 +402,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--src-user** *STRING*
 
-*  SSH username on --src-host. Used if replicating in pull mode. Example: 'alice'
+*  SSH username on src hosts. Used if replicating in pull mode. Example: 'alice'
 
 <!-- -->
 
@@ -351,7 +410,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--dst-user** *STRING*
 
-*  SSH username on dst. Used if replicating in push mode. Example: 'root'
+*  SSH username on dst hosts. Used if replicating in push mode. Example: 'root'
 
 <!-- -->
 
@@ -361,6 +420,54 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 *  The job identifier that shall be included in the log file name suffix. Default is a hex UUID.
     Example: 0badc0f003a011f0a94aef02ac16083c
+
+<!-- -->
+
+<div id="--workers"></div>
+
+**--workers** *INT[%]*
+
+*  The maximum number of jobs to run in parallel at any time; can be given as a positive integer,
+    optionally followed by the % percent character (min: 1, default: 100%). Percentages are
+    relative to the number of CPU cores on the machine. Example: 200% uses twice as many parallel
+    jobs as there are cores on the machine; 75% uses num_procs = num_cores * 0.75. Examples: 1,
+    4, 75%, 150%
+
+<!-- -->
+
+<div id="--work-period-seconds"></div>
+
+**--work-period-seconds** *FLOAT*
+
+*  Reduces bandwidth spikes by evenly spreading the start of worker jobs over this much time; 0
+    disables this feature (default: 0). Examples: 0, 60, 86400
+
+<!-- -->
+
+<div id="--worker-timeout-seconds"></div>
+
+**--worker-timeout-seconds** *FLOAT*
+
+*  If this much time has passed after a worker process has started executing, kill the straggling
+    worker (optional). Other workers remain unaffected. Examples: 60, 3600
+
+<!-- -->
+
+<div id="--jobrunner-dryrun"></div>
+
+**--jobrunner-dryrun**
+
+*  Do a dry run (aka 'no-op') to print what operations would happen if the command were to be
+    executed for real (optional). This option treats both the ZFS source and destination as
+    read-only. Can also be used to check if the configuration options are valid.
+
+<!-- -->
+
+<div id="--help,_-h"></div>
+
+**--help, -h**
+
+*  Show this help message and exit.
 
 <!-- -->
 

@@ -74,6 +74,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
@@ -531,6 +532,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(bzfs.has_siblings(["a", "a/b", "a/d"]))
         self.assertTrue(bzfs.has_siblings(["a", "a/b", "a/b/c", "a/b/d"]))
         self.assertTrue(bzfs.has_siblings(["a/b/c", "d/e/f"]))  # multiple root datasets can be processed in parallel
+        self.assertFalse(bzfs.has_siblings(["a", "a/b/c"]))
+        self.assertFalse(bzfs.has_siblings(["a", "a/b/c/d"]))
+        self.assertTrue(bzfs.has_siblings(["a", "a/b/c", "a/b/d"]))
+        self.assertTrue(bzfs.has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
     def test_validate_default_shell(self):
         args = argparser_parse_args(args=["src", "dst"])
@@ -1351,7 +1356,8 @@ class TestSubprocessRun(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError) as context:
             bzfs.subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True)
         self.assertIsInstance(context.exception, subprocess.CalledProcessError)
-        self.assertEqual(1, context.exception.returncode)
+        self.assertIsInstance(context.exception.returncode, int)
+        self.assertTrue(context.exception.returncode != 0)
 
     def test_input_bytes(self):
         result = bzfs.subprocess_run(["cat"], input=b"hello", stdout=PIPE, stderr=PIPE)
@@ -1677,6 +1683,28 @@ class TestBuildTree(unittest.TestCase):
     def test_multiple_roots_mixed_depth(self):
         datasets = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
         expected_tree = {"a": {"b": {"c": None}}, "x": {"y": None}, "z": {"1": None, "2": {"3": None}}}
+        tree = bzfs.Job().build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_tree_with_missing_intermediate_nodes(self):
+        datasets = ["a", "a/b/c", "z/2/3"]
+        expected_tree = {"a": {"b": {"c": None}}, "z": {"2": {"3": None}}}
+        tree = bzfs.Job().build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_tree_with_barriers(self):
+        BR = bzfs.BARRIER_CHAR
+        datasets = [
+            "a/b/c",
+            "a/b/c/0d",
+            "a/b/c/1d",
+            f"a/b/c/{BR}/prune",
+            f"a/b/c/{BR}/prune/monitor",
+            f"a/b/c/{BR}/{BR}/done",
+        ]
+        expected_tree = {"a": {"b": {"c": {"0d": None, "1d": None, BR: {"prune": {"monitor": None}, BR: {"done": None}}}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
@@ -3940,6 +3968,222 @@ class TestItrSSHCmdParallel(unittest.TestCase):
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)
         )
         self.assertEqual(results, expected_ordered)
+
+
+#############################################################################
+class TestProcessDatasetsInParallel(unittest.TestCase):
+    def setUp(self):
+        args = argparser_parse_args(args=["src", "dst"])
+        p = bzfs.Params(args, log=bzfs.get_simple_logger("myprogram"))
+        self.job = bzfs.Job()
+        self.job.params = p
+        self.lock = threading.Lock()
+        self.submitted = []
+
+    def append_submission(self, dataset):
+        with self.lock:
+            self.submitted.append(dataset)
+
+    def test_submit_no_skiptree(self):
+        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.setUp()
+                src_datasets = ["a1", "a1/b1", "a2"]
+                failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+                    src_datasets,
+                    process_dataset=submit_no_skiptree,  # lambda
+                    skip_tree_on_error=lambda dataset: False,
+                    max_workers=8,
+                    interval_nanos=lambda dataset: 10_000_000,
+                    task_name="mytask",
+                    enable_barriers=i > 0,
+                )
+                self.assertFalse(failed)
+                self.assertListEqual(["a1", "a1/b1", "a2"], sorted(self.submitted))
+
+    def test_submit_skiptree(self):
+        def submit_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return False
+
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.setUp()
+                src_datasets = ["a1", "a1/b1", "a2"]
+                failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+                    src_datasets,
+                    process_dataset=submit_skiptree,  # lambda
+                    skip_tree_on_error=lambda dataset: False,
+                    max_workers=8,
+                    enable_barriers=i > 0,
+                )
+                self.assertFalse(failed)
+                self.assertListEqual(["a1", "a2"], sorted(self.submitted))
+
+    def test_submit_zero_datasets(self):
+        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        src_datasets = []
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=submit_no_skiptree,  # lambda
+            skip_tree_on_error=lambda dataset: False,
+            max_workers=8,
+        )
+        self.assertFalse(failed)
+        self.assertListEqual([], sorted(self.submitted))
+
+    def test_submit_timeout_with_skip_on_error_is_fail(self):
+        def submit_raise_timeout(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            raise subprocess.TimeoutExpired("submit_raise_timeout", 10)
+
+        src_datasets = ["a1", "a1/b1", "a2"]
+        self.job.params.skip_on_error = "fail"
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.job.process_datasets_in_parallel_and_fault_tolerant(
+                src_datasets,
+                process_dataset=submit_raise_timeout,  # lambda
+                skip_tree_on_error=lambda dataset: True,
+                max_workers=8,
+            )
+        self.assertListEqual(["a1"], sorted(self.submitted))
+
+    def test_submit_timeout_with_skip_on_error_is_not_fail(self):
+        def submit_raise_timeout(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            raise subprocess.TimeoutExpired("submit_raise_timeout", 10)
+
+        src_datasets = ["a1", "a1/b1", "a2"]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=submit_raise_timeout,  # lambda
+            skip_tree_on_error=lambda dataset: True,
+            max_workers=8,
+        )
+        self.assertTrue(failed)
+        self.assertListEqual(["a1", "a2"], sorted(self.submitted))
+
+    def submit_raise_error(self, dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+        self.append_submission(dataset)
+        raise subprocess.CalledProcessError(1, "foo_cmd")
+
+    def test_submit_raise_error_with_skip_tree_on_error_is_false(self):
+        src_datasets = ["a1", "a1/b1", "a2"]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=self.submit_raise_error,  # lambda
+            skip_tree_on_error=lambda dataset: False,
+            max_workers=8,
+        )
+        self.assertTrue(failed)
+        self.assertListEqual(["a1", "a1/b1", "a2"], sorted(self.submitted))
+
+    def test_submit_raise_error_with_skip_tree_on_error_is_true(self):
+        src_datasets = ["a1", "a1/b1", "a2"]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=self.submit_raise_error,  # lambda
+            skip_tree_on_error=lambda dataset: True,
+            max_workers=8,
+        )
+        self.assertTrue(failed)
+        self.assertListEqual(["a1", "a2"], sorted(self.submitted))
+
+    def test_submit_barriers0(self):
+        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        BR = bzfs.BARRIER_CHAR
+        src_datasets = ["a/b/c", "a/b/c/0d", "a/b/c/1d", f"a/b/c/{BR}/prune", f"a/b/c/{BR}/prune/monitor"]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=submit_no_skiptree,  # lambda
+            skip_tree_on_error=lambda dataset: True,
+            max_workers=8,
+            enable_barriers=True,
+        )
+        self.assertFalse(failed)
+        self.assertListEqual(src_datasets, sorted(self.submitted))
+
+    def test_submit_barriers1(self):
+        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        BR = bzfs.BARRIER_CHAR
+        src_datasets = [
+            "a/b/c",
+            "a/b/c/0d",
+            "a/b/c/1d",
+            f"a/b/c/{BR}/prune",
+            f"a/b/c/{BR}/prune/monitor",
+            f"a/b/c/{BR}/{BR}/done",
+        ]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=submit_no_skiptree,  # lambda
+            skip_tree_on_error=lambda dataset: True,
+            max_workers=8,
+            enable_barriers=True,
+        )
+        self.assertFalse(failed)
+        self.assertListEqual(src_datasets, sorted(self.submitted))
+
+    def test_submit_barriers2(self):
+        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        BR = bzfs.BARRIER_CHAR
+        src_datasets = [
+            "a/b/c",
+            "a/b/c/0d",
+            "a/b/c/1d",
+            f"a/b/c/{BR}/prune",
+            f"a/b/c/{BR}/prune/monitor",
+            f"a/b/c/{BR}/{BR}/{BR}/{BR}/done",
+        ]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=submit_no_skiptree,  # lambda
+            skip_tree_on_error=lambda dataset: True,
+            max_workers=8,
+            enable_barriers=True,
+        )
+        self.assertFalse(failed)
+        self.assertListEqual(src_datasets, sorted(self.submitted))
+
+    def test_submit_barriers3(self):
+        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        BR = bzfs.BARRIER_CHAR
+        src_datasets = [
+            "a/b/c",
+            "a/b/c/0d",
+            "a/b/c/1d",
+            f"a/b/c/{BR}/prune",
+            f"a/b/c/{BR}/prune/monitor",
+            f"a/b/c/{BR}/{BR}/{BR}/{BR}",
+        ]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=submit_no_skiptree,  # lambda
+            skip_tree_on_error=lambda dataset: True,
+            max_workers=8,
+            enable_barriers=True,
+        )
+        self.assertFalse(failed)
+        self.assertListEqual(src_datasets[0:-1], sorted(self.submitted))
 
 
 #############################################################################

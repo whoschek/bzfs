@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
@@ -310,6 +309,7 @@ class BZFSTestCase(ParametrizedTestCase):
         progress_update_intervals: Optional[Tuple[float, float]] = None,
         use_select: bool = None,
         use_jobrunner: bool = False,
+        spawn_process_per_job: bool = None,
         include_snapshot_plan_excludes_outdated_snapshots: bool = None,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
@@ -347,17 +347,17 @@ class BZFSTestCase(ParametrizedTestCase):
         elif params and params.get("ssh_mode", "local") != "local":
             raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])
 
+        if platform.system() == "Linux":
+            args += src_private_key
+        else:
+            args += src_private_key2
+        args = args + [
+            "--ssh-src-extra-opts",
+            "-o StrictHostKeyChecking=no",
+            "--ssh-dst-extra-opts",
+            "-o StrictHostKeyChecking=no",
+        ]
         if params and params.get("ssh_mode", "local") != "local":
-            if platform.system() == "Linux":
-                args += src_private_key
-            else:
-                args += src_private_key2
-            args = args + [
-                "--ssh-src-extra-opts",
-                "-o StrictHostKeyChecking=no",
-                "--ssh-dst-extra-opts",
-                "-o StrictHostKeyChecking=no",
-            ]
             if ssh_program == "ssh" and has_netcat_prog and not is_solaris_zfs() and not platform.system() == "FreeBSD":
                 r = rng.randint(0, 2)
                 if r % 3 == 0:
@@ -431,10 +431,12 @@ class BZFSTestCase(ParametrizedTestCase):
                 os.environ["PATH"] = bzfs_dir + os.pathsep + os.environ["PATH"]
             from bzfs import bzfs_jobrunner
 
-            with self.assertRaises(SystemExit) as context:
-                bzfs_jobrunner.main()
-            self.assertEqual(2, context.exception.code)  # error: the following arguments are required: --root-dataset-pairs
             job = bzfs_jobrunner.Job()
+            if spawn_process_per_job:
+                args += ["--spawn_process_per_job"]
+            elif spawn_process_per_job is not None:
+                job.spawn_process_per_job = spawn_process_per_job
+
         else:
             job = bzfs.Job()
             job.is_test_mode = True
@@ -4578,388 +4580,410 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs.disable_prg, expected_status=die_status)
 
     def test_jobrunner_flat_simple(self):
+        def run_jobrunner(*args, **kwargs):
+            self.run_bzfs(*args, **kwargs, use_jobrunner=True, spawn_process_per_job=spawn_process_per_job)
+
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
-        self.assertSnapshots(src_root_dataset, 0)
+        for jobiter, spawn_process_per_job in enumerate([None, True]):
+            with stop_on_failure_subtest(i=jobiter):
+                self.tearDownAndSetup()
+                self.assertSnapshots(src_root_dataset, 0)
 
-        localhostname = socket.gethostname()
-        src_host = "-"  # for local mode (no ssh, no network)
-        dst_hosts_pull = {localhostname: ["", "onsite"]}
-        dst_hosts_pull_bad = {localhostname: ["xxxxonsite"]}
-        dst_hosts_push = {"-": ["onsite"]}
-        dst_hosts_push_bad = {"-": ["xxxonsite"]}
-        dst_root_datasets = {localhostname: "", "-": ""}
-        src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}
-        dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}, "offsite": {}}}
-        src_bookmark_plan = dst_snapshot_plan
-        monitor_dst_snapshot_plan = {
-            "z": {
-                "onsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}},
-                "offsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}},
-            }
-        }
-        monitor_src_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}}}}
-        args = [
-            "--root-dataset-pairs",
-            src_root_dataset,
-            dst_root_dataset,
-            f"--src-host={src_host}",
-            f"--localhost={localhostname}",
-            f"--retain-dst-targets={dst_hosts_pull}",
-            f"--dst-root-datasets={dst_root_datasets}",
-            f"--src-snapshot-plan={src_snapshot_plan}",
-            f"--src-bookmark-plan={src_bookmark_plan}",
-            f"--dst-snapshot-plan={dst_snapshot_plan}",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
-        ]
-        pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
-        pull_args_bad = args + [f"--dst-hosts={dst_hosts_pull_bad}"]
-        push_args = args + [f"--dst-hosts={dst_hosts_push}"]
-        push_args_bad = args + [f"--dst-hosts={dst_hosts_push_bad}"]
+                localhostname = socket.gethostname()
+                src_hosts = [localhostname]  # for local mode (no ssh, no network)
+                dst_hosts_pull = {localhostname: ["", "onsite"]}
+                dst_hosts_pull_bad = {localhostname: ["xxxxonsite"]}
+                dst_hosts_push = {"-": ["onsite"], "127.0.0.1": ["onsite"]}
+                dst_hosts_push_bad = {"-": ["xxxonsite"]}
+                dst_root_datasets = {localhostname: "", "-": "", "127.0.0.1": ""}
+                retain_dst_targets = dst_hosts_pull.copy()
+                retain_dst_targets.update(dst_hosts_push)
+                src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}
+                dst_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}, "offsite": {}}}
+                src_bookmark_plan = dst_snapshot_plan
+                monitor_dst_snapshot_plan = {
+                    "z": {
+                        "onsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}},
+                        "offsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}},
+                    }
+                }
+                monitor_src_snapshot_plan = {
+                    "z": {"onsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}}}
+                }
+                args = [
+                    "--root-dataset-pairs",
+                    src_root_dataset,
+                    dst_root_dataset,
+                    f"--src-hosts={src_hosts}",
+                    f"--localhost={localhostname}",
+                    f"--retain-dst-targets={retain_dst_targets}",
+                    f"--dst-root-datasets={dst_root_datasets}",
+                    f"--src-snapshot-plan={src_snapshot_plan}",
+                    f"--src-bookmark-plan={src_bookmark_plan}",
+                    f"--dst-snapshot-plan={dst_snapshot_plan}",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+                    f"--ssh-src-port={getenv_any('test_ssh_port', '22')}",
+                    f"--ssh-dst-port={getenv_any('test_ssh_port', '22')}",
+                ]
+                pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
+                pull_args_bad = args + [f"--dst-hosts={dst_hosts_pull_bad}"]
+                push_args = args + [f"--dst-hosts={dst_hosts_push}"]
+                push_args_bad = args + [f"--dst-hosts={dst_hosts_push_bad}"]
 
-        # next iteration: create a src snapshot
-        self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(0, len(bookmarks(src_root_dataset)))
-        self.assertEqual(0, len(snapshots(dst_root_dataset)))
+                # next iteration: create a src snapshot
+                run_jobrunner("--create-src-snapshots", *pull_args)
+                self.assertEqual(1, len(snapshots(src_root_dataset)))
+                self.assertEqual(0, len(bookmarks(src_root_dataset)))
+                self.assertEqual(0, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest src snapshots aren't too old:
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        self.run_bzfs(
-            "--monitor-src-snapshots",
-            f"--monitor-snapshot-plan={monitor_src_snapshot_plan}",
-            *pull_args_no_monitoring,
-            use_jobrunner=True,
-        )
+                # monitoring says latest src snapshots aren't too old:
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                run_jobrunner(
+                    "--monitor-src-snapshots",
+                    f"--monitor-snapshot-plan={monitor_src_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                )
+                run_jobrunner(
+                    "--monitor-src-snapshots",
+                    *[f"--src-host={host}" for host in src_hosts + src_hosts],
+                    *[f"--dst-host={host}" for host in src_hosts + src_hosts],
+                    f"--monitor-snapshot-plan={monitor_src_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                )
 
-        # monitoring says critical as there is no latest dst snapshot:
-        self.assertEqual(0, len(snapshots(dst_root_dataset)))
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
-        self.run_bzfs(
-            "--monitor-snapshots-no-oldest-check",
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            expected_status=bzfs.critical_status,
-            use_jobrunner=True,
-        )
+                # monitoring says critical as there is no latest dst snapshot:
+                self.assertEqual(0, len(snapshots(dst_root_dataset)))
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
+                run_jobrunner(
+                    "--monitor-snapshots-no-oldest-check",
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                    expected_status=bzfs.critical_status,
+                )
 
-        # monitoring says critical as there is no oldest dst snapshot:
-        self.assertEqual(0, len(snapshots(dst_root_dataset)))
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
-        self.run_bzfs(
-            "--monitor-snapshots-no-latest-check",
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            expected_status=bzfs.critical_status,
-            use_jobrunner=True,
-        )
+                # monitoring says critical as there is no oldest dst snapshot:
+                self.assertEqual(0, len(snapshots(dst_root_dataset)))
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
+                run_jobrunner(
+                    "--monitor-snapshots-no-latest-check",
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                    expected_status=bzfs.critical_status,
+                )
 
-        # monitoring says critical (but with zero exit code b/c of dont-crit) as there is no dst snapshot:
-        self.assertEqual(0, len(snapshots(dst_root_dataset)))
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
-        self.run_bzfs(
-            "--monitor-dst-snapshots",
-            "--monitor-snapshots-dont-crit",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            use_jobrunner=True,
-        )
+                # monitoring says critical (but with zero exit code b/c of dont-crit) as there is no dst snapshot:
+                self.assertEqual(0, len(snapshots(dst_root_dataset)))
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "60 seconds"}}}}
+                run_jobrunner(
+                    "--monitor-dst-snapshots",
+                    "--monitor-snapshots-dont-crit",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                )
 
-        # replicate from src to dst:
-        self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # replicate from src to dst:
+                run_jobrunner("--replicate=pull", *pull_args)
+                self.assertEqual(1, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # no snapshots to prune yet on src:
-        self.run_bzfs("--prune-src-snapshots", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # no snapshots to prune yet on src:
+                run_jobrunner("--prune-src-snapshots", *pull_args)
+                self.assertEqual(1, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # no bookmarks to prune yet on src:
-        self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # no bookmarks to prune yet on src:
+                run_jobrunner("--prune-src-bookmarks", *pull_args)
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # no snapshots to prune yet on dst:
-        self.run_bzfs("--prune-dst-snapshots", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # no snapshots to prune yet on dst:
+                run_jobrunner("--prune-dst-snapshots", *pull_args)
+                self.assertEqual(1, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshots aren't too old:
-        self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
-        self.run_bzfs("--quiet", "--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
+                # monitoring says latest dst snapshots aren't too old:
+                run_jobrunner("--monitor-dst-snapshots", *pull_args)
+                run_jobrunner("--quiet", "--monitor-dst-snapshots", *pull_args)
 
-        # next iteration: create another src snapshot
-        self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # next iteration: create another src snapshot
+                run_jobrunner("--create-src-snapshots", *pull_args)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # replication to nonexistingpool target does nothing:
-        self.run_bzfs("--replicate=pull", *pull_args_bad, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # replication to nonexistingpool target does nothing:
+                run_jobrunner("--replicate=pull", *pull_args_bad)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # replication to nonexistingpool destination pool does nothing:
-        self.run_bzfs(
-            "--replicate=pull",
-            "--root-dataset-pairs",
-            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
-            use_jobrunner=True,
-        )
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # replication to nonexistingpool destination pool does nothing:
+                run_jobrunner(
+                    "--replicate=pull",
+                    "--root-dataset-pairs",
+                    *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
+                )
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshot is critically too old:
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "1 millis"}}}}
-        self.run_bzfs(
-            "--monitor-snapshots-no-oldest-check",
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            expected_status=bzfs.critical_status,
-            use_jobrunner=True,
-        )
+                # monitoring says latest dst snapshot is critically too old:
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "1 millis"}}}}
+                run_jobrunner(
+                    "--monitor-snapshots-no-oldest-check",
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                    expected_status=bzfs.critical_status,
+                )
 
-        # monitoring says oldest dst snapshot is critically too old:
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "1 millis"}}}}
-        self.run_bzfs(
-            "--monitor-snapshots-no-latest-check",
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            expected_status=bzfs.critical_status,
-            use_jobrunner=True,
-        )
+                # monitoring says oldest dst snapshot is critically too old:
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"critical": "1 millis"}}}}
+                run_jobrunner(
+                    "--monitor-snapshots-no-latest-check",
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                    expected_status=bzfs.critical_status,
+                )
 
-        # monitoring says latest dst snapshot is critically too old, but we only inform about this rather than error out:
-        self.run_bzfs(
-            "--monitor-snapshots-dont-crit",
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            use_jobrunner=True,
-        )
+                # monitoring says latest dst snapshot is critically too old, but we only inform about this rather than error out:
+                run_jobrunner(
+                    "--monitor-snapshots-dont-crit",
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                )
 
-        # monitoring says latest dst snapshot is warning too old:
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warning": "1 millis"}}}}
-        self.run_bzfs(
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            expected_status=bzfs.warning_status,
-            use_jobrunner=True,
-        )
+                # monitoring says latest dst snapshot is warning too old:
+                monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warning": "1 millis"}}}}
+                run_jobrunner(
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                    expected_status=bzfs.warning_status,
+                )
 
-        # monitoring says latest dst snapshot is warning too old, but we only inform about this rather than error out:
-        self.run_bzfs(
-            "--monitor-snapshots-dont-warn",
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            use_jobrunner=True,
-        )
+                # monitoring says latest dst snapshot is warning too old, but we only inform about this rather than error out:
+                run_jobrunner(
+                    "--monitor-snapshots-dont-warn",
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                )
 
-        # monitoring freshness on nonexistingpool destination pool does nothing:
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"millisecondly": {"warning": "1 millis", "critical": "2 millis"}}}}
-        self.run_bzfs(
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            "--root-dataset-pairs",
-            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args_no_monitoring[3:]),
-            use_jobrunner=True,
-        )
+                # monitoring freshness on nonexistingpool destination pool does nothing:
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                monitor_dst_snapshot_plan = {
+                    "z": {"onsite": {"millisecondly": {"warning": "1 millis", "critical": "2 millis"}}}
+                }
+                run_jobrunner(
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    "--root-dataset-pairs",
+                    *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args_no_monitoring[3:]),
+                )
 
-        # replicate new snapshot from src to dst:
-        self.run_bzfs("--replicate=pull", *pull_args, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
-        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                # replicate new snapshot from src to dst:
+                run_jobrunner("--replicate=pull", *pull_args)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(2, len(bookmarks(src_root_dataset)))
+                self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # delete one old snapshot on src:
-        self.run_bzfs("--prune-src-snapshots", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                # delete one old snapshot on src:
+                run_jobrunner("--prune-src-snapshots", *pull_args)
+                self.assertEqual(1, len(snapshots(src_root_dataset)))
+                self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # delete one old bookmark on src:
-        self.run_bzfs("--prune-src-bookmarks", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                # delete one old bookmark on src:
+                run_jobrunner("--prune-src-bookmarks", *pull_args)
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # pruning a nonexistingpool destination pool does nothing:
-        self.run_bzfs(
-            "--prune-dst-snapshots",
-            "--root-dataset-pairs",
-            *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
-            use_jobrunner=True,
-        )
-        self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                # pruning a nonexistingpool destination pool does nothing:
+                run_jobrunner(
+                    "--prune-dst-snapshots",
+                    "--root-dataset-pairs",
+                    *([src_root_dataset, "nonexistingpool/" + dst_root_dataset] + pull_args[3:]),
+                )
+                self.assertEqual(1, len(snapshots(src_root_dataset)))
+                self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # delete one old snapshot on dst:
-        self.run_bzfs("--prune-dst-snapshots", *pull_args, use_jobrunner=True)
-        self.assertEqual(1, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # delete one old snapshot on dst:
+                run_jobrunner("--prune-dst-snapshots", *pull_args)
+                self.assertEqual(1, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshots aren't too old:
-        self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
+                # monitoring says latest dst snapshots aren't too old:
+                run_jobrunner("--monitor-dst-snapshots", *pull_args)
 
-        # next iteration: create another src snapshot
-        self.run_bzfs("--create-src-snapshots", *push_args, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # next iteration: create another src snapshot
+                run_jobrunner("--create-src-snapshots", *push_args)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # push replication does nothing if target isn't mapped to destination host:
-        self.run_bzfs("--replicate=push", *push_args_bad, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # push replication does nothing if target isn't mapped to destination host:
+                run_jobrunner("--replicate=push", *push_args_bad)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # push replication does nothing if period isn't greater than zero:
-        dst_snapshot_plan_empty = {"z": {"onsite": {"daily": 0}}}
-        push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
-        push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
-        self.run_bzfs("--replicate=push", *push_args_empty, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # push replication does nothing if period isn't greater than zero:
+                dst_snapshot_plan_empty = {"z": {"onsite": {"daily": 0}}}
+                push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
+                push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
+                run_jobrunner("--replicate=push", *push_args_empty)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # push replication does nothing if periods are empty:
-        dst_snapshot_plan_empty = {"z": {"onsite": {}}}
-        push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
-        push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
-        self.run_bzfs("--replicate=push", *push_args_empty, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(1, len(bookmarks(src_root_dataset)))
-        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+                # push replication does nothing if periods are empty:
+                dst_snapshot_plan_empty = {"z": {"onsite": {}}}
+                push_args_empty = [arg for arg in push_args if not arg.startswith("--dst-snapshot-plan=")]
+                push_args_empty += [f"--dst-snapshot-plan={dst_snapshot_plan_empty}"]
+                run_jobrunner("--replicate=push", *push_args_empty)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(1, len(bookmarks(src_root_dataset)))
+                self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
-        # push replicate successfully from src to dst:
-        self.run_bzfs("--replicate=push", *push_args, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
-        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                # push replicate successfully from src to dst:
+                run_jobrunner("--replicate=push", *push_args)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(2, len(bookmarks(src_root_dataset)))
+                self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # monitoring says latest dst snapshots aren't too old:
-        self.run_bzfs("--monitor-dst-snapshots", *pull_args, use_jobrunner=True)
+                # monitoring says latest dst snapshots aren't too old:
+                run_jobrunner("--monitor-dst-snapshots", *pull_args)
 
-        # non-existing CLI option will cause failure:
-        self.run_bzfs(
-            "--create-src-snapshots",
-            "--prune-src-snapshots",
-            *(["--nonexistingoption"] + push_args),
-            use_jobrunner=True,
-            expected_status=2,
-        )
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
-        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                # non-existing CLI option will cause failure:
+                run_jobrunner(
+                    "--create-src-snapshots",
+                    "--prune-src-snapshots",
+                    *(["--nonexistingoption"] + push_args),
+                    expected_status=2,
+                )
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(2, len(bookmarks(src_root_dataset)))
+                self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # Forgetting to specify src dataset (or dst dataset) will cause failure:
-        self.run_bzfs(
-            "--create-src-snapshots",
-            "--root-dataset-pairs",
-            *(push_args[2:]),  # Each SRC_DATASET must have a corresponding DST_DATASET
-            use_jobrunner=True,
-            expected_status=2,
-        )
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertEqual(2, len(bookmarks(src_root_dataset)))
-        self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                # Forgetting to specify src dataset (or dst dataset) will cause failure:
+                run_jobrunner(
+                    "--create-src-snapshots",
+                    "--root-dataset-pairs",
+                    *(push_args[2:]),  # Each SRC_DATASET must have a corresponding DST_DATASET
+                    expected_status=2,
+                )
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(2, len(bookmarks(src_root_dataset)))
+                self.assertEqual(2, len(snapshots(dst_root_dataset)))
 
-        # monitoring says critical as there is no yearly snapshot:
-        pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
-        monitor_dst_snapshot_plan = {"z": {"onsite": {"yearly": {"critical": "60 minutes"}}}}
-        self.run_bzfs(
-            "--monitor-dst-snapshots",
-            f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
-            *pull_args_no_monitoring,
-            expected_status=bzfs.critical_status,
-            use_jobrunner=True,
-        )
+                # monitoring says critical as there is no yearly snapshot:
+                pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
+                monitor_dst_snapshot_plan = {"z": {"onsite": {"yearly": {"critical": "60 minutes"}}}}
+                run_jobrunner(
+                    "--monitor-dst-snapshots",
+                    f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
+                    *pull_args_no_monitoring,
+                    expected_status=bzfs.critical_status,
+                )
+
+                from bzfs import bzfs_jobrunner
+
+                # error: the following arguments are required: --root-dataset-pairs
+                with self.assertRaises(SystemExit) as context:
+                    bzfs_jobrunner.main()
+                self.assertEqual(2, context.exception.code)
 
     def test_jobrunner_flat_simple_with_empty_targets(self):
+        def run_jobrunner(*args, **kwargs):
+            self.run_bzfs(*args, **kwargs, use_jobrunner=True, spawn_process_per_job=spawn_process_per_job)
+
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
-        destroy(dst_root_dataset, recursive=True)
-        self.assertSnapshots(src_root_dataset, 0)
+        for jobiter, spawn_process_per_job in enumerate([None, True]):
+            with stop_on_failure_subtest(i=jobiter):
+                self.tearDownAndSetup()
+                destroy(dst_root_dataset, recursive=True)
+                self.assertSnapshots(src_root_dataset, 0)
 
-        localhostname = socket.gethostname()
-        src_host = "-"  # for local mode (no ssh, no network)
-        dst_hosts_pull = {localhostname: ["onsite", ""]}
-        dst_root_datasets = {localhostname: "", "-": ""}
-        src_snapshot_plan = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
-        dst_snapshot_plan = {"z": {"": {"yearly": 1, "daily": 0}}}
-        src_bookmark_plan = dst_snapshot_plan
-        args = [
-            "--root-dataset-pairs",
-            src_root_dataset,
-            dst_root_dataset,
-            f"--src-host={src_host}",
-            f"--localhost={localhostname}",
-            f"--retain-dst-targets={dst_hosts_pull}",
-            f"--dst-root-datasets={dst_root_datasets}",
-            f"--src-snapshot-plan={src_snapshot_plan}",
-            f"--src-bookmark-plan={src_bookmark_plan}",
-            f"--dst-snapshot-plan={dst_snapshot_plan}",
-            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
-        ]
-        pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
+                localhostname = socket.gethostname()
+                src_hosts = [localhostname]  # for local mode (no ssh, no network)
+                dst_hosts_pull = {localhostname: ["onsite", ""]}
+                # dst_root_datasets = {localhostname: "", "-": ""}
+                dst_root_datasets = {localhostname: ""}
+                src_snapshot_plan = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
+                dst_snapshot_plan = {"z": {"": {"yearly": 1, "daily": 0}}}
+                src_bookmark_plan = dst_snapshot_plan
+                args = [
+                    "--root-dataset-pairs",
+                    src_root_dataset,
+                    dst_root_dataset,
+                    f"--src-hosts={src_hosts}",
+                    f"--localhost={localhostname}",
+                    f"--retain-dst-targets={dst_hosts_pull}",
+                    f"--dst-root-datasets={dst_root_datasets}",
+                    f"--src-snapshot-plan={src_snapshot_plan}",
+                    f"--src-bookmark-plan={src_bookmark_plan}",
+                    f"--dst-snapshot-plan={dst_snapshot_plan}",
+                    "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+                    f"--ssh-src-port={getenv_any('test_ssh_port', '22')}",
+                    f"--ssh-dst-port={getenv_any('test_ssh_port', '22')}",
+                ]
+                pull_args = args + [f"--dst-hosts={dst_hosts_pull}"]
 
-        # next iteration: create a src snapshot with non-empty target
-        self.run_bzfs("--create-src-snapshots", *pull_args, use_jobrunner=True)
-        self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
-        self.assertFalse(dataset_exists(dst_root_dataset))
+                # next iteration: create a src snapshot with non-empty target
+                run_jobrunner("--create-src-snapshots", *pull_args)
+                self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
+                self.assertFalse(dataset_exists(dst_root_dataset))
 
-        # next iteration: create a src snapshot with empty target
-        src_snapshot_plan_empty = {"z": {"": {"yearly": 1}}}
-        pull_args_empty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
-        pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
-        self.run_bzfs("--create-src-snapshots", *pull_args_empty, use_jobrunner=True)
-        self.assertSnapshotNameRegexes(src_root_dataset, ["z_(?!onsite).*_yearly", "z_onsite.*_yearly"])
-        self.assertFalse(dataset_exists(dst_root_dataset))
+                # next iteration: create a src snapshot with empty target
+                src_snapshot_plan_empty = {"z": {"": {"yearly": 1}}}
+                pull_args_empty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
+                pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
+                run_jobrunner("--create-src-snapshots", *pull_args_empty)
+                self.assertSnapshotNameRegexes(src_root_dataset, ["z_(?!onsite).*_yearly", "z_onsite.*_yearly"])
+                self.assertFalse(dataset_exists(dst_root_dataset))
 
-        # replicate empty targets from src to dst:
-        self.run_bzfs("--replicate=pull", *pull_args_empty, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertSnapshotNameRegexes(dst_root_dataset, ["z_(?!onsite).*_yearly"])
+                # replicate empty targets from src to dst:
+                run_jobrunner("--replicate=pull", *pull_args_empty)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertSnapshotNameRegexes(dst_root_dataset, ["z_(?!onsite).*_yearly"])
 
-        # with empty dst, replicate non-empty targets from src to dst
-        destroy(dst_root_dataset, recursive=True)
-        dst_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
-        pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--dst-snapshot-plan=")]
-        pull_args_nonempty += [f"--dst-snapshot-plan={dst_snapshot_plan_nonempty}"]
-        self.run_bzfs("--replicate=pull", *pull_args_nonempty, use_jobrunner=True)
-        self.assertEqual(2, len(snapshots(src_root_dataset)))
-        self.assertSnapshotNameRegexes(dst_root_dataset, ["z_onsite_.*_yearly"])
+                # with empty dst, replicate non-empty targets from src to dst
+                destroy(dst_root_dataset, recursive=True)
+                dst_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
+                pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--dst-snapshot-plan=")]
+                pull_args_nonempty += [f"--dst-snapshot-plan={dst_snapshot_plan_nonempty}"]
+                run_jobrunner("--replicate=pull", *pull_args_nonempty)
+                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertSnapshotNameRegexes(dst_root_dataset, ["z_onsite_.*_yearly"])
 
-        # only retain src snapshots with non-empty target:
-        src_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1}}}
-        pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
-        pull_args_nonempty += [f"--src-snapshot-plan={src_snapshot_plan_nonempty}"]
-        self.run_bzfs("--prune-src-snapshots", *pull_args_nonempty, use_jobrunner=True)
-        self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
+                # only retain src snapshots with non-empty target:
+                src_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1}}}
+                pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
+                pull_args_nonempty += [f"--src-snapshot-plan={src_snapshot_plan_nonempty}"]
+                run_jobrunner("--prune-src-snapshots", *pull_args_nonempty)
+                self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
 
-        # only retain src snapshots with empty target:
-        src_snapshot_plan_empty = {"z": {"": {"yearly": 1}}}
-        pull_args_empty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
-        pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
-        self.run_bzfs("--prune-src-snapshots", *pull_args_empty, use_jobrunner=True)
-        self.assertEqual(0, len(snapshots(src_root_dataset)))
+                # only retain src snapshots with empty target:
+                src_snapshot_plan_empty = {"z": {"": {"yearly": 1}}}
+                pull_args_empty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
+                pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
+                run_jobrunner("--prune-src-snapshots", *pull_args_empty)
+                self.assertEqual(0, len(snapshots(src_root_dataset)))
 
 
 #############################################################################

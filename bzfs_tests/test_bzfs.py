@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
@@ -20,11 +19,13 @@ import unittest
 
 from bzfs_tests.test_units import suite as test_units_suite
 from bzfs_tests.test_integrations import suite as test_integrations_suite
+from bzfs_tests.test_jobrunner_units import suite as test_jobrunner_units_suite
 
 
 def main():
     suite = unittest.TestSuite()
     suite.addTests(test_units_suite())
+    suite.addTests(test_jobrunner_units_suite())
     suite.addTests(test_integrations_suite())
 
     failfast = False if os.getenv("CI") else True  # no need to fail fast when running within GitHub Action

@@ -119,9 +119,13 @@ reliably without the corresponding auxiliary feature.
 # Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program,
-which is a convenience wrapper around `bzfs` that simplifies periodic ZFS snapshot creation,
-replication, pruning, and monitoring, across source host and multiple destination hosts, using a
-single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
+which is a convenience wrapper around `bzfs` that simplifies efficient periodic ZFS snapshot
+creation, replication, pruning, and monitoring, across N source hosts and M destination hosts,
+using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For example, this
+simplifies the deployment of an efficient geo-replicated backup service where each of the M
+destination hosts is located in a separate geographic region and pulls replicas from (the same set
+of) N source hosts. It also simplifies low latency replication from a primary to a secondary, or
+backup to removable drives, etc.
 
 # Quickstart
 
@@ -137,7 +141,7 @@ $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 
 ```
 $ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@test_2024-11-06_08:30:05_adhoc 
+tank1/foo/bar@test_2024-11-06_08:30:05_adhoc
 ```
 
 
@@ -155,7 +159,7 @@ $ bzfs tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 ```
 $ zfs list -t snapshot tank1/foo/bar
 tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly 
+tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
 ```
 
 
@@ -444,7 +448,7 @@ delete mode.
 * Continously tested on Linux, FreeBSD and Solaris.
 * Code is almost 100% covered by tests.
 * Automatically replicates the snapshots of multiple datasets in parallel for best performance. Similarly, quickly
-deletes (or monitors or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently 
+deletes (or monitors or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be created as frequently
 as every N milliseconds.
 * For replication, periodically prints progress bar, throughput metrics, ETA, etc, to the same console status line (but not
 to the log file), which is helpful if the program runs in an interactive terminal session. The metrics represent aggregates

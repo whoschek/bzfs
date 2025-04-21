@@ -15,9 +15,9 @@
 # limitations under the License.
 
 #############################################################################
-# Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the hostname of your
-# local machine. Edit root_dataset_pairs to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH.
-# Run the final script like so:
+# Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the hostname of
+# your local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets.
+# Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH. Run the final script like so:
 #
 # /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate=pull --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
 #
@@ -33,9 +33,12 @@ import sys
 parser = argparse.ArgumentParser(
     description=f"""
 Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication,
-pruning, and monitoring, across source host and multiple destination hosts, using the same single shared jobconfig script.
-This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
-actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
+pruning, and monitoring, across N source hosts and M destination hosts, using the same single shared jobconfig script.
+For example, this simplifies the deployment of an efficient geo-replicated backup service, or low latency replication
+from a primary to a secondary, or backup to removable drives, etc.
+This script should be periodically executed on each source host and each destination host, e.g. by a cron job (or similar).
+This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of
+the actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
 """
 )
 known_args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`
@@ -59,15 +62,14 @@ root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 
 recursive = True
 
 
-# Network hostname of src. Used by destination host(s) if replicating in pull mode:
-# src_host = "prod001"
-# src_host = "127.0.0.1"
-src_host = "-"  # for local mode (no ssh, no network)
+# List of one or more source hostnames. Each of the M destination hosts pulls replicas from (the same set of) N source hosts:
+# src_hosts = ["prod001", "prod002", "prod999"]
+src_hosts = ["nas"]
 
 
 # Dictionary that maps each destination hostname to a list of zero or more logical replication target names (the infix
 # portion of a snapshot name).
-# A destination host will 'pull' replicate snapshots for all targets that map to its --localhost name. Removing a mapping
+# A destination host will 'pull' replicate snapshots for all targets that map to that destination host. Removing a mapping
 # can be used to temporarily suspend replication to a given destination host.
 # dst_hosts = {
 #     "nas": ["onsite"],
@@ -82,10 +84,10 @@ dst_hosts = {"nas": ["", "onsite"]}
 
 
 # Dictionary that maps each destination hostname to a list of zero or more logical replication target names (the infix
-# portion of a snapshot name).
-# Has same format as dst_hosts. As part of --prune-dst-snapshots, a destination host will delete any snapshot it has
-# stored whose target has no mapping to its --localhost in this dictionary.
-# Do not remove a mapping unless you are sure it's ok to delete all those snapshots on that destination host! If in
+# portion of a snapshot name). Has same format as dst_hosts.
+# As part of --prune-dst-snapshots, a destination host will delete any snapshot it has stored whose target has no mapping
+# to that destination host in this dictionary.
+# Do not remove a mapping here unless you are sure it's ok to delete all those snapshots on that destination host! If in
 # doubt, use --dryrun mode first.
 # retain_dst_targets = dst_hosts
 retain_dst_targets = {"nas": ["", "onsite"]}
@@ -100,12 +102,16 @@ retain_dst_targets = {"nas": ["", "onsite"]}
 # For example, dst_root_datasets = {"nas":""} turns "boo/bar" into "boo/bar" on dst host "nas", and with
 # root_dataset_pairs = ["tank1/foo/bar", "tank1/foo/bar" ] it turns tank1/foo/bar on src into tank1/foo/bar
 # on dst host "nas".
+# "^SRC_HOST" and "^DST_HOST" are optional placeholders that will be auto-replaced at runtime with the actual hostname.
+# This can be used to force the use of a separate destination root dataset per source host or per destination host.
 # dst_root_datasets = {
 #     "nas": "tank2/bak",
 #     "bak-us-west-1": "backups/bak001",
 #     "bak-eu-west-1": "backups/bak999",
-#     "hotspare": "",
-#     "archive": f"archives/zoo/{src_host}",  # force use of a separate destination root dataset per source host
+#     "archive": "archives/zoo/^SRC_HOST",  # force use of a separate destination root dataset per source host
+# }
+# dst_root_datasets = {
+#     "nas": "tank2/bak/^SRC_HOST",
 # }
 dst_root_datasets = {
     "nas": "",  # Empty string means 'Don't prepend a prefix' (for safety, the hostname must always be in the dict)
@@ -205,6 +211,26 @@ monitor_snapshot_plan = {
 }
 
 
+# Max worker jobs to run in parallel at any time; specified as a positive integer, or as a percentage of num CPU cores:
+workers = "100%"  # aka max_workers = 1.0 * num_cores
+# workers = "200%"  # aka max_workers = 2.0 * num_cores
+# workers = "25%"  # aka max_workers = 0.25 * num_cores
+# workers = 4  # aka max_workers = 4
+# workers = 1  # aka max_workers = 1  # for debugging, run jobs sequentially
+
+
+# Reduce bandwidth spikes by evenly spreading the start of worker jobs over this much time; 0 disables this feature:
+# work_period_seconds = 60
+# work_period_seconds = 86400
+work_period_seconds = 0
+
+
+# If this much time has passed after a worker process has started executing, kill the straggling worker. Other workers remain
+# unaffected. A value of None disables this feature:
+# worker_timeout_seconds = 3600
+worker_timeout_seconds = None
+
+
 extra_args = []
 extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', os.path.basename(sys.argv[0]))}"]
 # extra_args += ["--ssh-src-port=2222"]  # for hpnssh
@@ -284,15 +310,8 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # os.environ["bzfs_name_of_a_unix_env_var"] = "true"  # toggle example tuning knob
 
 
-# If this much time has passed after the worker process has started executing, kill the straggling worker. A value of None
-# disables this feature:
-# worker_timeout_seconds = 3600
-worker_timeout_seconds = None
-
-
 cmd = ["bzfs_jobrunner"]
 cmd += ["--recursive"] if recursive else []
-cmd += [f"--src-host={src_host}"]
 cmd += [f"--dst-hosts={dst_hosts}"]
 cmd += [f"--retain-dst-targets={retain_dst_targets}"]
 cmd += [f"--dst-root-datasets={dst_root_datasets}"]
@@ -300,5 +319,8 @@ cmd += [f"--src-snapshot-plan={src_snapshot_plan}"]
 cmd += [f"--src-bookmark-plan={src_bookmark_plan}"]
 cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
 cmd += [f"--monitor-snapshot-plan={monitor_snapshot_plan}"]
+cmd += [f"--workers={workers}"]
+cmd += [f"--work-period-seconds={work_period_seconds}"]
+cmd += [f"--worker-timeout-seconds={worker_timeout_seconds}"] if worker_timeout_seconds is not None else []
 cmd += extra_args + unknown_args + ["--root-dataset-pairs"] + root_dataset_pairs
-sys.exit(subprocess.run(cmd, stdin=subprocess.DEVNULL, text=True, timeout=worker_timeout_seconds).returncode)
+sys.exit(subprocess.run(cmd, input=f"{src_hosts}", text=True).returncode)
