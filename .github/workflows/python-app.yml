@@ -146,14 +146,15 @@ jobs:
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
         # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages
-        sudo add-apt-repository ppa:satadru-umich/zfs-experimental; sudo apt update
-        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux
-        zfs --version
+        sudo add-apt-repository ppa:satadru-umich/zfs-experimental
 
         # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
-        sudo add-apt-repository ppa:rapier1/hpnssh; sudo apt update
-        sudo apt-get -y install hpnssh
+        sudo add-apt-repository ppa:rapier1/hpnssh
+
+        sudo apt update
+        ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
+        sudo apt-get -y install zfs-dkms zfsutils-linux hpnssh
+        zfs --version
         hpnssh -V
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
@@ -237,7 +238,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.11", "pypy3.11"]
+        python-version: ["3.11"]
       fail-fast: false
     timeout-minutes: 100
     steps:
@@ -269,10 +270,10 @@ jobs:
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
-        python3 --version 2>&1 | grep -q PyPy || ./coverage.sh
+        ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
-      if: ${{ matrix.python-version == '3.11' && (github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '') }}
+      if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
       uses: ./.github/workflows/coverage-upload
 
 
@@ -283,7 +284,7 @@ jobs:
     strategy:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
-        python-version: ["3.12"]
+        python-version: ["3.12", "pypy3.11"]
       fail-fast: false
     timeout-minutes: 100
     steps:
@@ -308,7 +309,7 @@ jobs:
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
-        ./coverage.sh
+        python3 --version 2>&1 | grep -q PyPy || ./coverage.sh
         echo "bzfs-testrun-success"
     - name: Upload code coverage report to workflow run page
       if: ${{ github.event.inputs.num_runs == '1' || github.event.inputs.num_runs == '' }}
@@ -614,7 +615,7 @@ jobs:
           name: generate_website
           path: generate_website
       - name: Setup Pages
-        uses: actions/configure-pages@v5  # https://github.com/actions/configure-pages
+        uses: actions/configure-pages@v5  # see https://github.com/actions/configure-pages
       - name: Upload website to GitHub Pages
         uses: actions/upload-pages-artifact@v3  # see https://github.com/actions/upload-pages-artifact
         with:
