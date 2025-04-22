@@ -1601,7 +1601,7 @@ class TestBuildTree(unittest.TestCase):
 
     def test_basic_tree(self):
         datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
-        expected_tree = {"pool": {"dataset": {"sub": None}, "other": {"sub": {"child": None}}}}
+        expected_tree = {"pool": {"dataset": {"sub": {}}, "other": {"sub": {"child": {}}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
@@ -1614,21 +1614,21 @@ class TestBuildTree(unittest.TestCase):
 
     def test_single_root(self):
         datasets = ["pool"]
-        expected_tree = {"pool": None}
+        expected_tree = {"pool": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_single_branch(self):
         datasets = ["pool/dataset/sub/child"]
-        expected_tree = {"pool": {"dataset": {"sub": {"child": None}}}}
+        expected_tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots(self):
         datasets = ["pool", "otherpool", "anotherpool"]
-        expected_tree = {"anotherpool": None, "otherpool": None, "pool": None}
+        expected_tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
@@ -1647,49 +1647,49 @@ class TestBuildTree(unittest.TestCase):
             "pool/parent/child2/grandchild",
             "pool/parent/child3",
         ]
-        expected_tree = {"pool": {"parent": {"child1": None, "child2": {"grandchild": None}, "child3": None}}}
+        expected_tree = {"pool": {"parent": {"child1": {}, "child2": {"grandchild": {}}, "child3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_no_children(self):
         datasets = ["pool", "otherpool"]
-        expected_tree = {"otherpool": None, "pool": None}
+        expected_tree = {"otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_single_level(self):
         datasets = ["pool", "pool1", "pool2", "pool3"]
-        expected_tree = {"pool": None, "pool1": None, "pool2": None, "pool3": None}
+        expected_tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_with_hierarchy(self):
         datasets = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
-        expected_tree = {"pool": None, "pool1": {"dataset1": None}, "pool2": {"dataset2": {"sub": None}}, "pool3": None}
+        expected_tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_flat(self):
         datasets = ["root1", "root2", "root3", "root4"]
-        expected_tree = {"root1": None, "root2": None, "root3": None, "root4": None}
+        expected_tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_mixed_depth(self):
         datasets = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
-        expected_tree = {"a": {"b": {"c": None}}, "x": {"y": None}, "z": {"1": None, "2": {"3": None}}}
+        expected_tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_tree_with_missing_intermediate_nodes(self):
         datasets = ["a", "a/b/c", "z/2/3"]
-        expected_tree = {"a": {"b": {"c": None}}, "z": {"2": {"3": None}}}
+        expected_tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
@@ -1704,7 +1704,7 @@ class TestBuildTree(unittest.TestCase):
             f"a/b/c/{BR}/prune/monitor",
             f"a/b/c/{BR}/{BR}/done",
         ]
-        expected_tree = {"a": {"b": {"c": {"0d": None, "1d": None, BR: {"prune": {"monitor": None}, BR: {"done": None}}}}}}
+        expected_tree = {"a": {"b": {"c": {"0d": {}, "1d": {}, BR: {"prune": {"monitor": {}}, BR: {"done": {}}}}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)

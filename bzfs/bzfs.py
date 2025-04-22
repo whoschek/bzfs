@@ -1566,7 +1566,7 @@ class LogParams:
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
 RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
-Tree = Dict[str, Optional[Dict]]  # Type alias
+Tree = Dict[str, Dict]  # Type alias
 
 
 #############################################################################
@@ -4788,12 +4788,10 @@ class Job:
         tree: Tree = {}
         for dataset in sorted_datasets:
             current = tree
-            components = dataset.split("/")
-            n = len(components) - 1
-            for i, component in enumerate(components):
-                child = current.get(component, None)
+            for component in dataset.split("/"):
+                child = current.get(component)
                 if child is None:
-                    child = {} if i < n else None  # perf: use None to indicate empty leaf dictionary
+                    child = {}
                     current[component] = child
                 current = child
         return tree
@@ -4802,9 +4800,9 @@ class Job:
         self,
         datasets: List[str],
         process_dataset: Callable[[str, str, Retry], bool],  # lambda, must be thread-safe
-        skip_tree_on_error: Callable[[str], bool],  # lambda, must be thread-safe
+        skip_tree_on_error: Callable[[str], bool],
         max_workers: int = os.cpu_count() or 1,
-        interval_nanos: Callable[[str], int] = lambda dataset: 0,  # must be thread-safe
+        interval_nanos: Callable[[str], int] = lambda dataset: 0,
         task_name: str = "Task",
         enable_barriers: Optional[bool] = None,  # for testing only; None means 'auto-detect'
     ) -> bool:
@@ -4864,7 +4862,7 @@ class Job:
                 roots.append(node)
             return roots
 
-        assert not self.is_test_mode or str(TreeNode("foo", {}))
+        assert (not self.is_test_mode) or str(TreeNode("foo", {}))
         priority_queue: List[TreeNode] = build_dataset_tree_and_find_roots()
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets = len(datasets)
@@ -4909,7 +4907,7 @@ class Job:
                     if not enable_barriers:
                         # This simple algorithm is sufficient for almost all use cases:
                         children = done_future.node.children
-                        if no_skip and children:  # make child datasets available for start of processing ...
+                        if no_skip:  # make child datasets available for start of processing ...
                             for child, grandchildren in children.items():  # as processing of parent has now completed
                                 heapq.heappush(priority_queue, TreeNode(f"{dataset}/{child}", grandchildren))
                     else:
@@ -4930,25 +4928,27 @@ class Job:
                         # Note that "~" is unambiguous as it is not a valid ZFS dataset name component per the naming rules
                         # enforced by the 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs.
                         def enqueue_children(node: TreeNode) -> int:
+                            """Returns the number of jobs that were made available for immediate start of processing, i.e.
+                            that were added to priority_queue."""
                             n = 0
                             children = node.children
-                            children = children if children else {}
                             for child, grandchildren in children.items():
                                 child_node = TreeNode(f"{node.dataset}/{child}", grandchildren, parent=node)
                                 if child != BARRIER_CHAR:
+                                    # it's not a barrier; make job available for immediate start of processing
                                     heapq.heappush(priority_queue, child_node)
                                     node.pending.value += 1
                                     n += 1
-                                elif len(children) == 1:
-                                    n = enqueue_children(child_node)
-                                else:
+                                elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
+                                    n += enqueue_children(child_node)  # ... recursively down the tree
+                                else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
                                     assert len(node.barriers) == 0
                                     node.barriers.append(child_node)
                             return n
 
                         def on_job_completion_with_barriers(node: TreeNode, no_skip: bool) -> None:
-                            if no_skip:  # make child datasets available for start of processing ...
-                                enqueue_children(node)
+                            if no_skip:
+                                enqueue_children(node)  # make child datasets available for start of processing
                             else:  # job completed without success
                                 tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
                                 while tmp is not None:
@@ -5256,6 +5256,7 @@ class Job:
         def flush() -> Any:
             if len(batch) > 0:
                 return fn(batch)
+            return None
 
         for cmd_arg in cmd_args:
             curr_bytes = seplen + len(cmd_arg.encode(fsenc))
