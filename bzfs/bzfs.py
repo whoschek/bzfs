@@ -4836,7 +4836,8 @@ class Job:
             barriers: List["TreeNode"] = field(compare=False, default_factory=list)
 
             def __repr__(self) -> str:
-                return str({"dataset": self.dataset, "pending": self.pending, "barriers": len(self.barriers)})
+                dataset, pending, nbarriers, nchildren = self.dataset, self.pending, len(self.barriers), len(self.children)
+                return str({"dataset": dataset, "pending": pending, "nbarriers": nbarriers, "nchildren": nchildren})
 
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.monotonic_ns()
@@ -4874,17 +4875,16 @@ class Job:
             def submit_datasets() -> bool:
                 while len(priority_queue) > 0 and len(todo_futures) < max_workers:
                     # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
+                    nonlocal next_update_nanos
+                    time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)
                     node: TreeNode = heapq.heappop(priority_queue)
                     dataset = node.dataset
+                    next_update_nanos += max(0, interval_nanos(dataset))
                     nonlocal submitted
                     submitted += 1
                     future = executor.submit(_process_dataset, dataset, tid=f"{submitted}/{len_datasets}")
                     future.node = node
                     todo_futures.add(future)
-                    nonlocal next_update_nanos
-                    ival_nanos = max(0, interval_nanos(dataset))
-                    ival_nanos > 0 and time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)
-                    next_update_nanos += ival_nanos
                 return len(todo_futures) > 0
 
             failed = False

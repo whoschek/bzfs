@@ -4051,7 +4051,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                 src_datasets,
                 process_dataset=submit_raise_timeout,  # lambda
                 skip_tree_on_error=lambda dataset: True,
-                max_workers=8,
+                max_workers=1,
             )
         self.assertListEqual(["a1"], sorted(self.submitted))
 

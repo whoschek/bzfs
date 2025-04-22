@@ -353,7 +353,7 @@ def main():
 class Job:
     def __init__(self, log: Optional[Logger] = None):
         # immutable variables:
-        self.jobrunner_dryrun = False
+        self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: Optional[bool] = None
         self.log: Logger = log if log is not None else bzfs.get_simple_logger(prog_name)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
@@ -361,7 +361,7 @@ class Job:
 
         # mutable variables:
         self.first_exception: Optional[int] = None
-        self.stats = Stats()
+        self.stats: Stats = Stats()
         self.cache_existing_dst_pools: Set[str] = set()
         self.cache_known_dst_pools: Set[str] = set()
 
@@ -421,13 +421,13 @@ class Job:
         def npad() -> str:
             return "_" + zero_pad(len(subjobs))
 
-        def update_subjob_prefix(tag: str) -> str:
+        def update_subjob_name(tag: str) -> str:
             if j <= 0:
-                return subjob_prefix
+                return subjob_name
             elif j == 1:
-                return subjob_prefix + f"/{jpad(j-1)}{tag}"
+                return subjob_name + f"/{jpad(j-1)}{tag}"
             else:
-                return subjob_prefix + "/" + bzfs.BARRIER_CHAR
+                return subjob_name + "/" + bzfs.BARRIER_CHAR
 
         def resolve_dataset(hostname: str, dataset: str, is_src: bool = True) -> str:
             ssh_user = args.src_user if is_src else args.dst_user
@@ -445,7 +445,7 @@ class Job:
 
         subjobs: Dict[str, List[str]] = {}
         for i, src_host in enumerate(src_hosts):
-            subjob_prefix: str = ipad() + sanitize(src_host)
+            subjob_name: str = ipad() + sanitize(src_host)
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
@@ -454,8 +454,8 @@ class Job:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += dedupe([(resolve_dataset(src_host, src), dummy_dataset) for src, dst in args.root_dataset_pairs])
-                subjob_prefix += "/create_src_snapshots"
-                subjobs[subjob_prefix] = ["bzfs"] + opts
+                subjob_name += "/create_src_snapshots"
+                subjobs[subjob_name] = ["bzfs"] + opts
 
             if args.replicate == "pull" or args.replicate == "push":  # push mode is an experimental feature
                 j = 0
@@ -476,14 +476,14 @@ class Job:
                             opts += [src, dst]
                         if len(opts) > old_len_opts:
                             daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                            subjobs[subjob_prefix + f"/{jpad(j)}{args.replicate}"] = ["bzfs"] + daemon_opts + opts
+                            subjobs[subjob_name + f"/{jpad(j)}{args.replicate}"] = ["bzfs"] + daemon_opts + opts
                             j += 1
-                subjob_prefix = update_subjob_prefix(args.replicate)
+                subjob_name = update_subjob_name(args.replicate)
 
-            def prune_src(opts: List[str], delete_plan: Dict, tag: str) -> None:
+            def prune_src(opts: List[str], retention_plan: Dict, tag: str) -> None:
                 opts += [
                     "--skip-replication",
-                    f"--delete-dst-snapshots-except-plan={delete_plan}",
+                    f"--delete-dst-snapshots-except-plan={retention_plan}",
                     f"--log-file-prefix={prog_name}{sep}{tag}{sep}",
                     f"--log-file-suffix={sep}{jobid}{npad()}{sep}",
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
@@ -491,9 +491,9 @@ class Job:
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += dedupe([(dummy_dataset, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])
-                nonlocal subjob_prefix
-                subjob_prefix += f"/{tag}"
-                subjobs[subjob_prefix] = ["bzfs"] + opts
+                nonlocal subjob_name
+                subjob_name += f"/{tag}"
+                subjobs[subjob_name] = ["bzfs"] + opts
 
             if args.prune_src_snapshots:
                 prune_src(["--delete-dst-snapshots"], src_snapshot_plan, "prune-src-snapshots")
@@ -524,9 +524,9 @@ class Job:
                     for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                         opts += [src, dst]
                     if len(opts) > old_len_opts:
-                        subjobs[subjob_prefix + f"/{jpad(j)}prune_dst_snapshots"] = ["bzfs"] + opts
+                        subjobs[subjob_name + f"/{jpad(j)}prune_dst_snapshots"] = ["bzfs"] + opts
                         j += 1
-                subjob_prefix = update_subjob_prefix("prune_dst_snapshots")
+                subjob_name = update_subjob_name("prune_dst_snapshots")
 
             def monitor_snapshots_opts(tag: str, monitor_plan: Dict) -> List[str]:
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
@@ -559,8 +559,8 @@ class Job:
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += dedupe([(dummy_dataset, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])
-                subjob_prefix += "/monitor_src_snapshots"
-                subjobs[subjob_prefix] = ["bzfs"] + opts
+                subjob_name += "/monitor_src_snapshots"
+                subjobs[subjob_name] = ["bzfs"] + opts
 
             if args.monitor_dst_snapshots:
                 j = 0
@@ -579,9 +579,9 @@ class Job:
                     for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                         opts += [src, dst]
                     if len(opts) > old_len_opts:
-                        subjobs[subjob_prefix + f"/{jpad(j)}monitor_dst_snapshots"] = ["bzfs"] + opts
+                        subjobs[subjob_name + f"/{jpad(j)}monitor_dst_snapshots"] = ["bzfs"] + opts
                         j += 1
-                subjob_prefix = update_subjob_prefix("monitor_dst_snapshots")
+                subjob_name = update_subjob_name("monitor_dst_snapshots")
 
         log.trace("Ready to run subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)
@@ -628,7 +628,7 @@ class Job:
         assert len(root_dataset_pairs) > 0
         unknown_dst_pools = {zpool(dst) for src, dst in root_dataset_pairs}
         unknown_dst_pools = unknown_dst_pools.difference(self.cache_known_dst_pools)
-        # Here we treat a zpool as existing if the zpool isn't local, aka if it isn't prefixed with "-:". The remote host
+        # Here we treat a zpool as existing if the zpool isn't local, aka if it isn't prefixed with "-:". A remote host
         # will raise an appropriate error anyway if it turns out that the remote zpool doesn't actually exist.
         if len(unknown_dst_pools) > 0 and all(pool.startswith("-:") for pool in unknown_dst_pools):  # `zfs list` if local
             existing_pools = {pool[len("-:") :] for pool in unknown_dst_pools}
