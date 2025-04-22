@@ -109,6 +109,7 @@ retain_dst_targets = {"nas": ["", "onsite"]}
 #     "bak-us-west-1": "backups/bak001",
 #     "bak-eu-west-1": "backups/bak999",
 #     "archive": "archives/zoo/^SRC_HOST",  # force use of a separate destination root dataset per source host
+#     "hotspare": ""  # Empty string means 'Don't prepend a prefix' (for safety, the hostname must always be in the dict)
 # }
 # dst_root_datasets = {
 #     "nas": "tank2/bak/^SRC_HOST",
