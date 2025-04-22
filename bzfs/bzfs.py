@@ -4871,12 +4871,22 @@ class Job:
             todo_futures: Set[Future] = set()
             submitted = 0
             next_update_nanos = time.monotonic_ns()
+            fw_timeout: Optional[float]
 
             def submit_datasets() -> bool:
+                nonlocal fw_timeout
+                fw_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
                 while len(priority_queue) > 0 and len(todo_futures) < max_workers:
                     # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
                     nonlocal next_update_nanos
-                    time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)
+                    sleep_nanos = next_update_nanos - time.monotonic_ns()
+                    if sleep_nanos > 0:
+                        time.sleep(sleep_nanos / 1_000_000_000)  # seconds
+                    if sleep_nanos > 0 and len(todo_futures) > 0:
+                        # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
+                        # If so it's preferable to submit to the thread pool the smaller one first.
+                        fw_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
+                        break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
                     node: TreeNode = heapq.heappop(priority_queue)
                     dataset = node.dataset
                     next_update_nanos += max(0, interval_nanos(dataset))
@@ -4889,7 +4899,7 @@ class Job:
 
             failed = False
             while submit_datasets():
-                done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
+                done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
                 for done_future in done_futures:
                     dataset = done_future.node.dataset
                     try:
