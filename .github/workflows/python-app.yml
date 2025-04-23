@@ -150,11 +150,6 @@ jobs:
         ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
-
-        # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
-        #sudo add-apt-repository ppa:rapier1/hpnssh; sudo apt update
-        #sudo apt-get -y install hpnssh
-        #hpnssh -V
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
@@ -172,8 +167,6 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
-        #if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
-        #echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
@@ -292,6 +285,14 @@ jobs:
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Upgrade tools
+      run: |
+        if [ "${{ matrix.python-version }}" == "pypy3.11" ]; then
+          # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
+          sudo add-apt-repository ppa:rapier1/hpnssh; sudo apt update
+          sudo apt-get -y install hpnssh
+          hpnssh -V
+        fi
     - name: Display ZFS version and Python version
       run: |
         id -u -n
@@ -305,6 +306,8 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
+        if [ "${{ matrix.python-version }}" == "pypy3.11" ]; then export bzfs_test_ssh_program=hpnssh; fi
+        echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
