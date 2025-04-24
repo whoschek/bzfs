@@ -1171,10 +1171,10 @@ usage: bzfs [-h] [--recursive]
 **--create-src-snapshots-enable-snapshots-changed-cache**
 
 *  Maintain a local cache of recent snapshot creation times, running 'zfs list -t
-    filesystem,volume -o snapshots_changed' instead of 'zfs list -t snapshot' to determine if a
-    new snapshot shall be created on the src. This flag improves performance for high-frequency
-    snapshotting use cases. Only relevant if --create-src-snapshots-even-if-not-due is not
-    specified.
+    filesystem,volume -p -o snapshots_changed' instead of 'zfs list -t snapshot' to determine
+    if a new snapshot shall be created on the src. This flag improves performance for
+    high-frequency snapshotting use cases. Only relevant if
+    --create-src-snapshots-even-if-not-due is not specified.
 
 <!-- -->
 
