@@ -2833,17 +2833,21 @@ class Job:
             current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
             is_debug = log.isEnabledFor(log_debug)
 
-            def alert_msg(kind: str, dataset: str, lbl: SnapshotLabel, snapshot_age_millis: float, delta_millis: int) -> str:
+            def alert_msg(
+                kind: str, dataset: str, snapshot: str, lbl: SnapshotLabel, snapshot_age_millis: float, delta_millis: int
+            ) -> str:
                 assert kind == "Latest" or kind == "Oldest"
                 lab = f"{lbl.prefix}{lbl.infix}<timestamp>{lbl.suffix}"
                 if snapshot_age_millis >= current_unixtime_millis:
                     return f"No snapshot exists for {dataset}@{lab}"
                 msg = f"{kind} snapshot for {dataset}@{lab} is {human_readable_duration(snapshot_age_millis, unit='ms')} old"
                 if delta_millis == -1:
-                    return msg
-                return f"{msg} but should be at most {human_readable_duration(delta_millis, unit='ms')} old"
+                    return f"{msg} ({snapshot})"
+                return f"{msg} but should be at most {human_readable_duration(delta_millis, unit='ms')} old ({snapshot})"
 
-            def check_alert(label: SnapshotLabel, alert_cfg: AlertConfig, creation_unixtime_secs: int, dataset: str) -> None:
+            def check_alert(
+                label: SnapshotLabel, alert_cfg: AlertConfig, creation_unixtime_secs: int, dataset: str, snapshot: str
+            ) -> None:
                 if alert_cfg is None:
                     return
                 warning_millis = alert_cfg.warning_millis
@@ -2852,25 +2856,26 @@ class Job:
                 snapshot_age_millis = current_unixtime_millis - creation_unixtime_secs * 1000
                 m = "--monitor_snapshots: "
                 if snapshot_age_millis > critical_millis:
-                    msg = m + alert_msg(alert_kind, dataset, label, snapshot_age_millis, critical_millis)
+                    msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, critical_millis)
                     log.critical("%s", msg)
                     if not p.monitor_snapshots_config.dont_crit:
                         die(msg, exit_code=critical_status)
                 elif snapshot_age_millis > warning_millis:
-                    msg = m + alert_msg(alert_kind, dataset, label, snapshot_age_millis, warning_millis)
+                    msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, warning_millis)
                     log.warning("%s", msg)
                     if not p.monitor_snapshots_config.dont_warn:
                         die(msg, exit_code=warning_status)
                 elif is_debug:
-                    log.debug("%s", m + "OK. " + alert_msg(alert_kind, dataset, label, snapshot_age_millis, delta_millis=-1))
+                    msg = m + "OK. " + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, delta_millis=-1)
+                    log.debug("%s", msg)
 
-            def alert_latest_snapshot(i: int, creation_unixtime_secs: int, dataset: str) -> None:
+            def alert_latest_snapshot(i: int, creation_unixtime_secs: int, dataset: str, snapshot: str) -> None:
                 alert: MonitorSnapshotAlert = alerts[i]
-                check_alert(alert.label, alert.latest, creation_unixtime_secs, dataset)
+                check_alert(alert.label, alert.latest, creation_unixtime_secs, dataset, snapshot)
 
-            def alert_oldest_snapshot(i: int, creation_unixtime_secs: int, dataset: str) -> None:
+            def alert_oldest_snapshot(i: int, creation_unixtime_secs: int, dataset: str, snapshot: str) -> None:
                 alert: MonitorSnapshotAlert = alerts[i]
-                check_alert(alert.label, alert.oldest, creation_unixtime_secs, dataset)
+                check_alert(alert.label, alert.oldest, creation_unixtime_secs, dataset, snapshot)
 
             def alert_remote(remote, sorted_datasets):
                 datasets_without_snapshots = self.handle_minmax_snapshots(
@@ -2878,8 +2883,8 @@ class Job:
                 )
                 for dataset in datasets_without_snapshots:
                     for i in range(len(alerts)):
-                        alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset)
-                        alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset)
+                        alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot=None)
+                        alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot=None)
 
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.run_in_parallel(lambda: alert_remote(dst, dst_datasets), lambda: alert_remote(src, src_datasets))
@@ -4375,7 +4380,7 @@ class Job:
                         )
             sorted_datasets = sorted_datasets_todo
 
-        def create_snapshot_fn(i: int, creation_unixtime_secs: int, dataset: str) -> None:
+        def create_snapshot_fn(i: int, creation_unixtime_secs: int, dataset: str, snapshot: str) -> None:
             create_snapshot_if_latest_is_too_old(datasets_to_snapshot, dataset, labels[i], creation_unixtime_secs)
 
         def on_finish_dataset(dataset: str) -> None:
@@ -4409,8 +4414,8 @@ class Job:
         r: Remote,
         sorted_datasets: List[str],
         labels: List[SnapshotLabel],
-        fn_latest: Callable[[int, int, str], None],  # callback function for latest snapshot
-        fn_oldest: Callable[[int, int, str], None] = None,  # callback function for oldest snapshot
+        fn_latest: Callable[[int, int, str, str], None],  # callback function for latest snapshot
+        fn_oldest: Callable[[int, int, str, str], None] = None,  # callback function for oldest snapshot
         fn_on_finish_dataset: Callable[[str], None] = lambda dataset: None,
     ) -> List[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
@@ -4440,6 +4445,7 @@ class Job:
                     year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
+                        minmax_snapshot = None
                         for j, s in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
                             if (
                                 s.endswith(end)
@@ -4449,8 +4455,9 @@ class Job:
                             ):
                                 k = len(snapshots) - j - 1 if is_reverse else j
                                 creation_unixtime_secs = snapshots[k][1]
+                                minmax_snapshot = s
                                 break
-                        fn(i, creation_unixtime_secs, dataset)
+                        fn(i, creation_unixtime_secs, dataset, minmax_snapshot)
                 fn_on_finish_dataset(dataset)
 
         datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
