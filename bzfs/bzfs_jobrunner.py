@@ -324,6 +324,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
 def load_module(progname: str) -> types.ModuleType:
     prog_path = shutil.which(progname)
+    if not prog_path:
+        sibling_prog_path = os.path.join(os.path.dirname(sys.argv[0]), progname)
+        prog_path = sibling_prog_path if os.path.isfile(sibling_prog_path) else prog_path
     assert prog_path, f"{progname}: command not found on PATH"
     prog_path = os.path.realpath(prog_path)  # resolve symlink, if any
     loader = importlib.machinery.SourceFileLoader(progname, prog_path)

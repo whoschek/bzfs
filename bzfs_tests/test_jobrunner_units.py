@@ -395,3 +395,9 @@ class TestXLoadModule(unittest.TestCase):
         self.assertIsNotNone(bzfs.get_simple_logger(progname))
         bzfs_jobrunner.load_module(progname)
         self.assertIsNotNone(bzfs.get_simple_logger(progname))
+
+    def test_load_module_directly_withsibling_and_without_wrapper_script(self):
+        progname = "bzfs"
+        with patch("shutil.which", return_value=None), patch.object(sys, "argv", new=["./bzfs/bzfs_jobrunner"]):
+            bzfs = bzfs_jobrunner.load_module(progname)
+        self.assertIsNotNone(bzfs.get_simple_logger(progname))
