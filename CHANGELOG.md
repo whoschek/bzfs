@@ -4,8 +4,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [1.12.0] - TBD
 
-- [bzfs_jobrunner] Added ability to replicate across N source hosts and M destination hosts, using the same single
-shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
+- [bzfs_jobrunner] Added ability to [bzfs_jobrunner](README_bzfs_jobrunner.md) to replicate across N source hosts and M
+destination hosts, using the same single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
 hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts.
 
