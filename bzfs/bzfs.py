@@ -4449,15 +4449,13 @@ class Job:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
         cache_file = self.last_modified_cache_file(dataset)
         if not self.params.dry_run:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 zero_times = (0, 0)
                 os_utime(cache_file, times=zero_times)  # update this before the other files
                 for entry in os.scandir(os.path.dirname(cache_file)):
                     if entry.path != cache_file:
                         os_utime(entry.path, times=zero_times)
                 os_utime(cache_file, times=zero_times)  # and again after the other files
-            except FileNotFoundError:
-                pass  # harmless
 
     def update_last_modified_cache(self, datasets_to_snapshot: Dict[SnapshotLabel, List[str]]) -> None:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
@@ -4487,7 +4485,7 @@ class Job:
                 cache_file = self.last_modified_cache_file(src_dataset)
                 cache_dir = os.path.dirname(cache_file)
                 if not p.dry_run:
-                    try:
+                    with contextlib.suppress(FileNotFoundError):
                         os.makedirs(cache_dir, exist_ok=True)
                         set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
                         for label in dataset_labels[src_dataset]:
@@ -4496,8 +4494,6 @@ class Job:
                                 unixtime_in_secs=snapshots_changed,
                                 if_more_recent=True,
                             )
-                    except FileNotFoundError:
-                        pass  # harmless
 
     def zfs_get_snapshots_changed(self, remote: Remote, datasets: List[str]) -> Dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
