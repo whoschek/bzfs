@@ -406,6 +406,17 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertEqual(1000, round(os.stat(file).st_mtime))
             bzfs.set_last_modification_time(file, unixtime_in_secs=0, if_more_recent=True)
             self.assertEqual(1000, round(os.stat(file).st_mtime))
+            bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=True)
+            self.assertEqual(1001, round(os.stat(file).st_mtime))
+
+    def test_set_last_modification_time_with_FileNotFoundError(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file = os.path.join(tmpdir, "foo")
+            with patch("bzfs.bzfs.os_utime", side_effect=FileNotFoundError):
+                with self.assertRaises(FileNotFoundError):
+                    bzfs.set_last_modification_time(file + "nonexisting", unixtime_in_secs=1001, if_more_recent=False)
+                file = os.path.join(file, "x", "nonexisting2")
+                bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
 
     def test_recv_option_property_names(self):
         def names(lst: List[str]) -> Set[str]:
