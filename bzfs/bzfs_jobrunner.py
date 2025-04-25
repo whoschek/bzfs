@@ -398,7 +398,7 @@ class Job:
             dst_hosts = {dst_host: lst for dst_host, lst in dst_hosts.items() if dst_host in retain_dst_hosts}
         retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
         validate_is_subset(dst_hosts.keys(), retain_dst_targets.keys(), "--dst-hosts.keys", "--retain-dst-targets.keys")
-        dst_root_datasets = ast.literal_eval(args.dst_root_datasets)
+        dst_root_datasets = validate_dst_root_datasets(ast.literal_eval(args.dst_root_datasets))
         validate_is_subset(
             dst_root_datasets.keys(), retain_dst_targets.keys(), "--dst-root-dataset.keys", "--retain-dst-targets.keys"
         )
@@ -825,6 +825,16 @@ def validate_dst_hosts(dst_hosts: Dict) -> Dict:
         for target in targets:
             assert isinstance(target, str)
     return dst_hosts
+
+
+def validate_dst_root_datasets(dst_root_datasets: Dict) -> Dict:
+    assert isinstance(dst_root_datasets, dict)
+    for dst_hostname, dst_root_dataset in dst_root_datasets.items():
+        assert isinstance(dst_hostname, str)
+        assert dst_hostname, "dst hostname must not be empty!"
+        bzfs.validate_host_name(dst_hostname, "dst host", extra_invalid_chars=":")
+        assert isinstance(dst_root_dataset, str)
+    return dst_root_datasets
 
 
 def validate_snapshot_plan(snapshot_plan: Dict, context: str) -> Dict:
