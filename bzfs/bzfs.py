@@ -4890,6 +4890,7 @@ class Job:
         priority_queue: List[TreeNode] = build_dataset_tree_and_find_roots()
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets = len(datasets)
+        datasets_set = set(datasets) if enable_barriers else None
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
             submitted = 0
@@ -4968,9 +4969,12 @@ class Job:
                             for child, grandchildren in children.items():
                                 child_node = TreeNode(f"{node.dataset}/{child}", grandchildren, parent=node)
                                 if child != BARRIER_CHAR:
-                                    # it's not a barrier; make job available for immediate start of processing
-                                    heapq.heappush(priority_queue, child_node)
-                                    k = 1
+                                    if child_node.dataset in datasets_set:
+                                        # it's not a barrier; make job available for immediate start of processing
+                                        heapq.heappush(priority_queue, child_node)
+                                        k = 1
+                                    else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+                                        k = enqueue_children(child_node)  # ... recursively down the tree
                                 elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
                                     k = enqueue_children(child_node)  # ... recursively down the tree
                                 else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
