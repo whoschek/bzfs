@@ -4844,8 +4844,11 @@ class Job:
         p, log = self.params, self.params.log
 
         class IntHolder:
-            def __init__(self):
-                self.value: int = 0
+            def __init__(self, value: int = 0):
+                self.value: int = value
+
+            def __repr__(self) -> str:
+                return str(self.value)
 
         @dataclass(order=True, frozen=True, repr=False)
         class TreeNode:
@@ -4967,13 +4970,16 @@ class Job:
                                 if child != BARRIER_CHAR:
                                     # it's not a barrier; make job available for immediate start of processing
                                     heapq.heappush(priority_queue, child_node)
-                                    node.pending.value += 1
-                                    n += 1
+                                    k = 1
                                 elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
-                                    n += enqueue_children(child_node)  # ... recursively down the tree
+                                    k = enqueue_children(child_node)  # ... recursively down the tree
                                 else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
                                     assert len(node.barriers) == 0
                                     node.barriers.append(child_node)
+                                    k = 0
+                                node.pending.value += min(1, k)
+                                n += k
+                            assert n >= 0
                             return n
 
                         def on_job_completion_with_barriers(node: TreeNode, no_skip: bool) -> None:
@@ -4984,6 +4990,7 @@ class Job:
                                 while tmp is not None:
                                     tmp.barriers.clear()
                                     tmp = tmp.parent
+                            assert node.pending.value >= 0
                             while node.pending.value == 0:  # have all jobs in subtree of current node completed?
                                 # ... if so open the barrier, if there's a barrier, and enqueue jobs waiting on it
                                 if no_skip:
@@ -4996,6 +5003,7 @@ class Job:
                                     break  # we've reached the root node
                                 node = node.parent  # recurse up the tree
                                 node.pending.value -= 1  # mark subtree as completed
+                                assert node.pending.value >= 0
 
                         assert enable_barriers
                         on_job_completion_with_barriers(done_future.node, no_skip)
