@@ -348,6 +348,7 @@ dummy_dataset = bzfs.dummy_dataset
 sep = ","
 
 
+#############################################################################
 def main():
     Job().run_main(sys.argv)
 
@@ -378,9 +379,9 @@ class Job:
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
-        src_snapshot_plan = ast.literal_eval(args.src_snapshot_plan)
-        src_bookmark_plan = ast.literal_eval(args.src_bookmark_plan)
-        dst_snapshot_plan = ast.literal_eval(args.dst_snapshot_plan)
+        src_snapshot_plan = validate_snapshot_plan(ast.literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
+        src_bookmark_plan = validate_snapshot_plan(ast.literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
+        dst_snapshot_plan = validate_snapshot_plan(ast.literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
         monitor_snapshot_plan = validate_monitor_snapshot_plan(ast.literal_eval(args.monitor_snapshot_plan))
         localhostname = args.localhost if args.localhost else socket.gethostname()
         assert localhostname, "localhostname must not be empty!"
@@ -511,7 +512,7 @@ class Job:
                 j = 0
                 for dst_hostname, targets in dst_hosts.items():
                     retain_targets = set(retain_dst_targets[dst_hostname])
-                    dst_snapshot_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
+                    dst_snapshot_plan = {  # only retain targets that belong to the host
                         org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
                         for org, target_periods in dst_snapshot_plan.items()
                     }
@@ -569,7 +570,7 @@ class Job:
                 j = 0
                 for dst_hostname, targets in dst_hosts.items():
                     targets = set(targets).intersection(set(retain_dst_targets[dst_hostname]))
-                    monitor_plan = {  # only retain targets that belong to the host executing bzfs_jobrunner
+                    monitor_plan = {  # only retain targets that belong to the host
                         org: {target: periods for target, periods in target_periods.items() if target in targets}
                         for org, target_periods in monitor_snapshot_plan.items()
                     }
@@ -824,6 +825,22 @@ def validate_dst_hosts(dst_hosts: Dict) -> Dict:
         for target in targets:
             assert isinstance(target, str)
     return dst_hosts
+
+
+def validate_snapshot_plan(snapshot_plan: Dict, context: str) -> Dict:
+    assert isinstance(snapshot_plan, dict)
+    for org, target_periods in snapshot_plan.items():
+        assert isinstance(org, str)
+        assert isinstance(target_periods, dict)
+        for target, periods in target_periods.items():
+            assert isinstance(target, str)
+            assert isinstance(periods, dict)
+            for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
+                assert isinstance(period_unit, str)
+                assert not (
+                    not isinstance(period_amount, int) or period_amount < 0
+                ), f"{context}: Period amount must be a non-negative integer: {period_amount} within plan {snapshot_plan}"
+    return snapshot_plan
 
 
 def validate_monitor_snapshot_plan(monitor_snapshot_plan: Dict) -> Dict:
