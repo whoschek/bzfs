@@ -311,6 +311,7 @@ class BZFSTestCase(ParametrizedTestCase):
         use_jobrunner: bool = False,
         spawn_process_per_job: bool = None,
         include_snapshot_plan_excludes_outdated_snapshots: bool = None,
+        no_cache_snapshots: bool = True,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -424,6 +425,7 @@ class BZFSTestCase(ParametrizedTestCase):
 
         args = args + ["--exclude-envvar-regex=EDITOR"]
         args = args + ["--create-src-snapshots-enable-snapshots-changed-cache"]
+        args += ["--no-cache-snapshots"] if no_cache_snapshots else []
 
         if use_jobrunner:
             bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
@@ -688,6 +690,12 @@ class AdhocTestCase(BZFSTestCase):
 
     def test_jobrunner_flat_simple_with_empty_targets(self):
         LocalTestCase(param=self.param).test_jobrunner_flat_simple_with_empty_targets()
+
+    def test_last_replicated_cache_with_no_sleep(self):
+        LocalTestCase(param=self.param).test_last_replicated_cache_with_no_sleep()
+
+    def test_last_replicated_cache_with_sleep_longer_than_threshold(self):
+        LocalTestCase(param=self.param).test_last_replicated_cache_with_sleep_longer_than_threshold()
 
 
 #############################################################################
@@ -1670,6 +1678,35 @@ class LocalTestCase(BZFSTestCase):
                     self.assertSnapshots(dst_root_dataset, 0)
                     self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
                     self.assertSnapshots(dst_root_dataset + "/woo0", 3, "w")
+
+    def test_last_replicated_cache_with_no_sleep(self):
+        destroy(dst_root_dataset, recursive=True)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--create-src-snapshots",
+            "--create-src-snapshots-plan=" + str({"z": {"onsite": {"secondly": 1}}}),
+            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+            no_cache_snapshots=False,
+        )
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+        self.run_bzfs(src_root_dataset, dst_root_dataset, no_cache_snapshots=False)
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+
+    def test_last_replicated_cache_with_sleep_longer_than_threshold(self):
+        destroy(dst_root_dataset, recursive=True)
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--create-src-snapshots",
+            "--create-src-snapshots-plan=" + str({"z": {"onsite": {"secondly": 1}}}),
+            "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+            no_cache_snapshots=False,
+        )
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
+        time.sleep(2.2)
+        self.run_bzfs(src_root_dataset, dst_root_dataset, no_cache_snapshots=False)
+        self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
     def test_include_snapshot_time_range_full(self):
         self.setup_basic()
@@ -4581,13 +4618,20 @@ class LocalTestCase(BZFSTestCase):
 
     def test_jobrunner_flat_simple(self):
         def run_jobrunner(*args, **kwargs):
-            self.run_bzfs(*args, **kwargs, use_jobrunner=True, spawn_process_per_job=spawn_process_per_job)
+            self.run_bzfs(
+                *args,
+                **kwargs,
+                use_jobrunner=True,
+                spawn_process_per_job=spawn_process_per_job,
+                no_cache_snapshots=no_cache_snapshots,
+            )
 
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         for jobiter, spawn_process_per_job in enumerate([None, True]):
+            no_cache_snapshots = spawn_process_per_job is None
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 self.assertSnapshots(src_root_dataset, 0)
@@ -4796,10 +4840,14 @@ class LocalTestCase(BZFSTestCase):
                 )
 
                 # replicate new snapshot from src to dst:
+                nonexisting_snap = "s1_nonexisting_2024-01-01_00:00:00_secondly"
+                take_snapshot(src_root_dataset, nonexisting_snap)
                 run_jobrunner("--replicate=pull", *pull_args)
-                self.assertEqual(2, len(snapshots(src_root_dataset)))
+                self.assertEqual(3, len(snapshots(src_root_dataset)))
                 self.assertEqual(2, len(bookmarks(src_root_dataset)))
                 self.assertEqual(2, len(snapshots(dst_root_dataset)))
+                destroy_snapshots(src_root_dataset, [s for s in snapshots(src_root_dataset) if nonexisting_snap in s])
+                destroy_snapshots(dst_root_dataset, [s for s in snapshots(dst_root_dataset) if nonexisting_snap in s])
 
                 # delete one old snapshot on src:
                 run_jobrunner("--prune-src-snapshots", *pull_args)
@@ -4907,13 +4955,20 @@ class LocalTestCase(BZFSTestCase):
 
     def test_jobrunner_flat_simple_with_empty_targets(self):
         def run_jobrunner(*args, **kwargs):
-            self.run_bzfs(*args, **kwargs, use_jobrunner=True, spawn_process_per_job=spawn_process_per_job)
+            self.run_bzfs(
+                *args,
+                **kwargs,
+                use_jobrunner=True,
+                spawn_process_per_job=spawn_process_per_job,
+                no_cache_snapshots=no_cache_snapshots,
+            )
 
         if self.is_no_privilege_elevation():
             self.skipTest("Destroying snapshots on src needs extra permissions")
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         for jobiter, spawn_process_per_job in enumerate([None, True]):
+            no_cache_snapshots = spawn_process_per_job is None
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 destroy(dst_root_dataset, recursive=True)
