@@ -226,6 +226,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo"], params.split_args("foo", []))
         with self.assertRaises(SystemExit):
             params.split_args("'foo'")
+        with self.assertRaises(SystemExit):
+            params.split_args("`foo`")
+        with self.assertRaises(SystemExit):
+            params.split_args("$foo")
         self.assertEqual(["'foo'"], params.split_args("'foo'", allow_all=True))
         with self.assertRaises(SystemExit):
             params.split_args('"foo"')

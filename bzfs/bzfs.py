@@ -1744,8 +1744,8 @@ class Params:
     @staticmethod
     def validate_quoting(opts: List[str]) -> None:
         for opt in opts:
-            if "'" in opt or '"' in opt or "`" in opt:
-                die(f"Option must not contain a single quote or double quote or backtick character: {opt}")
+            if "'" in opt or '"' in opt or "$" in opt or "`" in opt:
+                die(f"Option must not contain a single quote or double quote or dollar or backtick character: {opt}")
 
     @staticmethod
     def fix_recv_opts(opts: List[str]) -> List[str]:
@@ -2522,11 +2522,8 @@ class Job:
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
         p = self.params
         assert isinstance(ssh_user_host, str)
-        p.validate_arg(ssh_user_host)
         assert isinstance(ssh_user, str)
-        validate_user_name(ssh_user, ssh_user_host)
         assert isinstance(p.sudo_program, str)
-        p.program_name(p.sudo_program)  # validate
         assert isinstance(p.enable_privilege_elevation, bool)
 
         is_root = True
@@ -2885,7 +2882,7 @@ class Job:
                 alert: MonitorSnapshotAlert = alerts[i]
                 check_alert(alert.label, alert.oldest, creation_unixtime_secs, dataset, snapshot)
 
-            def alert_remote(remote, sorted_datasets):
+            def alert_remote(remote: Remote, sorted_datasets: List[str]) -> None:
                 datasets_without_snapshots = self.handle_minmax_snapshots(
                     remote, sorted_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
                 )
@@ -3699,8 +3696,8 @@ class Job:
         return arg if remote.ssh_user_host == "" else shlex.quote(arg)
 
     def dquote(self, arg: str) -> str:
-        """shell-escapes double quotes and backticks, then surrounds with double quotes."""
-        return '"' + arg.replace('"', '\\"').replace("`", "\\`") + '"'
+        """shell-escapes double quotes and dollar and backticks, then surrounds with double quotes."""
+        return '"' + arg.replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
 
     def filter_datasets(self, remote: Remote, sorted_datasets: List[str]) -> List[str]:
         """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the

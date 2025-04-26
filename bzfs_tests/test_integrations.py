@@ -597,7 +597,7 @@ class BZFSTestCase(ParametrizedTestCase):
     def properties_with_special_characters() -> Dict[str, str]:
         return {
             "compression": "off",
-            "bzfs:prop0": "/tmp/dir with  spaces and $ dollar sign-" + str(os.getpid()),
+            "bzfs:prop0": "/tmp/dir with  spaces and $dollar sign-" + str(os.getpid()),
             "bzfs:prop1": "/tmp/dir` ~!@#$%^&*()_+-={}[]|;:<>?,./",  # test escaping
             "bzfs:prop2": "/tmp/foo'bar",
             "bzfs:prop3": '/tmp/foo"bar',
