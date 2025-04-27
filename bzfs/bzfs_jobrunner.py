@@ -168,7 +168,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
     # options:
     parser.add_argument(
-        "--localhost", default=None, metavar="STRING",
+        "--localhost", default=None, action=bzfs.NonEmptyStringAction, metavar="STRING",
         help="Hostname of localhost. Default is the hostname without the domain name, querying the Operating System.\n\n")
     parser.add_argument(
         "--src-hosts", default=None, metavar="LIST_STRING",
