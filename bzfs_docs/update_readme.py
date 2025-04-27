@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 from bzfs import bzfs
 from bzfs import bzfs_jobrunner
@@ -43,8 +44,8 @@ def main():
         sys.exit(1)
 
     bzfs_py_file, readme_file = sys.argv[1], sys.argv[2]
-    tmp_manpage1_path = "/tmp/manpage.1"
-    tmp_manpage_md_path = "/tmp/manpage.md"
+    tmp_manpage1_path = os.path.join(tempfile.gettempdir(), "manpage.1")
+    tmp_manpage_md_path = os.path.join(tempfile.gettempdir(), "manpage.md")
 
     # Step 1: Generate manpage
     with open(tmp_manpage1_path, "w") as fd:
