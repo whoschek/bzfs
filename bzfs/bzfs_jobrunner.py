@@ -136,40 +136,51 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 """, formatter_class=argparse.RawTextHelpFormatter)
 
     # commands:
-    parser.add_argument("--create-src-snapshots", action="store_true",
+    parser.add_argument(
+        "--create-src-snapshots", action="store_true",
         help="Take snapshots on src as necessary. This command should be called by a program (or cron job) running on each "
              "src host.\n\n")
-    parser.add_argument("--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?",
+    parser.add_argument(
+        "--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?",
         help="Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push mode "
              "(experimental). For pull mode, this command should be called by a program (or cron job) running on each dst "
              "host; for push mode, on the src host.\n\n")
-    parser.add_argument("--prune-src-snapshots", action="store_true",
+    parser.add_argument(
+        "--prune-src-snapshots", action="store_true",
         help="Prune snapshots on src as necessary. This command should be called by a program (or cron job) running on each "
              "src host.\n\n")
-    parser.add_argument("--prune-src-bookmarks", action="store_true",
+    parser.add_argument(
+        "--prune-src-bookmarks", action="store_true",
         help="Prune bookmarks on src as necessary. This command should be called by a program (or cron job) running on each "
              "src host.\n\n")
-    parser.add_argument("--prune-dst-snapshots", action="store_true",
+    parser.add_argument(
+        "--prune-dst-snapshots", action="store_true",
         help="Prune snapshots on dst as necessary. This command should be called by a program (or cron job) running on each "
              "dst host.\n\n")
-    parser.add_argument("--monitor-src-snapshots", action="store_true",
+    parser.add_argument(
+        "--monitor-src-snapshots", action="store_true",
         help="Alert the user if src snapshots are too old, using --monitor-snapshot-plan (see below). This command should "
              "be called by a program (or cron job) running on each src host.\n\n")
-    parser.add_argument("--monitor-dst-snapshots", action="store_true",
+    parser.add_argument(
+        "--monitor-dst-snapshots", action="store_true",
         help="Alert the user if dst snapshots are too old, using --monitor-snapshot-plan (see below). This command should "
              "be called by a program (or cron job) running on each dst host.\n\n")
 
     # options:
-    parser.add_argument("--localhost", default=None, metavar="STRING",
+    parser.add_argument(
+        "--localhost", default=None, metavar="STRING",
         help="Hostname of localhost. Default is the hostname without the domain name, querying the Operating System.\n\n")
-    parser.add_argument("--src-hosts", default=None, metavar="LIST_STRING",
+    parser.add_argument(
+        "--src-hosts", default=None, metavar="LIST_STRING",
         help="Hostnames of sources. Used by destination hosts if replicating in pull mode.\n\n")
-    parser.add_argument("--src-host", default=None, action="append", metavar="STRING",
+    parser.add_argument(
+        "--src-host", default=None, action="append", metavar="STRING",
         help="For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the --src-hosts that are "
              "contained in the specified --src-host values (optional).\n\n")
     dst_hosts_example = {"nas": ["onsite"], "bak-us-west-1": ["us-west-1"],
                          "bak-eu-west-1": ["eu-west-1"], "archive": ["offsite"]}
-    parser.add_argument("--dst-hosts", default="{}", metavar="DICT_STRING",
+    parser.add_argument(
+        "--dst-hosts", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
              "(the infix portion of snapshot name). "
              f"Example: `{format_dict(dst_hosts_example)}`.\n\n"
@@ -178,10 +189,12 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "replicate the given snapshot from the source host, or if the snapshot is intended for another destination "
              f"host, in which case it skips the snapshot. A destination host running {prog_name} will 'pull' snapshots for "
              "all targets that map to that destination host.\n\n")
-    parser.add_argument("--dst-host", default=None, action="append", metavar="STRING",
+    parser.add_argument(
+        "--dst-host", default=None, action="append", metavar="STRING",
         help="For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the --dst-hosts keys that "
              "are contained in the specified --dst-host values (optional).\n\n")
-    parser.add_argument("--retain-dst-targets", default="{}", metavar="DICT_STRING",
+    parser.add_argument(
+        "--retain-dst-targets", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
              "(the infix portion of snapshot name). "
              f"Example: `{format_dict(dst_hosts_example)}`. Has same format as --dst-hosts.\n\n"
@@ -195,7 +208,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "archive": "archives/zoo/^SRC_HOST",
         "hotspare": "",
     }
-    parser.add_argument("--dst-root-datasets", default="{}", metavar="DICT_STRING",
+    parser.add_argument(
+        "--dst-root-datasets", default="{}", metavar="DICT_STRING",
         help="Dictionary that maps each destination hostname to a root dataset located on that destination host. The root "
              "dataset name is an (optional) prefix that will be prepended to each dataset that is replicated to that "
              "destination host. For backup use cases, this is the backup ZFS pool or a ZFS dataset path within that pool, "
@@ -215,7 +229,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             "offsite": {"12hourly": 42, "weekly": 12},
         },
     }
-    parser.add_argument("--src-snapshot-plan", default="{}", metavar="DICT_STRING",
+    parser.add_argument(
+        "--src-snapshot-plan", default="{}", metavar="DICT_STRING",
         help="Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src. "
              "Snapshots that do not match a retention period will be deleted. A zero within a retention period indicates "
              "that no snapshots shall be retained (or even be created) for the given period.\n\n"
@@ -232,9 +247,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "`prod_us-west-1_<timestamp>_hourly`, `prod_us-west-1_<timestamp>_daily`, "
              "`prod_eu-west-1_<timestamp>_hourly`, `prod_eu-west-1_<timestamp>_daily`, "
              "`test_offsite_<timestamp>_12hourly`, `test_offsite_<timestamp>_weekly`, and so on.\n\n")
-    parser.add_argument("--src-bookmark-plan", default="{}", metavar="DICT_STRING",
+    parser.add_argument(
+        "--src-bookmark-plan", default="{}", metavar="DICT_STRING",
         help="Retention periods for bookmarks to be used if pruning src. Has same format as --src-snapshot-plan.\n\n")
-    parser.add_argument("--dst-snapshot-plan", default="{}", metavar="DICT_STRING",
+    parser.add_argument(
+        "--dst-snapshot-plan", default="{}", metavar="DICT_STRING",
         help="Retention periods for snapshots to be used if pruning dst. Has same format as --src-snapshot-plan.\n\n")
     monitor_snapshot_plan_example = {
         "prod": {
@@ -254,7 +271,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             },
         },
     }
-    parser.add_argument("--monitor-snapshot-plan", default="{}", metavar="DICT_STRING",
+    parser.add_argument(
+        "--monitor-snapshot-plan", default="{}", metavar="DICT_STRING",
         help="Alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any specified "
              "snapshot pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to "
              "check if snapshots are successfully taken on schedule, successfully replicated on schedule, and successfully "
@@ -270,14 +288,18 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
              "the given snapshot name pattern.\n\n")
-    parser.add_argument("--src-user", default="", metavar="STRING",
+    parser.add_argument(
+        "--src-user", default="", metavar="STRING",
         help="SSH username on src hosts. Used if replicating in pull mode. Example: 'alice'\n\n")
-    parser.add_argument("--dst-user", default="", metavar="STRING",
+    parser.add_argument(
+        "--dst-user", default="", metavar="STRING",
         help="SSH username on dst hosts. Used if replicating in push mode. Example: 'root'\n\n")
-    parser.add_argument("--job-id", default=None, metavar="STRING",
+    parser.add_argument(
+        "--job-id", default=None, metavar="STRING",
         help="The job identifier that shall be included in the log file name suffix. Default is a hex UUID. "
              "Example: 0badc0f003a011f0a94aef02ac16083c\n\n")
-    parser.add_argument("--jobid", default=None, metavar="STRING",
+    parser.add_argument(
+        "--jobid", default=None, metavar="STRING",
         help=argparse.SUPPRESS)   # deprecated; was renamed to --job-id
     workers_default = 100  # percent
     parser.add_argument(
@@ -297,25 +319,31 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--spawn_process_per_job", action="store_true",
         help=argparse.SUPPRESS)
-    parser.add_argument("--jobrunner-dryrun",  action="store_true",
+    parser.add_argument(
+        "--jobrunner-dryrun",  action="store_true",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
              "for real (optional). This option treats both the ZFS source and destination as read-only. Can also be used to "
              "check if the configuration options are valid.\n\n")
     parser.add_argument(
         "--jobrunner-log-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"], default="INFO",
         help="Only emit jobrunner messages with equal or higher priority than this log level. Default is 'INFO'.\n\n")
-    parser.add_argument("--help, -h", action="help",
+    parser.add_argument(
+        "--help, -h", action="help",
         help="Show this help message and exit.\n\n")
-    parser.add_argument("--daemon-replication-frequency", default="minutely", metavar="STRING",
+    parser.add_argument(
+        "--daemon-replication-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall replicate from src to dst if --daemon-lifetime is nonzero.\n\n")
-    parser.add_argument("--daemon-prune-src-frequency", default="minutely", metavar="STRING",
+    parser.add_argument(
+        "--daemon-prune-src-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall prune src if --daemon-lifetime is nonzero.\n\n")
-    parser.add_argument("--daemon-prune-dst-frequency", default="minutely", metavar="STRING",
+    parser.add_argument(
+        "--daemon-prune-dst-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall prune dst if --daemon-lifetime is nonzero.\n\n")
-    parser.add_argument("--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
+    parser.add_argument(
+        "--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
-    parser.add_argument("--root-dataset-pairs", required=True, nargs="+", action=bzfs.DatasetPairsAction,
-        metavar="SRC_DATASET DST_DATASET",
+    parser.add_argument(
+        "--root-dataset-pairs", required=True, nargs="+", action=bzfs.DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
              "auto-appended later).\n\n")
     return parser
