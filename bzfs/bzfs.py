@@ -701,10 +701,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     def argparser_escape(text: str) -> str:
         return text.replace('%', '%%')
 
-    create_src_snapshots_timeformat_dflt = "%Y-%m-%d_%H:%M:%S"
     parser.add_argument(
-        "--create-src-snapshots-timeformat", default=create_src_snapshots_timeformat_dflt, metavar="STRFTIME_SPEC",
-        help=f"Default is `{argparser_escape(create_src_snapshots_timeformat_dflt)}`. For the strftime format, see "
+        "--create-src-snapshots-timeformat", default="%Y-%m-%d_%H:%M:%S", metavar="STRFTIME_SPEC",
+        help="Default is `%(default)s`. For the strftime format, see "
              "https://docs.python.org/3.11/library/datetime.html#strftime-strptime-behavior. "
              f"Examples: `{argparser_escape('%Y-%m-%d_%H:%M:%S.%f')}` (adds microsecond resolution), "
              f"`{argparser_escape('%Y-%m-%d_%H:%M:%S%z')}` (adds timezone offset), "
@@ -740,21 +739,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         #      "frequently (e.g. every 5 seconds), yet there's seldom anything to replicate (e.g. a new src snapshot is only "
         #      "created every minute).\n\n")
         help=argparse.SUPPRESS)
-    zfs_send_program_opts_default = "--props --raw --compressed"
     parser.add_argument(
-        "--zfs-send-program-opts", type=str, default=zfs_send_program_opts_default, metavar="STRING",
+        "--zfs-send-program-opts", type=str, default="--props --raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
              "The value is split on runs of one or more whitespace characters. "
-             f"Default is '{zfs_send_program_opts_default}'. To run `zfs send` without options, specify the empty "
+             "Default is '%(default)s'. To run `zfs send` without options, specify the empty "
              "string: `--zfs-send-program-opts=''`. "
              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-send.8.html "
              "and https://github.com/openzfs/zfs/issues/13024\n\n")
-    zfs_recv_program_opts_default = "-u"
     parser.add_argument(
-        "--zfs-recv-program-opts", type=str, default=zfs_recv_program_opts_default, metavar="STRING",
+        "--zfs-recv-program-opts", type=str, default="-u", metavar="STRING",
         help="Parameters to fine-tune 'zfs receive' behaviour (optional); will be passed into 'zfs receive' CLI. "
              "The value is split on runs of one or more whitespace characters. "
-             f"Default is '{zfs_recv_program_opts_default}'. To run `zfs receive` without options, specify the empty "
+             "Default is '%(default)s'. To run `zfs receive` without options, specify the empty "
              "string: `--zfs-recv-program-opts=''`. "
              "Example: '-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption'. "
              "See https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html "
@@ -810,7 +807,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "is processed unless --recursive is also specified. "
              f"Analogy: `{prog_name} --recursive --skip-parent src dst` is akin to Unix `cp -r src/* dst/` whereas "
              f" `{prog_name} --recursive --skip-parent --skip-replication --delete-dst-datasets dummy dst` is akin to "
-             f"Unix `rm -r dst/*`\n\n")
+             "Unix `rm -r dst/*`\n\n")
     parser.add_argument(
         "--skip-missing-snapshots", choices=["fail", "dataset", "continue"], default="dataset", nargs="?",
         help="During replication, handle source datasets that select no snapshots (and no relevant bookmarks) "
@@ -822,34 +819,27 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "with an error (without --force). If there is no such abort, continue processing with the next dataset. "
              "Eventually create empty destination dataset and ancestors if they do not yet exist and source dataset "
              "has at least one descendant that selects at least one snapshot.\n\n")
-    retries_default = 2
     parser.add_argument(
-        "--retries", type=int, min=0, default=retries_default, action=CheckRange, metavar="INT",
+        "--retries", type=int, min=0, default=2, action=CheckRange, metavar="INT",
         help="The maximum number of times a retryable replication or deletion step shall be retried if it fails, for "
-             f"example because of network hiccups (default: {retries_default}, min: 0). "
+             "example because of network hiccups (default: %(default)s, min: %(min)s). "
              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
              f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n")
-    retry_min_sleep_secs_default = 0.125
     parser.add_argument(
-        "--retry-min-sleep-secs", type=float, min=0, default=retry_min_sleep_secs_default,
-        action=CheckRange, metavar="FLOAT",
-        help=f"The minimum duration to sleep between retries (default: {retry_min_sleep_secs_default}).\n\n")
-    retry_max_sleep_secs_default = 5 * 60
+        "--retry-min-sleep-secs", type=float, min=0, default=0.125, action=CheckRange, metavar="FLOAT",
+        help="The minimum duration to sleep between retries (default: %(default)s).\n\n")
     parser.add_argument(
-        "--retry-max-sleep-secs", type=float, min=0, default=retry_max_sleep_secs_default,
-        action=CheckRange, metavar="FLOAT",
+        "--retry-max-sleep-secs", type=float, min=0, default=5 * 60, action=CheckRange, metavar="FLOAT",
         help="The maximum duration to sleep between retries initially starts with --retry-min-sleep-secs (see above), "
              "and doubles on each retry, up to the final maximum of --retry-max-sleep-secs "
-             f"(default: {retry_max_sleep_secs_default}). On each retry a random sleep time in the "
+             "(default: %(default)s). On each retry a random sleep time in the "
              "[--retry-min-sleep-secs, current max] range is picked. The timer resets after each operation.\n\n")
-    retry_max_elapsed_secs_default = 60 * 60
     parser.add_argument(
-        "--retry-max-elapsed-secs", type=float, min=0, default=retry_max_elapsed_secs_default,
-        action=CheckRange, metavar="FLOAT",
+        "--retry-max-elapsed-secs", type=float, min=0, default=60 * 60, action=CheckRange, metavar="FLOAT",
         help="A single operation (e.g. 'zfs send/receive' of the current dataset, or deletion of a list of snapshots "
              "within the current dataset) will not be retried (or not retried anymore) once this much time has elapsed "
-             f"since the initial start of the operation, including retries (default: {retry_max_elapsed_secs_default})."
-             " The timer resets after each operation completes or retries exhaust, such that subsequently failing "
+             "since the initial start of the operation, including retries (default: %(default)s). "
+             "The timer resets after each operation completes or retries exhaust, such that subsequently failing "
              "operations can again be retried.\n\n")
     parser.add_argument(
         "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
@@ -923,11 +913,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--delete-dst-snapshots-except", action="store_true",
         help="This flag indicates that the --include/exclude-snapshot-* options shall have inverted semantics for the "
              "--delete-dst-snapshots option, thus deleting all snapshots except for the selected snapshots (within the "
-             "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other"
-             " words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n")
+             "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other "
+             "words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n")
     parser.add_argument(
-        "--delete-dst-snapshots-except-plan", action=DeleteDstSnapshotsExceptPlanAction, default=None,
-        metavar="DICT_STRING",
+        "--delete-dst-snapshots-except-plan", action=DeleteDstSnapshotsExceptPlanAction, default=None, metavar="DICT_STRING",
         help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datasets via "
              "--delete-dst-snapshots. Has the same format as --create-src-snapshots-plan. "
              "Snapshots (--delete-dst-snapshots=snapshots) or bookmarks (with --delete-dst-snapshots=bookmarks) that "
@@ -965,8 +954,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Never delete non-selected dataset subtrees or their ancestors.\n\n"
              "For example, if the destination contains datasets h1,d1, and the include/exclude policy "
              "selects h1,d1, then check if h1,d1 can be deleted. "
-             "On the other hand, if the include/exclude policy only selects h1 then only check if h1 "
-             "can be deleted.\n\n"
+             "On the other hand, if the include/exclude policy only selects h1 then only check if h1 can be deleted.\n\n"
              "*Note:* Use --delete-empty-dst-datasets=snapshots to delete snapshot-less datasets even if they still "
              "contain bookmarks.\n\n")
     monitor_snapshot_plan_example = {
@@ -1193,7 +1181,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
              "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
              "keyword in ssh_config(5) for more information: "
-             f"https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `{ssh_cipher_default}`\n\n")
+             "https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `%(default)s`\n\n")
 
     ssh_private_key_file_default = ".ssh/id_rsa"
     locations = ["src", "dst"]
@@ -1242,7 +1230,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--threads", min=1, default=(threads_default, True), action=CheckPercentRange, metavar="INT[%]",
         help="The maximum number of threads to use for parallel operations; can be given as a positive integer, "
-             f"optionally followed by the %% percent character (min: 1, default: {threads_default}%%). Percentages "
+             f"optionally followed by the %% percent character (min: %(min)s, default: {threads_default}%%). Percentages "
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many threads as "
              "there are cores on the machine; 75%% uses num_threads = num_cores * 0.75. Currently this option only "
              "applies to dataset and snapshot replication, --create-src-snapshots, --delete-dst-snapshots, "
@@ -1251,14 +1239,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "cores and the parallelism offered by SSDs vs. HDDs, ZFS topology and configuration, as well as the network "
              "bandwidth and other workloads simultaneously running on the system. The current default is geared towards a "
              "high degreee of parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%%, 150%%\n\n")
-    maxsessions_dflt = 8
     parser.add_argument(
-        "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=maxsessions_dflt,
-        action=CheckRange, metavar="INT",
+        "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=8, action=CheckRange, metavar="INT",
         help=f"For best throughput, {prog_name} uses multiple SSH TCP connections in parallel, as indicated by "
              "--threads (see above). For best startup latency, each such parallel TCP connection can carry a "
              "maximum of S concurrent SSH sessions, where "
-             f"S=--max-concurrent-ssh-sessions-per-tcp-connection (default: {maxsessions_dflt}, min: 1). "
+             "S=--max-concurrent-ssh-sessions-per-tcp-connection (default: %(default)s, min: %(min)s). "
              "Concurrent SSH sessions are mostly used for metadata operations such as listing ZFS datasets and their "
              "snapshots. This client-side max sessions parameter must not be higher than the server-side "
              "sshd_config(5) MaxSessions parameter (which defaults to 10, see "
@@ -1277,10 +1263,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         # help="Exit the daemon after this much time has elapsed. Default is '0 seconds', i.e. no daemon mode. "
         #      "Examples: '600 seconds', '86400 seconds', '1000years'\n\n")
         help=argparse.SUPPRESS)
-    daemon_frequency_dflt = "minutely"
     parser.add_argument(
-        "--daemon-frequency", default=daemon_frequency_dflt, metavar="STRING",
-        # help=f"Run a daemon iteration every N time units. Default is '{daemon_frequency_dflt}'. "
+        "--daemon-frequency", default="minutely", metavar="STRING",
+        # help="Run a daemon iteration every N time units. Default is '%(default)s'. "
         #      "Examples: '100 millisecondly', '10secondly, 'minutely' to request the daemon to run every 100 milliseconds, "
         #      "or every 10 seconds, or every minute, respectively. Only has an effect if --daemon-lifetime is nonzero.\n\n")
         help=argparse.SUPPRESS)
@@ -1301,17 +1286,16 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help="The options to be passed to the compression program on the compression step (optional). "
-             "Default is '-1' (fastest).\n\n")
+             "Default is '%(default)s' (fastest).\n\n")
     parser.add_argument(
         "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("mbuffer") + msg.rstrip() + " The use is auto-disabled if data is transferred locally "
                                              "instead of via the network. This tool is used to smooth out the rate "
                                              "of data flow and prevent bottlenecks caused by network latency or "
                                              "speed fluctuation.\n\n")
-    mbuffer_program_opts_default = "-q -m 128M"
     parser.add_argument(
-        "--mbuffer-program-opts", default=mbuffer_program_opts_default, metavar="STRING",
-        help=f"Options to be passed to 'mbuffer' program (optional). Default: '{mbuffer_program_opts_default}'.\n\n")
+        "--mbuffer-program-opts", default="-q -m 128M", metavar="STRING",
+        help="Options to be passed to 'mbuffer' program (optional). Default: '%(default)s'.\n\n")
     parser.add_argument(
         "--ps-program", default="ps", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("ps") + msg)
@@ -1321,8 +1305,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     pv_program_opts_default = ("--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 "
                                "--width=120 --buffer-size=2M")
     parser.add_argument(
-        "--pv-program-opts", default=pv_program_opts_default, metavar="STRING",
-        help=f"The options to be passed to the 'pv' program (optional). Default: '{pv_program_opts_default}'.\n\n")
+        "--pv-program-opts", metavar="STRING",
+        default="--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M",
+        help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n")
     parser.add_argument(
         "--shell-program", default="sh", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("sh") + msg)
@@ -1355,7 +1340,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "file names such as `zrun_us-west-1_2024-09-03_12:26:15_daily-bl4i1fth.log`\n\n")
     parser.add_argument(
         "--log-file-prefix", default="zrun_", action=SafeFileNameAction, metavar="STRING",
-        help="Default is zrun_. " + h_fix)
+        help="Default is %(default)s. " + h_fix)
     parser.add_argument(
         "--log-file-infix", default="", action=SafeFileNameAction, metavar="STRING",
         help="Default is the empty string. " + h_fix)
@@ -1364,7 +1349,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="Default is the empty string. " + h_fix)
     parser.add_argument(
         "--log-subdir", choices=["daily", "hourly", "minutely"], default="daily",
-        help="Make a new subdirectory in --log-dir every day, hour or minute; write log files there. Default is 'daily'.")
+        help="Make a new subdirectory in --log-dir every day, hour or minute; write log files there. "
+             "Default is '%(default)s'.")
     parser.add_argument(
         "--log-syslog-address", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="Host:port of the syslog machine to send messages to (e.g. 'foo.example.com:514' or '127.0.0.1:514'), or "
@@ -1373,18 +1359,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "https://docs.python.org/3/library/logging.handlers.html#sysloghandler\n\n")
     parser.add_argument(
         "--log-syslog-socktype", choices=["UDP", "TCP"], default="UDP",
-        help="The socket type to use to connect if no local socket file system path is used. Default is 'UDP'.\n\n")
+        help="The socket type to use to connect if no local socket file system path is used. Default is '%(default)s'.\n\n")
     parser.add_argument(
         "--log-syslog-facility", type=int, min=0, max=7, default=1, action=CheckRange, metavar="INT",
-        help="The local facility aka category that identifies msg sources in syslog (default: 1, min=0, max=7).\n\n")
+        help="The local facility aka category that identifies msg sources in syslog "
+             "(default: %(default)s, min=0, max=7).\n\n")
     parser.add_argument(
         "--log-syslog-prefix", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
         help=f"The name to prepend to each message that is sent to syslog; identifies {prog_name} messages as opposed "
-             f"to messages from other sources. Default is '{prog_name}'.\n\n")
+             "to messages from other sources. Default is '%(default)s'.\n\n")
     parser.add_argument(
         "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
         default="ERROR",
-        help="Only send messages with equal or higher priority than this log level to syslog. Default is 'ERROR'.\n\n")
+        help="Only send messages with equal or higher priority than this log level to syslog. Default is '%(default)s'.\n\n")
     parser.add_argument(
         "--log-config-file", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="The contents of a JSON file that defines a custom python logging configuration to be used (optional). "
@@ -1447,7 +1434,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             _max = f.metadata.get("max")
             anchor_group.add_argument(
                 "--" + f.name, type=int, min=_min, max=_max, default=f.default, action=CheckRange, metavar="INT",
-                help=f"{f.metadata.get('help')} ({_min} ≤ x ≤ {_max}, default: {f.default}).\n\n")
+                help=f"{f.metadata.get('help')} ({_min} ≤ x ≤ {_max}, default: %(default)s).\n\n")
 
     for option_name, flag in zfs_recv_groups.items():
         grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
@@ -1471,7 +1458,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             help=h(f"The zfs send phase or phases during which the extra {flag} options are passed to 'zfs receive'. "
                    "This can be one of the following choices: "
                    f"{', '.join([f'{qq}{x}{qq}' for x in target_choices])}. "
-                   f"Default is '{target_choices_default}'. "
+                   "Default is '%(default)s'. "
                    "A 'full' send is sometimes also known as an 'initial' send.\n\n"))
         msg = "Thus, -x opts do not benefit from source != 'local' (which is the default already)." \
             if flag == "'-x'" else ""
@@ -1480,7 +1467,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             help=h("The ZFS sources to provide to the 'zfs get -s' CLI in order to fetch the ZFS dataset properties "
                    f"that will be fed into the --{grup}-include/exclude-regex filter (see below). The sources are in "
                    "the form of a comma-separated list (no spaces) containing one or more of the following choices: "
-                   "'local', 'default', 'inherited', 'temporary', 'received', 'none', with the default being 'local'. "
+                   "'local', 'default', 'inherited', 'temporary', 'received', 'none', with the default being '%(default)s'. "
                    f"Uses 'zfs get -p -s ${grup}-sources all $SRC_DATASET' to fetch the "
                    "properties to copy - https://openzfs.github.io/openzfs-docs/man/master/8/zfs-get.8.html. P.S: Note "
                    "that the existing 'zfs send --props' option does not filter and that --props only reads properties "
@@ -7492,6 +7479,8 @@ class SmallPriorityQueue(Generic[T]):
 
 #############################################################################
 class SynchronizedBool:
+    """Thread-safe bool."""
+
     def __init__(self, val: bool):
         assert isinstance(val, bool)
         self._lock: threading.Lock = threading.Lock()
@@ -7536,6 +7525,8 @@ V = TypeVar("V")
 
 
 class SynchronizedDict(Generic[K, V]):
+    """Thread-safe dict."""
+
     def __init__(self, val: Dict[K, V]):
         assert isinstance(val, dict)
         self._lock: threading.Lock = threading.Lock()

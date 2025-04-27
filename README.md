@@ -465,7 +465,7 @@ attempt to "abstract away" ZFS concepts and semantics. Keeps simple things simpl
 a terminal/shell, and run manually to help anticipate or diagnose issues.
 * Supports snapshotting, replicating (or deleting) dataset subsets via powerful include/exclude regexes and other filters,
 which can be combined into a mini filter pipeline. For example, can snapshot, replicate (or delete) all except temporary
-datasets and private datasets. Can be told to do such deletions only if a corresponding source dataset does not exist.
+datasets and private datasets.
 * Supports replicating (or deleting) snapshot subsets via powerful include/exclude regexes, time based filters, and
 oldest N/latest N filters, which can also be combined into a mini filter pipeline.
     * For example, can replicate (or delete) daily and weekly snapshots while ignoring hourly and 5 minute snapshots.
@@ -1171,10 +1171,9 @@ usage: bzfs [-h] [--recursive]
 **--create-src-snapshots-enable-snapshots-changed-cache**
 
 *  Maintain a local cache of recent snapshot creation times, running 'zfs list -t
-    filesystem,volume -p -o snapshots_changed' instead of 'zfs list -t snapshot' to determine
-    if a new snapshot shall be created on the src. This flag improves performance for
-    high-frequency snapshotting use cases. Only relevant if
-    --create-src-snapshots-even-if-not-due is not specified.
+    filesystem,volume -p -o snapshots_changed' first to determine if a new snapshot shall be
+    created on the src. This flag improves performance for high-frequency snapshotting use cases.
+    Only relevant if --create-src-snapshots-even-if-not-due is not specified.
 
 <!-- -->
 

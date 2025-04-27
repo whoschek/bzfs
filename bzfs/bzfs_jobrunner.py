@@ -311,7 +311,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--work-period-seconds", type=float, min=0, default=0, action=bzfs.CheckRange, metavar="FLOAT",
         help="Reduces bandwidth spikes by evenly spreading the start of worker jobs over this much time; "
-             "0 disables this feature (default: 0). Examples: 0, 60, 86400\n\n")
+             "0 disables this feature (default: %(default)s). Examples: 0, 60, 86400\n\n")
     parser.add_argument(
         "--worker-timeout-seconds", type=float, min=0, default=None, action=bzfs.CheckRange, metavar="FLOAT",
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
