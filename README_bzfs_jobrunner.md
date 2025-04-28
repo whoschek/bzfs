@@ -43,12 +43,13 @@ This program can be used to efficiently replicate ...
 
 a) within a single machine, or
 
-b) from a single source host to one or more destination hosts (pull or push mode), or
+b) from a single source host to one or more destination hosts (pull or push or pull-push mode),
+or
 
-c) from multiple source hosts to a single destination host (pull or push mode), or
+c) from multiple source hosts to a single destination host (pull or push or pull-push mode), or
 
-d) from N source hosts to M destination hosts (pull or push mode, N can be large, M=2 or M=3 are
-typical geo-replication factors)
+d) from N source hosts to M destination hosts (pull or push or pull-push mode, N can be large,
+M=2 or M=3 are typical geo-replication factors)
 
 Typically, a cron job on each source host runs `bzfs_jobrunner` periodically to create new
 snapshots (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source
