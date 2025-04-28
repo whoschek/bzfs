@@ -451,7 +451,7 @@ class Job:
             return zero_pad(jj)
 
         def npad() -> str:
-            return "_" + zero_pad(len(subjobs))
+            return sep + zero_pad(len(subjobs))
 
         def update_subjob_name(tag: str) -> str:
             if j <= 0:
@@ -482,7 +482,7 @@ class Job:
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
                 opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
-                opts += [f"--log-file-suffix={sep}{jobid}{npad()}{sep}"]
+                opts += [f"--log-file-suffix={sep}{jobid}{npad()}{log_suffix(src_host, None)}{sep}"]
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += dedupe([(resolve_dataset(src_host, src), dummy_dataset) for src, dst in args.root_dataset_pairs])
@@ -517,7 +517,7 @@ class Job:
                     "--skip-replication",
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
                     f"--log-file-prefix={prog_name}{sep}{tag}{sep}",
-                    f"--log-file-suffix={sep}{jobid}{npad()}{sep}",
+                    f"--log-file-suffix={sep}{jobid}{npad()}{log_suffix(src_host, None)}{sep}",
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
@@ -547,7 +547,7 @@ class Job:
                     opts = ["--delete-dst-snapshots", "--skip-replication"]
                     opts += [f"--delete-dst-snapshots-except-plan={dst_snapshot_plan}"]
                     opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
-                    opts += [f"--log-file-suffix={sep}{jobid}{npad()}{sep}{sanitize(dst_hostname)}{sep}"]
+                    opts += [f"--log-file-suffix={sep}{jobid}{npad()}{log_suffix(src_host, dst_hostname)}{sep}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
@@ -560,11 +560,11 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name("prune_dst_snapshots")
 
-            def monitor_snapshots_opts(tag: str, monitor_plan: Dict) -> List[str]:
+            def monitor_snapshots_opts(tag: str, monitor_plan: Dict, logsuffix: str) -> List[str]:
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
                 opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
                 opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
-                opts += [f"--log-file-suffix={sep}{jobid}{npad()}{sep}{sanitize(src_host)}{sep}"]
+                opts += [f"--log-file-suffix={sep}{jobid}{npad()}{logsuffix}{sep}"]
                 return opts
 
             def build_monitor_plan(monitor_plan: Dict, snapshot_plan: Dict) -> Dict:
@@ -587,7 +587,7 @@ class Job:
 
             if args.monitor_src_snapshots:
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan)
-                opts = monitor_snapshots_opts("monitor-src-snapshots", monitor_plan)
+                opts = monitor_snapshots_opts("monitor-src-snapshots", monitor_plan, log_suffix(src_host, None))
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += dedupe([(dummy_dataset, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])
@@ -603,7 +603,7 @@ class Job:
                         for org, target_periods in monitor_snapshot_plan.items()
                     }
                     monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan)
-                    opts = monitor_snapshots_opts("monitor-dst-snapshots", monitor_plan)
+                    opts = monitor_snapshots_opts("monitor-dst-snapshots", monitor_plan, log_suffix(src_host, dst_hostname))
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
                     old_len_opts = len(opts)
@@ -650,7 +650,7 @@ class Job:
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
             opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
-            opts += [f"--log-file-suffix={sep}{jobid}{sep}{sanitize(src_hostname)}{sep}{sanitize(dst_hostname)}{sep}"]
+            opts += [f"--log-file-suffix={sep}{jobid}{log_suffix(src_hostname, dst_hostname)}{sep}"]
         return opts
 
     def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs) -> List[Tuple[str, str]]:
@@ -910,6 +910,11 @@ def sanitize(filename: str) -> str:
     for s in (" ", "..", "/", "\\", bzfs.BARRIER_CHAR):
         filename = filename.replace(s, "!")
     return filename
+
+
+def log_suffix(src_hostname: str, dst_hostname: str) -> str:
+    sanitized_dst_hostname = sanitize(dst_hostname) if dst_hostname else ""
+    return f"{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
 
 
 def format_dict(dictionary) -> str:
