@@ -464,8 +464,8 @@ attempt to "abstract away" ZFS concepts and semantics. Keeps simple things simpl
 * All ZFS and SSH commands (even in --dryrun mode) are logged such that they can be inspected, copy-and-pasted into
 a terminal/shell, and run manually to help anticipate or diagnose issues.
 * Supports snapshotting, replicating (or deleting) dataset subsets via powerful include/exclude regexes and other filters,
-which can be combined into a mini filter pipeline. For example, can snapshot, replicate (or delete) all except temporary
-datasets and private datasets.
+which can be combined into a mini filter pipeline. Can be told to do such deletions only if a corresponding source dataset
+does not exist. For example, can snapshot, replicate (or delete) all except temporary datasets and private datasets.
 * Supports replicating (or deleting) snapshot subsets via powerful include/exclude regexes, time based filters, and
 oldest N/latest N filters, which can also be combined into a mini filter pipeline.
     * For example, can replicate (or delete) daily and weekly snapshots while ignoring hourly and 5 minute snapshots.
