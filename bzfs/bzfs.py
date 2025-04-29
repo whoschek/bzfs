@@ -2895,7 +2895,7 @@ class Job:
             for src_dataset in src_datasets:
                 dst_dataset = src2dst(src_dataset)  # cache is only valid for identical destination dataset
                 cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
-                cache_file = self.last_modified_cache_file(src_dataset, cache_label)
+                cache_file = self.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
                 snapshots_changed: int = self.src_properties[src_dataset][SNAPSHOTS_CHANGED]  # get prop "for free"
                 if (
@@ -2914,7 +2914,7 @@ class Job:
                 is_stale = True
                 if dst_dataset in dst_snapshots_changed_dict:
                     snapshots_changed = dst_snapshots_changed_dict[dst_dataset]
-                    cache_file = self.last_modified_cache_file(dst_dataset, remote=dst)
+                    cache_file = self.last_modified_cache_file(dst, dst_dataset)
                     if (
                         snapshots_changed != 0
                         and time.time() > snapshots_changed + time_threshold_secs
@@ -2957,7 +2957,7 @@ class Job:
                 dst_snapshots_changed = 0
                 if dst_dataset in dst_snapshots_changed_dict:
                     dst_snapshots_changed = dst_snapshots_changed_dict[dst_dataset]
-                dst_cache_file = self.last_modified_cache_file(dst_dataset, remote=dst)
+                dst_cache_file = self.last_modified_cache_file(dst, dst_dataset)
                 src_dataset = dst2src(dst_dataset)
                 src_snapshots_changed: int = self.src_properties[src_dataset][SNAPSHOTS_CHANGED]
                 if not p.dry_run:
@@ -4418,7 +4418,7 @@ class Job:
                 msg = " has passed"
             msgs.append(f"Next scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}")
             if use_last_modified_cache and not p.dry_run:
-                cache_file = self.last_modified_cache_file(dataset, label)
+                cache_file = self.last_modified_cache_file(src, dataset, label)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=creation_unixtime, if_more_recent=True)
 
         labels = []
@@ -4437,7 +4437,7 @@ class Job:
         if self.cache_create_snapshots_changed(src):
             sorted_datasets_todo = []
             for dataset in sorted_datasets:
-                cached_snapshots_changed: int = self.cache_get_snapshots_changed(self.last_modified_cache_file(dataset))
+                cached_snapshots_changed: int = self.cache_get_snapshots_changed(self.last_modified_cache_file(src, dataset))
                 if cached_snapshots_changed == 0:
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
@@ -4447,7 +4447,7 @@ class Job:
                     continue
                 creation_unixtimes = []
                 for label in labels:
-                    creation_unixtime: int = self.cache_get_snapshots_changed(self.last_modified_cache_file(dataset, label))
+                    creation_unixtime = self.cache_get_snapshots_changed(self.last_modified_cache_file(src, dataset, label))
                     if creation_unixtime == 0:
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
@@ -4465,7 +4465,7 @@ class Job:
         def on_finish_dataset(dataset: str) -> None:
             if use_last_modified_cache and not p.dry_run:
                 set_last_modification_time_safe(
-                    self.last_modified_cache_file(dataset),
+                    self.last_modified_cache_file(src, dataset),
                     unixtime_in_secs=self.src_properties[dataset][SNAPSHOTS_CHANGED],
                     if_more_recent=True,
                 )
@@ -4549,7 +4549,7 @@ class Job:
         except FileNotFoundError:
             return 0  # harmless
 
-    def last_modified_cache_file(self, dataset: str, label: Optional[SnapshotLabel] = None, remote=None) -> str:
+    def last_modified_cache_file(self, remote: Remote, dataset: str, label: Optional[SnapshotLabel] = None) -> str:
         p = self.params
         cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         remote = remote if remote is not None else p.src
@@ -4559,8 +4559,9 @@ class Job:
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""
-        cache_file = self.last_modified_cache_file(dataset)
-        if not self.params.dry_run:
+        p = self.params
+        cache_file = self.last_modified_cache_file(p.src, dataset)
+        if not p.dry_run:
             try:
                 zero_times = (0, 0)
                 for entry in os.scandir(os.path.dirname(cache_file)):
@@ -4595,14 +4596,14 @@ class Job:
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
-                cache_file = self.last_modified_cache_file(src_dataset)
+                cache_file = self.last_modified_cache_file(src, src_dataset)
                 cache_dir = os.path.dirname(cache_file)
                 if not p.dry_run:
                     try:
                         os.makedirs(cache_dir, exist_ok=True)
                         set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
                         for label in dataset_labels[src_dataset]:
-                            cache_file = self.last_modified_cache_file(src_dataset, label)
+                            cache_file = self.last_modified_cache_file(src, src_dataset, label)
                             set_last_modification_time(cache_file, unixtime_in_secs=snapshots_changed, if_more_recent=True)
                     except FileNotFoundError:
                         pass  # harmless
