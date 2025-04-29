@@ -4145,6 +4145,23 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual(src_datasets, sorted(self.submitted))
 
+    def test_submit_barriers0c(self):
+        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        BR = bzfs.BARRIER_CHAR
+        src_datasets = ["a/b/c", "a/b/c/d/e/f", "u/v/w"]
+        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
+            src_datasets,
+            process_dataset=submit_no_skiptree,  # lambda
+            skip_tree_on_error=lambda dataset: True,
+            max_workers=8,
+            enable_barriers=False,
+        )
+        self.assertFalse(failed)
+        self.assertListEqual(src_datasets, sorted(self.submitted))
+
     def test_submit_barriers1(self):
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)

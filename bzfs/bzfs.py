@@ -25,7 +25,7 @@
 * All CLI option/parameter values are reachable from the "Params" class.
 * Control flow starts in main(), far below ..., which kicks off a "Job".
 * A Job runs one or more "tasks" via run_tasks(), each task replicating a separate dataset tree.
-* The core replication algorithm is in run_task() and especially in replicate_dataset().
+* The core replication algorithm is in run_task() and especially in replicate_datasets() and replicate_dataset().
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
 * The --create-src-snapshots-* and --delete-* and --compare-* and --monitor-* algorithms also start in run_task().
 * Consider using an IDE/editor that can open multiple windows for the same (long) file, such as PyCharm or Sublime Text, etc.
@@ -115,6 +115,7 @@ log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway i
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
+SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
 BARRIER_CHAR = "~"
 SHARED = "shared"
 DEDICATED = "dedicated"
@@ -2192,6 +2193,8 @@ class Job:
         self.max_workers: Dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         self.stats_lock = threading.Lock()
+        self.num_cache_hits: int = 0
+        self.num_cache_misses: int = 0
         self.num_snapshots_found: int = 0
         self.num_snapshots_replicated: int = 0
         self.control_persist_secs: int = 90
@@ -2563,7 +2566,7 @@ class Job:
                 snapshots_changed, volblocksize, recordsize, src_dataset = cols if list_snapshots_changed else ["-"] + cols
                 self.src_properties[src_dataset] = {
                     "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
-                    "snapshots_changed": int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+                    SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 }
                 basis_src_datasets.append(src_dataset)
             assert not self.is_test_mode or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
@@ -2614,33 +2617,7 @@ class Job:
             if self.is_dummy(dst):
                 die("Replication: Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
-            log.info("Starting replication task: %s", task_description + f" [{len(src_datasets)} datasets]")
-            # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
-            self.dedicated_tcp_connection_per_zfs_send = (
-                p.dedicated_tcp_connection_per_zfs_send
-                and max_workers > 1
-                and has_siblings(src_datasets)  # siblings can be replicated in parallel
-            )
-            self.num_snapshots_found = 0
-            self.num_snapshots_replicated = 0
-            start_time_nanos = time.monotonic_ns()
-            # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
-            failed = self.process_datasets_in_parallel_and_fault_tolerant(
-                src_datasets,
-                process_dataset=self.replicate_dataset,  # lambda
-                skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[
-                    replace_prefix(dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
-                ],
-                max_workers=max_workers,
-                enable_barriers=False,
-                task_name="Replication",
-            )
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            log.info(
-                p.dry("Replication done: %s"),
-                f"{task_description} [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots"
-                f" within {len(src_datasets)} datasets; took {human_readable_duration(elapsed_nanos)}]",
-            )
+            failed = self.replicate_datasets(src_datasets, task_description, max_workers)
 
         if failed or not (
             p.delete_dst_datasets
@@ -2881,6 +2858,124 @@ class Job:
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.run_in_parallel(lambda: alert_remote(dst, dst_datasets), lambda: alert_remote(src, src_datasets))
 
+    def replicate_datasets(self, src_datasets: List[str], task_description: str, max_workers: int) -> bool:
+        assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+        self.num_snapshots_found = 0
+        self.num_snapshots_replicated = 0
+        # perf/latency: no need to set up a dedicated TCP connection if no parallel replication is possible
+        self.dedicated_tcp_connection_per_zfs_send = (
+            p.dedicated_tcp_connection_per_zfs_send
+            and max_workers > 1
+            and has_siblings(src_datasets)  # siblings can be replicated in parallel
+        )
+        log.info("Starting replication task: %s", task_description + f" [{len(src_datasets)} datasets]")
+        start_time_nanos = time.monotonic_ns()
+
+        def src2dst(src_dataset: str) -> str:
+            return replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
+
+        def dst2src(dst_dataset: str) -> str:
+            return replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
+
+        def find_stale_datasets() -> Tuple[List[str], Dict[str, str]]:
+            """If the cache is enabled on replication, check which src datasets or dst datasets have changed to determine
+            which datasets can be skipped cheaply, i.e. without incurring 'zfs list -t snapshots'. This is done by comparing
+            the "snapshots_changed" ZFS dataset property with the local cache.
+            See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
+            # First, check which src datasets have changed since the last replication to that destination
+            cache_files = {}
+            stale_src_datasets1 = []
+            maybe_stale_dst_datasets = []
+            userhost_dir = p.dst.ssh_user_host  # cache is only valid for identical destination username+host
+            userhost_dir = userhost_dir if userhost_dir else "-"
+            hash_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
+            hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
+            time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
+            for src_dataset in src_datasets:
+                dst_dataset = src2dst(src_dataset)  # cache is only valid for identical destination dataset
+                cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
+                cache_file = self.last_modified_cache_file(src_dataset, cache_label)
+                cache_files[src_dataset] = cache_file
+                snapshots_changed: int = self.src_properties[src_dataset][SNAPSHOTS_CHANGED]  # get prop "for free"
+                if (
+                    snapshots_changed != 0
+                    and time.time() > snapshots_changed + time_threshold_secs
+                    and snapshots_changed == self.cache_get_snapshots_changed(cache_file)
+                ):
+                    maybe_stale_dst_datasets.append(dst_dataset)
+                else:
+                    stale_src_datasets1.append(src_dataset)
+
+            # For each src dataset that hasn't changed, check if the corresponding dst dataset has changed
+            stale_src_datasets2 = []
+            dst_snapshots_changed_dict = self.zfs_get_snapshots_changed(dst, maybe_stale_dst_datasets)
+            for dst_dataset in maybe_stale_dst_datasets:
+                is_stale = True
+                if dst_dataset in dst_snapshots_changed_dict:
+                    snapshots_changed = dst_snapshots_changed_dict[dst_dataset]
+                    cache_file = self.last_modified_cache_file(dst_dataset, remote=dst)
+                    if (
+                        snapshots_changed != 0
+                        and time.time() > snapshots_changed + time_threshold_secs
+                        and snapshots_changed == self.cache_get_snapshots_changed(cache_file)
+                    ):
+                        log.info("Already-up-to-date [cached]: %s", dst_dataset)
+                        is_stale = False
+                if is_stale:
+                    stale_src_datasets2.append(dst2src(dst_dataset))
+            assert not self.is_test_mode or stale_src_datasets1 == sorted(stale_src_datasets1), "List is not sorted"
+            assert not self.is_test_mode or stale_src_datasets2 == sorted(stale_src_datasets2), "List is not sorted"
+            stale_src_datasets = list(heapq.merge(stale_src_datasets1, stale_src_datasets2))  # merge two sorted lists
+            return stale_src_datasets, cache_files
+
+        self.num_cache_hits = 0
+        self.num_cache_misses = 0
+        if self.cache_snapshots(src):
+            stale_src_datasets, cache_files = find_stale_datasets()
+            self.num_cache_misses += len(stale_src_datasets)
+            self.num_cache_hits += len(src_datasets) - len(stale_src_datasets)
+        else:
+            stale_src_datasets = src_datasets
+            cache_files = {}
+
+        # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
+        failed = self.process_datasets_in_parallel_and_fault_tolerant(
+            stale_src_datasets,
+            process_dataset=self.replicate_dataset,  # lambda
+            skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
+            max_workers=max_workers,
+            enable_barriers=False,
+            task_name="Replication",
+        )
+
+        if self.cache_snapshots(src) and not failed:
+            # refresh "snapshots_changed" ZFS dataset property from dst
+            stale_dst_datasets = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
+            dst_snapshots_changed_dict = self.zfs_get_snapshots_changed(dst, stale_dst_datasets)
+            for dst_dataset in stale_dst_datasets:  # update local cache
+                dst_snapshots_changed = 0
+                if dst_dataset in dst_snapshots_changed_dict:
+                    dst_snapshots_changed = dst_snapshots_changed_dict[dst_dataset]
+                dst_cache_file = self.last_modified_cache_file(dst_dataset, remote=dst)
+                src_dataset = dst2src(dst_dataset)
+                src_snapshots_changed: int = self.src_properties[src_dataset][SNAPSHOTS_CHANGED]
+                if not p.dry_run:
+                    set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
+                    set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
+            total = self.num_cache_hits + self.num_cache_misses
+            cmsg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
+        else:
+            cmsg = ""
+        elapsed_nanos = time.monotonic_ns() - start_time_nanos
+        log.info(
+            p.dry("Replication done: %s"),
+            f"{task_description} [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots"
+            f" within {len(src_datasets)} datasets; took {human_readable_duration(elapsed_nanos)}{cmsg}]",
+        )
+        return failed
+
     def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
 
@@ -2889,31 +2984,6 @@ class Job:
         retry_count = retry.count
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
         log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
-        if self.cache_snapshots(src):
-
-            def check_cache_snapshots():
-                userhost_dir = p.dst.ssh_user_host
-                userhost_dir = userhost_dir if userhost_dir else "-"
-                hash_key = tuple(tuple(f) for f in p.snapshot_filters)
-                hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-                cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
-                cache_file = self.last_modified_cache_file(src_dataset, cache_label)
-                cached_snapshots_changed: int = self.cache_get_snapshots_changed(cache_file)
-                snapshots_changed: int = self.src_properties[src_dataset]["snapshots_changed"]  # get that prop "for free"
-                if cached_snapshots_changed != 0 and cached_snapshots_changed == snapshots_changed:
-                    time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
-                    if time.time() > snapshots_changed + time_threshold_secs:
-                        return True, snapshots_changed, cache_file
-                return False, snapshots_changed, cache_file
-
-            is_already_uptodate, snapshots_changed, cache_snapshots_file = check_cache_snapshots()
-            if is_already_uptodate:
-                log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
-                return True
-
-        def update_cache_snapshots():
-            if self.cache_snapshots(src) and not p.dry_run:
-                set_last_modification_time_safe(cache_snapshots_file, unixtime_in_secs=snapshots_changed)
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
         dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
@@ -3044,7 +3114,6 @@ class Job:
 
             if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
                 log.info(f"{tid} Already up-to-date: %s", dst_dataset)
-                update_cache_snapshots()
                 return True
 
         # endif self.dst_dataset_exists[dst_dataset]
@@ -3155,7 +3224,6 @@ class Job:
                 # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
                 # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
                 # bookmark whose snapshot has been deleted on src.
-                update_cache_snapshots()
                 return True  # nothing more tbd
 
             recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
@@ -3213,7 +3281,6 @@ class Job:
                     self.num_snapshots_replicated += curr_num_snapshots
                 if i == len(steps_todo) - 1:
                     self.create_zfs_bookmark(src, to_snap, src_dataset)
-                    update_cache_snapshots()
             self.zfs_set(set_opts, dst, dst_dataset)
         return True
 
@@ -4375,7 +4442,7 @@ class Job:
                 if cached_snapshots_changed == 0:
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
-                if cached_snapshots_changed != self.src_properties[dataset]["snapshots_changed"]:  # get that prop "for free"
+                if cached_snapshots_changed != self.src_properties[dataset][SNAPSHOTS_CHANGED]:  # get that prop "for free"
                     self.invalidate_last_modified_cache_dataset(dataset)
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
@@ -4400,7 +4467,7 @@ class Job:
             if use_last_modified_cache and not p.dry_run:
                 set_last_modification_time_safe(
                     self.last_modified_cache_file(dataset),
-                    unixtime_in_secs=self.src_properties[dataset]["snapshots_changed"],
+                    unixtime_in_secs=self.src_properties[dataset][SNAPSHOTS_CHANGED],
                     if_more_recent=True,
                 )
 
@@ -4483,10 +4550,11 @@ class Job:
         except FileNotFoundError:
             return 0  # harmless
 
-    def last_modified_cache_file(self, dataset: str, label: Optional[SnapshotLabel] = None) -> str:
+    def last_modified_cache_file(self, dataset: str, label: Optional[SnapshotLabel] = None, remote=None) -> str:
         p = self.params
         cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
-        userhost_dir = p.src.ssh_user_host
+        remote = remote if remote is not None else p.src
+        userhost_dir = remote.ssh_user_host
         userhost_dir = userhost_dir if userhost_dir else "-"
         return os_path_join(p.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
@@ -4518,8 +4586,11 @@ class Job:
             for dataset in datasets:
                 dataset_labels[dataset].append(label)
 
-        for src_dataset, snapshots_changed in self.zfs_get_snapshots_changed(src, sorted(src_datasets_set)).items():
-            self.src_properties[src_dataset]["snapshots_changed"] = snapshots_changed
+        sorted_datasets = sorted(src_datasets_set)
+        snapshots_changed_dict = self.zfs_get_snapshots_changed(src, sorted_datasets)
+        for src_dataset in sorted_datasets:
+            snapshots_changed = snapshots_changed_dict.get(src_dataset, 0)
+            self.src_properties[src_dataset][SNAPSHOTS_CHANGED] = snapshots_changed
             if not cache_create_snapshots_changed:
                 continue
             if snapshots_changed == 0:
@@ -4540,6 +4611,15 @@ class Job:
     def zfs_get_snapshots_changed(self, remote: Remote, datasets: List[str]) -> Dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
         See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
+
+        def try_zfs_list_command(_cmd: List[str], batch: List[str]) -> List[str]:
+            try:
+                return self.run_ssh_command(remote, print_stderr=False, cmd=_cmd + batch).splitlines()
+            except CalledProcessError as e:
+                return stderr_to_str(e.stdout).splitlines()
+            except UnicodeDecodeError:
+                return []
+
         p, log = self.params, self.params.log
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
         # cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed")
@@ -4547,7 +4627,7 @@ class Job:
         for lines in self.itr_ssh_cmd_parallel(
             remote,
             [(cmd, datasets)],
-            lambda _cmd, batch: self.run_ssh_command(remote, log_trace, cmd=_cmd + batch).splitlines(),
+            lambda _cmd, batch: try_zfs_list_command(_cmd, batch),
             ordered=False,
         ):
             for line in lines:
@@ -4907,7 +4987,7 @@ class Job:
         priority_queue: List[TreeNode] = build_dataset_tree_and_find_roots()
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets = len(datasets)
-        datasets_set = set(datasets) if enable_barriers else None
+        datasets_set = set(datasets)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
             submitted = 0
@@ -4957,10 +5037,17 @@ class Job:
 
                     if not enable_barriers:
                         # This simple algorithm is sufficient for almost all use cases:
-                        children = done_future.node.children
-                        if no_skip:  # make child datasets available for start of processing ...
+                        def simple_enqueue_children(node: TreeNode) -> None:
+                            children = node.children
                             for child, grandchildren in children.items():  # as processing of parent has now completed
-                                heapq.heappush(priority_queue, TreeNode(f"{dataset}/{child}", grandchildren))
+                                child_node = TreeNode(f"{node.dataset}/{child}", grandchildren)
+                                if child_node.dataset in datasets_set:
+                                    heapq.heappush(priority_queue, child_node)  # make it available for start of processing
+                                else:  # it's an intermediate node that has no job attached; pass the enqueue operation
+                                    simple_enqueue_children(child_node)  # ... recursively down the tree
+
+                        if no_skip:
+                            simple_enqueue_children(done_future.node)
                     else:
                         # The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner.
                         # Here, a "dataset" string is treated as an identifier for any kind of job rather than a reference
@@ -6103,6 +6190,10 @@ def human_readable_float(number: float) -> str:
     return "0" if result == "-0" else result
 
 
+def percent(number: int, total: int) -> str:
+    return f"{number}={'NaN' if total == 0 else human_readable_float(100 * number / total)}%"
+
+
 def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "") -> int:
     unit_milliseconds = {
         "milliseconds": 1,
@@ -6606,7 +6697,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or dataset.endswith("/..")
         or "/./" in dataset
         or "/../" in dataset
-        or any(char in "'@#`%$^&*+=|,\\" or char == '"' or (char.isspace() and char != " ") for char in dataset)
+        or any(char in "'~@#`%$^&*+=|,\\" or char == '"' or (char.isspace() and char != " ") for char in dataset)
         or not dataset[0].isalpha()
     ):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")

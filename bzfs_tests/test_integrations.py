@@ -312,6 +312,7 @@ class BZFSTestCase(ParametrizedTestCase):
         spawn_process_per_job: bool = None,
         include_snapshot_plan_excludes_outdated_snapshots: bool = None,
         no_cache_snapshots: bool = True,
+        create_src_snapshots_enable_snapshots_changed_cache: bool = True,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -424,8 +425,10 @@ class BZFSTestCase(ParametrizedTestCase):
             args = args + ["--skip-on-error=" + skip_on_error]
 
         args = args + ["--exclude-envvar-regex=EDITOR"]
-        args = args + ["--create-src-snapshots-enable-snapshots-changed-cache"]
-        args += ["--no-cache-snapshots"] if no_cache_snapshots else []
+        if create_src_snapshots_enable_snapshots_changed_cache:
+            args += ["--create-src-snapshots-enable-snapshots-changed-cache"]
+        if no_cache_snapshots:
+            args += ["--no-cache-snapshots"]
 
         if use_jobrunner:
             bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
@@ -696,6 +699,12 @@ class AdhocTestCase(BZFSTestCase):
 
     def test_last_replicated_cache_with_sleep_longer_than_threshold(self):
         LocalTestCase(param=self.param).test_last_replicated_cache_with_sleep_longer_than_threshold()
+
+    def test_cache_flat_simple(self):
+        LocalTestCase(param=self.param).test_cache_flat_simple()
+
+    def test_cache_flat_simple_subset(self):
+        LocalTestCase(param=self.param).test_cache_flat_simple_subset()
 
 
 #############################################################################
@@ -974,43 +983,52 @@ class LocalTestCase(BZFSTestCase):
                     )
 
     def test_basic_snapshotting_recursive_simple(self):
-        self.setup_basic()
-        create_filesystem(src_root_dataset, "boo")
-        create_filesystem(src_root_dataset, "xoo")
-        destroy(dst_root_dataset, recursive=True)
-        n = 3
-        self.assertSnapshots(src_root_dataset, n, "s")
-        self.assertSnapshots(src_root_dataset + "/boo", 0)
-        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
-        for i in range(0, 2):
-            with stop_on_failure_subtest(i=i):
-                self.run_bzfs(
-                    src_root_dataset,
-                    bzfs.dummy_dataset,
-                    "--recursive",
-                    "--skip-replication",
-                    "--create-src-snapshots",
-                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"yearly": 1}}}),
-                    "--create-src-snapshots-timeformat=",
-                    "--yearly_month=6",
-                    dry_run=(i == 0),
-                )
-                self.assertFalse(dataset_exists(dst_root_dataset))
-                if i == 0:
-                    self.assertEqual(n, len(snapshots(src_root_dataset)))
-                    self.assertEqual(0, len(snapshots(src_root_dataset + "/boo")))
-                    self.assertEqual(0, len(snapshots(src_root_dataset + "/xoo")))
-                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
-                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
-                    self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
-                else:
-                    self.assertEqual(n + 1, len(snapshots(src_root_dataset)))
-                    self.assertEqual(1, len(snapshots(src_root_dataset + "/boo")))
-                    self.assertEqual(1, len(snapshots(src_root_dataset + "/xoo")))
-                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo")))
-                    self.assertEqual(n + 1, len(snapshots(src_root_dataset + "/foo/a")))
-                    self.assertEqual(1, len(snapshots(src_root_dataset + "/foo/b")))
-                    self.assert_snapshotting_generates_identical_createtxg()
+        q = 0
+        for m in range(0, 2):
+            for k in range(0, 2):
+                for j in range(0, 2):
+                    for i in range(0, 2):
+                        self.tearDownAndSetup()
+                        self.setup_basic()
+                        create_filesystem(src_root_dataset, "boo")
+                        create_filesystem(src_root_dataset, "xoo")
+                        n = 3
+                        self.assertSnapshots(src_root_dataset, n, "s")
+                        self.assertSnapshots(src_root_dataset + "/boo", 0)
+                        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+                        for b in range(0, 3):
+                            with stop_on_failure_subtest(i=q):
+                                q += 1
+                                self.run_bzfs(
+                                    src_root_dataset,
+                                    dst_root_dataset,
+                                    "--recursive",
+                                    "--create-src-snapshots",
+                                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"yearly": 1}}}),
+                                    "--create-src-snapshots-timeformat=",
+                                    "--yearly_month=6",
+                                    *(["--skip-replication"] if m == 0 else []),
+                                    dry_run=(i == 0),
+                                    create_src_snapshots_enable_snapshots_changed_cache=(j > 0),
+                                    no_cache_snapshots=(k == 0),
+                                )
+                                if i == 0:
+                                    self.assertEqual(n, len(snapshots(src_root_dataset)))
+                                    self.assertEqual(0, len(snapshots(src_root_dataset + "/boo")))
+                                    self.assertEqual(0, len(snapshots(src_root_dataset + "/xoo")))
+                                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo")))
+                                    self.assertEqual(n, len(snapshots(src_root_dataset + "/foo/a")))
+                                    self.assertEqual(0, len(snapshots(src_root_dataset + "/foo/b")))
+                                else:
+                                    lst = [src_root_dataset, dst_root_dataset] if m > 0 else [src_root_dataset]
+                                    for dataset in lst:
+                                        self.assertEqual(n + 1, len(snapshots(dataset)))
+                                        self.assertEqual(1, len(snapshots(dataset + "/boo")))
+                                        self.assertEqual(1, len(snapshots(dataset + "/xoo")))
+                                        self.assertEqual(n + 1, len(snapshots(dataset + "/foo")))
+                                        self.assertEqual(n + 1, len(snapshots(dataset + "/foo/a")))
+                                        self.assertEqual(1, len(snapshots(dataset + "/foo/b")))
+                                    self.assert_snapshotting_generates_identical_createtxg()
 
     def test_basic_snapshotting_recursive_with_skip_parent(self):
         self.setup_basic()
@@ -4616,6 +4634,106 @@ class LocalTestCase(BZFSTestCase):
             self.skipTest("ssh is only required in nonlocal mode")
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs.disable_prg, expected_status=die_status)
 
+    def test_cache_flat_simple(self):
+        if not is_cache_snapshots_enabled():
+            self.skipTest("Cache not supported")
+
+        delay_secs = 1.1 + 0.1
+        create_filesystem(src_root_dataset, "foo1")
+        take_snapshot(src_root_dataset + "/foo1", fix("s1"))
+
+        job = self.run_bzfs(
+            src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False, dry_run=True
+        )
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo1"))
+        self.assertEqual(0, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assertEqual(0, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assertEqual(1, job.num_cache_hits)
+        self.assertEqual(0, job.num_cache_misses)
+
+        create_filesystem(src_root_dataset, "foo2")
+        take_snapshot(src_root_dataset + "/foo2", fix("s1"))
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assertEqual(1, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assertEqual(2, job.num_cache_hits)
+        self.assertEqual(0, job.num_cache_misses)
+
+        take_snapshot(src_root_dataset + "/foo1", fix("s2"))
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo1", 2, "s")
+        self.assertEqual(1, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertEqual(2, job.num_cache_hits)
+        self.assertEqual(0, job.num_cache_misses)
+
+        destroy_snapshots(dst_root_dataset + "/foo1", snapshots(dst_root_dataset + "/foo1")[1:])
+        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo1", 2, "s")
+        self.assertEqual(1, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertEqual(2, job.num_cache_hits)
+        self.assertEqual(0, job.num_cache_misses)
+
+    def test_cache_flat_simple_subset(self):
+        if not is_cache_snapshots_enabled():
+            self.skipTest("Cache not supported")
+
+        delay_secs = 1.1 + 0.1
+        create_filesystem(src_root_dataset, "foo1")
+        take_snapshot(src_root_dataset + "/foo1", fix("s1"))
+
+        create_filesystem(src_root_dataset, "foo2")
+        take_snapshot(src_root_dataset + "/foo2", fix("s1"))
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assertEqual(0, job.num_cache_hits)
+        self.assertEqual(2, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertEqual(2, job.num_cache_hits)
+        self.assertEqual(0, job.num_cache_misses)
+
+        destroy(dst_root_dataset + "/foo2", recursive=True)
+        self.assertFalse(dataset_exists(dst_root_dataset + "/foo2"))
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assertEqual(1, job.num_cache_hits)
+        self.assertEqual(1, job.num_cache_misses)
+
+        time.sleep(delay_secs)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        self.assertEqual(2, job.num_cache_hits)
+        self.assertEqual(0, job.num_cache_misses)
+
     def test_jobrunner_flat_simple(self):
         def run_jobrunner(*args, **kwargs):
             self.run_bzfs(
@@ -5262,6 +5380,10 @@ def is_zpool_recv_resume_feature_enabled_or_active() -> bool:
     return is_zpool_feature_enabled_or_active("src", "feature@extensible_dataset") and is_zfs_at_least_2_1_0()
 
 
+def is_cache_snapshots_enabled() -> bool:
+    return is_zpool_feature_enabled_or_active("src", "feature@extensible_dataset") and is_zfs_at_least_2_2_0()
+
+
 def fix(s: str) -> str:
     """Generate names containing leading and trailing whitespace, forbidden characters, etc."""
     return afix + s + afix
@@ -5300,6 +5422,15 @@ def is_zfs_at_least_2_3_0() -> bool:
     if ver is None:
         return False
     return bzfs.is_version_at_least(ver, "2.3.0")
+
+
+def is_zfs_at_least_2_2_0() -> bool:
+    if is_solaris_zfs():
+        return False
+    ver = zfs_version()
+    if ver is None:
+        return False
+    return bzfs.is_version_at_least(ver, "2.2.0")
 
 
 def is_zfs_at_least_2_1_0() -> bool:
