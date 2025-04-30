@@ -95,7 +95,7 @@ lines:
 
 * crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --replicate=pull --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --replicate --prune-dst-snapshots`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --monitor-dst-snapshots`
 
@@ -124,7 +124,7 @@ single destination host, along these lines:
 
 * crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar" --dst-host="$(hostname)" --replicate=pull`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar" --dst-host="$(hostname)" --replicate`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar" --dst-host="$(hostname)" --prune-dst-snapshots`
 
@@ -143,10 +143,10 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Take snapshots on src as necessary. This command should be called by a program (or cron job) running on each "
              "src host.\n\n")
     parser.add_argument(
-        "--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?",
-        help="Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push mode "
-             "(experimental). For pull mode, this command should be called by a program (or cron job) running on each dst "
-             "host; for push mode, on the src host.\n\n")
+        "--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?", metavar="",
+        help="Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push mode or "
+             "pull-push mode. For pull mode, this command should be called by a program (or cron job) running on each dst "
+             "host; for push mode, on the src host; for pull-push mode on a third party host.\n\n")
     parser.add_argument(
         "--prune-src-snapshots", action="store_true",
         help="Prune snapshots on src as necessary. This command should be called by a program (or cron job) running on each "
@@ -174,7 +174,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Hostname of localhost. Default is the hostname without the domain name, querying the Operating System.\n\n")
     parser.add_argument(
         "--src-hosts", default=None, metavar="LIST_STRING",
-        help="Hostnames of sources. Used by destination hosts if replicating in pull mode.\n\n")
+        help="Hostnames of sources. Used by destination hosts if replicating in pull mode and pull-push mode.\n\n")
     parser.add_argument(
         "--src-host", default=None, action="append", metavar="STRING",
         help="For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the --src-hosts that are "
@@ -292,10 +292,10 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "the given snapshot name pattern.\n\n")
     parser.add_argument(
         "--src-user", default="", metavar="STRING",
-        help="SSH username on src hosts. Used if replicating in pull mode. Example: 'alice'\n\n")
+        help="SSH username on src hosts. Used in pull mode and pull-push mode. Example: 'alice'\n\n")
     parser.add_argument(
         "--dst-user", default="", metavar="STRING",
-        help="SSH username on dst hosts. Used if replicating in push mode. Example: 'root'\n\n")
+        help="SSH username on dst hosts. Used in push mode and pull-push mode. Example: 'root'\n\n")
     parser.add_argument(
         "--job-id", default=None, metavar="STRING",
         help="The job identifier that shall be included in the log file name suffix. Default is a hex UUID. "
@@ -495,12 +495,10 @@ class Job:
                 subjob_name += "/create_src_snapshots"
                 subjobs[subjob_name] = ["bzfs"] + opts
 
-            if args.replicate == "pull" or args.replicate == "push":  # push mode is an experimental feature
+            if args.replicate:
                 j = 0
                 for dst_hostname, targets in dst_hosts.items():
-                    opts = self.replication_opts(
-                        dst_snapshot_plan, args.replicate, set(targets), src_host, dst_hostname, jobid + npad()
-                    )
+                    opts = self.replication_opts(dst_snapshot_plan, set(targets), src_host, dst_hostname, jobid + npad())
                     if len(opts) > 0:
                         opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                         opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
@@ -514,7 +512,7 @@ class Job:
                             opts += [src, dst]
                         if len(opts) > old_len_opts:
                             daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                            subjobs[subjob_name + f"/{jpad(j)}{args.replicate}"] = ["bzfs"] + daemon_opts + opts
+                            subjobs[subjob_name + f"/{jpad(j)}replicate"] = ["bzfs"] + daemon_opts + opts
                             j += 1
                 subjob_name = update_subjob_name(args.replicate)
 
@@ -631,10 +629,10 @@ class Job:
         log.info("Succeeded. Bye!")
 
     def replication_opts(
-        self, dst_snapshot_plan: Dict, kind: str, targets: Set[str], src_hostname: str, dst_hostname: str, jobid: str
+        self, dst_snapshot_plan: Dict, targets: Set[str], src_hostname: str, dst_hostname: str, jobid: str
     ) -> List[str]:
         log = self.log
-        log.debug("%s", f"Replicating targets {sorted(targets)} in {kind} mode from {src_hostname} to {dst_hostname} ...")
+        log.debug("%s", f"Replicating targets {sorted(targets)} from {src_hostname} to {dst_hostname} ...")
         include_snapshot_plan = {  # only replicate targets that belong to the destination host and are relevant
             org: {
                 target: {
@@ -655,7 +653,7 @@ class Job:
         opts = []
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
-            opts += [f"--log-file-prefix={prog_name}{sep}{kind}{sep}"]
+            opts += [f"--log-file-prefix={prog_name}{sep}replicate{sep}"]
             opts += [f"--log-file-suffix={sep}{jobid}{log_suffix(src_hostname, dst_hostname)}{sep}"]
         return opts
 

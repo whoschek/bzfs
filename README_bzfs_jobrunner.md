@@ -76,8 +76,8 @@ systemd timers or Monit entries or similar), along these lines:
 
 * crontab on destination hosts:
 
-`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)"
---replicate=pull --prune-dst-snapshots`
+`* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)" --replicate
+--prune-dst-snapshots`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --dst-host="$(hostname)"
 --monitor-dst-snapshots`
@@ -114,7 +114,7 @@ lines:
 * crontab on destination hosts:
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
---dst-host="$(hostname)" --replicate=pull`
+--dst-host="$(hostname)" --replicate`
 
 `* * * * * testuser /etc/bzfs/bzfs_job_example.py --src-host="bar"
 --dst-host="$(hostname)" --prune-dst-snapshots`
@@ -139,8 +139,7 @@ daemons but this is benign as these new processes immediately exit with a messag
 <!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
-usage: bzfs_jobrunner [-h] [--create-src-snapshots]
-                      [--replicate [{pull,push}]]
+usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
                       [--prune-dst-snapshots]
                       [--monitor-src-snapshots]
@@ -181,11 +180,12 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 <div id="--replicate"></div>
 
-**--replicate** *[{pull,push}]*
+**--replicate** *[]*
 
 *  Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push
-    mode (experimental). For pull mode, this command should be called by a program (or cron job)
-    running on each dst host; for push mode, on the src host.
+    mode or pull-push mode. For pull mode, this command should be called by a program (or cron
+    job) running on each dst host; for push mode, on the src host; for pull-push mode on a third
+    party host.
 
 <!-- -->
 
@@ -247,7 +247,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--src-hosts** *LIST_STRING*
 
-*  Hostnames of sources. Used by destination hosts if replicating in pull mode.
+*  Hostnames of sources. Used by destination hosts if replicating in pull mode and pull-push
+    mode.
 
 <!-- -->
 
@@ -405,7 +406,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--src-user** *STRING*
 
-*  SSH username on src hosts. Used if replicating in pull mode. Example: 'alice'
+*  SSH username on src hosts. Used in pull mode and pull-push mode. Example: 'alice'
 
 <!-- -->
 
@@ -413,7 +414,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
 
 **--dst-user** *STRING*
 
-*  SSH username on dst hosts. Used if replicating in push mode. Example: 'root'
+*  SSH username on dst hosts. Used in push mode and pull-push mode. Example: 'root'
 
 <!-- -->
 

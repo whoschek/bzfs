@@ -19,7 +19,7 @@
 # your local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets.
 # Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH. Run the final script like so:
 #
-# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate=pull --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
+# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
 #
 # Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or
 # every hour, or every day, or similar.
@@ -237,8 +237,8 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--ssh-src-port=2222"]  # for hpnssh
 # extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
 # extra_args += ["--localhost=bak-us-west-1"]
-# extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode
-# extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode
+# extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode and pull-push mode
+# extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode and pull-push mode
 # extra_args += ["--include-dataset", "foo", "zoo"]  # see bzfs --help
 # extra_args += ["--exclude-dataset", "bar", "baz"]
 # extra_args += ["--include-dataset-regex", "foo.*", "zoo.*"]
