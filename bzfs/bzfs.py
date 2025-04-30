@@ -433,7 +433,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots in parallel across datasets and serially within a dataset. All child datasets of a dataset "
              "may be processed in parallel. For consistency, processing of a dataset only starts after processing of "
              "all its ancestor datasets has completed. Further, when a thread is ready to start processing another "
-             "dataset, it chooses the next dataset wrt. case-sensitive sort order from the datasets that are "
+             "dataset, it chooses the next dataset wrt. lexicographical sort order from the datasets that are "
              "currently available for start of processing. Initially, only the roots of the selected dataset subtrees "
              "are available for start of processing. The degree of parallelism is configurable with the --threads "
              "option (see below).\n\n")
@@ -619,8 +619,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         },
     }
     parser.add_argument(
-        "--include-snapshot-plan", action=IncludeSnapshotPlanAction, default=None,
-        metavar="DICT_STRING",
+        "--include-snapshot-plan", action=IncludeSnapshotPlanAction, default=None, metavar="DICT_STRING",
         help="Replication periods to be used if replicating snapshots within the selected destination datasets. "
              "Has the same format as --create-src-snapshots-plan and --delete-dst-snapshots-except-plan (see below). "
              "Snapshots that do not match a period will not be replicated. To avoid unexpected surprises, make sure to "
@@ -667,7 +666,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered "
              "non-periodic and is thus created immediately regardless of the creation time of any existing snapshot.\n\n"
              "The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command "
-             "line, using case-sensitive sort order, and using 'zfs snapshot -r' to the extent that this is compatible "
+             "line, using lexicographical sort order, and using 'zfs snapshot -r' to the extent that this is compatible "
              "with the actual results of the schedule and the actual results of the --{include|exclude}-dataset* pruning "
              "policy. The snapshots of all datasets that fit "
              "within the same single 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction group, and "
@@ -880,8 +879,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --recursive "
              "--delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'`\n\n")
     parser.add_argument(
-        "--delete-dst-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots",
-        nargs="?",
+        "--delete-dst-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots", nargs="?",
         help="Do nothing if the --delete-dst-snapshots option is missing. Otherwise, after successful "
              "replication, and successful --delete-dst-datasets step, if any, delete existing destination snapshots "
              "whose GUID does not exist within the source dataset (which can be an empty dummy dataset!) if the "
@@ -2572,7 +2570,7 @@ class Job:
 
         # Optionally, atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
         # The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
-        # using case-sensitive sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
+        # using lexicographical sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
         # --{include|exclude}-dataset* pruning policy. The snapshots of all datasets that fit within the same single
         # 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction group, and correspondingly have
         # identical 'createtxg' ZFS property (but not necessarily identical 'creation' ZFS time property as ZFS actually
@@ -4920,7 +4918,7 @@ class Job:
         and parallel execution. Assumes that the input dataset list is sorted. All children of a dataset may be
         processed in parallel. For consistency (even during parallel dataset replication/deletion), processing of a
         dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is
-        ready to start processing another dataset, it chooses the "smallest" dataset wrt. case-sensitive sort order
+        ready to start processing another dataset, it chooses the "smallest" dataset wrt. lexicographical sort order
         from the datasets that are currently available for start of processing. Initially, only the roots of the
         selected dataset subtrees are available for start of processing."""
         assert not self.is_test_mode or datasets == sorted(datasets), "List is not sorted"

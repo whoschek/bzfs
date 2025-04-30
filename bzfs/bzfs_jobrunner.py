@@ -320,7 +320,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--spawn_process_per_job", action="store_true",
         help=argparse.SUPPRESS)
     parser.add_argument(
-        "--jobrunner-dryrun",  action="store_true",
+        "--jobrunner-dryrun", action="store_true",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
              "for real (optional). This option treats both the ZFS source and destination as read-only. Can also be used to "
              "check if the configuration options are valid.\n\n")
