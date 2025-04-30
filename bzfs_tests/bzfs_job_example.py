@@ -36,9 +36,11 @@ Jobconfig script that generates deployment specific parameters to manage periodi
 pruning, and monitoring, across N source hosts and M destination hosts, using the same single shared jobconfig script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service, or low latency replication
 from a primary to a secondary, or backup to removable drives, etc.
-This script should be periodically executed on each source host and each destination host, e.g. by a cron job (or similar).
-This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of
-the actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
+Typically, this script should be periodically executed on each source host and each destination host, e.g. by a cron job
+(or similar). However, you can also run it on a single third-party host and have that talk to all source hosts and
+destination hosts, which is convenient for basic use cases and for testing. This script submits parameters plus all unknown
+CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the actual work to the `bzfs` CLI.
+Uses an "Infrastructure as Code" approach.
 """
 )
 known_args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`
@@ -62,14 +64,14 @@ root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 
 recursive = True
 
 
-# List of one or more source hostnames. Each of the M destination hosts pulls replicas from (the same set of) N source hosts:
+# List of one or more source hostnames. Each of the M destination hosts receives replicas from (the same set of) N source hosts:
 # src_hosts = ["prod001", "prod002", "prod999"]
 src_hosts = ["nas"]
 
 
 # Dictionary that maps each destination hostname to a list of zero or more logical replication target names (the infix
 # portion of a snapshot name).
-# A destination host will 'pull' replicate snapshots for all targets that map to that destination host. Removing a mapping
+# A destination host will receive replicas of snapshots for all targets that map to that destination host. Removing a mapping
 # can be used to temporarily suspend replication to a given destination host.
 # dst_hosts = {
 #     "nas": ["onsite"],

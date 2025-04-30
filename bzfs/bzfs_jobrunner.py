@@ -58,7 +58,7 @@ This program is a convenience wrapper around [bzfs](README.md) that simplifies p
 pruning, and monitoring, across N source hosts and M destination hosts, using a single shared
 [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
-hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts. It also
+hosts is located in a separate geographic region and receives replicas from (the same set of) N source hosts. It also
 simplifies low latency replication from a primary to a secondary, or backup to removable drives, etc.
 
 This program can be used to efficiently replicate ...
@@ -72,7 +72,9 @@ c) from multiple source hosts to a single destination host (pull or push or pull
 d) from N source hosts to M destination hosts (pull or push or pull-push mode, N can be large, M=2 or M=3 are typical
 geo-replication factors)
 
-Typically, a cron job on each source host runs `{prog_name}` periodically to create new snapshots (via
+You can run this program on a single third-party host and have that talk to all source hosts and destination hosts, which is
+convenient for basic use cases and for testing.
+However, typically, a cron job on each source host runs `{prog_name}` periodically to create new snapshots (via
 --create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and
 --prune-src-bookmarks), whereas another cron job on each destination host runs `{prog_name}` periodically to prune
 outdated destination snapshots (via --prune-dst-snapshots), and to replicate the recently created snapshots from the source
@@ -108,8 +110,8 @@ is proportional to the frequency with which snapshots are created. Consider usin
 filters to limit the selected datasets only to those that require this level of frequency.
 
 In addition, use the `--daemon-*` options to reduce startup overhead, in combination with splitting the crontab entry (or
-better: high frequency systemd timer) into multiple processes, using pull replication mode, from a single source host to a
-single destination host, along these lines:
+better: high frequency systemd timer) into multiple processes, from a single source host to a single destination host,
+along these lines:
 
 * crontab on source hosts:
 
@@ -140,33 +142,33 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # commands:
     parser.add_argument(
         "--create-src-snapshots", action="store_true",
-        help="Take snapshots on src as necessary. This command should be called by a program (or cron job) running on each "
-             "src host.\n\n")
+        help="Take snapshots on the selected source hosts as necessary. Typically, this command should be called by a "
+             "program (or cron job) running on each src host.\n\n")
     parser.add_argument(
         "--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?", metavar="",
-        help="Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push mode or "
-             "pull-push mode. For pull mode, this command should be called by a program (or cron job) running on each dst "
-             "host; for push mode, on the src host; for pull-push mode on a third party host.\n\n")
+        help="Replicate snapshots from the selected source hosts to the selected destinations hosts as necessary. For pull "
+             "mode (recommended), this command should be called by a program (or cron job) running on each dst "
+             "host; for push mode, on the src host; for pull-push mode on a third-party host.\n\n")
     parser.add_argument(
         "--prune-src-snapshots", action="store_true",
-        help="Prune snapshots on src as necessary. This command should be called by a program (or cron job) running on each "
-             "src host.\n\n")
+        help="Prune snapshots on the selected source hosts as necessary. Typically, this command should be called by a "
+             "program (or cron job) running on each src host.\n\n")
     parser.add_argument(
         "--prune-src-bookmarks", action="store_true",
-        help="Prune bookmarks on src as necessary. This command should be called by a program (or cron job) running on each "
-             "src host.\n\n")
+        help="Prune bookmarks on the selected source hosts as necessary. Typically, this command should be called by a "
+             "program (or cron job) running on each src host.\n\n")
     parser.add_argument(
         "--prune-dst-snapshots", action="store_true",
-        help="Prune snapshots on dst as necessary. This command should be called by a program (or cron job) running on each "
-             "dst host.\n\n")
+        help="Prune snapshots on the selected destination hosts as necessary. Typically, this command should be called by a "
+             "program (or cron job) running on each dst host.\n\n")
     parser.add_argument(
         "--monitor-src-snapshots", action="store_true",
-        help="Alert the user if src snapshots are too old, using --monitor-snapshot-plan (see below). This command should "
-             "be called by a program (or cron job) running on each src host.\n\n")
+        help="Alert the user if snapshots on the selected source hosts are too old, using --monitor-snapshot-plan (see "
+             "below). Typically, this command should be called by a program (or cron job) running on each src host.\n\n")
     parser.add_argument(
         "--monitor-dst-snapshots", action="store_true",
-        help="Alert the user if dst snapshots are too old, using --monitor-snapshot-plan (see below). This command should "
-             "be called by a program (or cron job) running on each dst host.\n\n")
+        help="Alert the user if snapshots on the selected destination hosts are too old, using --monitor-snapshot-plan (see "
+             "below). Typically, this command should be called by a program (or cron job) running on each dst host.\n\n")
 
     # options:
     parser.add_argument(
@@ -174,7 +176,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Hostname of localhost. Default is the hostname without the domain name, querying the Operating System.\n\n")
     parser.add_argument(
         "--src-hosts", default=None, metavar="LIST_STRING",
-        help="Hostnames of sources. Used by destination hosts if replicating in pull mode and pull-push mode.\n\n")
+        help="Hostnames of the sources to operate on.\n\n")
     parser.add_argument(
         "--src-host", default=None, action="append", metavar="STRING",
         help="For subsetting --src-hosts; Can be specified multiple times; Indicates to only use the --src-hosts that are "
@@ -187,10 +189,10 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "(the infix portion of snapshot name). "
              f"Example: `{format_dict(dst_hosts_example)}`.\n\n"
              "With this, given a snapshot name, we can find the destination hostname to which the snapshot shall be "
-             "replicated. Also, given a snapshot name and its own name, a destination host can determine if it shall 'pull' "
+             "replicated. Also, given a snapshot name and its own name, a destination host can determine if it shall "
              "replicate the given snapshot from the source host, or if the snapshot is intended for another destination "
-             f"host, in which case it skips the snapshot. A destination host running {prog_name} will 'pull' snapshots for "
-             "all targets that map to that destination host.\n\n")
+             f"host, in which case it skips the snapshot. A destination host running {prog_name} will receive replicas of "
+             "snapshots for all targets that map to that destination host.\n\n")
     parser.add_argument(
         "--dst-host", default=None, action="append", metavar="STRING",
         help="For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the --dst-hosts keys that "

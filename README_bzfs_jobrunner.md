@@ -35,9 +35,9 @@ This program is a convenience wrapper around [bzfs](README.md) that simplifies p
 snapshot creation, replication, pruning, and monitoring, across N source hosts and M destination
 hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For example,
 this simplifies the deployment of an efficient geo-replicated backup service where each of the M
-destination hosts is located in a separate geographic region and pulls replicas from (the same set
-of) N source hosts. It also simplifies low latency replication from a primary to a secondary, or
-backup to removable drives, etc.
+destination hosts is located in a separate geographic region and receives replicas from (the same
+set of) N source hosts. It also simplifies low latency replication from a primary to a secondary,
+or backup to removable drives, etc.
 
 This program can be used to efficiently replicate ...
 
@@ -51,10 +51,12 @@ c) from multiple source hosts to a single destination host (pull or push or pull
 d) from N source hosts to M destination hosts (pull or push or pull-push mode, N can be large,
 M=2 or M=3 are typical geo-replication factors)
 
-Typically, a cron job on each source host runs `bzfs_jobrunner` periodically to create new
-snapshots (via --create-src-snapshots) and prune outdated snapshots and bookmarks on the source
-(via --prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on each
-destination host runs `bzfs_jobrunner` periodically to prune outdated destination snapshots (via
+You can run this program on a single third-party host and have that talk to all source hosts and
+destination hosts, which is convenient for basic use cases and for testing. However, typically, a
+cron job on each source host runs `bzfs_jobrunner` periodically to create new snapshots (via
+--create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via
+--prune-src-snapshots and --prune-src-bookmarks), whereas another cron job on each destination
+host runs `bzfs_jobrunner` periodically to prune outdated destination snapshots (via
 --prune-dst-snapshots), and to replicate the recently created snapshots from the source to the
 destination (via --replicate). Yet another cron job on each source and each destination runs
 `bzfs_jobrunner` periodically to alert the user if the latest or oldest snapshot is somehow too
@@ -94,8 +96,7 @@ this level of frequency.
 
 In addition, use the `--daemon-*` options to reduce startup overhead, in combination with
 splitting the crontab entry (or better: high frequency systemd timer) into multiple processes,
-using pull replication mode, from a single source host to a single destination host, along these
-lines:
+from a single source host to a single destination host, along these lines:
 
 * crontab on source hosts:
 
@@ -173,8 +174,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--create-src-snapshots**
 
-*  Take snapshots on src as necessary. This command should be called by a program (or cron job)
-    running on each src host.
+*  Take snapshots on the selected source hosts as necessary. Typically, this command should be
+    called by a program (or cron job) running on each src host.
 
 <!-- -->
 
@@ -182,10 +183,10 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--replicate** *[]*
 
-*  Replicate snapshots from src to dst as necessary, either in pull mode (recommended) or push
-    mode or pull-push mode. For pull mode, this command should be called by a program (or cron
-    job) running on each dst host; for push mode, on the src host; for pull-push mode on a third
-    party host.
+*  Replicate snapshots from the selected source hosts to the selected destinations hosts as
+    necessary. For pull mode (recommended), this command should be called by a program (or cron
+    job) running on each dst host; for push mode, on the src host; for pull-push mode on a
+    third-party host.
 
 <!-- -->
 
@@ -193,8 +194,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--prune-src-snapshots**
 
-*  Prune snapshots on src as necessary. This command should be called by a program (or cron job)
-    running on each src host.
+*  Prune snapshots on the selected source hosts as necessary. Typically, this command should be
+    called by a program (or cron job) running on each src host.
 
 <!-- -->
 
@@ -202,8 +203,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--prune-src-bookmarks**
 
-*  Prune bookmarks on src as necessary. This command should be called by a program (or cron job)
-    running on each src host.
+*  Prune bookmarks on the selected source hosts as necessary. Typically, this command should be
+    called by a program (or cron job) running on each src host.
 
 <!-- -->
 
@@ -211,8 +212,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--prune-dst-snapshots**
 
-*  Prune snapshots on dst as necessary. This command should be called by a program (or cron job)
-    running on each dst host.
+*  Prune snapshots on the selected destination hosts as necessary. Typically, this command should
+    be called by a program (or cron job) running on each dst host.
 
 <!-- -->
 
@@ -220,8 +221,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--monitor-src-snapshots**
 
-*  Alert the user if src snapshots are too old, using --monitor-snapshot-plan (see below). This
-    command should be called by a program (or cron job) running on each src host.
+*  Alert the user if snapshots on the selected source hosts are too old, using
+    --monitor-snapshot-plan (see below). Typically, this command should be called by a program
+    (or cron job) running on each src host.
 
 <!-- -->
 
@@ -229,8 +231,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--monitor-dst-snapshots**
 
-*  Alert the user if dst snapshots are too old, using --monitor-snapshot-plan (see below). This
-    command should be called by a program (or cron job) running on each dst host.
+*  Alert the user if snapshots on the selected destination hosts are too old, using
+    --monitor-snapshot-plan (see below). Typically, this command should be called by a program
+    (or cron job) running on each dst host.
 
 <!-- -->
 
@@ -247,8 +250,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--src-hosts** *LIST_STRING*
 
-*  Hostnames of sources. Used by destination hosts if replicating in pull mode and pull-push
-    mode.
+*  Hostnames of the sources to operate on.
 
 <!-- -->
 
@@ -272,10 +274,10 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
     With this, given a snapshot name, we can find the destination hostname to which the snapshot
     shall be replicated. Also, given a snapshot name and its own name, a destination host can
-    determine if it shall 'pull' replicate the given snapshot from the source host, or if the
-    snapshot is intended for another destination host, in which case it skips the snapshot. A
-    destination host running bzfs_jobrunner will 'pull' snapshots for all targets that map to
-    that destination host.
+    determine if it shall replicate the given snapshot from the source host, or if the snapshot is
+    intended for another destination host, in which case it skips the snapshot. A destination host
+    running bzfs_jobrunner will receive replicas of snapshots for all targets that map to that
+    destination host.
 
 <!-- -->
 
