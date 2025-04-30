@@ -2030,9 +2030,10 @@ usage: bzfs [-h] [--recursive]
 **--compression-program** *STRING*
 
 *  The name or path to the 'zstd' executable (optional). Default is 'zstd'. Examples:
-    'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. Use '-' to disable the use of this program.
-    The use is auto-disabled if data is transferred locally instead of via the network. This
-    option is about transparent compression-on-the-wire, not about compression-at-rest.
+    'lz4', 'pzstd', 'pigz', 'gzip', '/opt/bin/zstd'. Use '-' to disable the use of
+    this program. The use is auto-disabled if data is transferred locally instead of via the
+    network. This option is about transparent compression-on-the-wire, not about
+    compression-at-rest.
 
 <!-- -->
 

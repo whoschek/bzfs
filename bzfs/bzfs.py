@@ -1278,7 +1278,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
     parser.add_argument(
         "--compression-program", default="zstd", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("zstd") + "Examples: 'lz4', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg.rstrip() + " The use is "
+        help=hlp("zstd") + "Examples: 'lz4', 'pzstd', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg.rstrip() + " The use is "
                            "auto-disabled if data is transferred locally instead of via the network. This "
                            "option is about transparent compression-on-the-wire, not about compression-at-rest.\n\n")
     parser.add_argument(
