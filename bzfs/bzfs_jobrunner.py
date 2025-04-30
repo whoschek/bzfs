@@ -42,6 +42,8 @@ from subprocess import DEVNULL, PIPE
 from typing import Dict, List, Optional, Set, Tuple, Iterable
 
 prog_name = "bzfs_jobrunner"
+src_magic_substitution_token = "^SRC_HOST"
+dst_magic_substitution_token = "^DST_HOST"
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -205,7 +207,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "nas": "tank2/bak",
         "bak-us-west-1": "backups/bak001",
         "bak-eu-west-1": "backups/bak999",
-        "archive": "archives/zoo/^SRC_HOST",
+        "archive": f"archives/zoo/{src_magic_substitution_token}",
         "hotspare": "",
     }
     parser.add_argument(
@@ -215,9 +217,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "destination host. For backup use cases, this is the backup ZFS pool or a ZFS dataset path within that pool, "
              "whereas for cloning, master slave replication, or replication from a primary to a secondary, this can also be "
              "the empty string.\n\n"
-             "`^SRC_HOST` and `^DST_HOST` are optional placeholders that will be auto-replaced at runtime with the actual "
-             "hostname. This can be used to force the use of a separate destination root dataset per source host or per "
-             "destination host.\n\n"
+             f"`{src_magic_substitution_token}` and `{dst_magic_substitution_token}` are optional magic substitution tokens "
+             "that will be auto-replaced at runtime with the actual hostname. This can be used to force the use of a "
+             "separate destination root dataset per source host or per destination host.\n\n"
              f"Example: `{format_dict(dst_root_datasets_example)}`\n\n")
     src_snapshot_plan_example = {
         "prod": {
@@ -431,6 +433,10 @@ class Job:
             dst_root_datasets.keys(), retain_dst_targets.keys(), "--dst-root-dataset.keys", "--retain-dst-targets.keys"
         )
         validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
+        assert not (
+            len(src_hosts) > 1
+            and any(src_magic_substitution_token not in dst_root_datasets[dst_host] for dst_host in dst_hosts)
+        ), "Multiple sources must not write to the same destination dataset"
         jobid = args.job_id if args.job_id is not None else args.jobid  # --jobid is deprecated
         jobid = sanitize(jobid) if jobid else uuid.uuid1().hex
         workers, workers_is_percent = args.workers
@@ -470,8 +476,8 @@ class Job:
         def resolve_dst_dataset(dst_hostname: str, dst_dataset: str) -> str:
             root_dataset = dst_root_datasets.get(dst_hostname)
             assert root_dataset is not None, f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
-            root_dataset = root_dataset.replace("^SRC_HOST", src_host)
-            root_dataset = root_dataset.replace("^DST_HOST", dst_hostname)
+            root_dataset = root_dataset.replace(src_magic_substitution_token, src_host)
+            root_dataset = root_dataset.replace(dst_magic_substitution_token, dst_hostname)
             dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
             return resolve_dataset(dst_hostname, dst_dataset, is_src=False)
 

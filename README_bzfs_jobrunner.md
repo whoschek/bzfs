@@ -313,9 +313,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots]
     or a ZFS dataset path within that pool, whereas for cloning, master slave replication, or
     replication from a primary to a secondary, this can also be the empty string.
 
-    `^SRC_HOST` and `^DST_HOST` are optional placeholders that will be auto-replaced at
-    runtime with the actual hostname. This can be used to force the use of a separate destination
-    root dataset per source host or per destination host.
+    `^SRC_HOST` and `^DST_HOST` are optional magic substitution tokens that will be
+    auto-replaced at runtime with the actual hostname. This can be used to force the use of a
+    separate destination root dataset per source host or per destination host.
 
     Example: `"{'nas': 'tank2/bak', 'bak-us-west-1': 'backups/bak001',
     'bak-eu-west-1': 'backups/bak999', 'archive': 'archives/zoo/^SRC_HOST', 'hotspare':

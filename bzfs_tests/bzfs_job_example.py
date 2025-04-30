@@ -102,8 +102,8 @@ retain_dst_targets = {"nas": ["", "onsite"]}
 # For example, dst_root_datasets = {"nas":""} turns "boo/bar" into "boo/bar" on dst host "nas", and with
 # root_dataset_pairs = ["tank1/foo/bar", "tank1/foo/bar" ] it turns tank1/foo/bar on src into tank1/foo/bar
 # on dst host "nas".
-# "^SRC_HOST" and "^DST_HOST" are optional placeholders that will be auto-replaced at runtime with the actual hostname.
-# This can be used to force the use of a separate destination root dataset per source host or per destination host.
+# "^SRC_HOST" and "^DST_HOST" are optional magic substitution tokens that will be auto-replaced at runtime with the actual
+# hostname. This can be used to force the use of a separate destination root dataset per source host or per destination host.
 # dst_root_datasets = {
 #     "nas": "tank2/bak",
 #     "bak-us-west-1": "backups/bak001",
