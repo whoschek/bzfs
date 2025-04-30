@@ -2911,18 +2911,15 @@ class Job:
             stale_src_datasets2 = []
             dst_snapshots_changed_dict = self.zfs_get_snapshots_changed(dst, maybe_stale_dst_datasets)
             for dst_dataset in maybe_stale_dst_datasets:
-                is_stale = True
-                if dst_dataset in dst_snapshots_changed_dict:
-                    snapshots_changed = dst_snapshots_changed_dict[dst_dataset]
-                    cache_file = self.last_modified_cache_file(dst, dst_dataset)
-                    if (
-                        snapshots_changed != 0
-                        and time.time() > snapshots_changed + time_threshold_secs
-                        and snapshots_changed == self.cache_get_snapshots_changed(cache_file)
-                    ):
-                        log.info("Already-up-to-date [cached]: %s", dst_dataset)
-                        is_stale = False
-                if is_stale:
+                snapshots_changed = dst_snapshots_changed_dict.get(dst_dataset, 0)
+                cache_file = self.last_modified_cache_file(dst, dst_dataset)
+                if (
+                    snapshots_changed != 0
+                    and time.time() > snapshots_changed + time_threshold_secs
+                    and snapshots_changed == self.cache_get_snapshots_changed(cache_file)
+                ):
+                    log.info("Already-up-to-date [cached]: %s", dst_dataset)
+                else:
                     stale_src_datasets2.append(dst2src(dst_dataset))
             assert not self.is_test_mode or stale_src_datasets1 == sorted(stale_src_datasets1), "List is not sorted"
             assert not self.is_test_mode or stale_src_datasets2 == sorted(stale_src_datasets2), "List is not sorted"
@@ -2954,9 +2951,7 @@ class Job:
             stale_dst_datasets = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
             dst_snapshots_changed_dict = self.zfs_get_snapshots_changed(dst, stale_dst_datasets)
             for dst_dataset in stale_dst_datasets:  # update local cache
-                dst_snapshots_changed = 0
-                if dst_dataset in dst_snapshots_changed_dict:
-                    dst_snapshots_changed = dst_snapshots_changed_dict[dst_dataset]
+                dst_snapshots_changed = dst_snapshots_changed_dict.get(dst_dataset, 0)
                 dst_cache_file = self.last_modified_cache_file(dst, dst_dataset)
                 src_dataset = dst2src(dst_dataset)
                 src_snapshots_changed: int = self.src_properties[src_dataset][SNAPSHOTS_CHANGED]
@@ -4552,9 +4547,7 @@ class Job:
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: Optional[SnapshotLabel] = None) -> str:
         p = self.params
         cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
-        remote = remote if remote is not None else p.src
-        userhost_dir = remote.ssh_user_host
-        userhost_dir = userhost_dir if userhost_dir else "-"
+        userhost_dir = remote.ssh_user_host if remote.ssh_user_host else "-"
         return os_path_join(p.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
