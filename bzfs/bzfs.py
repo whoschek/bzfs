@@ -728,18 +728,17 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "are periodic and not actually due per the schedule.\n\n")
     parser.add_argument(
         "--create-src-snapshots-enable-snapshots-changed-cache", action="store_true",
-        help="Maintain a local cache of recent snapshot creation times, running "
-             "'zfs list -t filesystem,volume -p -o snapshots_changed' first to determine if a "
-             "new snapshot shall be created on the src. This flag improves performance for high-frequency snapshotting use "
-             "cases. Only relevant if --create-src-snapshots-even-if-not-due is not specified.\n\n")
+        help="Maintain a local cache of recent snapshot creation times, and compare that to "
+             "'zfs list -t filesystem,volume -p -o snapshots_changed' to determine if a new snapshot shall be created on "
+             "the src. This flag improves performance for high-frequency snapshotting use cases. "
+             "Only relevant if --create-src-snapshots-even-if-not-due is not specified.\n\n")
     parser.add_argument(
-        "--no-cache-snapshots", action="store_true",
-        # help="Do not maintain a local cache of recent successful replication times, i.e. do not run "
-        #      "'zfs list -t filesystem,volume -p -o snapshots_changed' first to determine if a new snapshot is "
-        #      "available to be replicated. Disabling the cache degrades performance if replication is invoked "
-        #      "frequently (e.g. every 5 seconds), yet there's seldom anything to replicate (e.g. a new src snapshot is only "
-        #      "created every minute).\n\n")
-        help=argparse.SUPPRESS)
+        "--cache-snapshots", choices=["true", "false"], default="false",
+        help="Default is '%(default)s'. If true, maintain a local cache of recent successful replication times, and compare "
+             "that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to determine if no new snapshot is available "
+             "to be replicated. Enabling the cache improves performance if replication is invoked frequently (e.g. every 5 "
+             "seconds), yet there's seldom anything to replicate (e.g. a new src snapshot is only created every minute)."
+             "\n\n")
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default="--props --raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
@@ -1648,7 +1647,7 @@ class Params:
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.create_src_snapshots_config: CreateSrcSnapshotConfig = CreateSrcSnapshotConfig(args, self)
         self.monitor_snapshots_config: MonitorSnapshotsConfig = MonitorSnapshotsConfig(args, self)
-        self.cache_snapshots: bool = not args.no_cache_snapshots
+        self.cache_snapshots: bool = args.cache_snapshots == "true"
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)

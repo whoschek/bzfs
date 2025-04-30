@@ -608,6 +608,7 @@ usage: bzfs [-h] [--recursive]
             [--create-src-snapshots-timezone TZ_SPEC]
             [--create-src-snapshots-even-if-not-due]
             [--create-src-snapshots-enable-snapshots-changed-cache]
+            [--cache-snapshots {true,false}]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -1170,10 +1171,22 @@ usage: bzfs [-h] [--recursive]
 
 **--create-src-snapshots-enable-snapshots-changed-cache**
 
-*  Maintain a local cache of recent snapshot creation times, running 'zfs list -t
-    filesystem,volume -p -o snapshots_changed' first to determine if a new snapshot shall be
-    created on the src. This flag improves performance for high-frequency snapshotting use cases.
-    Only relevant if --create-src-snapshots-even-if-not-due is not specified.
+*  Maintain a local cache of recent snapshot creation times, and compare that to 'zfs list -t
+    filesystem,volume -p -o snapshots_changed' to determine if a new snapshot shall be created on
+    the src. This flag improves performance for high-frequency snapshotting use cases. Only
+    relevant if --create-src-snapshots-even-if-not-due is not specified.
+
+<!-- -->
+
+<div id="--cache-snapshots"></div>
+
+**--cache-snapshots** *{true,false}*
+
+*  Default is 'false'. If true, maintain a local cache of recent successful replication times,
+    and compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to determine if
+    no new snapshot is available to be replicated. Enabling the cache improves performance if
+    replication is invoked frequently (e.g. every 5 seconds), yet there's seldom anything to
+    replicate (e.g. a new src snapshot is only created every minute).
 
 <!-- -->
 

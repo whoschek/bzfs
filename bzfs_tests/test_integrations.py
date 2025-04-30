@@ -311,7 +311,7 @@ class BZFSTestCase(ParametrizedTestCase):
         use_jobrunner: bool = False,
         spawn_process_per_job: bool = None,
         include_snapshot_plan_excludes_outdated_snapshots: bool = None,
-        no_cache_snapshots: bool = True,
+        cache_snapshots: bool = False,
         create_src_snapshots_enable_snapshots_changed_cache: bool = True,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
@@ -427,8 +427,7 @@ class BZFSTestCase(ParametrizedTestCase):
         args = args + ["--exclude-envvar-regex=EDITOR"]
         if create_src_snapshots_enable_snapshots_changed_cache:
             args += ["--create-src-snapshots-enable-snapshots-changed-cache"]
-        if no_cache_snapshots:
-            args += ["--no-cache-snapshots"]
+        args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
         if use_jobrunner:
             bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
@@ -1010,7 +1009,7 @@ class LocalTestCase(BZFSTestCase):
                                     *(["--skip-replication"] if m == 0 else []),
                                     dry_run=(i == 0),
                                     create_src_snapshots_enable_snapshots_changed_cache=(j > 0),
-                                    no_cache_snapshots=(k == 0),
+                                    cache_snapshots=(k > 0),
                                 )
                                 if i == 0:
                                     self.assertEqual(n, len(snapshots(src_root_dataset)))
@@ -1705,10 +1704,10 @@ class LocalTestCase(BZFSTestCase):
             "--create-src-snapshots",
             "--create-src-snapshots-plan=" + str({"z": {"onsite": {"secondly": 1}}}),
             "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
-            no_cache_snapshots=False,
+            cache_snapshots=True,
         )
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
-        self.run_bzfs(src_root_dataset, dst_root_dataset, no_cache_snapshots=False)
+        self.run_bzfs(src_root_dataset, dst_root_dataset, cache_snapshots=True)
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
     def test_last_replicated_cache_with_sleep_longer_than_threshold(self):
@@ -1719,11 +1718,11 @@ class LocalTestCase(BZFSTestCase):
             "--create-src-snapshots",
             "--create-src-snapshots-plan=" + str({"z": {"onsite": {"secondly": 1}}}),
             "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
-            no_cache_snapshots=False,
+            cache_snapshots=True,
         )
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
         time.sleep(2.2)
-        self.run_bzfs(src_root_dataset, dst_root_dataset, no_cache_snapshots=False)
+        self.run_bzfs(src_root_dataset, dst_root_dataset, cache_snapshots=True)
         self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
     def test_include_snapshot_time_range_full(self):
@@ -4643,19 +4642,19 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset + "/foo1", fix("s1"))
 
         job = self.run_bzfs(
-            src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False, dry_run=True
+            src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True, dry_run=True
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo1"))
         self.assertEqual(0, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
         self.assertEqual(0, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
@@ -4663,39 +4662,39 @@ class LocalTestCase(BZFSTestCase):
         create_filesystem(src_root_dataset, "foo2")
         take_snapshot(src_root_dataset + "/foo2", fix("s1"))
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
         take_snapshot(src_root_dataset + "/foo1", fix("s2"))
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo1", 2, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
         destroy_snapshots(dst_root_dataset + "/foo1", snapshots(dst_root_dataset + "/foo1")[1:])
         self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo1", 2, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
@@ -4709,28 +4708,28 @@ class LocalTestCase(BZFSTestCase):
 
         create_filesystem(src_root_dataset, "foo2")
         take_snapshot(src_root_dataset + "/foo2", fix("s1"))
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
         self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(0, job.num_cache_hits)
         self.assertEqual(2, job.num_cache_misses)
 
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
         destroy(dst_root_dataset + "/foo2", recursive=True)
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo2"))
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
         self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
         time.sleep(delay_secs)
-        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", no_cache_snapshots=False)
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
@@ -4741,7 +4740,7 @@ class LocalTestCase(BZFSTestCase):
                 **kwargs,
                 use_jobrunner=True,
                 spawn_process_per_job=spawn_process_per_job,
-                no_cache_snapshots=no_cache_snapshots,
+                cache_snapshots=cache_snapshots,
             )
 
         if self.is_no_privilege_elevation():
@@ -4749,7 +4748,7 @@ class LocalTestCase(BZFSTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         for jobiter, spawn_process_per_job in enumerate([None, True]):
-            no_cache_snapshots = spawn_process_per_job is None
+            cache_snapshots = spawn_process_per_job is not None
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 self.assertSnapshots(src_root_dataset, 0)
@@ -5078,7 +5077,7 @@ class LocalTestCase(BZFSTestCase):
                 **kwargs,
                 use_jobrunner=True,
                 spawn_process_per_job=spawn_process_per_job,
-                no_cache_snapshots=no_cache_snapshots,
+                cache_snapshots=cache_snapshots,
             )
 
         if self.is_no_privilege_elevation():
@@ -5086,7 +5085,7 @@ class LocalTestCase(BZFSTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         for jobiter, spawn_process_per_job in enumerate([None, True]):
-            no_cache_snapshots = spawn_process_per_job is None
+            cache_snapshots = spawn_process_per_job is not None
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 destroy(dst_root_dataset, recursive=True)
