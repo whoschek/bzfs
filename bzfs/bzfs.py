@@ -728,16 +728,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--create-src-snapshots-enable-snapshots-changed-cache", action="store_true",
         help="Maintain a local cache of recent snapshot creation times, and compare that to "
-             "'zfs list -t filesystem,volume -p -o snapshots_changed' to determine if a new snapshot shall be created on "
-             "the src. This flag improves performance for high-frequency snapshotting use cases. "
+             "'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be created "
+             "on the src. Enabling the cache improves performance if --create-src-snapshots is invoked frequently (e.g. "
+             "every minute via cron) over a large number of datasets, with each dataset containing a large number of "
+             "snapshots, yet it is seldom for a new src snapshot to actually be created (e.g. a new src snapshot is "
+             "actually only created every day via the schedule specified in --create-src-snapshots-plan). "
              "Only relevant if --create-src-snapshots-even-if-not-due is not specified.\n\n")
     parser.add_argument(
         "--cache-snapshots", choices=["true", "false"], default="false",
-        help="Default is '%(default)s'. If true, maintain a local cache of recent successful replication times, and compare "
-             "that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to determine if no new snapshot is available "
-             "to be replicated. Enabling the cache improves performance if replication is invoked frequently (e.g. every 5 "
-             "seconds), yet there's seldom anything to replicate (e.g. a new src snapshot is only created every minute)."
-             "\n\n")
+        help="Default is '%(default)s'. If 'true', maintain a local cache of recent successful replication times, and "
+             "compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if no new snapshot "
+             "is available to be replicated. Enabling the cache improves performance if replication is invoked frequently "
+             "(e.g. every minute via cron) over a large number of datasets, with each dataset containing a large number of "
+             "snapshots, yet there's seldom anything to replicate (e.g. a new src snapshot is only created every day).\n\n")
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default="--props --raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
@@ -4225,7 +4228,7 @@ class Job:
         return steps
 
     @staticmethod
-    def send_step_to_str(step: Tuple[str, str, str]) -> str:
+    def send_step_to_str(step: Tuple[str, str, str, int]) -> str:
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
 
@@ -4392,8 +4395,8 @@ class Job:
         p, log = self.params, self.params.log
         src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
-        msgs = []
         use_last_modified_cache = False
+        msgs = []
 
         def create_snapshot_if_latest_is_too_old(
             datasets_to_snapshot: Dict[SnapshotLabel, List[str]], dataset: str, label: SnapshotLabel, creation_unixtime: int
@@ -4483,7 +4486,7 @@ class Job:
 
     def handle_minmax_snapshots(
         self,
-        r: Remote,
+        remote: Remote,
         sorted_datasets: List[str],
         labels: List[SnapshotLabel],
         fn_latest: Callable[[int, int, str, str], None],  # callback function for latest snapshot
@@ -4495,7 +4498,7 @@ class Job:
         p = self.params
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
         datasets_with_snapshots: Set[str] = set()
-        for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets, ordered=False):
+        for lines in self.zfs_list_snapshots_in_parallel(remote, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in itertools.groupby(lines, key=lambda line: line[line.rindex("\t") + 1 : line.index("@")]):
                 snapshots = sorted(  # fetch all snapshots of current dataset and sort by createtxg,creation,name
@@ -4543,10 +4546,9 @@ class Job:
             return 0  # harmless
 
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: Optional[SnapshotLabel] = None) -> str:
-        p = self.params
         cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         userhost_dir = remote.ssh_user_host if remote.ssh_user_host else "-"
-        return os_path_join(p.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
+        return os_path_join(self.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
 
     def invalidate_last_modified_cache_dataset(self, dataset: str) -> None:
         """Resets the last_modified timestamp of all cache files of the given dataset to zero."""

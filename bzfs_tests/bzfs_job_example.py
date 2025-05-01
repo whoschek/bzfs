@@ -247,6 +247,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--exclude-dataset-regex", "bar.*", "baz.*"]
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
+# extra_args += ["--cache-snapshots=true"]
 # extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]  # this is already the default anyway
 # extra_args += ["--zfs-send-program-opts="]  # run 'zfs send' without options
 # extra_args += ["--zfs-recv-program-opts=-u"]  # this is already the default anyway

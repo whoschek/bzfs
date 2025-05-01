@@ -1172,9 +1172,13 @@ usage: bzfs [-h] [--recursive]
 **--create-src-snapshots-enable-snapshots-changed-cache**
 
 *  Maintain a local cache of recent snapshot creation times, and compare that to 'zfs list -t
-    filesystem,volume -p -o snapshots_changed' to determine if a new snapshot shall be created on
-    the src. This flag improves performance for high-frequency snapshotting use cases. Only
-    relevant if --create-src-snapshots-even-if-not-due is not specified.
+    filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be
+    created on the src. Enabling the cache improves performance if --create-src-snapshots is
+    invoked frequently (e.g. every minute via cron) over a large number of datasets, with each
+    dataset containing a large number of snapshots, yet it is seldom for a new src snapshot to
+    actually be created (e.g. a new src snapshot is actually only created every day via the
+    schedule specified in --create-src-snapshots-plan). Only relevant if
+    --create-src-snapshots-even-if-not-due is not specified.
 
 <!-- -->
 
@@ -1182,11 +1186,12 @@ usage: bzfs [-h] [--recursive]
 
 **--cache-snapshots** *{true,false}*
 
-*  Default is 'false'. If true, maintain a local cache of recent successful replication times,
-    and compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to determine if
-    no new snapshot is available to be replicated. Enabling the cache improves performance if
-    replication is invoked frequently (e.g. every 5 seconds), yet there's seldom anything to
-    replicate (e.g. a new src snapshot is only created every minute).
+*  Default is 'false'. If 'true', maintain a local cache of recent successful replication
+    times, and compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help
+    determine if no new snapshot is available to be replicated. Enabling the cache improves
+    performance if replication is invoked frequently (e.g. every minute via cron) over a large
+    number of datasets, with each dataset containing a large number of snapshots, yet there's
+    seldom anything to replicate (e.g. a new src snapshot is only created every day).
 
 <!-- -->
 
