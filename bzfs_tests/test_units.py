@@ -734,8 +734,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46.2GiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46" + bzfs.arabic_decimal_separator + "2GiB"))
         self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiB"))
+        self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiO"))  # in French locale
         self.assertEqual(1000**2, pv_size_to_bytes("1 MB"))
         self.assertEqual(1024**3, pv_size_to_bytes("1 GiB"))
+        self.assertEqual(1024**3, pv_size_to_bytes("1 GiO"))
         self.assertEqual(1024**3, pv_size_to_bytes("8 Gib"))
         self.assertEqual(1000**3, pv_size_to_bytes("8 Gb"))
         self.assertEqual(1024**4, pv_size_to_bytes("1 TiB"))
