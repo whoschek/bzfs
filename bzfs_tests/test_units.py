@@ -734,14 +734,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46.2GiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46" + bzfs.arabic_decimal_separator + "2GiB"))
         self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiB"))
-        self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiO"))  # in French locale
         self.assertEqual(1000**2, pv_size_to_bytes("1 MB"))
-        self.assertEqual(1000**2, pv_size_to_bytes("8 Mo"))
         self.assertEqual(1024**3, pv_size_to_bytes("1 GiB"))
-        self.assertEqual(1024**3, pv_size_to_bytes("1 GiO"))
         self.assertEqual(1024**3, pv_size_to_bytes("8 Gib"))
         self.assertEqual(1000**3, pv_size_to_bytes("8 Gb"))
-        self.assertEqual(1000**3, pv_size_to_bytes("8 Go"))
         self.assertEqual(1024**4, pv_size_to_bytes("1 TiB"))
         self.assertEqual(1024**5, pv_size_to_bytes("1 PiB"))
         self.assertEqual(1024**6, pv_size_to_bytes("1 EiB"))
@@ -754,6 +750,18 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(0, pv_size_to_bytes("46-2GiB"))
         with self.assertRaises(ValueError):
             pv_size_to_bytes("4.12 KiB/s")
+
+    def test_count_num_bytes_transferred_by_pv(self):
+        default_opts = bzfs.argument_parser().get_default("pv_program_opts")
+        self.assertTrue(isinstance(default_opts, str) and default_opts)
+        pv_fd, pv_file = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
+        cmd = f"dd if=/dev/zero bs=1K count=16 | pv {default_opts} --size 16K --name=275GiB --force 2> {pv_file}"
+        try:
+            subprocess.run(cmd, shell=True, check=True)
+            num_bytes = bzfs.count_num_bytes_transferred_by_zfs_send(pv_file)
+            self.assertEqual(16 * 1024, num_bytes)
+        finally:
+            Path(pv_file).unlink(missing_ok=True)
 
     def test_count_num_bytes_transferred_by_zfs_send(self):
         self.assertEqual(0, bzfs.count_num_bytes_transferred_by_zfs_send("/tmp/nonexisting_bzfs_test_file"))

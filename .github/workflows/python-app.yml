@@ -381,6 +381,10 @@ jobs:
     - name: Install zfs-0.8.x
       run: |
         ./.github-workflow-scripts/install_ubuntu_22_04_zfs_0_8_x.sh
+        # test with French locale because parsing localized pv log files can be tricky
+        sudo apt-get install -y locales
+        sudo locale-gen fr_FR.UTF-8
+        sudo update-locale LANG=fr_FR.UTF-8
     - name: Display ZFS version and Python version
       run: |
         id -u -n
@@ -394,6 +398,10 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
+        export LANG=fr_FR.UTF-8
+        export LANGUAGE=fr_FR:fr
+        export LC_ALL=fr_FR.UTF-8
+        locale
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
