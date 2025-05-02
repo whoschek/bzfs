@@ -422,10 +422,12 @@ class Job:
         src_hosts = validate_src_hosts(ast.literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
         dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
         if args.src_host is not None:  # retain only the src hosts that are also contained in args.src_host
+            assert isinstance(args.src_host, list)
             retain_src_hosts = set(args.src_host).difference({"^NONE"})
             validate_is_subset(retain_src_hosts, src_hosts, "--src-host", "--src-hosts")
             src_hosts = [host for host in src_hosts if host in retain_src_hosts]
         if args.dst_host is not None:  # retain only the dst hosts that are also contained in args.dst_host
+            assert isinstance(args.dst_host, list)
             retain_dst_hosts = set(args.dst_host).difference({"^NONE"})
             validate_is_subset(retain_dst_hosts, dst_hosts.keys(), "--dst-host", "--dst-hosts.keys")
             dst_hosts = {dst_host: lst for dst_host, lst in dst_hosts.items() if dst_host in retain_dst_hosts}
