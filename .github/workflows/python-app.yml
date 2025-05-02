@@ -185,9 +185,9 @@ jobs:
         #export LANGUAGE=fr_FR:fr
         #export LC_ALL=fr_FR.UTF-8
         locale
-        dd if=/dev/zero bs=1K count=16 | pv >/dev/null
+        dd if=/dev/zero bs=1K count=16 | pv --force >/dev/null
         export LC_MESSAGES=fr_FR.UTF-8
-        dd if=/dev/zero bs=1K count=16 | pv >/dev/null
+        dd if=/dev/zero bs=1K count=16 | pv --force >/dev/null
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
