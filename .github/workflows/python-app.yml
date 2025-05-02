@@ -182,8 +182,8 @@ jobs:
         # if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
         # echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
         export LANG=fr_FR.UTF-8
-        export LANGUAGE=fr_FR:fr
-        export LC_ALL=fr_FR.UTF-8
+        #export LANGUAGE=fr_FR:fr
+        #export LC_ALL=fr_FR.UTF-8
         locale
         dd if=/dev/zero bs=1K count=16 | pv >/dev/null
         export LC_MESSAGES=fr_FR.UTF-8
