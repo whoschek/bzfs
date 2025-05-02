@@ -38,9 +38,9 @@ For example, this simplifies the deployment of an efficient geo-replicated backu
 from a primary to a secondary, or backup to removable drives, etc.
 Typically, this script should be periodically executed on each source host and each destination host, e.g. by a cron job
 (or similar). However, you can also run it on a single third-party host and have that talk to all source hosts and
-destination hosts, which is convenient for basic use cases and for testing. This script submits parameters plus all unknown
-CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the actual work to the `bzfs` CLI.
-Uses an "Infrastructure as Code" approach.
+destination hosts, which is convenient for basic use cases and for testing.
+This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
+actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
 """
 )
 known_args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`

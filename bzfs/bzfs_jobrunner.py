@@ -51,6 +51,7 @@ def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog_name,
         allow_abbrev=False,
+        formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
 
@@ -137,7 +138,7 @@ finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifet
 auto-restarted by 'cron', or earlier if they fail. While the daemons are running, 'cron' will attempt to start new
 (unnecessary) daemons but this is benign as these new processes immediately exit with a message like this:
 "Exiting as same previous periodic job is still running without completion yet"
-""", formatter_class=argparse.RawTextHelpFormatter)
+""")
 
     # commands:
     parser.add_argument(
@@ -899,6 +900,7 @@ def validate_monitor_snapshot_plan(monitor_snapshot_plan: Dict) -> Dict:
                 assert isinstance(alert_dict, dict)
                 for key, value in alert_dict.items():
                     assert isinstance(key, str)
+                    assert isinstance(value, str)
     return monitor_snapshot_plan
 
 

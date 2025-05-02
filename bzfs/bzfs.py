@@ -145,6 +145,7 @@ def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog_name,
         allow_abbrev=False,
+        formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
 *{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
 source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote)
@@ -407,7 +408,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
 --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
 --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' --ssh-dst-private-key /root/.ssh/id_rsa```
-""", formatter_class=argparse.RawTextHelpFormatter)
+""")
 
     parser.add_argument(
         "root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
@@ -1303,8 +1304,6 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--pv-program", default="pv", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("pv") + msg.rstrip() + " This is used for bandwidth rate-limiting and progress monitoring.\n\n")
-    pv_program_opts_default = ("--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 "
-                               "--width=120 --buffer-size=2M")
     parser.add_argument(
         "--pv-program-opts", metavar="STRING",
         default="--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M",
