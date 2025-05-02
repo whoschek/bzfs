@@ -735,7 +735,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "actually only created every day via the schedule specified in --create-src-snapshots-plan). "
              "Only relevant if --create-src-snapshots-even-if-not-due is not specified.\n\n")
     parser.add_argument(
-        "--cache-snapshots", choices=["true", "false"], default="false",
+        "--cache-snapshots", choices=["true", "false"], default="false", const="true", nargs="?",
         help="Default is '%(default)s'. If 'true', maintain a local cache of recent successful replication times, and "
              "compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if no new snapshot "
              "is available to be replicated. Enabling the cache improves performance if replication is invoked frequently "

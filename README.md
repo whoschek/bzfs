@@ -608,7 +608,7 @@ usage: bzfs [-h] [--recursive]
             [--create-src-snapshots-timezone TZ_SPEC]
             [--create-src-snapshots-even-if-not-due]
             [--create-src-snapshots-enable-snapshots-changed-cache]
-            [--cache-snapshots {true,false}]
+            [--cache-snapshots [{true,false}]]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -1184,7 +1184,7 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--cache-snapshots"></div>
 
-**--cache-snapshots** *{true,false}*
+**--cache-snapshots** *[{true,false}]*
 
 *  Default is 'false'. If 'true', maintain a local cache of recent successful replication
     times, and compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help
