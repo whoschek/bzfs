@@ -160,6 +160,7 @@ jobs:
         sudo apt-get install -y locales
         sudo locale-gen fr_FR.UTF-8
         sudo update-locale LANG=fr_FR.UTF-8
+        sudo apt-get install -y --reinstall pv
 
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
