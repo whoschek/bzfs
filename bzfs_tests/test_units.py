@@ -760,6 +760,7 @@ class TestHelperFunctions(unittest.TestCase):
             subprocess.run(cmd, shell=True, check=True)
             num_bytes = bzfs.count_num_bytes_transferred_by_zfs_send(pv_file)
             self.assertEqual(16 * 1024, num_bytes)
+            print(f"pv_log_file: {''.join(bzfs.tail(pv_file, 10))}")
         finally:
             Path(pv_file).unlink(missing_ok=True)
 
