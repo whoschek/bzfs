@@ -721,15 +721,6 @@ class Job:
                 if not self.run_subjob(subjobs[subjob], timeout_secs=timeout_secs, spawn_process_per_job=False):
                     break
 
-    def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> bool:
-        returncode = self.run_worker_job(cmd, timeout_secs=timeout_secs, spawn_process_per_job=spawn_process_per_job)
-        if returncode != 0:
-            with self.stats.lock:
-                if self.first_exception is None:
-                    self.first_exception = die_status if returncode is None else returncode
-            return False
-        return True
-
     def run_worker_job_in_current_thread(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
         if timeout_secs is not None:
             cmd = cmd[0:1] + [f"--timeout={round(1000 * timeout_secs)}milliseconds"] + cmd[1:]
@@ -772,7 +763,7 @@ class Job:
         else:
             return proc.returncode
 
-    def run_worker_job(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
+    def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
         log = self.log
         returncode = None
         start_time_nanos = time.monotonic_ns()
@@ -798,6 +789,9 @@ class Job:
             elapsed_human = bzfs.human_readable_duration(elapsed_nanos, separator="")
             if returncode != 0:
                 log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
+                with self.stats.lock:
+                    if self.first_exception is None:
+                        self.first_exception = die_status if returncode is None else returncode
             else:
                 log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
             return returncode

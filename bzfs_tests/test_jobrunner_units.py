@@ -334,24 +334,24 @@ class TestRunSubJob(unittest.TestCase):
 
     def test_success(self):
         result = self.job.run_subjob(cmd=["true"], timeout_secs=None, spawn_process_per_job=True)
-        self.assertTrue(result)
+        self.assertEqual(0, result)
 
     def test_failure(self):
         result = self.job.run_subjob(cmd=["false"], timeout_secs=None, spawn_process_per_job=True)
-        self.assertFalse(result)
+        self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
         self.assertTrue(self.job.first_exception != 0)
 
         result = self.job.run_subjob(cmd=["false"], timeout_secs=None, spawn_process_per_job=True)
-        self.assertFalse(result)
+        self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
         self.assertTrue(self.job.first_exception != 0)
 
     def test_timeout(self):
         result = self.job.run_subjob(cmd=["sleep", "0"], timeout_secs=1, spawn_process_per_job=True)
-        self.assertTrue(result)
+        self.assertEqual(0, result)
         result = self.job.run_subjob(cmd=["sleep", "1"], timeout_secs=0.01, spawn_process_per_job=True)
-        self.assertFalse(result)
+        self.assertNotEqual(0, result)
 
     def test_nonexisting_cmd(self):
         with self.assertRaises(FileNotFoundError):
