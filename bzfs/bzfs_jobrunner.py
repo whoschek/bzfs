@@ -39,7 +39,7 @@ import types
 import uuid
 from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Dict, List, Optional, Set, Tuple, Iterable
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 prog_name = "bzfs_jobrunner"
 src_magic_substitution_token = "^SRC_HOST"
@@ -723,17 +723,17 @@ class Job:
                     break
 
     def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
-        log = self.log
-        returncode = None
         start_time_nanos = time.monotonic_ns()
-        stats = self.stats
+        returncode = None
+        log = self.log
         cmd_str = " ".join(cmd)
+        stats = self.stats
         try:
-            log.trace("Starting worker job: %s", cmd_str)
             with stats.lock:
                 stats.jobs_started += 1
                 stats.jobs_running += 1
                 msg = str(stats)
+            log.trace("Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
             start_time_nanos = time.monotonic_ns()
             if spawn_process_per_job:
@@ -802,9 +802,7 @@ class Job:
                 timeout_secs = min(0.025, timeout_secs)
                 with contextlib.suppress(subprocess.TimeoutExpired):
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
-            return proc.returncode
-        else:
-            return proc.returncode
+        return proc.returncode
 
 
 #############################################################################
