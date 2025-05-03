@@ -272,12 +272,11 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
     'bak-us-west-1': ['us-west-1'], 'bak-eu-west-1': ['eu-west-1'], 'archive':
     ['offsite']}"`.
 
-    With this, given a snapshot name, we can find the destination hostname to which the snapshot
+    With this, given a snapshot name, we can find the destination hostnames to which the snapshot
     shall be replicated. Also, given a snapshot name and its own name, a destination host can
     determine if it shall replicate the given snapshot from the source host, or if the snapshot is
     intended for another destination host, in which case it skips the snapshot. A destination host
-    running bzfs_jobrunner will receive replicas of snapshots for all targets that map to that
-    destination host.
+    will receive replicas of snapshots for all targets that map to that destination host.
 
 <!-- -->
 

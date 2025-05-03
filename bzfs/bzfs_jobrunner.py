@@ -189,11 +189,11 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Dictionary that maps each destination hostname to a list of zero or more logical replication target names "
              "(the infix portion of snapshot name). "
              f"Example: `{format_dict(dst_hosts_example)}`.\n\n"
-             "With this, given a snapshot name, we can find the destination hostname to which the snapshot shall be "
+             "With this, given a snapshot name, we can find the destination hostnames to which the snapshot shall be "
              "replicated. Also, given a snapshot name and its own name, a destination host can determine if it shall "
              "replicate the given snapshot from the source host, or if the snapshot is intended for another destination "
-             f"host, in which case it skips the snapshot. A destination host running {prog_name} will receive replicas of "
-             "snapshots for all targets that map to that destination host.\n\n")
+             "host, in which case it skips the snapshot. A destination host will receive replicas of snapshots for all "
+             "targets that map to that destination host.\n\n")
     parser.add_argument(
         "--dst-host", default=None, action="append", metavar="STRING",
         help="For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the --dst-hosts keys that "
@@ -440,7 +440,7 @@ class Job:
         validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
         assert not (
             len(src_hosts) > 1
-            and any(src_magic_substitution_token not in dst_root_datasets[dst_host] for dst_host in dst_hosts)
+            and any(src_magic_substitution_token not in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys())
         ), "Multiple sources must not write to the same destination dataset"
         jobid = args.job_id if args.job_id is not None else args.jobid  # --jobid is deprecated
         jobid = sanitize(jobid) if jobid else uuid.uuid1().hex
