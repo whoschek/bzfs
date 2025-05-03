@@ -178,8 +178,11 @@ jobs:
         # if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
         # echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
         sudo apt-get install -y locales
+        echo before
+        locale
+        echo after
         sudo locale-gen fr_FR.UTF-8
-        sudo update-locale LANG=fr_FR.UTF-8
+        #sudo update-locale LANG=fr_FR.UTF-8
         #sudo apt-get install -y --reinstall pv
         export LC_ALL=fr_FR.UTF-8
         export LC_MESSAGES=fr_FR.UTF-8
