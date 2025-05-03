@@ -458,8 +458,8 @@ class Job:
         def ipad() -> str:
             return zero_pad(i)
 
-        def jpad(jj: int) -> str:
-            return zero_pad(jj)
+        def jpad(jj: int, tag: str) -> str:
+            return "/" + zero_pad(jj) + tag
 
         def npad() -> str:
             return sep + zero_pad(len(subjobs))
@@ -468,7 +468,7 @@ class Job:
             if j <= 0:
                 return subjob_name
             elif j == 1:
-                return subjob_name + f"/{jpad(j-1)}{tag}"
+                return subjob_name + jpad(j - 1, tag)
             else:
                 return subjob_name + "/" + bzfs.BARRIER_CHAR
 
@@ -497,13 +497,16 @@ class Job:
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += dedupe([(resolve_dataset(src_host, src), dummy_dataset) for src, dst in args.root_dataset_pairs])
-                subjob_name += "/create_src_snapshots"
+                subjob_name += "/create-src-snapshots"
                 subjobs[subjob_name] = ["bzfs"] + opts
 
             if args.replicate:
                 j = 0
+                marker = "replicate"
                 for dst_hostname, targets in dst_hosts.items():
-                    opts = self.replication_opts(dst_snapshot_plan, set(targets), src_host, dst_hostname, jobid + npad())
+                    opts = self.replication_opts(
+                        dst_snapshot_plan, set(targets), src_host, dst_hostname, marker, jobid + npad()
+                    )
                     if len(opts) > 0:
                         opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                         opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
@@ -517,9 +520,9 @@ class Job:
                             opts += [src, dst]
                         if len(opts) > old_len_opts:
                             daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                            subjobs[subjob_name + f"/{jpad(j)}replicate"] = ["bzfs"] + daemon_opts + opts
+                            subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + daemon_opts + opts
                             j += 1
-                subjob_name = update_subjob_name("replicate")
+                subjob_name = update_subjob_name(marker)
 
             def prune_src(opts: List[str], retention_plan: Dict, tag: str) -> None:
                 opts += [
@@ -547,15 +550,16 @@ class Job:
                     retain_dst_targets
                 ), "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
                 j = 0
+                marker = "prune-dst-snapshots"
                 for dst_hostname, targets in dst_hosts.items():
-                    retain_targets = set(retain_dst_targets[dst_hostname])
-                    dst_snapshot_plan = {  # only retain targets that belong to the host
-                        org: {target: periods for target, periods in target_periods.items() if target in retain_targets}
+                    curr_retain_targets = set(retain_dst_targets[dst_hostname])
+                    curr_dst_snapshot_plan = {  # only retain targets that belong to the host
+                        org: {target: periods for target, periods in target_periods.items() if target in curr_retain_targets}
                         for org, target_periods in dst_snapshot_plan.items()
                     }
                     opts = ["--delete-dst-snapshots", "--skip-replication"]
-                    opts += [f"--delete-dst-snapshots-except-plan={dst_snapshot_plan}"]
-                    opts += [f"--log-file-prefix={prog_name}{sep}prune-dst-snapshots{sep}"]
+                    opts += [f"--delete-dst-snapshots-except-plan={curr_dst_snapshot_plan}"]
+                    opts += [f"--log-file-prefix={prog_name}{sep}{marker}{sep}"]
                     opts += [f"--log-file-suffix={sep}{jobid}{npad()}{log_suffix(src_host, dst_hostname)}{sep}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
@@ -565,9 +569,9 @@ class Job:
                     for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                         opts += [src, dst]
                     if len(opts) > old_len_opts:
-                        subjobs[subjob_name + f"/{jpad(j)}prune_dst_snapshots"] = ["bzfs"] + opts
+                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts
                         j += 1
-                subjob_name = update_subjob_name("prune_dst_snapshots")
+                subjob_name = update_subjob_name(marker)
 
             def monitor_snapshots_opts(tag: str, monitor_plan: Dict, logsuffix: str) -> List[str]:
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
@@ -595,24 +599,26 @@ class Job:
                 }
 
             if args.monitor_src_snapshots:
+                marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan)
-                opts = monitor_snapshots_opts("monitor-src-snapshots", monitor_plan, log_suffix(src_host, None))
+                opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(src_host, None))
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += dedupe([(dummy_dataset, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])
-                subjob_name += "/monitor_src_snapshots"
+                subjob_name += "/" + marker
                 subjobs[subjob_name] = ["bzfs"] + opts
 
             if args.monitor_dst_snapshots:
                 j = 0
+                marker = "monitor-dst-snapshots"
                 for dst_hostname, targets in dst_hosts.items():
-                    targets = set(targets).intersection(set(retain_dst_targets[dst_hostname]))
+                    monitor_targets = set(targets).intersection(set(retain_dst_targets[dst_hostname]))
                     monitor_plan = {  # only retain targets that belong to the host
-                        org: {target: periods for target, periods in target_periods.items() if target in targets}
+                        org: {target: periods for target, periods in target_periods.items() if target in monitor_targets}
                         for org, target_periods in monitor_snapshot_plan.items()
                     }
                     monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan)
-                    opts = monitor_snapshots_opts("monitor-dst-snapshots", monitor_plan, log_suffix(src_host, dst_hostname))
+                    opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(src_host, dst_hostname))
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
                     old_len_opts = len(opts)
@@ -620,9 +626,9 @@ class Job:
                     for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
                         opts += [src, dst]
                     if len(opts) > old_len_opts:
-                        subjobs[subjob_name + f"/{jpad(j)}monitor_dst_snapshots"] = ["bzfs"] + opts
+                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts
                         j += 1
-                subjob_name = update_subjob_name("monitor_dst_snapshots")
+                subjob_name = update_subjob_name(marker)
 
         log.trace("Ready to run subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)
@@ -634,7 +640,7 @@ class Job:
         log.info("Succeeded. Bye!")
 
     def replication_opts(
-        self, dst_snapshot_plan: Dict, targets: Set[str], src_hostname: str, dst_hostname: str, jobid: str
+        self, dst_snapshot_plan: Dict, targets: Set[str], src_hostname: str, dst_hostname: str, tag: str, jobid: str
     ) -> List[str]:
         log = self.log
         log.debug("%s", f"Replicating targets {sorted(targets)} from {src_hostname} to {dst_hostname} ...")
@@ -658,7 +664,7 @@ class Job:
         opts = []
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
-            opts += [f"--log-file-prefix={prog_name}{sep}replicate{sep}"]
+            opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
             opts += [f"--log-file-suffix={sep}{jobid}{log_suffix(src_hostname, dst_hostname)}{sep}"]
         return opts
 
