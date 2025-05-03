@@ -519,7 +519,7 @@ class Job:
                             daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
                             subjobs[subjob_name + f"/{jpad(j)}replicate"] = ["bzfs"] + daemon_opts + opts
                             j += 1
-                subjob_name = update_subjob_name(args.replicate)
+                subjob_name = update_subjob_name("replicate")
 
             def prune_src(opts: List[str], retention_plan: Dict, tag: str) -> None:
                 opts += [
