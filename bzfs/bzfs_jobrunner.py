@@ -721,6 +721,48 @@ class Job:
                 if not self.run_subjob(subjobs[subjob], timeout_secs=timeout_secs, spawn_process_per_job=False):
                     break
 
+    def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
+        log = self.log
+        returncode = None
+        start_time_nanos = time.monotonic_ns()
+        stats = self.stats
+        cmd_str = " ".join(cmd)
+        try:
+            log.trace("Starting worker job: %s", cmd_str)
+            with stats.lock:
+                stats.jobs_started += 1
+                stats.jobs_running += 1
+                msg = str(stats)
+            log.info("Progress: %s", msg)
+            start_time_nanos = time.monotonic_ns()
+            if spawn_process_per_job:
+                returncode = self.run_worker_job_spawn_process_per_job(cmd, timeout_secs)
+            else:
+                returncode = self.run_worker_job_in_current_thread(cmd, timeout_secs)
+        except BaseException as e:
+            log.error("Worker job failed with unexpected exception: %s for command: %s", e, cmd_str)
+            raise e
+        else:
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            elapsed_human = bzfs.human_readable_duration(elapsed_nanos, separator="")
+            if returncode != 0:
+                with self.stats.lock:
+                    if self.first_exception is None:
+                        self.first_exception = die_status if returncode is None else returncode
+                log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
+            else:
+                log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
+            return returncode
+        finally:
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            with stats.lock:
+                stats.jobs_running -= 1
+                stats.jobs_completed += 1
+                stats.sum_elapsed_nanos += elapsed_nanos
+                stats.jobs_failed += 1 if returncode != 0 else 0
+                msg = str(stats)
+            log.info("Progress: %s", msg)
+
     def run_worker_job_in_current_thread(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
         if timeout_secs is not None:
             cmd = cmd[0:1] + [f"--timeout={round(1000 * timeout_secs)}milliseconds"] + cmd[1:]
@@ -762,48 +804,6 @@ class Job:
             return proc.returncode
         else:
             return proc.returncode
-
-    def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
-        log = self.log
-        returncode = None
-        start_time_nanos = time.monotonic_ns()
-        stats = self.stats
-        cmd_str = " ".join(cmd)
-        try:
-            log.trace("Starting worker job: %s", cmd_str)
-            with stats.lock:
-                stats.jobs_started += 1
-                stats.jobs_running += 1
-                msg = str(stats)
-            log.info("Progress: %s", msg)
-            start_time_nanos = time.monotonic_ns()
-            if spawn_process_per_job:
-                returncode = self.run_worker_job_spawn_process_per_job(cmd, timeout_secs)
-            else:
-                returncode = self.run_worker_job_in_current_thread(cmd, timeout_secs)
-        except BaseException as e:
-            log.error("Worker job failed with unexpected exception: %s for command: %s", e, cmd_str)
-            raise e
-        else:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            elapsed_human = bzfs.human_readable_duration(elapsed_nanos, separator="")
-            if returncode != 0:
-                log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
-                with self.stats.lock:
-                    if self.first_exception is None:
-                        self.first_exception = die_status if returncode is None else returncode
-            else:
-                log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
-            return returncode
-        finally:
-            elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            with stats.lock:
-                stats.jobs_running -= 1
-                stats.jobs_completed += 1
-                stats.sum_elapsed_nanos += elapsed_nanos
-                stats.jobs_failed += 1 if returncode != 0 else 0
-                msg = str(stats)
-            log.info("Progress: %s", msg)
 
 
 #############################################################################
