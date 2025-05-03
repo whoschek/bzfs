@@ -186,6 +186,8 @@ jobs:
         #sudo apt-get install -y --reinstall pv
         export LC_ALL=fr_FR.UTF-8
         export LC_MESSAGES=fr_FR.UTF-8
+        unset LANG
+        unset LANGUAGE
         locale
         date         # shows French
         python - <<'PY'
