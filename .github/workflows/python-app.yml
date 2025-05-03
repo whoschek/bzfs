@@ -157,10 +157,6 @@ jobs:
         #zfs --version
         # hpnssh -V
 
-        sudo apt-get install -y locales
-        sudo locale-gen fr_FR.UTF-8
-        sudo update-locale LANG=fr_FR.UTF-8
-        sudo apt-get install -y --reinstall pv
 
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
@@ -181,10 +177,20 @@ jobs:
       run: |
         # if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
         # echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
+        sudo apt-get install -y locales
+        sudo locale-gen fr_FR.UTF-8
+        sudo update-locale LANG=fr_FR.UTF-8
+        #sudo apt-get install -y --reinstall pv
         export LC_ALL=fr_FR.UTF-8
-        locale
-        dd if=/dev/zero bs=1K count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
         export LC_MESSAGES=fr_FR.UTF-8
+        locale
+        date         # shows French
+        python - <<'PY'
+        import locale, datetime
+        print(locale.getlocale())
+        print(datetime.datetime.now().strftime('%c'))
+        PY
+        dd if=/dev/zero bs=1K count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
         dd if=/dev/zero bs=1K count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
         #./test.sh
     - name: Run tests and generate code coverage
