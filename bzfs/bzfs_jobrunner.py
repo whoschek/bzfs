@@ -581,16 +581,18 @@ class Job:
                 return opts
 
             def build_monitor_plan(monitor_plan: Dict, snapshot_plan: Dict) -> Dict:
+
+                def alert_dicts(alertdict: Dict, cycles: int) -> Dict:
+                    latest_dict = alertdict.copy()
+                    latest_dict.pop("cycles", None)
+                    oldest_dict = latest_dict.copy()
+                    oldest_dict["cycles"] = int(alertdict.get("cycles", cycles))
+                    return {"latest": latest_dict, "oldest": oldest_dict}
+
                 return {
                     org: {
                         target: {
-                            periodunit: {
-                                "latest": alertdict,
-                                "oldest": {
-                                    **alertdict,
-                                    "cycles": snapshot_plan.get(org, {}).get(target, {}).get(periodunit, 1),
-                                },
-                            }
+                            periodunit: alert_dicts(alertdict, snapshot_plan.get(org, {}).get(target, {}).get(periodunit, 1))
                             for periodunit, alertdict in periods.items()
                         }
                         for target, periods in target_periods.items()
@@ -901,7 +903,7 @@ def validate_monitor_snapshot_plan(monitor_snapshot_plan: Dict) -> Dict:
                 assert isinstance(alert_dict, dict)
                 for key, value in alert_dict.items():
                     assert isinstance(key, str)
-                    assert isinstance(value, str)
+                    assert isinstance(value, str if key != "cycles" else int)
     return monitor_snapshot_plan
 
 
