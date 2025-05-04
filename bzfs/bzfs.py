@@ -2918,7 +2918,7 @@ class Job:
                     and time.time() > snapshots_changed + time_threshold_secs
                     and snapshots_changed == self.cache_get_snapshots_changed(cache_file)
                 ):
-                    log.info("Already-up-to-date [cached]: %s", dst_dataset)
+                    log.info("Already up-to-date [cached]: %s", dst_dataset)
                 else:
                     stale_src_datasets2.append(dst2src(dst_dataset))
             assert not self.is_test_mode or stale_src_datasets1 == sorted(stale_src_datasets1), "List is not sorted"
@@ -4927,6 +4927,7 @@ class Job:
         assert isinstance(skip_tree_on_error, Callable)
         assert max_workers > 0
         assert isinstance(interval_nanos, Callable)
+        assert "%" not in task_name
         has_barrier = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
         assert (enable_barriers is not False) or not has_barrier
         enable_barriers = has_barrier or enable_barriers
