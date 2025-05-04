@@ -2926,15 +2926,18 @@ class Job:
             stale_src_datasets = list(heapq.merge(stale_src_datasets1, stale_src_datasets2))  # merge two sorted lists
             return stale_src_datasets, cache_files
 
-        self.num_cache_hits = 0
-        self.num_cache_misses = 0
         if self.cache_snapshots(src):
             stale_src_datasets, cache_files = find_stale_datasets()
-            self.num_cache_misses += len(stale_src_datasets)
-            self.num_cache_hits += len(src_datasets) - len(stale_src_datasets)
+            num_cache_misses = len(stale_src_datasets)
+            num_cache_hits = len(src_datasets) - len(stale_src_datasets)
+            self.num_cache_misses += num_cache_misses
+            self.num_cache_hits += num_cache_hits
+            total = self.num_cache_hits + self.num_cache_misses
+            cmsg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
         else:
             stale_src_datasets = src_datasets
             cache_files = {}
+            cmsg = ""
 
         # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
         failed = self.process_datasets_in_parallel_and_fault_tolerant(
@@ -2958,10 +2961,6 @@ class Job:
                 if not p.dry_run:
                     set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
                     set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
-            total = self.num_cache_hits + self.num_cache_misses
-            cmsg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
-        else:
-            cmsg = ""
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         log.info(
             p.dry("Replication done: %s"),
