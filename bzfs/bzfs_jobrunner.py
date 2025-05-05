@@ -773,6 +773,7 @@ class Job:
             log.info("Progress: %s", msg)
 
     def run_worker_job_in_current_thread(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
+        log = self.log
         if timeout_secs is not None:
             cmd = cmd[0:1] + [f"--timeout={round(1000 * timeout_secs)}milliseconds"] + cmd[1:]
         try:
@@ -783,7 +784,8 @@ class Job:
             return e.returncode
         except SystemExit as e:
             return e.code
-        except:
+        except BaseException as e:
+            log.error("Worker job failed with unexpected exception for command: %s", " ".join(cmd), exc_info=e)
             return die_status
 
     def _bzfs_run_main(self, cmd: List[str]) -> None:
