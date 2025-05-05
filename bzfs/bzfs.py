@@ -6228,7 +6228,7 @@ def human_readable_bytes(size: float, separator=" ", precision=None, long=False)
     return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
 
 
-def human_readable_duration(duration: float, unit="ns", separator=" ", precision=None, long=False) -> str:
+def human_readable_duration(duration: float, unit="ns", separator="", precision=None, long=False) -> str:
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")

@@ -753,7 +753,7 @@ class Job:
             raise e
         else:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            elapsed_human = bzfs.human_readable_duration(elapsed_nanos, separator="")
+            elapsed_human = bzfs.human_readable_duration(elapsed_nanos)
             if returncode != 0:
                 with self.stats.lock:
                     if self.first_exception is None:
@@ -832,7 +832,7 @@ class Stats:
 
         all, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
         running = self.jobs_running
-        t = "avg_completion_time:" + bzfs.human_readable_duration(self.sum_elapsed_nanos / max(1, completed), separator="")
+        t = "avg_completion_time:" + bzfs.human_readable_duration(self.sum_elapsed_nanos / max(1, completed))
         return f"all:{all}, started:{pct(started)}, completed:{pct(completed)}, failed:{pct(failed)}, running:{running}, {t}"
 
 
