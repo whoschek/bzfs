@@ -607,8 +607,6 @@ usage: bzfs [-h] [--recursive]
             [--create-src-snapshots-timeformat STRFTIME_SPEC]
             [--create-src-snapshots-timezone TZ_SPEC]
             [--create-src-snapshots-even-if-not-due]
-            [--create-src-snapshots-enable-snapshots-changed-cache]
-            [--cache-snapshots [{true,false}]]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
@@ -631,6 +629,7 @@ usage: bzfs [-h] [--recursive]
             [--monitor-snapshots-dont-warn]
             [--monitor-snapshots-dont-crit]
             [--compare-snapshot-lists [{src,dst,all,src+dst,src+all,dst+all,src+dst+all}]]
+            [--cache-snapshots [{true,false}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream]
             [--no-resume-recv] [--no-create-bookmark]
@@ -1167,35 +1166,6 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--create-src-snapshots-enable-snapshots-changed-cache"></div>
-
-**--create-src-snapshots-enable-snapshots-changed-cache**
-
-*  Maintain a local cache of recent snapshot creation times, and compare that to 'zfs list -t
-    filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be
-    created on the src. Enabling the cache improves performance if --create-src-snapshots is
-    invoked frequently (e.g. every minute via cron) over a large number of datasets, with each
-    dataset containing a large number of snapshots, yet it is seldom for a new src snapshot to
-    actually be created (e.g. a new src snapshot is actually only created every day via the
-    schedule specified in --create-src-snapshots-plan). Only relevant if
-    --create-src-snapshots-even-if-not-due is not specified.
-
-<!-- -->
-
-<div id="--cache-snapshots"></div>
-
-**--cache-snapshots** *[{true,false}]*
-
-*  Default is 'false'. If 'true', maintain a local cache of recent successful replication
-    times, and recent monitoring times, and compares that to 'zfs list -t filesystem,volume -p -o
-    snapshots_changed' to help determine if there are any changes that needs to be replicate or
-    monitored. Enabling the cache improves performance if replication and/or monitoring is invoked
-    frequently (e.g. every minute via cron) over a large number of datasets, with each dataset
-    containing a large number of snapshots, yet there are seldom any changes to replicate or
-    monitor (e.g. a snapshot is only created every day or deleted every day).
-
-<!-- -->
-
 <div id="--zfs-send-program-opts"></div>
 
 **--zfs-send-program-opts** *STRING*
@@ -1655,6 +1625,27 @@ usage: bzfs [-h] [--recursive]
     *Note*: --compare-snapshot-lists is typically *much* faster than standard 'zfs list -t
     snapshot' CLI usage because the former issues requests with a higher degree of parallelism
     than the latter. The degree is configurable with the --threads option (see below).
+
+<!-- -->
+
+<div id="--cache-snapshots"></div>
+
+**--cache-snapshots** *[{true,false}]*
+
+*  Default is 'false'. If 'true', maintain a local cache of recent snapshot creation times,
+    recent successful replication times, and recent monitoring times, and compare them to a quick
+    'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot
+    shall be created on the src, and if there are any changes that need to be replicated or
+    monitored. Enabling the cache improves performance if --create-src-snapshots and/or
+    replication and/or --monitor-snapshots is invoked frequently (e.g. every minute via cron)
+    over a large number of datasets, with each dataset containing a large number of snapshots, yet
+    it is seldom for a new src snapshot to actually be created, or there are seldom any changes to
+    replicate or monitor (e.g. a snapshot is only created every day and/or deleted every day).
+
+    *Note:* This flag only has an effect on OpenZFS >= 2.2.
+
+    *Note:* This flag is only relevant for snapshot creation on the src if
+    --create-src-snapshots-even-if-not-due is not specified.
 
 <!-- -->
 

@@ -729,21 +729,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "are periodic and not actually due per the schedule.\n\n")
     parser.add_argument(
         "--create-src-snapshots-enable-snapshots-changed-cache", action="store_true",
-        help="Maintain a local cache of recent snapshot creation times, and compare that to "
-             "'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be created "
-             "on the src. Enabling the cache improves performance if --create-src-snapshots is invoked frequently (e.g. "
-             "every minute via cron) over a large number of datasets, with each dataset containing a large number of "
-             "snapshots, yet it is seldom for a new src snapshot to actually be created (e.g. a new src snapshot is "
-             "actually only created every day via the schedule specified in --create-src-snapshots-plan). "
-             "Only relevant if --create-src-snapshots-even-if-not-due is not specified.\n\n")
-    parser.add_argument(
-        "--cache-snapshots", choices=["true", "false"], default="false", const="true", nargs="?",
-        help="Default is '%(default)s'. If 'true', maintain a local cache of recent successful replication times, and "
-             "recent monitoring times, and compares that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help "
-             "determine if there are any changes that needs to be replicate or monitored. Enabling the cache improves "
-             "performance if replication and/or monitoring is invoked frequently (e.g. every minute via cron) over a large "
-             "number of datasets, with each dataset containing a large number of snapshots, yet there are seldom any "
-             "changes to replicate or monitor (e.g. a snapshot is only created every day or deleted every day).\n\n")
+        help=argparse.SUPPRESS)  # deprecated; was replaced by --cache-snapshots
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default="--props --raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
@@ -1048,6 +1034,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "*Note*: --compare-snapshot-lists is typically *much* faster than standard 'zfs list -t snapshot' CLI "
              "usage because the former issues requests with a higher degree of parallelism than the latter. The "
              "degree is configurable with the --threads option (see below).\n\n")
+    parser.add_argument(
+        "--cache-snapshots", choices=["true", "false"], default="false", const="true", nargs="?",
+        help="Default is '%(default)s'. If 'true', maintain a local cache of recent snapshot creation times, recent "
+             "successful replication times, and recent monitoring times, and compare them to a quick "
+             "'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be created "
+             "on the src, and if there are any changes that need to be replicated or monitored. Enabling the cache "
+             "improves performance if --create-src-snapshots and/or replication and/or --monitor-snapshots is invoked "
+             "frequently (e.g. every minute via cron) over a large number of datasets, with each dataset containing a large "
+             "number of snapshots, yet it is seldom for a new src snapshot to actually be created, or there are seldom any "
+             "changes to replicate or monitor (e.g. a snapshot is only created every day and/or deleted every day).\n\n"
+             "*Note:* This flag only has an effect on OpenZFS >= 2.2.\n\n"
+             "*Note:* This flag is only relevant for snapshot creation on the src if --create-src-snapshots-even-if-not-due "
+             "is not specified.\n\n")
     parser.add_argument(
         "--dryrun", "-n", choices=["recv", "send"], default=None, const="send", nargs="?",
         help="Do a dry run (aka 'no-op') to print what operations would happen if the command were to be executed "
@@ -1649,7 +1648,7 @@ class Params:
         self.dst: Remote = Remote("dst", args, self)  # dst dataset, host and ssh options
         self.create_src_snapshots_config: CreateSrcSnapshotConfig = CreateSrcSnapshotConfig(args, self)
         self.monitor_snapshots_config: MonitorSnapshotsConfig = MonitorSnapshotsConfig(args, self)
-        self.cache_snapshots: bool = args.cache_snapshots == "true"
+        self.is_caching_snapshots: bool = args.cache_snapshots == "true"
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
@@ -2013,7 +2012,6 @@ class CreateSrcSnapshotConfig:
         # immutable variables:
         self.skip_create_src_snapshots: bool = not args.create_src_snapshots
         self.create_src_snapshots_even_if_not_due: bool = args.create_src_snapshots_even_if_not_due
-        self.enable_snapshots_changed_cache: bool = args.create_src_snapshots_enable_snapshots_changed_cache
         tz_spec: str = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
@@ -2555,18 +2553,15 @@ class Job:
         self.src_properties = {}
         self.dst_properties = {}
         if not self.is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
-            list_snapshots_changed = (
-                self.cache_create_snapshots_changed(src) and not p.create_src_snapshots_config.skip_create_src_snapshots
-            )
-            list_snapshots_changed = list_snapshots_changed or (self.cache_snapshots(src) and not p.skip_replication)
+            is_caching = self.is_caching_snapshots(src)
             props = "volblocksize,recordsize,name"
-            props = "snapshots_changed," + props if list_snapshots_changed else props
+            props = "snapshots_changed," + props if is_caching else props
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
             )
             for line in (self.try_ssh_command(src, log_debug, cmd=cmd) or "").splitlines():
                 cols = line.split("\t")
-                snapshots_changed, volblocksize, recordsize, src_dataset = cols if list_snapshots_changed else ["-"] + cols
+                snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
                 self.src_properties[src_dataset] = {
                     "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
                     SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
@@ -2633,9 +2628,9 @@ class Job:
         log.info("Listing dst datasets: %s", task_description)
         if self.is_dummy(dst):
             die("Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
-        list_snapshots_changed = self.cache_snapshots(dst) and p.monitor_snapshots_config.enable_monitor_snapshots
+        is_caching = self.is_caching_snapshots(dst) and p.monitor_snapshots_config.enable_monitor_snapshots
         props = "name"
-        props = "snapshots_changed," + props if list_snapshots_changed else props
+        props = "snapshots_changed," + props if is_caching else props
         cmd = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props}", p.recursive_flag, dst.root_dataset
         )
@@ -2646,7 +2641,7 @@ class Job:
         else:
             for line in basis_dst_datasets_str.splitlines():
                 cols = line.split("\t")
-                snapshots_changed, dst_dataset = cols if list_snapshots_changed else ["-"] + cols
+                snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
                 self.dst_properties[dst_dataset] = {
                     SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 }
@@ -2836,7 +2831,7 @@ class Job:
         labels: List[SnapshotLabel] = [alert.label for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
         is_debug: bool = log.isEnabledFor(log_debug)
-        if self.cache_snapshots(remote):
+        if self.is_caching_snapshots(remote):
             props = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: Dict[str, int] = {dataset: vals[SNAPSHOTS_CHANGED] for dataset, vals in props.items()}
         is_caching = False
@@ -2928,7 +2923,7 @@ class Job:
             return stale_datasets
 
         # satisfy request from local cache as much as possible
-        if self.cache_snapshots(remote):
+        if self.is_caching_snapshots(remote):
             stale_datasets = find_stale_datasets_and_check_alerts()
             with self.stats_lock:
                 self.num_cache_misses += len(stale_datasets)
@@ -2937,7 +2932,7 @@ class Job:
             stale_datasets = sorted_datasets
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
-        is_caching = self.cache_snapshots(remote)
+        is_caching = self.is_caching_snapshots(remote)
         datasets_without_snapshots = self.handle_minmax_snapshots(
             remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
         )
@@ -3014,7 +3009,7 @@ class Job:
             stale_src_datasets = list(heapq.merge(stale_src_datasets1, stale_src_datasets2))  # merge two sorted lists
             return stale_src_datasets, cache_files
 
-        if self.cache_snapshots(src):
+        if self.is_caching_snapshots(src):
             stale_src_datasets, cache_files = find_stale_datasets()
             num_cache_misses = len(stale_src_datasets)
             num_cache_hits = len(src_datasets) - len(stale_src_datasets)
@@ -3037,7 +3032,7 @@ class Job:
             task_name="Replication",
         )
 
-        if self.cache_snapshots(src) and not failed:
+        if self.is_caching_snapshots(src) and not failed:
             # refresh "snapshots_changed" ZFS dataset property from dst
             stale_dst_datasets = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
             dst_snapshots_changed_dict = self.zfs_get_snapshots_changed(dst, stale_dst_datasets)
@@ -4481,7 +4476,7 @@ class Job:
         p, log = self.params, self.params.log
         src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
-        use_last_modified_cache = False
+        is_caching = False
         msgs = []
 
         def create_snapshot_if_latest_is_too_old(
@@ -4499,7 +4494,7 @@ class Job:
                 datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
                 msg = " has passed"
             msgs.append(f"Next scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}")
-            if use_last_modified_cache and not p.dry_run:
+            if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
                 cache_file = self.last_modified_cache_file(src, dataset, label)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=creation_unixtime, if_more_recent=True)
 
@@ -4516,7 +4511,7 @@ class Job:
 
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
-        if self.cache_create_snapshots_changed(src):
+        if self.is_caching_snapshots(src):
             sorted_datasets_todo = []
             for dataset in sorted_datasets:
                 cached_snapshots_changed: int = self.cache_get_snapshots_changed(self.last_modified_cache_file(src, dataset))
@@ -4545,7 +4540,7 @@ class Job:
             create_snapshot_if_latest_is_too_old(datasets_to_snapshot, dataset, labels[i], creation_unixtime_secs)
 
         def on_finish_dataset(dataset: str) -> None:
-            if use_last_modified_cache and not p.dry_run:
+            if is_caching and not p.dry_run:
                 set_last_modification_time_safe(
                     self.last_modified_cache_file(src, dataset),
                     unixtime_in_secs=self.src_properties[dataset][SNAPSHOTS_CHANGED],
@@ -4553,7 +4548,7 @@ class Job:
                 )
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
-        use_last_modified_cache = self.cache_create_snapshots_changed(src)
+        is_caching = self.is_caching_snapshots(src)
         datasets_without_snapshots = self.handle_minmax_snapshots(
             src, sorted_datasets, labels, fn_latest=create_snapshot_fn, fn_on_finish_dataset=on_finish_dataset
         )
@@ -4657,11 +4652,8 @@ class Job:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        cache_create_snapshots_changed: bool = self.cache_create_snapshots_changed(src)
-        cache_snapshots: bool = self.cache_snapshots(src) and not p.skip_replication
-        if not (cache_create_snapshots_changed or cache_snapshots):
+        if not self.is_caching_snapshots(src):
             return
-
         src_datasets_set: Set[str] = set()
         dataset_labels: Dict[str, List[SnapshotLabel]] = defaultdict(list)
         for label, datasets in datasets_to_snapshot.items():
@@ -4674,8 +4666,6 @@ class Job:
         for src_dataset in sorted_datasets:
             snapshots_changed = snapshots_changed_dict.get(src_dataset, 0)
             self.src_properties[src_dataset][SNAPSHOTS_CHANGED] = snapshots_changed
-            if not cache_create_snapshots_changed:
-                continue
             if snapshots_changed == 0:
                 self.invalidate_last_modified_cache_dataset(src_dataset)
             else:
@@ -5419,16 +5409,9 @@ class Job:
             remote, "feature@bookmark_v2"
         ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
 
-    def cache_create_snapshots_changed(self, remote: Remote) -> bool:
+    def is_caching_snapshots(self, remote: Remote) -> bool:
         return (
-            self.params.create_src_snapshots_config.enable_snapshots_changed_cache
-            and self.is_program_available(zfs_version_is_at_least_2_2_0, remote.location)
-            and self.is_zpool_feature_enabled_or_active(remote, "feature@extensible_dataset")
-        )
-
-    def cache_snapshots(self, remote: Remote) -> bool:
-        return (
-            self.params.cache_snapshots
+            self.params.is_caching_snapshots
             and self.is_program_available(zfs_version_is_at_least_2_2_0, remote.location)
             and self.is_zpool_feature_enabled_or_active(remote, "feature@extensible_dataset")
         )

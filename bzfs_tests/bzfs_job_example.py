@@ -247,7 +247,6 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--exclude-dataset-regex", "bar.*", "baz.*"]
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S"]  # this is already the default anyway
 # extra_args += ["--create-src-snapshots-timezone=UTC"]
-# extra_args += ["--cache-snapshots=true"]
 # extra_args += ["--zfs-send-program-opts=--props --raw --compressed"]  # this is already the default anyway
 # extra_args += ["--zfs-send-program-opts="]  # run 'zfs send' without options
 # extra_args += ["--zfs-recv-program-opts=-u"]  # this is already the default anyway
@@ -273,6 +272,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--dryrun"]
 # extra_args += ["--verbose"]
 # extra_args += ["--quiet"]
+# extra_args += ["--cache-snapshots"]  # perf: less 'zfs list -t snapshot' before snapshot creation, replication & monitoring
 # extra_args += ["--no-privilege-elevation"]
 # ... and so on (include all other options from bzfs --help here too)
 # extra_args += ["--daily_hour=23"]  # take daily snapshots at 23:59
@@ -301,7 +301,6 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--daemon-monitor-snapshots-frequency=secondly"]  # monitor snapshots every second
 # extra_args += ["--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f"]  # adds microseconds to snapshot names
 # extra_args += ["--create-src-snapshots-even-if-not-due"]  # nomore run 'zfs list -t snapshot' before snapshot creation
-# extra_args += ["--create-src-snapshots-enable-snapshots-changed-cache"]  # no 'zfs list -t snapshot' before snap creation
 # extra_args += ["--no-resume-recv"]  # skip 'zfs list' check for resume token
 # extra_args += ["--no-estimate-send-size"]  # skip 'zfs send -n -v'
 # extra_args += ["--pv-program=-"]  # nomore measure via 'pv' / stats

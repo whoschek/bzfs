@@ -312,7 +312,6 @@ class BZFSTestCase(ParametrizedTestCase):
         spawn_process_per_job: bool = None,
         include_snapshot_plan_excludes_outdated_snapshots: bool = None,
         cache_snapshots: bool = False,
-        create_src_snapshots_enable_snapshots_changed_cache: bool = True,
     ):
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(args)
@@ -425,8 +424,6 @@ class BZFSTestCase(ParametrizedTestCase):
             args = args + ["--skip-on-error=" + skip_on_error]
 
         args = args + ["--exclude-envvar-regex=EDITOR"]
-        if create_src_snapshots_enable_snapshots_changed_cache:
-            args += ["--create-src-snapshots-enable-snapshots-changed-cache"]
         args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
         if use_jobrunner:
@@ -1008,7 +1005,6 @@ class LocalTestCase(BZFSTestCase):
                                     "--yearly_month=6",
                                     *(["--skip-replication"] if m == 0 else []),
                                     dry_run=(i == 0),
-                                    create_src_snapshots_enable_snapshots_changed_cache=(j > 0),
                                     cache_snapshots=(k > 0),
                                 )
                                 if i == 0:
