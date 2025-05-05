@@ -1187,11 +1187,12 @@ usage: bzfs [-h] [--recursive]
 **--cache-snapshots** *[{true,false}]*
 
 *  Default is 'false'. If 'true', maintain a local cache of recent successful replication
-    times, and compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help
-    determine if no new snapshot is available to be replicated. Enabling the cache improves
-    performance if replication is invoked frequently (e.g. every minute via cron) over a large
-    number of datasets, with each dataset containing a large number of snapshots, yet there's
-    seldom anything to replicate (e.g. a new src snapshot is only created every day).
+    times, and recent monitoring times, and compares that to 'zfs list -t filesystem,volume -p -o
+    snapshots_changed' to help determine if there are any changes that needs to be replicate or
+    monitored. Enabling the cache improves performance if replication and/or monitoring is invoked
+    frequently (e.g. every minute via cron) over a large number of datasets, with each dataset
+    containing a large number of snapshots, yet there are seldom any changes to replicate or
+    monitor (e.g. a snapshot is only created every day or deleted every day).
 
 <!-- -->
 

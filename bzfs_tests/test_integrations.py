@@ -4748,11 +4748,12 @@ class LocalTestCase(BZFSTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         for jobiter, spawn_process_per_job in enumerate([None, True]):
-            cache_snapshots = spawn_process_per_job is not None
+            cache_snapshots = spawn_process_per_job is None
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 self.assertSnapshots(src_root_dataset, 0)
 
+                delay_secs = bzfs.time_threshold_secs
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
                 dst_hosts_pull = {localhostname: ["", "onsite"]}
@@ -4802,6 +4803,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assertEqual(0, len(snapshots(dst_root_dataset)))
 
                 # monitoring says latest src snapshots aren't too old:
+                time.sleep(delay_secs)
                 pull_args_no_monitoring = [arg for arg in pull_args if not arg.startswith("--monitor-snapshot-plan=")]
                 run_jobrunner(
                     "--monitor-src-snapshots",
@@ -5085,7 +5087,7 @@ class LocalTestCase(BZFSTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         for jobiter, spawn_process_per_job in enumerate([None, True]):
-            cache_snapshots = spawn_process_per_job is not None
+            cache_snapshots = spawn_process_per_job is None
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 destroy(dst_root_dataset, recursive=True)

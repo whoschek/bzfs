@@ -97,6 +97,7 @@ if sys.version_info < min_python_version:
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 create_src_snapshots_prefix_dflt = prog_name + "_"
 create_src_snapshots_suffix_dflt = "_adhoc"
+time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
 disable_prg = "-"
 env_var_prefix = prog_name + "_"
 pv_file_thread_separator = "_"
@@ -738,10 +739,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--cache-snapshots", choices=["true", "false"], default="false", const="true", nargs="?",
         help="Default is '%(default)s'. If 'true', maintain a local cache of recent successful replication times, and "
-             "compare that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if no new snapshot "
-             "is available to be replicated. Enabling the cache improves performance if replication is invoked frequently "
-             "(e.g. every minute via cron) over a large number of datasets, with each dataset containing a large number of "
-             "snapshots, yet there's seldom anything to replicate (e.g. a new src snapshot is only created every day).\n\n")
+             "recent monitoring times, and compares that to 'zfs list -t filesystem,volume -p -o snapshots_changed' to help "
+             "determine if there are any changes that needs to be replicate or monitored. Enabling the cache improves "
+             "performance if replication and/or monitoring is invoked frequently (e.g. every minute via cron) over a large "
+             "number of datasets, with each dataset containing a large number of snapshots, yet there are seldom any "
+             "changes to replicate or monitor (e.g. a snapshot is only created every day or deleted every day).\n\n")
     parser.add_argument(
         "--zfs-send-program-opts", type=str, default="--props --raw --compressed", metavar="STRING",
         help="Parameters to fine-tune 'zfs send' behaviour (optional); will be passed into 'zfs send' CLI. "
@@ -2182,6 +2184,7 @@ class Job:
         self.all_dst_dataset_exists: Dict[str, Dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
         self.src_properties: Dict[str, Dict[str, str | int]] = {}
+        self.dst_properties: Dict[str, Dict[str, str | int]] = {}
         self.all_exceptions: List[str] = []
         self.all_exceptions_count = 0
         self.max_exceptions_to_summarize = 10000
@@ -2550,6 +2553,7 @@ class Job:
         src_datasets = None
         basis_src_datasets = []
         self.src_properties = {}
+        self.dst_properties = {}
         if not self.is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
             list_snapshots_changed = (
                 self.cache_create_snapshots_changed(src) and not p.create_src_snapshots_config.skip_create_src_snapshots
@@ -2629,15 +2633,25 @@ class Job:
         log.info("Listing dst datasets: %s", task_description)
         if self.is_dummy(dst):
             die("Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
+        list_snapshots_changed = self.cache_snapshots(dst) and p.monitor_snapshots_config.enable_monitor_snapshots
+        props = "name"
+        props = "snapshots_changed," + props if list_snapshots_changed else props
         cmd = p.split_args(
-            f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o name", p.recursive_flag, dst.root_dataset
+            f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props}", p.recursive_flag, dst.root_dataset
         )
-        basis_dst_datasets = self.try_ssh_command(dst, log_trace, cmd=cmd)
-        if basis_dst_datasets is None:
+        basis_dst_datasets = []
+        basis_dst_datasets_str = self.try_ssh_command(dst, log_trace, cmd=cmd)
+        if basis_dst_datasets_str is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
-            basis_dst_datasets = []
         else:
-            basis_dst_datasets = basis_dst_datasets.splitlines()
+            for line in basis_dst_datasets_str.splitlines():
+                cols = line.split("\t")
+                snapshots_changed, dst_dataset = cols if list_snapshots_changed else ["-"] + cols
+                self.dst_properties[dst_dataset] = {
+                    SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+                }
+                basis_dst_datasets.append(dst_dataset)
+
         assert not self.is_test_mode or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
         dst_datasets = self.filter_datasets(dst, basis_dst_datasets)  # apply include/exclude policy
 
@@ -2712,6 +2726,8 @@ class Job:
                     num_snapshots_found += num_dst_snaps_with_guids
                     nonlocal num_snapshots_deleted
                     num_snapshots_deleted += len(missing_snapshot_tags)
+                    if len(missing_snapshot_tags) > 0 and not p.delete_dst_bookmarks:
+                        self.dst_properties[dst_dataset][SNAPSHOTS_CHANGED] = 0  # invalidate cache
                 return True
 
             # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
@@ -2796,66 +2812,139 @@ class Job:
         # pruned on schedule. Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
         if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
             log.info("--monitor-snapshots: %s", task_description)
-            alerts: List[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
-            labels = [alert.label for alert in alerts]
-            current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
-            is_debug = log.isEnabledFor(log_debug)
-
-            def alert_msg(
-                kind: str, dataset: str, snapshot: str, lbl: SnapshotLabel, snapshot_age_millis: float, delta_millis: int
-            ) -> str:
-                assert kind == "Latest" or kind == "Oldest"
-                lab = f"{lbl.prefix}{lbl.infix}<timestamp>{lbl.suffix}"
-                if snapshot_age_millis >= current_unixtime_millis:
-                    return f"No snapshot exists for {dataset}@{lab}"
-                msg = f"{kind} snapshot for {dataset}@{lab} is {human_readable_duration(snapshot_age_millis, unit='ms')} old"
-                if delta_millis == -1:
-                    return f"{msg} ({snapshot})"
-                return f"{msg} but should be at most {human_readable_duration(delta_millis, unit='ms')} old ({snapshot})"
-
-            def check_alert(
-                label: SnapshotLabel, alert_cfg: AlertConfig, creation_unixtime_secs: int, dataset: str, snapshot: str
-            ) -> None:
-                if alert_cfg is None:
-                    return
-                warning_millis = alert_cfg.warning_millis
-                critical_millis = alert_cfg.critical_millis
-                alert_kind = alert_cfg.kind
-                snapshot_age_millis = current_unixtime_millis - creation_unixtime_secs * 1000
-                m = "--monitor_snapshots: "
-                if snapshot_age_millis > critical_millis:
-                    msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, critical_millis)
-                    log.critical("%s", msg)
-                    if not p.monitor_snapshots_config.dont_crit:
-                        die(msg, exit_code=critical_status)
-                elif snapshot_age_millis > warning_millis:
-                    msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, warning_millis)
-                    log.warning("%s", msg)
-                    if not p.monitor_snapshots_config.dont_warn:
-                        die(msg, exit_code=warning_status)
-                elif is_debug:
-                    msg = m + "OK. " + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, delta_millis=-1)
-                    log.debug("%s", msg)
-
-            def alert_latest_snapshot(i: int, creation_unixtime_secs: int, dataset: str, snapshot: str) -> None:
-                alert: MonitorSnapshotAlert = alerts[i]
-                check_alert(alert.label, alert.latest, creation_unixtime_secs, dataset, snapshot)
-
-            def alert_oldest_snapshot(i: int, creation_unixtime_secs: int, dataset: str, snapshot: str) -> None:
-                alert: MonitorSnapshotAlert = alerts[i]
-                check_alert(alert.label, alert.oldest, creation_unixtime_secs, dataset, snapshot)
-
-            def alert_remote(remote: Remote, sorted_datasets: List[str]) -> None:
-                datasets_without_snapshots = self.handle_minmax_snapshots(
-                    remote, sorted_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
-                )
-                for dataset in datasets_without_snapshots:
-                    for i in range(len(alerts)):
-                        alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot=None)
-                        alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot=None)
-
             src_datasets = filter_src_datasets()  # apply include/exclude policy
-            self.run_in_parallel(lambda: alert_remote(dst, dst_datasets), lambda: alert_remote(src, src_datasets))
+            num_cache_hits = self.num_cache_hits
+            num_cache_misses = self.num_cache_misses
+            start_time_nanos = time.monotonic_ns()
+            self.run_in_parallel(
+                lambda: self.monitor_snapshots(dst, dst_datasets), lambda: self.monitor_snapshots(src, src_datasets)
+            )
+            elapsed = human_readable_duration(time.monotonic_ns() - start_time_nanos)
+            if num_cache_hits != self.num_cache_hits or num_cache_misses != self.num_cache_misses:
+                total = self.num_cache_hits + self.num_cache_misses
+                msg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
+            else:
+                msg = ""
+            log.info(
+                "--monitor-snapshots done: %s",
+                f"{task_description} [{len(src_datasets) + len(dst_datasets)} datasets; took {elapsed}{msg}]",
+            )
+
+    def monitor_snapshots(self, remote: Remote, sorted_datasets: List[str]) -> None:
+        p, log = self.params, self.params.log
+        alerts: List[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
+        labels = [alert.label for alert in alerts]
+        current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
+        is_debug = log.isEnabledFor(log_debug)
+        if self.cache_snapshots(remote):
+            props = self.dst_properties if remote is p.dst else self.src_properties
+            snapshots_changed_dict: Dict[str, int] = {dataset: vals[SNAPSHOTS_CHANGED] for dataset, vals in props.items()}
+        is_caching = False
+        hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
+
+        def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig):
+            cache_label = SnapshotLabel(os_path_join("===", alert_cfg.kind, str(label), hash_code), "", "", "")
+            return self.last_modified_cache_file(r, dataset, cache_label)
+
+        def alert_msg(
+            kind: str, dataset: str, snapshot: str, lbl: SnapshotLabel, snapshot_age_millis: float, delta_millis: int
+        ) -> str:
+            assert kind == "Latest" or kind == "Oldest"
+            lab = f"{lbl.prefix}{lbl.infix}<timestamp>{lbl.suffix}"
+            if snapshot_age_millis >= current_unixtime_millis:
+                return f"No snapshot exists for {dataset}@{lab}"
+            msg = f"{kind} snapshot for {dataset}@{lab} is {human_readable_duration(snapshot_age_millis, unit='ms')} old"
+            s = f" ({snapshot})" if snapshot else ""
+            if delta_millis == -1:
+                return f"{msg}{s}"
+            return f"{msg} but should be at most {human_readable_duration(delta_millis, unit='ms')} old{s}"
+
+        def check_alert(
+            label: SnapshotLabel, alert_cfg: AlertConfig, creation_unixtime_secs: int, dataset: str, snapshot: str
+        ) -> None:
+            if alert_cfg is None:
+                return
+            if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
+                snapshots_changed = snapshots_changed_dict.get(dataset, 0)
+                cache_file = monitor_last_modified_cache_file(remote, dataset, label, alert_cfg)
+                set_last_modification_time_safe(cache_file, unixtime_in_secs=(creation_unixtime_secs, snapshots_changed))
+            warning_millis = alert_cfg.warning_millis
+            critical_millis = alert_cfg.critical_millis
+            alert_kind = alert_cfg.kind
+            snapshot_age_millis = current_unixtime_millis - creation_unixtime_secs * 1000
+            m = "--monitor_snapshots: "
+            if snapshot_age_millis > critical_millis:
+                msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, critical_millis)
+                log.critical("%s", msg)
+                if not p.monitor_snapshots_config.dont_crit:
+                    die(msg, exit_code=critical_status)
+            elif snapshot_age_millis > warning_millis:
+                msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, warning_millis)
+                log.warning("%s", msg)
+                if not p.monitor_snapshots_config.dont_warn:
+                    die(msg, exit_code=warning_status)
+            elif is_debug:
+                msg = m + "OK. " + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, delta_millis=-1)
+                log.debug("%s", msg)
+
+        def alert_latest_snapshot(i: int, creation_unixtime_secs: int, dataset: str, snapshot: str) -> None:
+            alert: MonitorSnapshotAlert = alerts[i]
+            check_alert(alert.label, alert.latest, creation_unixtime_secs, dataset, snapshot)
+
+        def alert_oldest_snapshot(i: int, creation_unixtime_secs: int, dataset: str, snapshot: str) -> None:
+            alert: MonitorSnapshotAlert = alerts[i]
+            check_alert(alert.label, alert.oldest, creation_unixtime_secs, dataset, snapshot)
+
+        def find_stale_datasets_and_check_alerts() -> List[str]:
+            """If the cache is enabled, check which datasets have changed to determine which datasets can be skipped cheaply,
+            i.e. without incurring 'zfs list -t snapshots'. This is done by comparing the "snapshots_changed" ZFS dataset
+            property with the local cache - https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
+            stale_datasets = []
+            time_threshold = time.time() - time_threshold_secs
+            for dataset in sorted_datasets:
+                is_stale_dataset = False
+                snapshots_changed: int = snapshots_changed_dict.get(dataset, 0)
+                for alert in alerts:
+                    for cfg in (alert.latest, alert.oldest):
+                        if cfg is None:
+                            continue
+                        if (
+                            snapshots_changed != 0
+                            and snapshots_changed < time_threshold
+                            and (
+                                cached_unix_times := self.cache_get_snapshots_changed2(
+                                    monitor_last_modified_cache_file(remote, dataset, alert.label, cfg)
+                                )
+                            )
+                            and snapshots_changed == cached_unix_times[1]
+                            and snapshots_changed >= cached_unix_times[0]
+                        ):  # cached state is still valid; emit an alert if the latest/oldest snapshot is too old
+                            lbl = alert.label
+                            check_alert(lbl, cfg, creation_unixtime_secs=cached_unix_times[0], dataset=dataset, snapshot="")
+                        else:  # cached state is nomore valid; fallback to 'zfs list -t snapshot'
+                            is_stale_dataset = True
+                if is_stale_dataset:
+                    stale_datasets.append(dataset)
+            return stale_datasets
+
+        # satisfy request from local cache as much as possible
+        if self.cache_snapshots(remote):
+            stale_datasets = find_stale_datasets_and_check_alerts()
+            with self.stats_lock:
+                self.num_cache_misses += len(stale_datasets)
+                self.num_cache_hits += len(sorted_datasets) - len(stale_datasets)
+        else:
+            stale_datasets = sorted_datasets
+
+        # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
+        is_caching = self.cache_snapshots(remote)
+        datasets_without_snapshots = self.handle_minmax_snapshots(
+            remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
+        )
+        for ds in datasets_without_snapshots:
+            for i in range(len(alerts)):
+                alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=ds, snapshot="")
+                alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=ds, snapshot="")
 
     def replicate_datasets(self, src_datasets: List[str], task_description: str, max_workers: int) -> bool:
         assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
@@ -2882,7 +2971,7 @@ class Job:
             """If the cache is enabled on replication, check which src datasets or dst datasets have changed to determine
             which datasets can be skipped cheaply, i.e. without incurring 'zfs list -t snapshots'. This is done by comparing
             the "snapshots_changed" ZFS dataset property with the local cache.
-            See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
+            See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
             # First, check which src datasets have changed since the last replication to that destination
             cache_files = {}
             stale_src_datasets1 = []
@@ -2891,7 +2980,6 @@ class Job:
             userhost_dir = userhost_dir if userhost_dir else "-"
             hash_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
             hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
-            time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
             for src_dataset in src_datasets:
                 dst_dataset = src2dst(src_dataset)  # cache is only valid for identical destination dataset
                 cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
@@ -4543,6 +4631,14 @@ class Job:
         except FileNotFoundError:
             return 0  # harmless
 
+    def cache_get_snapshots_changed2(self, path: str) -> Tuple[int, int]:
+        """Like zfs_get_snapshots_changed() but reads from local cache."""
+        try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
+            s = os_stat(path)
+            return round(s.st_atime), round(s.st_mtime)
+        except FileNotFoundError:
+            return 0, 0  # harmless
+
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: Optional[SnapshotLabel] = None) -> str:
         cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         userhost_dir = remote.ssh_user_host if remote.ssh_user_host else "-"
@@ -4601,7 +4697,7 @@ class Job:
 
     def zfs_get_snapshots_changed(self, remote: Remote, datasets: List[str]) -> Dict[str, int]:
         """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
-        See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#snapshots_changed"""
+        See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
 
         def try_zfs_list_command(_cmd: List[str], batch: List[str]) -> List[str]:
             try:
@@ -5702,9 +5798,7 @@ class ProgressReporter:
                     fd.close()
         except BaseException as e:
             self.exception = e  # will be reraised in stop()
-            import traceback
-
-            log.error("%s%s", "ProgressReporter:\n", "".join(traceback.TracebackException.from_exception(e).format()))
+            log.error("%s", "ProgressReporter:", exc_info=e)
 
     @dataclass
     class TransferStat:
@@ -6252,21 +6346,22 @@ def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> 
         log.log(level, "%s", value)
 
 
-def set_last_modification_time(path: str, unixtime_in_secs: int, if_more_recent=False) -> None:
-    if not os_path_exists(path):
-        with open(path, "a"):
-            pass
-    elif if_more_recent and unixtime_in_secs <= round(os_stat(path).st_mtime):
-        return
-    os_utime(path, times=(unixtime_in_secs, unixtime_in_secs))
-
-
-def set_last_modification_time_safe(path: str, unixtime_in_secs: int, if_more_recent=False) -> None:
+def set_last_modification_time_safe(path: str, unixtime_in_secs: Union[int, Tuple[int, int]], if_more_recent=False) -> None:
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         set_last_modification_time(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
     except FileNotFoundError:
         pass  # harmless
+
+
+def set_last_modification_time(path: str, unixtime_in_secs: Union[int, Tuple[int, int]], if_more_recent=False) -> None:
+    unixtime_in_secs = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
+    if not os_path_exists(path):
+        with open(path, "a"):
+            pass
+    elif if_more_recent and unixtime_in_secs[1] <= round(os_stat(path).st_mtime):
+        return
+    os_utime(path, times=unixtime_in_secs)
 
 
 def drain(iterable: Iterable) -> None:
