@@ -2833,16 +2833,16 @@ class Job:
     def monitor_snapshots(self, remote: Remote, sorted_datasets: List[str]) -> None:
         p, log = self.params, self.params.log
         alerts: List[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
-        labels = [alert.label for alert in alerts]
+        labels: List[SnapshotLabel] = [alert.label for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
-        is_debug = log.isEnabledFor(log_debug)
+        is_debug: bool = log.isEnabledFor(log_debug)
         if self.cache_snapshots(remote):
             props = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: Dict[str, int] = {dataset: vals[SNAPSHOTS_CHANGED] for dataset, vals in props.items()}
         is_caching = False
         hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
 
-        def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig):
+        def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
             cache_label = SnapshotLabel(os_path_join("===", alert_cfg.kind, str(label), hash_code), "", "", "")
             return self.last_modified_cache_file(r, dataset, cache_label)
 
@@ -2916,8 +2916,8 @@ class Job:
                                     monitor_last_modified_cache_file(remote, dataset, alert.label, cfg)
                                 )
                             )
-                            and snapshots_changed == cached_unix_times[1]
-                            and snapshots_changed >= cached_unix_times[0]
+                            and snapshots_changed == cached_unix_times[1]  # cached snapshots_changed aka last modified time
+                            and snapshots_changed >= cached_unix_times[0]  # creation time of minmax snapshot aka access time
                         ):  # cached state is still valid; emit an alert if the latest/oldest snapshot is too old
                             lbl = alert.label
                             check_alert(lbl, cfg, creation_unixtime_secs=cached_unix_times[0], dataset=dataset, snapshot="")
@@ -4625,11 +4625,7 @@ class Job:
         return datasets_without_snapshots
 
     def cache_get_snapshots_changed(self, path: str) -> int:
-        """Like zfs_get_snapshots_changed() but reads from local cache."""
-        try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
-            return round(os_stat(path).st_mtime)
-        except FileNotFoundError:
-            return 0  # harmless
+        return self.cache_get_snapshots_changed2(path)[1]
 
     def cache_get_snapshots_changed2(self, path: str) -> Tuple[int, int]:
         """Like zfs_get_snapshots_changed() but reads from local cache."""
