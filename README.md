@@ -1632,15 +1632,16 @@ usage: bzfs [-h] [--recursive]
 
 **--cache-snapshots** *[{true,false}]*
 
-*  Default is 'false'. If 'true', maintain a local cache of recent snapshot creation times,
-    recent successful replication times, and recent monitoring times, and compare them to a quick
-    'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot
-    shall be created on the src, and if there are any changes that need to be replicated or
-    monitored. Enabling the cache improves performance if --create-src-snapshots and/or
-    replication and/or --monitor-snapshots is invoked frequently (e.g. every minute via cron)
-    over a large number of datasets, with each dataset containing a large number of snapshots, yet
-    it is seldom for a new src snapshot to actually be created, or there are seldom any changes to
-    replicate or monitor (e.g. a snapshot is only created every day and/or deleted every day).
+*  Default is 'false'. If 'true', maintain a persistent local cache of recent snapshot
+    creation times, recent successful replication times, and recent monitoring times, and compare
+    them to a quick 'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if
+    a new snapshot shall be created on the src, and if there are any changes that need to be
+    replicated or monitored. Enabling the cache improves performance if --create-src-snapshots
+    and/or replication and/or --monitor-snapshots is invoked frequently (e.g. every minute via
+    cron) over a large number of datasets, with each dataset containing a large number of
+    snapshots, yet it is seldom for a new src snapshot to actually be created, or there are seldom
+    any changes to replicate or monitor (e.g. a snapshot is only created every day and/or deleted
+    every day).
 
     *Note:* This flag only has an effect on OpenZFS >= 2.2.
 

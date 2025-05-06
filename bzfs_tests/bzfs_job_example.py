@@ -269,10 +269,10 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--skip-on-error=dataset"]  # this is already the default anyway
 # extra_args += ["--skip-on-error=fail"]
 # extra_args += ["--skip-on-error=tree"]
+# extra_args += ["--cache-snapshots"]  # perf: less 'zfs list -t snapshot' before snapshot creation, replication & monitoring
 # extra_args += ["--dryrun"]
 # extra_args += ["--verbose"]
 # extra_args += ["--quiet"]
-# extra_args += ["--cache-snapshots"]  # perf: less 'zfs list -t snapshot' before snapshot creation, replication & monitoring
 # extra_args += ["--no-privilege-elevation"]
 # ... and so on (include all other options from bzfs --help here too)
 # extra_args += ["--daily_hour=23"]  # take daily snapshots at 23:59

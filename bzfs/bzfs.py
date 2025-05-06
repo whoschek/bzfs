@@ -1036,8 +1036,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "degree is configurable with the --threads option (see below).\n\n")
     parser.add_argument(
         "--cache-snapshots", choices=["true", "false"], default="false", const="true", nargs="?",
-        help="Default is '%(default)s'. If 'true', maintain a local cache of recent snapshot creation times, recent "
-             "successful replication times, and recent monitoring times, and compare them to a quick "
+        help="Default is '%(default)s'. If 'true', maintain a persistent local cache of recent snapshot creation times, "
+             "recent successful replication times, and recent monitoring times, and compare them to a quick "
              "'zfs list -t filesystem,volume -p -o snapshots_changed' to help determine if a new snapshot shall be created "
              "on the src, and if there are any changes that need to be replicated or monitored. Enabling the cache "
              "improves performance if --create-src-snapshots and/or replication and/or --monitor-snapshots is invoked "
