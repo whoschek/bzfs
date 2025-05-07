@@ -71,11 +71,16 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.job.validate_non_empty_string("", "name")
 
-    def test_non_negative_int(self):
+    def test_validate_non_negative_int(self):
         self.job.validate_non_negative_int(1, "name")
         self.job.validate_non_negative_int(0, "name")
         with self.assertRaises(SystemExit):
             self.job.validate_non_negative_int(-1, "name")
+
+    def test_validate_true(self):
+        self.job.validate_true(1, "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_true(0, "name")
 
     def test_validate_is_subset(self):
         self.job.validate_is_subset([1], [1, 2], "x", "y")
@@ -409,6 +414,11 @@ class TestXLoadModule(unittest.TestCase):
     with open(_STUB_WRAPPER, "w") as fp:
         fp.write("import importlib as _il\n" "_il.import_module('bzfs.bzfs')\n")
     os.chmod(_STUB_WRAPPER, 0o755)
+
+    def test_command_not_found_on_path_raises_error(self):
+        with self.assertRaises(SystemExit) as context:
+            bzfs_jobrunner.load_module("nonexistent_prog")
+        self.assertEqual(die_status, context.exception.code)
 
     def test_a_wrapper_script_triggers_package_import(self):
         progname = "bzfs"

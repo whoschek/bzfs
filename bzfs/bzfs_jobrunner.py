@@ -23,10 +23,10 @@
 """WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."""
 
 import argparse
-import ast
 import contextlib
 import importlib.machinery
 import importlib.util
+import logging
 import os
 import pwd
 import shutil
@@ -40,7 +40,7 @@ import uuid
 from ast import literal_eval
 from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 prog_name = "bzfs_jobrunner"
 src_magic_substitution_token = "^SRC_HOST"
@@ -356,12 +356,24 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # fmt: on
 
 
+# constants:
+die_status = 3
+
+
 def load_module(progname: str) -> types.ModuleType:
+
+    def die(msg: str, exit_code=die_status) -> None:
+        logging.getLogger(__name__).error("%s", msg)
+        ex = SystemExit(msg)
+        ex.code = exit_code
+        raise ex
+
     prog_path = shutil.which(progname)
     if not prog_path:
         sibling_prog_path = os.path.join(os.path.dirname(sys.argv[0]), progname)
         prog_path = sibling_prog_path if os.path.isfile(sibling_prog_path) else prog_path
-    assert prog_path, f"{progname}: command not found on PATH"
+    if not prog_path:
+        die(f"{progname}: command not found on PATH")
     prog_path = os.path.realpath(prog_path)  # resolve symlink, if any
     loader = importlib.machinery.SourceFileLoader(progname, prog_path)
     spec = importlib.util.spec_from_loader(progname, loader)
@@ -377,8 +389,8 @@ def load_module(progname: str) -> types.ModuleType:
 
 # constants:
 bzfs: types.ModuleType = load_module("bzfs")
-die_status = bzfs.die_status
 dummy_dataset = bzfs.dummy_dataset
+assert die_status == bzfs.die_status
 sep = ","
 
 
@@ -418,7 +430,7 @@ class Job:
         dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
         monitor_snapshot_plan = self.validate_monitor_snapshot_plan(literal_eval(args.monitor_snapshot_plan))
         localhostname = args.localhost if args.localhost else socket.gethostname()
-        assert localhostname, "localhostname must not be empty!"
+        self.validate_non_empty_string(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
         src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
         dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
@@ -439,10 +451,11 @@ class Job:
             dst_root_datasets.keys(), retain_dst_targets.keys(), "--dst-root-dataset.keys", "--retain-dst-targets.keys"
         )
         self.validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
-        assert not (
-            len(src_hosts) > 1
-            and any(src_magic_substitution_token not in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys())
-        ), "Multiple sources must not write to the same destination dataset"
+        self.validate_true(
+            len(src_hosts) <= 1
+            or all(src_magic_substitution_token in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys()),
+            "Multiple sources must not write to the same destination dataset",
+        )
         jobid = args.job_id if args.job_id is not None else args.jobid  # --jobid is deprecated
         jobid = sanitize(jobid) if jobid else uuid.uuid1().hex
         workers, workers_is_percent = args.workers
@@ -481,7 +494,7 @@ class Job:
 
         def resolve_dst_dataset(dst_hostname: str, dst_dataset: str) -> str:
             root_dataset = dst_root_datasets.get(dst_hostname)
-            assert root_dataset is not None, f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
+            assert root_dataset is not None, dst_hostname  # f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
             root_dataset = root_dataset.replace(src_magic_substitution_token, src_host)
             root_dataset = root_dataset.replace(dst_magic_substitution_token, dst_hostname)
             dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
@@ -547,9 +560,10 @@ class Job:
                 prune_src(["--delete-dst-snapshots=bookmarks"], src_bookmark_plan, "prune-src-bookmarks")
 
             if args.prune_dst_snapshots:
-                assert (
-                    retain_dst_targets
-                ), "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
+                self.validate_true(
+                    retain_dst_targets,
+                    "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!",
+                )
                 j = 0
                 marker = "prune-dst-snapshots"
                 for dst_hostname, targets in dst_hosts.items():
@@ -880,7 +894,7 @@ class Job:
             self.die(f"{x_name} must be a subset of {y_name}. diff: {diff}, {x_name}: {sorted(x)}, {y_name}: {sorted(y)}")
 
     def validate_host_name(self, hostname: str, context: str) -> None:
-        self.validate_non_empty_string(hostname, context)
+        self.validate_non_empty_string(hostname, f"{context} hostname")
         bzfs.validate_host_name(hostname, context, extra_invalid_chars=":")
 
     def validate_non_empty_string(self, value: str, name: str) -> None:
@@ -892,6 +906,10 @@ class Job:
         self.validate_type(value, int, name)
         if value < 0:
             self.die(f"{name} must be a non-negative integer: {value}")
+
+    def validate_true(self, expr: Any, msg: str) -> None:
+        if not bool(expr):
+            self.die(msg)
 
     def validate_type(self, value, expected_type, name: str) -> None:
         if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10
