@@ -23,7 +23,10 @@ import tempfile
 import types
 import unittest
 from subprocess import DEVNULL, PIPE
+from typing import Union
 from unittest.mock import patch, MagicMock
+
+from bzfs.bzfs import die_status
 
 bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
 if bzfs_dir not in os.environ["PATH"]:
@@ -44,14 +47,48 @@ def suite():
 
 #############################################################################
 class TestHelperFunctions(unittest.TestCase):
+    def setUp(self):
+        self.job = bzfs_jobrunner.Job()
+
+    def test_validate_type(self):
+        self.job.validate_type("foo", str, "name")
+        self.job.validate_type(123, int, "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_type(123, str, "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_type("foo", int, "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_type(None, str, "name")
+        self.job.validate_type("foo", Union[str, int], "name")
+        self.job.validate_type(123, Union[str, int], "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_type([], Union[str, int], "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_type(None, Union[str, int], "name")
+
+    def test_validate_non_empty_string(self):
+        self.job.validate_non_empty_string("valid_string", "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_non_empty_string("", "name")
+
+    def test_non_negative_int(self):
+        self.job.validate_non_negative_int(1, "name")
+        self.job.validate_non_negative_int(0, "name")
+        with self.assertRaises(SystemExit):
+            self.job.validate_non_negative_int(-1, "name")
+
     def test_validate_is_subset(self):
-        bzfs_jobrunner.validate_is_subset([1], [1, 2], "x", "y")
-        bzfs_jobrunner.validate_is_subset([], [1, 2], "x", "y")
-        bzfs_jobrunner.validate_is_subset([], [], "x", "y")
-        with self.assertRaises(AssertionError):
-            bzfs_jobrunner.validate_is_subset([3], [1, 2], "x", "y")
-        with self.assertRaises(AssertionError):
-            bzfs_jobrunner.validate_is_subset([3, 4], [], "x", "y")
+        self.job.validate_is_subset([1], [1, 2], "x", "y")
+        self.job.validate_is_subset([], [1, 2], "x", "y")
+        self.job.validate_is_subset([], [], "x", "y")
+        with self.assertRaises(SystemExit):
+            self.job.validate_is_subset([3], [1, 2], "x", "y")
+        with self.assertRaises(SystemExit):
+            self.job.validate_is_subset([3, 4], [], "x", "y")
+        with self.assertRaises(SystemExit):
+            self.job.validate_is_subset("foo", [3], "x", "y")
+        with self.assertRaises(SystemExit):
+            self.job.validate_is_subset([3], "foo", "x", "y")
 
     def test_pretty_print_formatter(self):
         self.assertIsNotNone(str(bzfs_jobrunner.pretty_print_formatter({"foo": "bar"})))
@@ -314,7 +351,7 @@ class TestRunSubJobInCurrentThread(unittest.TestCase):
 
     def test_generic_exception_returns_die_status(self, mock_bzfs_run_main):
         cmd = ["bzfs", "foo"]
-        mock_bzfs_run_main.side_effect = ValueError("unexpected")
+        mock_bzfs_run_main.side_effect = SystemExit(die_status)
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(bzfs_jobrunner.die_status, result)
 
@@ -323,6 +360,12 @@ class TestRunSubJobInCurrentThread(unittest.TestCase):
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(0, result)
         mock_bzfs_run_main.assert_called_once_with(cmd)
+
+    def test_unexpected_exception(self, mock_bzfs_run_main):
+        cmd = ["bzfs", "foo"]
+        mock_bzfs_run_main.side_effect = ValueError
+        result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
+        self.assertEqual(bzfs_jobrunner.die_status, result)
 
 
 #############################################################################

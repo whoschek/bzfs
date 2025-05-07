@@ -37,9 +37,10 @@ import threading
 import time
 import types
 import uuid
+from ast import literal_eval
 from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 prog_name = "bzfs_jobrunner"
 src_magic_substitution_token = "^SRC_HOST"
@@ -412,32 +413,32 @@ class Job:
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
-        src_snapshot_plan = validate_snapshot_plan(ast.literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
-        src_bookmark_plan = validate_snapshot_plan(ast.literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
-        dst_snapshot_plan = validate_snapshot_plan(ast.literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
-        monitor_snapshot_plan = validate_monitor_snapshot_plan(ast.literal_eval(args.monitor_snapshot_plan))
+        src_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
+        src_bookmark_plan = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
+        dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
+        monitor_snapshot_plan = self.validate_monitor_snapshot_plan(literal_eval(args.monitor_snapshot_plan))
         localhostname = args.localhost if args.localhost else socket.gethostname()
         assert localhostname, "localhostname must not be empty!"
         log.debug("localhostname: %s", localhostname)
-        src_hosts = validate_src_hosts(ast.literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
-        dst_hosts = validate_dst_hosts(ast.literal_eval(args.dst_hosts))
+        src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
+        dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
         if args.src_host is not None:  # retain only the src hosts that are also contained in args.src_host
             assert isinstance(args.src_host, list)
             retain_src_hosts = set(args.src_host).difference({"^NONE"})
-            validate_is_subset(retain_src_hosts, src_hosts, "--src-host", "--src-hosts")
+            self.validate_is_subset(retain_src_hosts, src_hosts, "--src-host", "--src-hosts")
             src_hosts = [host for host in src_hosts if host in retain_src_hosts]
         if args.dst_host is not None:  # retain only the dst hosts that are also contained in args.dst_host
             assert isinstance(args.dst_host, list)
             retain_dst_hosts = set(args.dst_host).difference({"^NONE"})
-            validate_is_subset(retain_dst_hosts, dst_hosts.keys(), "--dst-host", "--dst-hosts.keys")
+            self.validate_is_subset(retain_dst_hosts, dst_hosts.keys(), "--dst-host", "--dst-hosts.keys")
             dst_hosts = {dst_host: lst for dst_host, lst in dst_hosts.items() if dst_host in retain_dst_hosts}
-        retain_dst_targets = validate_dst_hosts(ast.literal_eval(args.retain_dst_targets))
-        validate_is_subset(dst_hosts.keys(), retain_dst_targets.keys(), "--dst-hosts.keys", "--retain-dst-targets.keys")
-        dst_root_datasets = validate_dst_root_datasets(ast.literal_eval(args.dst_root_datasets))
-        validate_is_subset(
+        retain_dst_targets = self.validate_dst_hosts(literal_eval(args.retain_dst_targets))
+        self.validate_is_subset(dst_hosts.keys(), retain_dst_targets.keys(), "--dst-hosts.keys", "--retain-dst-targets.keys")
+        dst_root_datasets = self.validate_dst_root_datasets(literal_eval(args.dst_root_datasets))
+        self.validate_is_subset(
             dst_root_datasets.keys(), retain_dst_targets.keys(), "--dst-root-dataset.keys", "--retain-dst-targets.keys"
         )
-        validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
+        self.validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
         assert not (
             len(src_hosts) > 1
             and any(src_magic_substitution_token not in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys())
@@ -814,6 +815,99 @@ class Job:
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         return proc.returncode
 
+    def validate_src_hosts(self, src_hosts: List) -> List[str]:
+        context = "--src-hosts"
+        self.validate_type(src_hosts, list, context)
+        for src_hostname in src_hosts:
+            self.validate_host_name(src_hostname, context)
+        return src_hosts
+
+    def validate_dst_hosts(self, dst_hosts: Dict) -> Dict:
+        context = "--dst-hosts"
+        self.validate_type(dst_hosts, dict, context)
+        for dst_hostname, targets in dst_hosts.items():
+            self.validate_host_name(dst_hostname, context)
+            self.validate_type(targets, list, f"{context} targets")
+            for target in targets:
+                self.validate_type(target, str, f"{context} target")
+        return dst_hosts
+
+    def validate_dst_root_datasets(self, dst_root_datasets: Dict) -> Dict:
+        context = "--dst-root-datasets"
+        self.validate_type(dst_root_datasets, dict, context)
+        for dst_hostname, dst_root_dataset in dst_root_datasets.items():
+            self.validate_host_name(dst_hostname, context)
+            self.validate_type(dst_root_dataset, str, f"{context} root dataset")
+        return dst_root_datasets
+
+    def validate_snapshot_plan(self, snapshot_plan: Dict, context: str) -> Dict:
+        self.validate_type(snapshot_plan, dict, context)
+        for org, target_periods in snapshot_plan.items():
+            self.validate_type(org, str, f"{context} org")
+            self.validate_type(target_periods, dict, f"{context} target_periods")
+            for target, periods in target_periods.items():
+                self.validate_type(target, str, f"{context} org/target")
+                self.validate_type(periods, dict, f"{context} org/periods")
+                for period_unit, period_amount in periods.items():
+                    self.validate_non_empty_string(period_unit, f"{context} org/target/period_unit")
+                    self.validate_non_negative_int(period_amount, f"{context} org/target/period_amount")
+        return snapshot_plan
+
+    def validate_monitor_snapshot_plan(self, monitor_snapshot_plan: Dict) -> Dict:
+        context = "--monitor-snapshot-plan"
+        self.validate_type(monitor_snapshot_plan, dict, context)
+        for org, target_periods in monitor_snapshot_plan.items():
+            self.validate_type(org, str, f"{context} org")
+            self.validate_type(target_periods, dict, f"{context} target_periods")
+            for target, periods in target_periods.items():
+                self.validate_type(target, str, f"{context} org/target")
+                self.validate_type(periods, dict, f"{context} org/periods")
+                for period_unit, alert_dict in periods.items():
+                    self.validate_non_empty_string(period_unit, f"{context} org/target/period_unit")
+                    self.validate_type(alert_dict, dict, f"{context} org/target/alert_dict")
+                    for key, value in alert_dict.items():
+                        self.validate_non_empty_string(key, f"{context} org/target/alert_dict/key")
+                        self.validate_type(value, Union[str, int], f"{context} org/target/alert_dict/value")
+        return monitor_snapshot_plan
+
+    def validate_is_subset(self, x: Iterable[str], y: Iterable[str], x_name: str, y_name: str) -> None:
+        if not isinstance(x, Iterable) or isinstance(x, str):
+            self.die(f"{x_name} must be an Iterable")
+        if not isinstance(y, Iterable) or isinstance(y, str):
+            self.die(f"{y_name} must be an Iterable")
+        if not set(x).issubset(set(y)):
+            diff = sorted(set(x).difference(set(y)))
+            self.die(f"{x_name} must be a subset of {y_name}. diff: {diff}, {x_name}: {sorted(x)}, {y_name}: {sorted(y)}")
+
+    def validate_host_name(self, hostname: str, context: str) -> None:
+        self.validate_non_empty_string(hostname, context)
+        bzfs.validate_host_name(hostname, context, extra_invalid_chars=":")
+
+    def validate_non_empty_string(self, value: str, name: str) -> None:
+        self.validate_type(value, str, name)
+        if not value:
+            self.die(f"{name} must not be empty!")
+
+    def validate_non_negative_int(self, value: int, name: str) -> None:
+        self.validate_type(value, int, name)
+        if value < 0:
+            self.die(f"{name} must be a non-negative integer")
+
+    def validate_type(self, value, expected_type, name: str) -> None:
+        if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10
+            union_types = expected_type.__args__
+            for t in union_types:
+                if isinstance(value, t):
+                    return
+            type_msg = " or ".join([t.__name__ for t in union_types])
+            self.die(f"{name} must be of type {type_msg} but got {type(value).__name__}: {value}")
+        elif not isinstance(value, expected_type):
+            self.die(f"{name} must be of type {expected_type.__name__} but got {type(value).__name__}: {value}")
+
+    def die(self, msg: str) -> None:
+        self.log.error("%s", msg)
+        bzfs.die(msg)
+
 
 #############################################################################
 class Stats:
@@ -828,7 +922,7 @@ class Stats:
 
     def __repr__(self) -> str:
         def pct(number: int) -> str:
-            return f"{number}={bzfs.human_readable_float(100 * number / self.jobs_all)}%"
+            return bzfs.percent(number, total=self.jobs_all)
 
         all, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
         running = self.jobs_running
@@ -843,80 +937,6 @@ def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
         results.append(src)
         results.append(dst)
     return results
-
-
-def validate_src_hosts(src_hosts: List) -> List[str]:
-    assert isinstance(src_hosts, list)
-    for src_hostname in src_hosts:
-        assert isinstance(src_hostname, str)
-        assert src_hostname, "src hostname must not be empty!"
-        bzfs.validate_host_name(src_hostname, "src host", extra_invalid_chars=":")
-    return src_hosts
-
-
-def validate_dst_hosts(dst_hosts: Dict) -> Dict:
-    assert isinstance(dst_hosts, dict)
-    for dst_hostname, targets in dst_hosts.items():
-        assert isinstance(dst_hostname, str)
-        assert dst_hostname, "dst hostname must not be empty!"
-        bzfs.validate_host_name(dst_hostname, "dst host", extra_invalid_chars=":")
-        assert isinstance(targets, list)
-        for target in targets:
-            assert isinstance(target, str)
-    return dst_hosts
-
-
-def validate_dst_root_datasets(dst_root_datasets: Dict) -> Dict:
-    assert isinstance(dst_root_datasets, dict)
-    for dst_hostname, dst_root_dataset in dst_root_datasets.items():
-        assert isinstance(dst_hostname, str)
-        assert dst_hostname, "dst hostname must not be empty!"
-        bzfs.validate_host_name(dst_hostname, "dst host", extra_invalid_chars=":")
-        assert isinstance(dst_root_dataset, str)
-    return dst_root_datasets
-
-
-def validate_snapshot_plan(snapshot_plan: Dict, context: str) -> Dict:
-    assert isinstance(snapshot_plan, dict)
-    for org, target_periods in snapshot_plan.items():
-        assert isinstance(org, str)
-        assert isinstance(target_periods, dict)
-        for target, periods in target_periods.items():
-            assert isinstance(target, str)
-            assert isinstance(periods, dict)
-            for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
-                assert isinstance(period_unit, str)
-                assert not (
-                    not isinstance(period_amount, int) or period_amount < 0
-                ), f"{context}: Period amount must be a non-negative integer: {period_amount} within plan {snapshot_plan}"
-    return snapshot_plan
-
-
-def validate_monitor_snapshot_plan(monitor_snapshot_plan: Dict) -> Dict:
-    assert isinstance(monitor_snapshot_plan, dict)
-    for org, target_periods in monitor_snapshot_plan.items():
-        assert isinstance(org, str)
-        assert isinstance(target_periods, dict)
-        for target, periods in target_periods.items():
-            assert isinstance(target, str)
-            assert isinstance(periods, dict)
-            for period_unit, alert_dict in periods.items():
-                assert isinstance(period_unit, str)
-                assert isinstance(alert_dict, dict)
-                for key, value in alert_dict.items():
-                    assert isinstance(key, str)
-                    assert isinstance(value, str if key != "cycles" else int)
-    return monitor_snapshot_plan
-
-
-def validate_is_subset(x: Iterable[str], y: Iterable[str], x_name: str, y_name: str) -> None:
-    assert isinstance(x, Iterable)
-    assert not isinstance(x, str)
-    assert isinstance(y, Iterable)
-    assert not isinstance(y, str)
-    if not set(x).issubset(set(y)):
-        diff = sorted(set(x).difference(set(y)))
-        assert False, f"{x_name} must be a subset of {y_name}. diff: {diff}, {x_name}: {sorted(x)}, {y_name}: {sorted(y)}"
 
 
 def sanitize(filename: str) -> str:

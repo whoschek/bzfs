@@ -6302,7 +6302,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
 def tail(file, n: int) -> Sequence[str]:
     if not os.path.isfile(file):
         return []
-    with open(file, "r", encoding="utf-8") as fd:
+    with open(file, "r", encoding="utf-8", errors="surrogateescape") as fd:
         return deque(fd, maxlen=n)
 
 
