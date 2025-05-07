@@ -891,7 +891,7 @@ class Job:
     def validate_non_negative_int(self, value: int, name: str) -> None:
         self.validate_type(value, int, name)
         if value < 0:
-            self.die(f"{name} must be a non-negative integer")
+            self.die(f"{name} must be a non-negative integer: {value}")
 
     def validate_type(self, value, expected_type, name: str) -> None:
         if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10

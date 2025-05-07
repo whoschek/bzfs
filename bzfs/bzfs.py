@@ -6299,10 +6299,10 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
-def tail(file, n: int) -> Sequence[str]:
+def tail(file, n: int, errors=None) -> Sequence[str]:
     if not os.path.isfile(file):
         return []
-    with open(file, "r", encoding="utf-8", errors="surrogateescape") as fd:
+    with open(file, "r", encoding="utf-8", errors=errors) as fd:
         return deque(fd, maxlen=n)
 
 

@@ -4430,7 +4430,7 @@ class LocalTestCase(BZFSTestCase):
                     "--log-syslog-prefix=" + syslog_prefix,
                     "--skip-replication",
                 )
-                lines = list(bzfs.tail("/var/log/syslog", 100))
+                lines = list(bzfs.tail("/var/log/syslog", 100, errors="surrogateescape"))
                 k = -1
                 for kk, line in enumerate(lines):
                     if syslog_prefix in line and "Log file is:" in line:
