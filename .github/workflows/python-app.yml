@@ -183,7 +183,10 @@ jobs:
         echo after
         sudo locale-gen fr_FR.UTF-8
         #sudo update-locale LANG=fr_FR.UTF-8
-        #sudo apt-get install -y --reinstall pv
+        ls -al /usr/share/locale/fr/LC_MESSAGES/pv.mo || true
+        echo reinstalling pv
+        sudo apt-get install -y --reinstall pv
+        ls -al /usr/share/locale/fr/LC_MESSAGES/pv.mo || true
         export LC_ALL=fr_FR.UTF-8
         export LC_MESSAGES=fr_FR.UTF-8
         unset LANG
