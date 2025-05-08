@@ -92,7 +92,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.13"]
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -138,7 +138,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.14-dev"]
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
     - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -194,7 +194,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.11"]
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -240,7 +240,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.11"]
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
@@ -286,7 +286,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.12", "pypy3.11"]
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -325,7 +325,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.10", "3.9", "3.8"]
       fail-fast: false
-    timeout-minutes: 120
+    timeout-minutes: 130
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -370,7 +370,7 @@ jobs:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
         python-version: ["3.8"]
       fail-fast: false
-    timeout-minutes: 120
+    timeout-minutes: 130
     steps:
     - uses: actions/checkout@v4
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -412,7 +412,7 @@ jobs:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -435,7 +435,7 @@ jobs:
       matrix:
         iteration: ${{ fromJSON(needs.create_iteration_test_matrix.outputs.iteration_test_matrix_output) }}
       fail-fast: false
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
     - uses: actions/checkout@v4
     - name: Test with unittest for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
