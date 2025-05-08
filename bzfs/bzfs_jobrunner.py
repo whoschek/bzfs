@@ -274,7 +274,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
                 "10minutely": {"warning": "0 minutes", "critical": "0 minutes"},
             },
             "": {
-                "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 80},
+                "daily": {"warning": "4 hours", "critical": "8 hours"},
             },
         },
     }
@@ -596,13 +596,14 @@ class Job:
                 opts += [f"--log-file-suffix={sep}{jobid}{npad()}{logsuffix}{sep}"]
                 return opts
 
-            def build_monitor_plan(monitor_plan: Dict, snapshot_plan: Dict) -> Dict:
+            def build_monitor_plan(monitor_plan: Dict, snapshot_plan: Dict, cycles_prefix: str) -> Dict:
 
                 def alert_dicts(alertdict: Dict, cycles: int) -> Dict:
                     latest_dict = alertdict.copy()
-                    latest_dict.pop("cycles", None)
+                    for prefix in ("src_snapshot_", "dst_snapshot_", ""):
+                        latest_dict.pop(f"{prefix}cycles", None)
                     oldest_dict = latest_dict.copy()
-                    oldest_dict["cycles"] = int(alertdict.get("cycles", cycles))
+                    oldest_dict["cycles"] = int(alertdict.get(f"{cycles_prefix}cycles", cycles))
                     return {"latest": latest_dict, "oldest": oldest_dict}
 
                 return {
@@ -618,7 +619,7 @@ class Job:
 
             if args.monitor_src_snapshots:
                 marker = "monitor-src-snapshots"
-                monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan)
+                monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
                 opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(src_host, None))
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
@@ -635,7 +636,7 @@ class Job:
                         org: {target: periods for target, periods in target_periods.items() if target in monitor_targets}
                         for org, target_periods in monitor_snapshot_plan.items()
                     }
-                    monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan)
+                    monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan, "dst_snapshot_")
                     opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(src_host, dst_hostname))
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
@@ -886,9 +887,9 @@ class Job:
         return monitor_snapshot_plan
 
     def validate_is_subset(self, x: Iterable[str], y: Iterable[str], x_name: str, y_name: str) -> None:
-        if not isinstance(x, Iterable) or isinstance(x, str):
+        if isinstance(x, str) or not isinstance(x, Iterable):
             self.die(f"{x_name} must be an Iterable")
-        if not isinstance(y, Iterable) or isinstance(y, str):
+        if isinstance(y, str) or not isinstance(y, Iterable):
             self.die(f"{y_name} must be an Iterable")
         if not set(x).issubset(set(y)):
             diff = sorted(set(x).difference(set(y)))

@@ -4764,7 +4764,14 @@ class LocalTestCase(BZFSTestCase):
                 src_bookmark_plan = dst_snapshot_plan
                 monitor_dst_snapshot_plan = {
                     "z": {
-                        "onsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours", "cycles": 1}},
+                        "onsite": {
+                            "millisecondly": {
+                                "warning": "1 hours",
+                                "critical": "2 hours",
+                                "src_snapshot_cycles": 1,
+                                "dst_snapshot_cycles": 1,
+                            }
+                        },
                         "offsite": {"millisecondly": {"warning": "1 hours", "critical": "2 hours"}},
                     }
                 }
