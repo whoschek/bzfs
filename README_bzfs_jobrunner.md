@@ -278,6 +278,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
     intended for another destination host, in which case it skips the snapshot. A destination host
     will receive replicas of snapshots for all targets that map to that destination host.
 
+    Removing a mapping can be used to temporarily suspend replication to a given destination host.
+
 <!-- -->
 
 <div id="--dst-host"></div>
@@ -388,8 +390,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
     '8 hours'}, 'weekly': {'warning': '2 days', 'critical': '8 days'}, 'monthly':
     {'warning': '2 days', 'critical': '8 days'}, 'yearly': {'warning': '5 days',
     'critical': '14 days'}, '10minutely': {'warning': '0 minutes', 'critical': '0
-    minutes'}}, '': {'daily': {'warning': '4 hours', 'critical': '8 hours'}}}}"`.
-    This example alerts the user if the latest src or dst snapshot named
+    minutes'}}, '': {'daily': {'warning': '4 hours', 'critical': '8 hours',
+    'cycles': 40}}}}"`. This example alerts the user if the latest src or dst snapshot named
     `prod_onsite_<timestamp>_hourly` is more than 30 minutes late (i.e. more than 30+60=90
     minutes old) [warning] or more than 300 minutes late (i.e. more than 300+60=360 minutes old)
     [critical]. In addition, the example alerts the user if the oldest src or dst snapshot named

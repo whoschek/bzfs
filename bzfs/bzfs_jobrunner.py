@@ -194,7 +194,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "replicated. Also, given a snapshot name and its own name, a destination host can determine if it shall "
              "replicate the given snapshot from the source host, or if the snapshot is intended for another destination "
              "host, in which case it skips the snapshot. A destination host will receive replicas of snapshots for all "
-             "targets that map to that destination host.\n\n")
+             "targets that map to that destination host.\n\n"
+             "Removing a mapping can be used to temporarily suspend replication to a given destination host.\n\n")
     parser.add_argument(
         "--dst-host", default=None, action="append", metavar="STRING",
         help="For subsetting --dst-hosts; Can be specified multiple times; Indicates to only use the --dst-hosts keys that "
@@ -273,7 +274,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
                 "10minutely": {"warning": "0 minutes", "critical": "0 minutes"},
             },
             "": {
-                "daily": {"warning": "4 hours", "critical": "8 hours"},
+                "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 40},
             },
         },
     }
@@ -332,7 +333,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "check if the configuration options are valid.\n\n")
     parser.add_argument(
         "--jobrunner-log-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"], default="INFO",
-        help="Only emit jobrunner messages with equal or higher priority than this log level. Default is 'INFO'.\n\n")
+        help="Only emit jobrunner messages with equal or higher priority than this log level. Default is '%(default)s'.\n\n")
     parser.add_argument(
         "--help, -h", action="help",
         help="Show this help message and exit.\n\n")
