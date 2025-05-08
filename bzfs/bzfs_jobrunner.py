@@ -274,7 +274,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
                 "10minutely": {"warning": "0 minutes", "critical": "0 minutes"},
             },
             "": {
-                "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 40},
+                "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 80},
             },
         },
     }

@@ -200,7 +200,7 @@ src_bookmark_plan = dst_snapshot_plan
 #             "yearly": {"warning": "5 days", "critical": "14 days"},
 #         },
 #         "": {
-#             "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 40}, # "cycles" overrides snapshot plan number
+#             "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 80}, # "cycles" overrides snapshot plan number
 #         },
 #     },
 # }
@@ -208,7 +208,7 @@ monitor_snapshot_plan = {
     org: {
         "onsite": {
             "hourly": {"warning": "30 minutes", "critical": "300 minutes"},
-            "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 40},  # "cycles" overrides snapshot plan number
+            "daily": {"warning": "4 hours", "critical": "8 hours", "cycles": 80},  # "cycles" overrides snapshot plan number
         },
     },
 }
