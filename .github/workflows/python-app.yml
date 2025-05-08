@@ -177,7 +177,7 @@ jobs:
       run: |
         # if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
         # echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
-        sudo apt-get install -y locales
+        sudo apt-get install -y language-pack-fr locales
         echo before
         locale
         echo after
@@ -196,7 +196,7 @@ jobs:
         print(datetime.datetime.now().strftime('%c'))
         PY
         dd if=/dev/zero bs=1K count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
-        dd if=/dev/zero bs=1K count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+        #dd if=/dev/zero bs=1K count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
         #./test.sh
     - name: Run tests and generate code coverage
       run: |
