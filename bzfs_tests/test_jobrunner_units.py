@@ -15,6 +15,7 @@
 
 import importlib
 import os
+import platform
 import shutil
 import signal
 import subprocess
@@ -97,6 +98,20 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_pretty_print_formatter(self):
         self.assertIsNotNone(str(bzfs_jobrunner.pretty_print_formatter({"foo": "bar"})))
+
+    def test_help(self):
+        if is_solaris_zfs():
+            self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
+        parser = bzfs_jobrunner.argument_parser()
+        with self.assertRaises(SystemExit) as e:
+            parser.parse_args(["--help"])
+        self.assertEqual(0, e.exception.code)
+
+    def test_version(self):
+        parser = bzfs_jobrunner.argument_parser()
+        with self.assertRaises(SystemExit) as e:
+            parser.parse_args(["--version"])
+        self.assertEqual(0, e.exception.code)
 
 
 #############################################################################
@@ -454,3 +469,8 @@ class TestXLoadModule(unittest.TestCase):
         with patch("shutil.which", return_value=None), patch.object(sys, "argv", new=["./bzfs/bzfs_jobrunner"]):
             bzfs = bzfs_jobrunner.load_module(progname)
         self.assertIsNotNone(bzfs.get_simple_logger(progname))
+
+
+#############################################################################
+def is_solaris_zfs() -> bool:
+    return platform.system() == "SunOS"

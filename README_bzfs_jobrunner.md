@@ -159,7 +159,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--worker-timeout-seconds FLOAT]
                       [--jobrunner-dryrun]
                       [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
-                      [--help, -h]
+                      [--version] [--help, -h]
                       [--daemon-replication-frequency STRING]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
@@ -476,6 +476,14 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 *  Only emit jobrunner messages with equal or higher priority than this log level. Default is
     'INFO'.
+
+<!-- -->
+
+<div id="--version"></div>
+
+**--version**
+
+*  Display version information and exit.
 
 <!-- -->
 

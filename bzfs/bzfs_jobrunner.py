@@ -335,6 +335,9 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--jobrunner-log-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"], default="INFO",
         help="Only emit jobrunner messages with equal or higher priority than this log level. Default is '%(default)s'.\n\n")
     parser.add_argument(
+        "--version", action="version", version=f"{prog_name}-{bzfs.__version__}, by {bzfs.prog_author}",
+        help="Display version information and exit.\n\n")
+    parser.add_argument(
         "--help, -h", action="help",
         help="Show this help message and exit.\n\n")
     parser.add_argument(
