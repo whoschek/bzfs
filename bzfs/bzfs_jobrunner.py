@@ -367,7 +367,7 @@ die_status = 3
 def load_module(progname: str) -> types.ModuleType:
 
     def die(msg: str, exit_code=die_status) -> None:
-        logging.getLogger(__name__).error("%s", msg)
+        logging.getLogger(prog_name).error("%s", msg)
         ex = SystemExit(msg)
         ex.code = exit_code
         raise ex
