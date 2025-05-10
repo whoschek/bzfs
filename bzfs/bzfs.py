@@ -1832,6 +1832,7 @@ class Remote:
         self.ssh_user: str = ""
         self.ssh_host: str = ""
         self.ssh_user_host: str = ""
+        self.is_nonlocal: bool = False
 
     def local_ssh_command(self) -> List[str]:
         """Returns the ssh CLI command to run locally in order to talk to the remote host. This excludes the (trailing)
@@ -2458,6 +2459,8 @@ class Job:
                 r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
             r.sudo, r.use_zfs_delegation = self.sudo_cmd(r.ssh_user_host, r.ssh_user)
+            local_addrs = ("",) if self.is_test_mode else ("", "127.0.0.1", "::1")  # ::1 is IPv6 version of loopback address
+            remote.is_nonlocal = r.ssh_host not in local_addrs
         self.dst_dataset_exists = SynchronizedDict(self.all_dst_dataset_exists[dst.ssh_user_host])
 
         if src.ssh_host == dst.ssh_host:
@@ -3615,9 +3618,9 @@ class Job:
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
             and (
-                (loc == "src" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
-                or (loc == "dst" and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != ""))
-                or (loc == "local" and p.src.ssh_user_host != "" and p.dst.ssh_user_host != "")
+                (loc == "src" and (p.src.is_nonlocal or p.dst.is_nonlocal))
+                or (loc == "dst" and (p.src.is_nonlocal or p.dst.is_nonlocal))
+                or (loc == "local" and p.src.is_nonlocal and p.dst.is_nonlocal)
             )
             and self.is_program_available("mbuffer", loc)
         ):
@@ -3632,7 +3635,7 @@ class Job:
         p = self.params
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
-            and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != "")
+            and (p.src.is_nonlocal or p.dst.is_nonlocal)
             and self.is_program_available("zstd", loc)
         ):
             return f"{p.compression_program} {' '.join(p.compression_program_opts)}"
@@ -3643,7 +3646,7 @@ class Job:
         p = self.params
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
-            and (p.src.ssh_user_host != "" or p.dst.ssh_user_host != "")
+            and (p.src.is_nonlocal or p.dst.is_nonlocal)
             and self.is_program_available("zstd", loc)
         ):
             return f"{p.compression_program} -dc"
