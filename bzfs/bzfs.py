@@ -1996,6 +1996,7 @@ class SnapshotPeriods:
 
     @staticmethod
     def _suffix_to_duration(suffix: str, regex: re.Pattern) -> Tuple[int, str]:
+        """Ex: Converts "2 hourly" to (2, "hourly") and "hourly" to (1, "hourly"), i.e. perform some action every N hours."""
         if match := regex.fullmatch(suffix):
             duration_amount = int(match.group(1)) if match.group(1) else 1
             assert duration_amount > 0
@@ -2018,6 +2019,8 @@ class CreateSrcSnapshotConfig:
         self.timeformat: str = args.create_src_snapshots_timeformat
         self.anchors: PeriodAnchors = PeriodAnchors.parse(args)
 
+        # Compute the schedule for upcoming periodic time events (suffix_durations). This event schedule is also used in
+        # daemon mode via sleep_until_next_daemon_iteration()
         suffixes: List[str] = []
         labels = []
         create_src_snapshots_plan = args.create_src_snapshots_plan or str({"bzfs": {"onsite": {"adhoc": 1}}})
@@ -2059,6 +2062,7 @@ class CreateSrcSnapshotConfig:
             label.validate_label("--create-src-snapshots-plan ")
 
     def snapshot_labels(self) -> List[SnapshotLabel]:
+        """Returns the snapshot name patterns for which snapshots shall be created."""
         timeformat = self.timeformat
         is_millis = timeformat.endswith("%F")  # non-standard hack to append milliseconds
         if is_millis:
@@ -2302,7 +2306,7 @@ class Job:
             self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
             try:
                 daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
-                while True:
+                while True:  # loop for daemon mode
                     self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
                     self.progress_reporter.reset()
                     src, dst = p.src, p.dst
@@ -5078,9 +5082,9 @@ class Job:
                     if sleep_nanos > 0:
                         time.sleep(sleep_nanos / 1_000_000_000)  # seconds
                     if sleep_nanos > 0 and len(todo_futures) > 0:
+                        fw_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
                         # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
                         # If so it's preferable to submit to the thread pool the smaller one first.
-                        fw_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
                         break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
                     node: TreeNode = heapq.heappop(priority_queue)
                     dataset = node.dataset
