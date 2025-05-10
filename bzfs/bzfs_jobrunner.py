@@ -312,7 +312,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--workers", min=1, default=(workers_default, True), action=bzfs.CheckPercentRange, metavar="INT[%]",
         help="The maximum number of jobs to run in parallel at any time; can be given as a positive integer, "
-             f"optionally followed by the %% percent character (min: 1, default: {workers_default}%%). Percentages "
+             f"optionally followed by the %% percent character (min: %(min)s, default: {workers_default}%%). Percentages "
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many parallel jobs as "
              "there are cores on the machine; 75%% uses num_procs = num_cores * 0.75. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(

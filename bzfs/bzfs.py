@@ -1364,7 +1364,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--log-syslog-facility", type=int, min=0, max=7, default=1, action=CheckRange, metavar="INT",
         help="The local facility aka category that identifies msg sources in syslog "
-             "(default: %(default)s, min=0, max=7).\n\n")
+             "(default: %(default)s, min=%(min)s, max=%(max)s).\n\n")
     parser.add_argument(
         "--log-syslog-prefix", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
         help=f"The name to prepend to each message that is sent to syslog; identifies {prog_name} messages as opposed "
@@ -4702,7 +4702,6 @@ class Job:
 
         p, log = self.params, self.params.log
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
-        # cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none snapshots_changed")
         results = {}
         for lines in self.itr_ssh_cmd_parallel(
             remote,
