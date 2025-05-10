@@ -2841,8 +2841,8 @@ class Job:
         if self.is_caching_snapshots(remote):
             props = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: Dict[str, int] = {dataset: vals[SNAPSHOTS_CHANGED] for dataset, vals in props.items()}
+            hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
         is_caching = False
-        hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
             cache_label = SnapshotLabel(os_path_join("===", alert_cfg.kind, str(label), hash_code), "", "", "")
