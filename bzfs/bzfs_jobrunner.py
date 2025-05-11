@@ -412,6 +412,7 @@ class Job:
         self.log: Logger = log if log is not None else bzfs.get_simple_logger(prog_name)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
+        self.loopback_address: str = convert_ipv6(detect_loopback_address())
 
         # mutable variables:
         self.first_exception: Optional[int] = None
@@ -493,7 +494,8 @@ class Job:
         def resolve_dataset(hostname: str, dataset: str, is_src: bool = True) -> str:
             ssh_user = args.src_user if is_src else args.dst_user
             ssh_user = ssh_user if ssh_user else username
-            hostname = hostname if hostname != localhostname else "127.0.0.1" if username != ssh_user else "-"
+            lb = self.loopback_address
+            hostname = hostname if hostname != localhostname else (lb if lb else hostname) if username != ssh_user else "-"
             return f"{hostname}:{dataset}"
 
         def resolve_dst_dataset(dst_hostname: str, dst_dataset: str) -> str:
@@ -985,6 +987,32 @@ def pretty_print_formatter(dictionary):  # For lazy/noop evaluation in disabled 
             return json.dumps(dictionary, indent=4, sort_keys=True)
 
     return PrettyPrintFormatter()
+
+
+def detect_loopback_address() -> str:
+    """Detects if a loopback connection over IPv4 or IPv6 is possible."""
+    try:
+        addr = "127.0.0.1"
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((addr, 0))
+        return addr
+    except OSError:
+        pass
+
+    try:
+        addr = "::1"
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
+            s.bind((addr, 0))
+        return addr
+    except OSError:
+        pass
+
+    return ""
+
+
+def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator ...
+    return hostname.replace(":", "|")  # ... and any colons that may be part of a (valid) ZFS dataset name
+    # Also see bzfs.convert_ipv6() for the reverse conversion
 
 
 #############################################################################

@@ -96,6 +96,33 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.job.validate_is_subset([3], "foo", "x", "y")
 
+    def _make_mock_socket(self, bind_side_effect=None):
+        sock = MagicMock()
+        sock.bind.side_effect = bind_side_effect
+        sock.__enter__.return_value = sock
+        sock.__exit__.return_value = False
+        return sock
+
+    def test_detect_loopback_address_ipv4_supported(self):
+        ipv4 = self._make_mock_socket()
+        with patch("socket.socket", side_effect=[ipv4]) as socket_factory:
+            self.assertEqual("127.0.0.1", bzfs_jobrunner.detect_loopback_address())
+            self.assertEqual(1, socket_factory.call_count)
+
+    def test_detect_loopback_address_ipv6_fallback(self):
+        ipv4_fail = self._make_mock_socket(OSError("No IPv4"))
+        ipv6_ok = self._make_mock_socket()
+        with patch("socket.socket", side_effect=[ipv4_fail, ipv6_ok]) as socket_factory:
+            self.assertEqual("::1", bzfs_jobrunner.detect_loopback_address())
+            self.assertEqual(2, socket_factory.call_count)
+
+    def test_detect_loopback_address_neither_supported(self):
+        ipv4_fail = self._make_mock_socket(OSError("No IPv4"))
+        ipv6_fail = self._make_mock_socket(OSError("No IPv6"))
+        with patch("socket.socket", side_effect=[ipv4_fail, ipv6_fail]) as socket_factory:
+            self.assertEqual("", bzfs_jobrunner.detect_loopback_address())
+            self.assertEqual(2, socket_factory.call_count)
+
     def test_pretty_print_formatter(self):
         self.assertIsNotNone(str(bzfs_jobrunner.pretty_print_formatter({"foo": "bar"})))
 
