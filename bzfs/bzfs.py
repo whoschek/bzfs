@@ -2914,12 +2914,13 @@ class Job:
                             snapshots_changed != 0
                             and snapshots_changed < time_threshold
                             and (
-                                cached_unix_times := self.cache_get_snapshots_changed2(
+                                cached_snapshot_creation_time,
+                                cached_snapshots_changed := self.cache_get_snapshots_changed2(
                                     monitor_last_modified_cache_file(remote, dataset, alert.label, cfg)
-                                )
+                                ),
                             )
-                            and snapshots_changed == cached_unix_times[1]  # cached snapshots_changed aka last modified time
-                            and snapshots_changed >= cached_unix_times[0]  # creation time of minmax snapshot aka access time
+                            and snapshots_changed == cached_snapshots_changed  # aka last modified time
+                            and snapshots_changed >= cached_snapshot_creation_time  # aka access time
                         ):  # cached state is still valid; emit an alert if the latest/oldest snapshot is too old
                             lbl = alert.label
                             check_alert(lbl, cfg, creation_unixtime_secs=cached_unix_times[0], dataset=dataset, snapshot="")
