@@ -91,7 +91,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
     sudo_cmd = ["sudo", "-n"]
     set_sudo_cmd(["sudo", "-n"])
 
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
+test_mode = getenv_any("test_mode", "adhoc")  # Consider toggling this when testing isolated code changes
 
 
 def suite():
@@ -636,53 +636,53 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_include_snapshots_plan(self):
-        LocalTestCase(param=self.param).test_include_snapshots_plan()
-
-    def test_include_snapshots_plan_without_excludes_outdated_snapshots(self):
-        LocalTestCase(param=self.param).test_include_snapshots_plan_without_excludes_outdated_snapshots()
-
-    def test_delete_dst_snapshots_except_plan(self):
-        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
-
-    def test_daemon_frequency(self):
-        LocalTestCase(param=self.param).test_daemon_frequency()
-
-    def test_daemon_frequency_invalid(self):
-        LocalTestCase(param=self.param).test_daemon_frequency_invalid()
-
-    def test_basic_snapshotting_flat_simple(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
-
-    def test_basic_snapshotting_flat_non_existing_root(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
-
-    def test_basic_snapshotting_flat_empty(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
-
-    def test_basic_snapshotting_recursive_simple(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
-
-    def test_basic_snapshotting_recursive_with_skip_parent(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
-
-    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
-
-    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
-
-    def test_basic_snapshotting_flat_even_if_not_due(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_even_if_not_due()
-
-    def test_invalid_use_of_dummy(self):
-        LocalTestCase(param=self.param).test_invalid_use_of_dummy()
-
-    def test_basic_snapshotting_flat_daemon(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
-
-    def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
-        LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
+    # def test_include_snapshots_plan(self):
+    #     LocalTestCase(param=self.param).test_include_snapshots_plan()
+    #
+    # def test_include_snapshots_plan_without_excludes_outdated_snapshots(self):
+    #     LocalTestCase(param=self.param).test_include_snapshots_plan_without_excludes_outdated_snapshots()
+    #
+    # def test_delete_dst_snapshots_except_plan(self):
+    #     LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
+    #
+    # def test_daemon_frequency(self):
+    #     LocalTestCase(param=self.param).test_daemon_frequency()
+    #
+    # def test_daemon_frequency_invalid(self):
+    #     LocalTestCase(param=self.param).test_daemon_frequency_invalid()
+    #
+    # def test_basic_snapshotting_flat_simple(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
+    #
+    # def test_basic_snapshotting_flat_non_existing_root(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
+    #
+    # def test_basic_snapshotting_flat_empty(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
+    #
+    # def test_basic_snapshotting_recursive_simple(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
+    #
+    # def test_basic_snapshotting_recursive_with_skip_parent(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
+    #
+    # def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
+    #
+    # def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
+    #
+    # def test_basic_snapshotting_flat_even_if_not_due(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_even_if_not_due()
+    #
+    # def test_invalid_use_of_dummy(self):
+    #     LocalTestCase(param=self.param).test_invalid_use_of_dummy()
+    #
+    # def test_basic_snapshotting_flat_daemon(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
+    #
+    # def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
+    #     LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
 
     def test_jobrunner_flat_simple(self):
         LocalTestCase(param=self.param).test_jobrunner_flat_simple()
