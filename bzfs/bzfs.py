@@ -6277,7 +6277,7 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "") -> int
         "days": 86400 * 1000,
         "weeks": 7 * 86400 * 1000,
         "months": round(30.5 * 86400 * 1000),
-        "years": round(365 * 86400 * 1000),
+        "years": 365 * 86400 * 1000,
     }
     match = re.fullmatch(
         r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
@@ -7127,8 +7127,8 @@ class DatasetPairsAction(argparse.Action):
                 try:
                     with open(value[1:], "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
-                            if not line.strip() or line.startswith("#"):
-                                continue  # skip empty lines and comment lines
+                            if line.startswith("#") or not line.strip():
+                                continue  # skip comment lines and empty lines
                             splits = line.split("\t", 1)
                             if len(splits) <= 1:
                                 parser.error("Line must contain tab-separated SRC_DATASET and DST_DATASET: " + line)
@@ -7177,8 +7177,8 @@ class FileOrLiteralAction(argparse.Action):
                 try:
                     with open(value[1:], "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
-                            if not line.strip() or line.startswith("#"):
-                                continue  # skip empty lines and comment lines
+                            if line.startswith("#") or not line.strip():
+                                continue  # skip comment lines and empty lines
                             extra_values.append(line)
                 except FileNotFoundError:
                     parser.error(f"File not found: {value[1:]}")
