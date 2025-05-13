@@ -5020,29 +5020,28 @@ class Job:
         enable_barriers = has_barrier or enable_barriers
         p, log = self.params, self.params.log
 
-        class IntHolder:
-            def __init__(self, value: int = 0):
-                self.value: int = value
-
-            def __repr__(self) -> str:
-                return str(self.value)
-
-        L = TypeVar("L")
-
-        class IterableHolder(Generic[L]):
-            def __init__(self):
-                self.items: Iterable[L] = []
-
-            def __repr__(self) -> str:
-                return str(self.items)
-
         @dataclass(order=True, frozen=True, repr=False)
         class TreeNode:
+
+            class IntHolder:
+                def __init__(self, value: int = 0):
+                    self.value: int = value
+
+                def __repr__(self) -> str:
+                    return str(self.value)
+
+            class Barriers:
+                def __init__(self):
+                    self.items: Sequence[TreeNode] = []
+
+                def __repr__(self) -> str:
+                    return str(self.items)
+
             dataset: str  # ordered by dataset within priority queue
             children: Tree = field(compare=False)
             parent: "TreeNode" = field(compare=False, default=None)
             pending: IntHolder = field(compare=False, default_factory=IntHolder)
-            barriers: IterableHolder["TreeNode"] = field(compare=False, default_factory=IterableHolder)
+            barriers: Barriers = field(compare=False, default_factory=Barriers)
 
             def __repr__(self) -> str:
 
@@ -5175,6 +5174,7 @@ class Job:
                                 else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
                                     assert len(node.barriers.items) == 0
                                     assert node.barriers.items is not immutable_empty_iterable
+                                    assert isinstance(node.barriers.items, list)
                                     node.barriers.items.append(child_node)
                                     k = 0
                                 node.pending.value += min(1, k)
