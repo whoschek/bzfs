@@ -4500,7 +4500,7 @@ class Job:
             if config.current_datetime >= next_event_dt:
                 datasets_to_snapshot[label].append(dataset)  # mark it as scheduled for snapshot creation
                 msg = " has passed"
-            msgs.append(f"Next scheduled snapshot time: {next_event_dt} for {dataset}@{label}{msg}")
+            msgs.append((next_event_dt, dataset, label, msg))
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
                 cache_file = self.last_modified_cache_file(src, dataset, label)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=creation_unixtime, if_more_recent=True)
@@ -4565,8 +4565,10 @@ class Job:
                 datasets_to_snapshot[lbl] = list(  # inputs to merge() are sorted, and outputs are sorted too
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
                 )
+        msgs.sort()
+        msgs = "\n".join(f"Next scheduled snapshot time: {msg[0]} for {msg[1]}@{msg[2]}{msg[3]}" for msg in msgs)
         if len(msgs) > 0:
-            log.info("Next scheduled snapshot times ...\n%s", "\n".join(msgs))
+            log.info("Next scheduled snapshot times ...\n%s", msgs)
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes = {label: k for k, label in enumerate(config_labels)}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
