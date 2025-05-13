@@ -474,9 +474,6 @@ class Job:
         def zero_pad(number: int, width: int = 6) -> str:
             return f"{number:0{width}d}"  # pad number with leading '0' chars to the given width
 
-        def ipad() -> str:
-            return zero_pad(i)
-
         def jpad(jj: int, tag: str) -> str:
             return "/" + zero_pad(jj) + tag
 
@@ -508,7 +505,7 @@ class Job:
 
         subjobs: Dict[str, List[str]] = {}
         for i, src_host in enumerate(src_hosts):
-            subjob_name: str = ipad() + sanitize(src_host)
+            subjob_name: str = zero_pad(i) + sanitize(src_host)
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
