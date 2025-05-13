@@ -17,7 +17,6 @@
 # To better debug these steps run a tmp solaris VM like so: https://github.com/vmactions/shell-solaris
 set -e # Exit immediately if a cmd returns a non-zero status
 id -u -n
-pkg install sudo pv || true
 pkgutil -y -i zstd mbuffer netcat
 uname -a
 uname -v
@@ -37,10 +36,9 @@ if [ "$(uname -v)" = "11.4.0.15.0" ]; then
   cd ..
 else  # it's a more recent solaris version and as such has python >= 3.7 preinstalled
   if false; then  # 3.7 would work fine too
-    pkg install coverage-37  # for coverage.sh only
+    pkg install sudo pv coverage-37  # coverage-37 is for coverage.sh only
   else
-    pkg install runtime/python-39
-    pkg install coverage-39  # for coverage.sh only
+    pkg install sudo pv runtime/python-39 coverage-39  # coverage-39 is for coverage.sh only
     mkdir -p /python3/bin
     ln -s $(command -v python3.9) /python3/bin/python3
   fi
