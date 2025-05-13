@@ -334,7 +334,7 @@ class BZFSTestCase(ParametrizedTestCase):
             args = args + src_host + src_port
         elif params and params.get("ssh_mode") == "pull-push":
             if (
-                getenv_bool("enable_IPv6", True)
+                getenv_bool("test_enable_IPv6", True)
                 and rng.randint(0, 2) % 3 == 0
                 and not (platform.platform().startswith("FreeBSD-") or platform.system() == "SunOS")
                 and not ssh_program == "hpnssh"
@@ -5253,6 +5253,8 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
         self.inject_pipe_error("inject_src_pipe_fail", expected_error=[1, die_status])
 
     def test_inject_src_pipe_garble(self):
+        if is_pv_at_least_1_9_0() and is_zfs_at_least_2_3_0():
+            self.skipTest("workaround for zfs send-receive pipeline hang")
         self.inject_pipe_error("inject_src_pipe_garble")
 
     def test_inject_dst_pipe_garble(self):
@@ -5444,6 +5446,25 @@ def is_zfs_at_least_2_1_0() -> bool:
     if ver is None:
         return False
     return bzfs.is_version_at_least(ver, "2.1.0")
+
+
+def is_pv_at_least_1_9_0() -> bool:
+    ver = pv_version()
+    return bzfs.is_version_at_least(ver, "1.9.0")
+
+
+def pv_version() -> str:
+    """Example pv 1.8.5 -> 1.8.5"""
+    lines = subprocess.run(["pv", "--version"], capture_output=True, text=True, check=True).stdout
+    assert lines
+    assert lines.startswith("pv")
+    line = lines.splitlines()[0]
+    version = line.split(" ")[1].strip()
+    match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
+    if match:
+        return match.group(1)
+    else:
+        raise ValueError("Unparsable pv version string: " + version)
 
 
 def os_username() -> str:

@@ -24,6 +24,7 @@ ideally using bzfs --verbose or even bzfs --verbose --verbose flags for more dia
  - bzfs --version:
  - zfs --version:
  - python3 --version:
+ - pv --version:
  - uname -a:
 
 **Additional context**

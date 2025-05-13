@@ -8,6 +8,10 @@ inputs:
     required: false
     type: boolean
     default: true
+  install-pv:
+    required: false
+    type: boolean
+    default: true
 runs:
   using: 'composite'
   steps:
@@ -27,11 +31,16 @@ runs:
   - name: Install ssh + other dependencies
     shell: bash
     run: |
-      sudo apt-get -y install zstd pv mbuffer netcat-openbsd
+      sudo apt-get -y install zstd mbuffer netcat-openbsd
       mkdir -p $HOME/.ssh
       rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
       ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -q -N "" # create private key and public key
       cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
+  - name: Install pv
+    if: ${{ inputs.install-pv == 'true' }}
+    shell: bash
+    run: |
+      sudo apt-get -y install pv
   - name: Install zfs
     if: ${{ inputs.install-zfs == 'true' }}
     shell: bash

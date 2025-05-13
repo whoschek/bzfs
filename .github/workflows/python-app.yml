@@ -156,10 +156,14 @@ jobs:
         sudo apt-get -y install zfs-dkms zfsutils-linux
         zfs --version
         # hpnssh -V
+
+        ./.github-workflow-scripts/install_ubuntu_24_04_pv_fr.sh
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
+        install-zfs: false
+        install-pv: false
     - name: Display ZFS version and Python version
       run: |
         id -u -n
@@ -175,6 +179,10 @@ jobs:
       run: |
         # if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
         # echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
+        export LC_ALL=fr_FR.UTF-8
+        dd if=/dev/zero bs=1k count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+        dd if=/dev/zero bs=1k count=32 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
+        echo "Now running test.sh ..."
         ./test.sh
     - name: Run tests and generate code coverage
       run: |
@@ -208,6 +216,7 @@ jobs:
       uses: ./.github/workflows/common
       with:
         python-version: ${{ matrix.python-version }}
+        install-zfs: false
     - name: Display ZFS version and Python version
       run: |
         id -u -n

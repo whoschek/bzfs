@@ -3679,7 +3679,7 @@ class Job:
             pv_program_opts = p.pv_program_opts
             if self.progress_update_intervals is not None:  # for testing
                 pv_program_opts = pv_program_opts + [f"--interval={self.progress_update_intervals[0]}"]
-            return f"{p.pv_program} {' '.join(pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
+            return f"LC_ALL=C {p.pv_program} {' '.join(pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
         else:
             return "cat"
 
@@ -6680,7 +6680,7 @@ def pid_exists(pid: int) -> Optional[bool]:
 
 
 arabic_decimal_separator = "\u066b"  # "٫"
-pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([BbOo])(.*)")
+pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
 
 
 def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
@@ -6688,7 +6688,7 @@ def pv_size_to_bytes(size: str) -> Tuple[int, str]:  # example inputs: "800B", "
         number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
         i = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
-        b = 1 if match.group(4) in ("B", "O") else 8
+        b = 1 if match.group(4) == "B" else 8
         line_tail = match.group(5)
         if line_tail and line_tail.startswith("/s"):
             raise ValueError("Invalid pv_size: " + size)  # stems from 'pv --rate' or 'pv --average-rate'
