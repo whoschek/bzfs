@@ -78,7 +78,7 @@ from os import stat as os_stat, utime as os_utime
 from os.path import exists as os_path_exists, join as os_path_join
 from pathlib import Path
 from subprocess import CalledProcessError, DEVNULL, PIPE
-from typing import Deque, Dict, Iterable, Iterator, List, Literal, Sequence, Set, Tuple
+from typing import Deque, Dict, Iterable, Iterator, List, Literal, NamedTuple, Sequence, Set, Tuple
 from typing import Any, Callable, Final, Generator, Generic, Optional
 from typing import ItemsView, TextIO, TypeVar, Union
 
@@ -5812,8 +5812,7 @@ class ProgressReporter:
 
     def _run_internal(self, fds: List[TextIO], selector: selectors.BaseSelector) -> None:
 
-        @dataclass(frozen=True)
-        class Sample:
+        class Sample(NamedTuple):
             sent_bytes: int
             timestamp_nanos: int
 
