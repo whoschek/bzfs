@@ -1926,8 +1926,7 @@ class Retry:
 
 
 #############################################################################
-@dataclass(order=True, frozen=True)
-class SnapshotLabel:
+class SnapshotLabel(NamedTuple):
     """Contains the individual parts that are concatenated into a ZFS snapshot name."""
 
     prefix: str  # bzfs_
