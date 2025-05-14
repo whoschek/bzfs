@@ -564,8 +564,7 @@ class Job:
 
             if args.prune_dst_snapshots:
                 self.validate_true(
-                    retain_dst_targets,
-                    "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!",
+                    retain_dst_targets, "--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!"
                 )
                 j = 0
                 marker = "prune-dst-snapshots"

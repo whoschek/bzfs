@@ -5079,7 +5079,7 @@ class Job:
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets = len(datasets)
         datasets_set = set(datasets)
-        immutable_empty_iterable = tuple()
+        immutable_empty_sequence = tuple()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
             submitted = 0
@@ -5158,8 +5158,7 @@ class Job:
                         # Note that "~" is unambiguous as it is not a valid ZFS dataset name component per the naming rules
                         # enforced by the 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs.
                         def enqueue_children(node: TreeNode) -> int:
-                            """Returns the number of jobs that were made available for immediate start of processing, i.e.
-                            that were added to priority_queue."""
+                            """Returns number of jobs that were added to priority_queue for immediate start of processing."""
                             n = 0
                             children = node.children
                             for child, grandchildren in children.items():
@@ -5175,7 +5174,7 @@ class Job:
                                     k = enqueue_children(child_node)  # ... recursively down the tree
                                 else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
                                     assert len(node.barriers.items) == 0
-                                    assert node.barriers.items is not immutable_empty_iterable
+                                    assert node.barriers.items is not immutable_empty_sequence
                                     assert isinstance(node.barriers.items, list)
                                     node.barriers.items.append(child_node)
                                     k = 0
@@ -5190,7 +5189,7 @@ class Job:
                             else:  # job completed without success
                                 tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
                                 while tmp is not None:
-                                    tmp.barriers.items = immutable_empty_iterable
+                                    tmp.barriers.items = immutable_empty_sequence
                                     tmp = tmp.parent
                             assert node.pending.value >= 0
                             while node.pending.value == 0:  # have all jobs in subtree of current node completed?
@@ -5198,7 +5197,7 @@ class Job:
                                 if no_skip:
                                     for barrier in node.barriers.items:
                                         node.pending.value += min(1, enqueue_children(barrier))
-                                node.barriers.items = immutable_empty_iterable
+                                node.barriers.items = immutable_empty_sequence
                                 if node.pending.value > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
                                     break  # ... if so we aren't quite done yet with this subtree
                                 if node.parent is None:
