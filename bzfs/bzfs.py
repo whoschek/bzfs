@@ -4566,7 +4566,8 @@ class Job:
                     heapq.merge(datasets_to_snapshot[lbl], cached_datasets_to_snapshot[lbl], datasets_without_snapshots)
                 )
         msgs.sort()
-        msgs = "\n".join(f"Next scheduled snapshot time: {msg[0]} for {msg[1]}@{msg[2]}{msg[3]}" for msg in msgs)
+        prefx = "Next scheduled snapshot time: "
+        msgs = "\n".join(f"{prefx}{next_event_dt} for {dataset}@{label}{msg}" for next_event_dt, dataset, label, msg in msgs)
         if len(msgs) > 0:
             log.info("Next scheduled snapshot times ...\n%s", msgs)
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
@@ -4584,7 +4585,7 @@ class Job:
         fn_on_finish_dataset: Callable[[str], None] = lambda dataset: None,
     ) -> List[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
-        the callback functions on them. Ignores the timestamp of the input labels."""
+        the callback functions on them. Ignores the timestamp of the input labels and the timestamp of the snapshot names."""
         p = self.params
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
         datasets_with_snapshots: Set[str] = set()
