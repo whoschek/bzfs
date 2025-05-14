@@ -2849,13 +2849,13 @@ class Job:
             return self.last_modified_cache_file(r, dataset, cache_label)
 
         def alert_msg(
-            kind: str, dataset: str, snapshot: str, lbl: SnapshotLabel, snapshot_age_millis: float, delta_millis: int
+            kind: str, dataset: str, snapshot: str, label: SnapshotLabel, snapshot_age_millis: float, delta_millis: int
         ) -> str:
             assert kind == "Latest" or kind == "Oldest"
-            lab = f"{lbl.prefix}{lbl.infix}<timestamp>{lbl.suffix}"
+            lbl = f"{label.prefix}{label.infix}<timestamp>{label.suffix}"
             if snapshot_age_millis >= current_unixtime_millis:
-                return f"No snapshot exists for {dataset}@{lab}"
-            msg = f"{kind} snapshot for {dataset}@{lab} is {human_readable_duration(snapshot_age_millis, unit='ms')} old"
+                return f"No snapshot exists for {dataset}@{lbl}"
+            msg = f"{kind} snapshot for {dataset}@{lbl} is {human_readable_duration(snapshot_age_millis, unit='ms')} old"
             s = f" ({snapshot})" if snapshot else ""
             if delta_millis == -1:
                 return f"{msg}{s}"

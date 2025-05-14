@@ -360,6 +360,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     # fmt: on
 
 
+#############################################################################
 # constants:
 die_status = 3
 
