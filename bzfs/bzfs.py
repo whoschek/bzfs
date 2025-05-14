@@ -2032,7 +2032,7 @@ class CreateSrcSnapshotConfig:
                     if period_amount > 0:
                         suffix = nsuffix(period_unit)
                         suffixes.append(suffix)
-                        labels.append(SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=suffix))
+                        labels.append(SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=suffix))
         xperiods = SnapshotPeriods()
         if self.skip_create_src_snapshots:
             duration_amount, duration_unit = xperiods.suffix_to_duration0(p.daemon_frequency)
@@ -2106,9 +2106,10 @@ class MonitorSnapshotsConfig:
         alerts = []
         xperiods = SnapshotPeriods()
         for org, target_periods in self.monitor_snapshots.items():
+            prefix = nprefix(org)
             for target, periods in target_periods.items():
                 for period_unit, alert_dicts in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
-                    label = SnapshotLabel(prefix=org + "_", infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
+                    label = SnapshotLabel(prefix=prefix, infix=ninfix(target), timestamp="", suffix=nsuffix(period_unit))
                     alert_latest, alert_oldest = None, None
                     for alert_type, alert_dict in alert_dicts.items():
                         m = "--monitor-snapshots: "
@@ -6368,12 +6369,16 @@ def drain(iterable: Iterable) -> None:
     deque(iterable, maxlen=0)
 
 
-def nsuffix(s: str) -> str:
-    return "_" + s if s else ""
+def nprefix(s: str) -> str:
+    return sys.intern(s + "_")
 
 
 def ninfix(s: str) -> str:
-    return s + "_" if s else ""
+    return sys.intern(s + "_") if s else ""
+
+
+def nsuffix(s: str) -> str:
+    return sys.intern("_" + s) if s else ""
 
 
 def format_dict(dictionary: Dict) -> str:
