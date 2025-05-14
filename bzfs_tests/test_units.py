@@ -680,6 +680,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("3h", bzfs.human_readable_duration(3000 * 60 * 60 * ms, long=False))
         self.assertEqual("1.25d", bzfs.human_readable_duration(3000 * 60 * 60 * 10 * ms, long=False))
         self.assertEqual("12.5d", bzfs.human_readable_duration(3000 * 60 * 60 * 100 * ms, long=False))
+        self.assertEqual("1250d", bzfs.human_readable_duration(3000 * 60 * 60 * 10000 * ms, long=False))
         self.assertEqual("125ns", bzfs.human_readable_duration(125, long=False))
         self.assertEqual("125μs", bzfs.human_readable_duration(125 * 1000, long=False))
         self.assertEqual("125ms", bzfs.human_readable_duration(125 * 1000 * 1000, long=False))
@@ -691,6 +692,15 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("0h", bzfs.human_readable_duration(0, unit="h", long=False))
         self.assertEqual("3h", bzfs.human_readable_duration(3, unit="h", long=False))
         self.assertEqual("7.5d", bzfs.human_readable_duration(3 * 60, unit="h", long=False))
+        self.assertEqual("0.3ns", bzfs.human_readable_duration(0.3, long=False))
+        self.assertEqual("300ns", bzfs.human_readable_duration(0.3, unit="μs", long=False))
+        self.assertEqual("300μs", bzfs.human_readable_duration(0.3, unit="ms", long=False))
+        self.assertEqual("300ms", bzfs.human_readable_duration(0.3, unit="s", long=False))
+        self.assertEqual("18s", bzfs.human_readable_duration(0.3, unit="m", long=False))
+        self.assertEqual("18m", bzfs.human_readable_duration(0.3, unit="h", long=False))
+        self.assertEqual("7.2h", bzfs.human_readable_duration(0.3, unit="d", long=False))
+        self.assertEqual("259ns", bzfs.human_readable_duration(3 / 1000_000_000_000, unit="d", long=False))
+        self.assertEqual("0.26ns", bzfs.human_readable_duration(3 / 1000_000_000_000_000, unit="d", long=False))
         with self.assertRaises(ValueError):
             bzfs.human_readable_duration(3, unit="hhh", long=False)  # invalid unit
 

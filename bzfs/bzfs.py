@@ -6233,9 +6233,12 @@ def human_readable_duration(duration: float, unit="ns", separator="", precision=
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
-    seconds = (1 / 1_000_000_000, 1 / 1_000_000, 1 / 1000, 1, 60, 60 * 60, 60 * 60 * 24)
+    nanos = (1, 1_000, 1_000_000, 1_000_000_000, 60 * 1_000_000_000, 60 * 60 * 1_000_000_000, 60 * 60 * 24 * 1_000_000_000)
     i = units.index(unit)
-    long_form = f" ({round(duration * seconds[i])} seconds)" if long else ""
+    long_form = f" ({round(duration * nanos[i] / 1_000_000_000)} seconds)" if long else ""
+    if t < 1 and t != 0:
+        t *= nanos[i]
+        i = 0
     while t >= 1000 and i < 3:
         t /= 1000
         i += 1
