@@ -412,7 +412,7 @@ class Job:
     def __init__(self, log: Optional[Logger] = None):
         # immutable variables:
         self.jobrunner_dryrun: bool = False
-        self.spawn_process_per_job: Optional[bool] = None
+        self.spawn_process_per_job: bool = False
         self.log: Logger = log if log is not None else bzfs.get_simple_logger(prog_name)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
@@ -442,12 +442,13 @@ class Job:
         self.validate_non_empty_string(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
         src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
-        dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
+        log.debug("src_hosts before subsetting: %s", src_hosts)
         if args.src_host is not None:  # retain only the src hosts that are also contained in args.src_host
             assert isinstance(args.src_host, list)
             retain_src_hosts = set(args.src_host)
             self.validate_is_subset(retain_src_hosts, src_hosts, "--src-host", "--src-hosts")
             src_hosts = [host for host in src_hosts if host in retain_src_hosts]
+        dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
         if args.dst_host is not None:  # retain only the dst hosts that are also contained in args.dst_host
             assert isinstance(args.dst_host, list)
             retain_dst_hosts = set(args.dst_host)
@@ -471,8 +472,7 @@ class Job:
         workers, workers_is_percent = args.workers
         max_workers = max(1, round(os.cpu_count() * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds = args.worker_timeout_seconds
-        if args.spawn_process_per_job:
-            self.spawn_process_per_job = args.spawn_process_per_job
+        self.spawn_process_per_job = args.spawn_process_per_job
         username = pwd.getpwuid(os.geteuid()).pw_name
         assert username
         dummy = bzfs.dummy_dataset
