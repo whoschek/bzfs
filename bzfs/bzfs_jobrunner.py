@@ -656,7 +656,7 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        msg = "Ready to run %s subjobs using %s src hosts %s, %s dst hosts %s"
+        msg = "Ready to run %s subjobs using %s src hosts: %s, %s dst hosts: %s"
         log.info(msg, len(subjobs), len(src_hosts), src_hosts, len(dst_hosts), list(dst_hosts.keys()))
         log.trace("subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)
