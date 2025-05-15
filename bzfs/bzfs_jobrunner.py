@@ -434,6 +434,7 @@ class Job:
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
+        assert len(args.root_dataset_pairs) > 0
         src_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
         src_bookmark_plan = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
         dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
@@ -473,9 +474,9 @@ class Job:
         max_workers = max(1, round(os.cpu_count() * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds = args.worker_timeout_seconds
         self.spawn_process_per_job = args.spawn_process_per_job
-        username = pwd.getpwuid(os.geteuid()).pw_name
+        username: str = pwd.getpwuid(os.geteuid()).pw_name
         assert username
-        dummy = bzfs.dummy_dataset
+        dummy: str = bzfs.dummy_dataset
 
         def zero_pad(number: int, width: int = 6) -> str:
             return f"{number:0{width}d}"  # pad number with leading '0' chars to the given width
@@ -511,7 +512,7 @@ class Job:
 
         subjobs: Dict[str, List[str]] = {}
         for i, src_host in enumerate(src_hosts):
-            subjob_name: str = zero_pad(i) + sanitize(src_host)
+            subjob_name: str = zero_pad(i) + "src-host"
             lhn = localhostname
 
             if args.create_src_snapshots:
@@ -655,7 +656,9 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        log.trace("Ready to run subjobs: \n%s", pretty_print_formatter(subjobs))
+        msg = "Ready to run %s subjobs using %s src hosts %s, %s dst hosts %s"
+        log.info(msg, len(subjobs), len(src_hosts), src_hosts, len(dst_hosts), list(dst_hosts.keys()))
+        log.trace("subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)
         ex = self.first_exception
         if isinstance(ex, int):
@@ -694,7 +697,7 @@ class Job:
             opts += [f"--log-file-suffix={sep}{job_run}{log_suffix(lhn, src_hostname, dst_hostname)}{sep}"]
         return opts
 
-    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs) -> List[Tuple[str, str]]:
+    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
         def zpool(dataset: str) -> str:
             return dataset.split("/", 1)[0]
 
@@ -967,7 +970,7 @@ def flatten(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
 
 
 def sanitize(filename: str) -> str:
-    for s in (" ", "..", "/", "\\", sep, bzfs.BARRIER_CHAR):
+    for s in (" ", "..", "/", "\\", sep):
         filename = filename.replace(s, "!")
     return filename
 
