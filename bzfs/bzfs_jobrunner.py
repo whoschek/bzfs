@@ -304,7 +304,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--job-id", required=True, action=bzfs.NonEmptyStringAction, metavar="STRING",
         help="The identifier that remains constant across all runs of this particular job; will be included in the log file "
-             "name infix. Example: mytestjob1\n\n")
+             "name infix. Example: mytestjob\n\n")
     parser.add_argument(
         "--jobid", default=None, action=bzfs.NonEmptyStringAction, metavar="STRING",
         help=argparse.SUPPRESS)   # deprecated; was renamed to --job-run
@@ -398,7 +398,6 @@ def load_module(progname: str) -> types.ModuleType:
 
 # constants:
 bzfs: types.ModuleType = load_module("bzfs")
-dummy_dataset = bzfs.dummy_dataset
 assert die_status == bzfs.die_status
 sep = ","
 
@@ -413,7 +412,7 @@ class Job:
     def __init__(self, log: Optional[Logger] = None):
         # immutable variables:
         self.jobrunner_dryrun: bool = False
-        self.spawn_process_per_job: Optional[bool] = None
+        self.spawn_process_per_job: bool = False
         self.log: Logger = log if log is not None else bzfs.get_simple_logger(prog_name)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
@@ -435,6 +434,7 @@ class Job:
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
+        assert len(args.root_dataset_pairs) > 0
         src_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
         src_bookmark_plan = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
         dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
@@ -443,15 +443,16 @@ class Job:
         self.validate_non_empty_string(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
         src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
-        dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
+        log.debug("src_hosts before subsetting: %s", src_hosts)
         if args.src_host is not None:  # retain only the src hosts that are also contained in args.src_host
             assert isinstance(args.src_host, list)
-            retain_src_hosts = set(args.src_host).difference({"^NONE"})
+            retain_src_hosts = set(args.src_host)
             self.validate_is_subset(retain_src_hosts, src_hosts, "--src-host", "--src-hosts")
             src_hosts = [host for host in src_hosts if host in retain_src_hosts]
+        dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
         if args.dst_host is not None:  # retain only the dst hosts that are also contained in args.dst_host
             assert isinstance(args.dst_host, list)
-            retain_dst_hosts = set(args.dst_host).difference({"^NONE"})
+            retain_dst_hosts = set(args.dst_host)
             self.validate_is_subset(retain_dst_hosts, dst_hosts.keys(), "--dst-host", "--dst-hosts.keys")
             dst_hosts = {dst_host: lst for dst_host, lst in dst_hosts.items() if dst_host in retain_dst_hosts}
         retain_dst_targets = self.validate_dst_hosts(literal_eval(args.retain_dst_targets))
@@ -472,10 +473,10 @@ class Job:
         workers, workers_is_percent = args.workers
         max_workers = max(1, round(os.cpu_count() * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds = args.worker_timeout_seconds
-        if args.spawn_process_per_job:
-            self.spawn_process_per_job = args.spawn_process_per_job
-        username = pwd.getpwuid(os.geteuid()).pw_name
+        self.spawn_process_per_job = args.spawn_process_per_job
+        username: str = pwd.getpwuid(os.geteuid()).pw_name
         assert username
+        dummy: str = bzfs.dummy_dataset
 
         def zero_pad(number: int, width: int = 6) -> str:
             return f"{number:0{width}d}"  # pad number with leading '0' chars to the given width
@@ -511,7 +512,7 @@ class Job:
 
         subjobs: Dict[str, List[str]] = {}
         for i, src_host in enumerate(src_hosts):
-            subjob_name: str = zero_pad(i) + sanitize(src_host)
+            subjob_name: str = zero_pad(i) + "src-host"
             lhn = localhostname
 
             if args.create_src_snapshots:
@@ -521,7 +522,7 @@ class Job:
                 opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, None)}{sep}"]
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
-                opts += dedupe([(resolve_dataset(src_host, src), dummy_dataset) for src, dst in args.root_dataset_pairs])
+                opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
                 subjobs[subjob_name] = ["bzfs"] + opts
 
@@ -536,16 +537,14 @@ class Job:
                         opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                         opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                         opts += unknown_args + ["--"]
-                        old_len_opts = len(opts)
-                        pairs = [
+                        dataset_pairs = [
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
                             for src, dst in args.root_dataset_pairs
                         ]
-                        for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
-                            opts += [src, dst]
-                        if len(opts) > old_len_opts:
+                        dataset_pairs = self.skip_datasets_with_nonexisting_dst_pool(dataset_pairs)
+                        if len(dataset_pairs) > 0:
                             daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                            subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + daemon_opts + opts
+                            subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + daemon_opts + opts + flatten(dataset_pairs)
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -560,7 +559,7 @@ class Job:
                 ]
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
-                opts += dedupe([(dummy_dataset, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])
+                opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
                 subjobs[subjob_name] = ["bzfs"] + opts
@@ -591,12 +590,10 @@ class Job:
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
-                    old_len_opts = len(opts)
-                    pairs = [(dummy_dataset, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
-                    for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
-                        opts += [src, dst]
-                    if len(opts) > old_len_opts:
-                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts
+                    dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
+                    dataset_pairs = self.skip_datasets_with_nonexisting_dst_pool(dataset_pairs)
+                    if len(dataset_pairs) > 0:
+                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts + flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -635,7 +632,7 @@ class Job:
                 opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, None))
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
-                opts += dedupe([(dummy_dataset, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])
+                opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
                 subjobs[subjob_name] = ["bzfs"] + opts
 
@@ -652,16 +649,16 @@ class Job:
                     opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, dst_hostname))
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
-                    old_len_opts = len(opts)
-                    pairs = [(dummy_dataset, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
-                    for src, dst in self.skip_datasets_with_nonexisting_dst_pool(pairs):
-                        opts += [src, dst]
-                    if len(opts) > old_len_opts:
-                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts
+                    dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
+                    dataset_pairs = self.skip_datasets_with_nonexisting_dst_pool(dataset_pairs)
+                    if len(dataset_pairs) > 0:
+                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts + flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        log.trace("Ready to run subjobs: \n%s", pretty_print_formatter(subjobs))
+        msg = "Ready to run %s subjobs using %s src hosts %s, %s dst hosts %s"
+        log.info(msg, len(subjobs), len(src_hosts), src_hosts, len(dst_hosts), list(dst_hosts.keys()))
+        log.trace("subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)
         ex = self.first_exception
         if isinstance(ex, int):
@@ -700,7 +697,7 @@ class Job:
             opts += [f"--log-file-suffix={sep}{job_run}{log_suffix(lhn, src_hostname, dst_hostname)}{sep}"]
         return opts
 
-    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs) -> List[Tuple[str, str]]:
+    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
         def zpool(dataset: str) -> str:
             return dataset.split("/", 1)[0]
 
@@ -988,16 +985,16 @@ class Stats:
 
 
 #############################################################################
-def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
-    results = []
-    for src, dst in dict.fromkeys(root_dataset_pairs).keys():
-        results.append(src)
-        results.append(dst)
-    return results
+def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    return list(dict.fromkeys(root_dataset_pairs).keys())
+
+
+def flatten(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
+    return [item for pair in root_dataset_pairs for item in pair]
 
 
 def sanitize(filename: str) -> str:
-    for s in (" ", "..", "/", "\\", sep, bzfs.BARRIER_CHAR):
+    for s in (" ", "..", "/", "\\", sep):
         filename = filename.replace(s, "!")
     return filename
 

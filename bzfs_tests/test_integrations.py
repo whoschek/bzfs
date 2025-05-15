@@ -435,8 +435,6 @@ class BZFSTestCase(ParametrizedTestCase):
             job = bzfs_jobrunner.Job()
             if spawn_process_per_job:
                 args += ["--spawn_process_per_job"]
-            elif spawn_process_per_job is not None:
-                job.spawn_process_per_job = spawn_process_per_job
 
         else:
             job = bzfs.Job()

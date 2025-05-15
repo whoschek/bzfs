@@ -1725,7 +1725,7 @@ class Params:
         if allow_all or opt is None:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
-            die(f"Option must not contain a whitespace character {'other than space' if allow_spaces else ''} : {opt}")
+            die(f"Option must not contain a whitespace character{' other than space' if allow_spaces else ''}: {opt}")
         self.validate_quoting([opt])
         return opt
 
