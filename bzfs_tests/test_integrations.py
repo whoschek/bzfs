@@ -4791,6 +4791,7 @@ class LocalTestCase(BZFSTestCase):
                     f"--dst-snapshot-plan={dst_snapshot_plan}",
                     f"--monitor-snapshot-plan={monitor_dst_snapshot_plan}",
                     "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+                    "--job-id=myjobid",
                     f"--ssh-src-port={getenv_any('test_ssh_port', '22')}",
                     f"--ssh-dst-port={getenv_any('test_ssh_port', '22')}",
                 ]
@@ -5116,6 +5117,7 @@ class LocalTestCase(BZFSTestCase):
                     f"--src-bookmark-plan={src_bookmark_plan}",
                     f"--dst-snapshot-plan={dst_snapshot_plan}",
                     "--create-src-snapshots-timeformat=%Y-%m-%d_%H:%M:%S.%f",
+                    "--job-id=myjobid",
                     f"--ssh-src-port={getenv_any('test_ssh_port', '22')}",
                     f"--ssh-dst-port={getenv_any('test_ssh_port', '22')}",
                 ]
