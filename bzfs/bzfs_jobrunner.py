@@ -304,7 +304,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--job-id", required=True, action=bzfs.NonEmptyStringAction, metavar="STRING",
         help="The identifier that remains constant across all runs of this particular job; will be included in the log file "
-             "name infix. Example: mytestjob1\n\n")
+             "name infix. Example: mytestjob\n\n")
     parser.add_argument(
         "--jobid", default=None, action=bzfs.NonEmptyStringAction, metavar="STRING",
         help=argparse.SUPPRESS)   # deprecated; was renamed to --job-run

@@ -246,8 +246,8 @@ worker_timeout_seconds = None
 
 
 extra_args = []
-extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', pathlib.Path(sys.argv[0]).stem)}"]
 extra_args += [f"--job-id={pathlib.Path(sys.argv[0]).stem}"]  # stem is the basename with the file extension removed
+extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', pathlib.Path(sys.argv[0]).stem)}"]
 # extra_args += ["--ssh-src-port=2222"]  # for hpnssh
 # extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
 # extra_args += ["--localhost=bak-us-west-1"]
