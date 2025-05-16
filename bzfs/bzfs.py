@@ -5027,34 +5027,21 @@ class Job:
         @dataclass(order=True, frozen=True, repr=False)
         class TreeNode:
 
-            class IntHolder:
-                __slots__ = ("value",)  # uses more compact memory layout than __dict__
-
-                def __init__(self, value: int = 0):
-                    self.value: int = value
-
-                def __repr__(self) -> str:
-                    return str(self.value)
-
-            class Barriers:
-                __slots__ = ("items",)  # uses more compact memory layout than __dict__
+            class MutableAttributes:
+                __slots__ = ("pending", "barriers")  # uses more compact memory layout than __dict__
 
                 def __init__(self):
-                    self.items: Sequence[TreeNode] = []
-
-                def __repr__(self) -> str:
-                    return str(self.items)
+                    self.pending: int = 0
+                    self.barriers: Sequence[TreeNode] = []
 
             dataset: str  # ordered by dataset within priority queue
             children: Tree = field(compare=False)
             parent: "TreeNode" = field(compare=False, default=None)
-            pending: IntHolder = field(compare=False, default_factory=IntHolder)
-            barriers: Barriers = field(compare=False, default_factory=Barriers)
+            mut: MutableAttributes = field(compare=False, default_factory=MutableAttributes)
 
             def __repr__(self) -> str:
-
-                ds, pending, nbarriers, nchildren = self.dataset, self.pending, len(self.barriers.items), len(self.children)
-                return str({"dataset": ds, "pending": pending, "nbarriers": nbarriers, "nchildren": nchildren})
+                d, pending, nbarriers, nchildren = self.dataset, self.mut.pending, len(self.mut.barriers), len(self.children)
+                return str({"dataset": d, "pending": pending, "nbarriers": nbarriers, "nchildren": nchildren})
 
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.monotonic_ns()
@@ -5179,12 +5166,12 @@ class Job:
                                 elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
                                     k = enqueue_children(child_node)  # ... recursively down the tree
                                 else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
-                                    assert len(node.barriers.items) == 0
-                                    assert node.barriers.items is not immutable_empty_sequence
-                                    assert isinstance(node.barriers.items, list)
-                                    node.barriers.items.append(child_node)
+                                    assert len(node.mut.barriers) == 0
+                                    assert node.mut.barriers is not immutable_empty_sequence
+                                    assert isinstance(node.mut.barriers, list)
+                                    node.mut.barriers.append(child_node)
                                     k = 0
-                                node.pending.value += min(1, k)
+                                node.mut.pending += min(1, k)
                                 n += k
                             assert n >= 0
                             return n
@@ -5195,22 +5182,22 @@ class Job:
                             else:  # job completed without success
                                 tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
                                 while tmp is not None:
-                                    tmp.barriers.items = immutable_empty_sequence
+                                    tmp.mut.barriers = immutable_empty_sequence
                                     tmp = tmp.parent
-                            assert node.pending.value >= 0
-                            while node.pending.value == 0:  # have all jobs in subtree of current node completed?
+                            assert node.mut.pending >= 0
+                            while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
                                 # ... if so open the barrier, if there's a barrier, and enqueue jobs waiting on it
                                 if no_skip:
-                                    for barrier in node.barriers.items:
-                                        node.pending.value += min(1, enqueue_children(barrier))
-                                node.barriers.items = immutable_empty_sequence
-                                if node.pending.value > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
+                                    for barrier in node.mut.barriers:
+                                        node.mut.pending += min(1, enqueue_children(barrier))
+                                node.mut.barriers = immutable_empty_sequence
+                                if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
                                     break  # ... if so we aren't quite done yet with this subtree
                                 if node.parent is None:
                                     break  # we've reached the root node
                                 node = node.parent  # recurse up the tree
-                                node.pending.value -= 1  # mark subtree as completed
-                                assert node.pending.value >= 0
+                                node.mut.pending -= 1  # mark subtree as completed
+                                assert node.mut.pending >= 0
 
                         assert enable_barriers
                         on_job_completion_with_barriers(done_future.node, no_skip)
