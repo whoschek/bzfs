@@ -153,8 +153,8 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--src-bookmark-plan DICT_STRING]
                       [--dst-snapshot-plan DICT_STRING]
                       [--monitor-snapshot-plan DICT_STRING]
-                      [--src-user STRING] [--dst-user STRING]
-                      [--job-id STRING] [--workers INT[%]]
+                      [--src-user STRING] [--dst-user STRING] --job-id
+                      STRING [--job-run STRING] [--workers INT[%]]
                       [--work-period-seconds FLOAT]
                       [--worker-timeout-seconds FLOAT]
                       [--jobrunner-dryrun]
@@ -425,8 +425,17 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--job-id** *STRING*
 
-*  The job identifier that shall be included in the log file name suffix. Default is a hex UUID.
-    Example: 0badc0f003a011f0a94aef02ac16083c
+*  The identifier that remains constant across all runs of this particular job; will be included
+    in the log file name infix. Example: mytestjob
+
+<!-- -->
+
+<div id="--job-run"></div>
+
+**--job-run** *STRING*
+
+*  The identifier of this particular run of the overall job; will be included in the log file
+    name suffix. Default is a hex UUID. Example: 0badc0f003a011f0a94aef02ac16083c
 
 <!-- -->
 
