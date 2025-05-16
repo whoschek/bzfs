@@ -2943,10 +2943,10 @@ class Job:
         datasets_without_snapshots = self.handle_minmax_snapshots(
             remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
         )
-        for ds in datasets_without_snapshots:
+        for dataset in datasets_without_snapshots:
             for i in range(len(alerts)):
-                alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=ds, snapshot="")
-                alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=ds, snapshot="")
+                alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
+                alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
 
     def replicate_datasets(self, src_datasets: List[str], task_description: str, max_workers: int) -> bool:
         assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
@@ -3052,6 +3052,7 @@ class Job:
                 if not p.dry_run:
                     set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
                     set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
+
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         log.info(
             p.dry("Replication done: %s"),
@@ -4633,7 +4634,8 @@ class Job:
     def cache_get_snapshots_changed(self, path: str) -> int:
         return self.cache_get_snapshots_changed2(path)[1]
 
-    def cache_get_snapshots_changed2(self, path: str) -> Tuple[int, int]:
+    @staticmethod
+    def cache_get_snapshots_changed2(path: str) -> Tuple[int, int]:
         """Like zfs_get_snapshots_changed() but reads from local cache."""
         try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
             s = os_stat(path)
@@ -5027,16 +5029,15 @@ class Job:
 
         @dataclass(order=True, frozen=True, repr=False)
         class TreeNode:
-
             class MutableAttributes:
                 __slots__ = ("pending", "barriers")  # uses more compact memory layout than __dict__
 
                 def __init__(self):
-                    self.pending: int = 0
-                    self.barriers: Sequence[TreeNode] = []
+                    self.pending: int = 0  # number of children that have not yet completed their work
+                    self.barriers: Sequence[TreeNode] = []  # zero or one child TreeNode waiting for this node to complete
 
-            dataset: str  # ordered by dataset within priority queue
-            children: Tree = field(compare=False)
+            dataset: str  # TreeNodes are ordered by dataset name within a priority queue
+            children: Tree = field(compare=False)  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
             parent: "TreeNode" = field(compare=False, default=None)
             mut: MutableAttributes = field(compare=False, default_factory=MutableAttributes)
 
