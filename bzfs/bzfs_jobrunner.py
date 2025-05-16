@@ -765,7 +765,7 @@ class Job:
         assert stats.jobs_completed == stats.jobs_started, msg
         skipped_jobs_dict = {subjob: subjobs[subjob] for subjob in sorted_subjobs if subjob not in stats.started_job_names}
         if len(skipped_jobs_dict) > 0:
-            log.warning("Skipped subjobs: \n%s", pretty_print_formatter(skipped_jobs_dict))
+            log.debug("Skipped subjobs: \n%s", pretty_print_formatter(skipped_jobs_dict))
         assert jobs_skipped == len(skipped_jobs_dict), msg
 
     def run_subjob(
