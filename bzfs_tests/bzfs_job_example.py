@@ -27,6 +27,7 @@
 
 import argparse
 import os
+import pathlib
 import subprocess
 import sys
 
@@ -245,7 +246,8 @@ worker_timeout_seconds = None
 
 
 extra_args = []
-extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', os.path.basename(sys.argv[0]))}"]
+extra_args += [f"--job-id={pathlib.Path(sys.argv[0]).stem}"]  # stem is basename without file extension ("bzfs_job_example")
+extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', pathlib.Path(sys.argv[0]).stem)}"]
 # extra_args += ["--ssh-src-port=2222"]  # for hpnssh
 # extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
 # extra_args += ["--localhost=bak-us-west-1"]
@@ -280,7 +282,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--skip-on-error=fail"]
 # extra_args += ["--skip-on-error=tree"]
 # extra_args += ["--cache-snapshots"]  # perf: less 'zfs list -t snapshot' before snapshot creation, replication & monitoring
-# extra_args += ["--dryrun"]
+# extra_args += ["--dryrun"]  # print what operations would happen if the command were to be executed for real
 # extra_args += ["--verbose"]
 # extra_args += ["--quiet"]
 # extra_args += ["--no-privilege-elevation"]
@@ -297,6 +299,9 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--monitor-snapshots-dont-warn"]
 # extra_args += ["--monitor-snapshots-dont-crit"]
 # os.environ["TZ"] = "UTC"  # change timezone in all respects for the entire program
+# extra_args += ["--jobrunner-dryrun"]  # print what operations would happen if the command were to be executed for real
+# extra_args += ["--jobrunner-log-level=DEBUG"]
+# extra_args += ["--jobrunner-log-level=TRACE"]
 
 
 # Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency.
