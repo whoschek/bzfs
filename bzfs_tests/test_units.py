@@ -935,6 +935,17 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             bzfs.reset_logger()
 
+    def test_has_duplicates(self):
+        self.assertFalse(bzfs.has_duplicates([]))
+        self.assertFalse(bzfs.has_duplicates([42]))
+        self.assertFalse(bzfs.has_duplicates([1, 2, 3, 4, 5]))
+        self.assertTrue(bzfs.has_duplicates([2, 2, 3, 4, 5]))
+        self.assertTrue(bzfs.has_duplicates([1, 2, 3, 3, 4, 5]))
+        self.assertTrue(bzfs.has_duplicates([1, 2, 3, 4, 5, 5]))
+        self.assertTrue(bzfs.has_duplicates([1, 1, 2, 3, 3, 4, 4, 5]))
+        self.assertTrue(bzfs.has_duplicates(["a", "b", "b", "c"]))
+        self.assertFalse(bzfs.has_duplicates(["ant", "bee", "cat"]))
+
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
         src_datasets: List[str], basis_src_datasets: List[str]

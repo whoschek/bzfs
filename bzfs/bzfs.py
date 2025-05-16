@@ -5005,14 +5005,15 @@ class Job:
         task_name: str = "Task",
         enable_barriers: Optional[bool] = None,  # for testing only; None means 'auto-detect'
     ) -> bool:
-        """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling and retries
-        and parallel execution. Assumes that the input dataset list is sorted. All children of a dataset may be
-        processed in parallel. For consistency (even during parallel dataset replication/deletion), processing of a
-        dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is
-        ready to start processing another dataset, it chooses the "smallest" dataset wrt. lexicographical sort order
-        from the datasets that are currently available for start of processing. Initially, only the roots of the
-        selected dataset subtrees are available for start of processing."""
+        """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling and retries and
+        parallel execution. Assumes that the input dataset list is sorted and does not contain duplicates. All children of a
+        dataset may be processed in parallel. For consistency (even during parallel dataset replication/deletion), processing
+        of a dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is ready
+        to start processing another dataset, it chooses the "smallest" dataset wrt. lexicographical sort order from the
+        datasets that are currently available for start of processing. Initially, only the roots of the selected dataset
+        subtrees are available for start of processing."""
         assert not self.is_test_mode or datasets == sorted(datasets), "List is not sorted"
+        assert not self.is_test_mode or not has_duplicates(datasets), "List contains duplicates"
         assert isinstance(process_dataset, Callable)
         assert isinstance(skip_tree_on_error, Callable)
         assert max_workers > 0
@@ -6087,6 +6088,10 @@ def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
 def replace_in_lines(lines: List[str], old: str, new: str) -> None:
     for i in range(len(lines)):
         lines[i] = lines[i].replace(old, new)
+
+
+def has_duplicates(sorted_list: List) -> bool:
+    return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
 
 
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
