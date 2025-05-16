@@ -743,7 +743,7 @@ class Job:
             helper.process_datasets_in_parallel_and_fault_tolerant(
                 sorted_subjobs,
                 process_dataset=lambda subjob, tid, retry: self.run_subjob(
-                    subjobs[subjob], timeout_secs=timeout_secs, spawn_process_per_job=True
+                    subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=True
                 )
                 == 0,
                 skip_tree_on_error=lambda subjob: True,
@@ -757,10 +757,23 @@ class Job:
             for subjob in sorted_subjobs:
                 time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)
                 next_update_nanos += interval_nanos
-                if not self.run_subjob(subjobs[subjob], timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
+                s = subjob
+                if not self.run_subjob(subjobs[subjob], name=s, timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
                     break
+        stats = self.stats
+        jobs_skipped = stats.jobs_all - stats.jobs_started
+        msg = f"{stats}, skipped:" + bzfs.percent(jobs_skipped, total=stats.jobs_all)
+        log.info("Final Progress: %s", msg)
+        assert stats.jobs_running == 0, msg
+        assert stats.jobs_completed == stats.jobs_started, msg
+        skipped_jobs_dict = {subjob: subjobs[subjob] for subjob in sorted_subjobs if subjob not in stats.started_job_names}
+        if len(skipped_jobs_dict) > 0:
+            log.debug("Skipped subjobs: \n%s", pretty_print_formatter(skipped_jobs_dict))
+        assert jobs_skipped == len(skipped_jobs_dict), msg
 
-    def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
+    def run_subjob(
+        self, cmd: List[str], name: str, timeout_secs: Optional[float], spawn_process_per_job: bool
+    ) -> Optional[int]:
         start_time_nanos = time.monotonic_ns()
         returncode = None
         log = self.log
@@ -770,6 +783,7 @@ class Job:
             with stats.lock:
                 stats.jobs_started += 1
                 stats.jobs_running += 1
+                stats.started_job_names.add(name)
                 msg = str(stats)
             log.trace("Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
@@ -785,7 +799,7 @@ class Job:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
             elapsed_human = bzfs.human_readable_duration(elapsed_nanos)
             if returncode != 0:
-                with self.stats.lock:
+                with stats.lock:
                     if self.first_exception is None:
                         self.first_exception = die_status if returncode is None else returncode
                 log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
@@ -800,6 +814,15 @@ class Job:
                 stats.sum_elapsed_nanos += elapsed_nanos
                 stats.jobs_failed += 1 if returncode != 0 else 0
                 msg = str(stats)
+                assert stats.jobs_all >= 0, msg
+                assert stats.jobs_started >= 0, msg
+                assert stats.jobs_completed >= 0, msg
+                assert stats.jobs_failed >= 0, msg
+                assert stats.jobs_running >= 0, msg
+                assert stats.sum_elapsed_nanos >= 0, msg
+                assert stats.jobs_failed <= stats.jobs_completed, msg
+                assert stats.jobs_completed <= stats.jobs_started, msg
+                assert stats.jobs_started <= stats.jobs_all, msg
             log.info("Progress: %s", msg)
 
     def run_worker_job_in_current_thread(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
@@ -952,6 +975,7 @@ class Stats:
         self.jobs_failed: int = 0
         self.jobs_running: int = 0
         self.sum_elapsed_nanos: int = 0
+        self.started_job_names: Set[str] = set()
 
     def __repr__(self) -> str:
         def pct(number: int) -> str:

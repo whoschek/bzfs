@@ -423,29 +423,31 @@ class TestRunSubJob(unittest.TestCase):
         self.assertIsNone(self.job.first_exception)
 
     def test_success(self):
-        result = self.job.run_subjob(cmd=["true"], timeout_secs=None, spawn_process_per_job=True)
+        result = self.job.run_subjob(cmd=["true"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertEqual(0, result)
 
     def test_failure(self):
-        result = self.job.run_subjob(cmd=["false"], timeout_secs=None, spawn_process_per_job=True)
+        self.job.stats.jobs_all = 2
+        result = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
         self.assertTrue(self.job.first_exception != 0)
 
-        result = self.job.run_subjob(cmd=["false"], timeout_secs=None, spawn_process_per_job=True)
+        result = self.job.run_subjob(cmd=["false"], name="j1", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
         self.assertTrue(self.job.first_exception != 0)
 
     def test_timeout(self):
-        result = self.job.run_subjob(cmd=["sleep", "0"], timeout_secs=1, spawn_process_per_job=True)
+        self.job.stats.jobs_all = 2
+        result = self.job.run_subjob(cmd=["sleep", "0"], name="j0", timeout_secs=1, spawn_process_per_job=True)
         self.assertEqual(0, result)
-        result = self.job.run_subjob(cmd=["sleep", "1"], timeout_secs=0.01, spawn_process_per_job=True)
+        result = self.job.run_subjob(cmd=["sleep", "1"], name="j1", timeout_secs=0.01, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
 
     def test_nonexisting_cmd(self):
         with self.assertRaises(FileNotFoundError):
-            self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], timeout_secs=None, spawn_process_per_job=True)
+            self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
 
 
 #############################################################################
