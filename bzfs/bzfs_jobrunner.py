@@ -740,7 +740,7 @@ class Job:
             helper.process_datasets_in_parallel_and_fault_tolerant(
                 sorted_subjobs,
                 process_dataset=lambda subjob, tid, retry: self.run_subjob(
-                    subjobs[subjob], timeout_secs=timeout_secs, spawn_process_per_job=True
+                    subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=True
                 )
                 == 0,
                 skip_tree_on_error=lambda subjob: True,
@@ -754,7 +754,8 @@ class Job:
             for subjob in sorted_subjobs:
                 time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)
                 next_update_nanos += interval_nanos
-                if not self.run_subjob(subjobs[subjob], timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
+                s = subjob
+                if not self.run_subjob(subjobs[subjob], name=s, timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
                     break
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
@@ -762,8 +763,13 @@ class Job:
         log.info("Final Progress: %s", msg)
         assert stats.jobs_running == 0, msg
         assert stats.jobs_completed == stats.jobs_started, msg
+        skipped_jobs_dict = {subjob: subjobs[subjob] for subjob in sorted_subjobs if subjob not in stats.started_job_names}
+        if len(skipped_jobs_dict) > 0:
+            log.warning("Skipped subjobs: \n%s", pretty_print_formatter(skipped_jobs_dict))
 
-    def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
+    def run_subjob(
+        self, cmd: List[str], name: str, timeout_secs: Optional[float], spawn_process_per_job: bool
+    ) -> Optional[int]:
         start_time_nanos = time.monotonic_ns()
         returncode = None
         log = self.log
@@ -773,6 +779,7 @@ class Job:
             with stats.lock:
                 stats.jobs_started += 1
                 stats.jobs_running += 1
+                stats.started_job_names.add(name)
                 msg = str(stats)
             log.trace("Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
@@ -964,6 +971,7 @@ class Stats:
         self.jobs_failed: int = 0
         self.jobs_running: int = 0
         self.sum_elapsed_nanos: int = 0
+        self.started_job_names: Set[str] = set()
 
     def __repr__(self) -> str:
         def pct(number: int) -> str:
