@@ -5027,6 +5027,8 @@ class Job:
         class TreeNode:
 
             class IntHolder:
+                __slots__ = ("value",)  # uses more compact memory layout than __dict__
+
                 def __init__(self, value: int = 0):
                     self.value: int = value
 
@@ -5034,6 +5036,8 @@ class Job:
                     return str(self.value)
 
             class Barriers:
+                __slots__ = ("items",)  # uses more compact memory layout than __dict__
+
                 def __init__(self):
                     self.items: Sequence[TreeNode] = []
 
