@@ -759,13 +759,14 @@ class Job:
                     break
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
-        msg = f"{stats}, skipped:" + bzfs.percent(jobs_skipped, total=self.stats.jobs_all)
+        msg = f"{stats}, skipped:" + bzfs.percent(jobs_skipped, total=stats.jobs_all)
         log.info("Final Progress: %s", msg)
         assert stats.jobs_running == 0, msg
         assert stats.jobs_completed == stats.jobs_started, msg
         skipped_jobs_dict = {subjob: subjobs[subjob] for subjob in sorted_subjobs if subjob not in stats.started_job_names}
         if len(skipped_jobs_dict) > 0:
             log.warning("Skipped subjobs: \n%s", pretty_print_formatter(skipped_jobs_dict))
+        assert jobs_skipped == len(skipped_jobs_dict), msg
 
     def run_subjob(
         self, cmd: List[str], name: str, timeout_secs: Optional[float], spawn_process_per_job: bool
