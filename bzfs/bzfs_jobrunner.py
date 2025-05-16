@@ -756,6 +756,12 @@ class Job:
                 next_update_nanos += interval_nanos
                 if not self.run_subjob(subjobs[subjob], timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
                     break
+        stats = self.stats
+        jobs_skipped = stats.jobs_all - stats.jobs_started
+        msg = f"{stats}, skipped:" + bzfs.percent(jobs_skipped, total=self.stats.jobs_all)
+        log.info("Final Progress: %s", msg)
+        assert stats.jobs_running == 0, msg
+        assert stats.jobs_completed == stats.jobs_started, msg
 
     def run_subjob(self, cmd: List[str], timeout_secs: Optional[float], spawn_process_per_job: bool) -> Optional[int]:
         start_time_nanos = time.monotonic_ns()
@@ -782,7 +788,7 @@ class Job:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
             elapsed_human = bzfs.human_readable_duration(elapsed_nanos)
             if returncode != 0:
-                with self.stats.lock:
+                with stats.lock:
                     if self.first_exception is None:
                         self.first_exception = die_status if returncode is None else returncode
                 log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
@@ -797,6 +803,15 @@ class Job:
                 stats.sum_elapsed_nanos += elapsed_nanos
                 stats.jobs_failed += 1 if returncode != 0 else 0
                 msg = str(stats)
+                assert stats.jobs_all >= 0, msg
+                assert stats.jobs_started >= 0, msg
+                assert stats.jobs_completed >= 0, msg
+                assert stats.jobs_failed >= 0, msg
+                assert stats.jobs_running >= 0, msg
+                assert stats.sum_elapsed_nanos >= 0, msg
+                assert stats.jobs_failed <= stats.jobs_completed, msg
+                assert stats.jobs_completed <= stats.jobs_started, msg
+                assert stats.jobs_started <= stats.jobs_all, msg
             log.info("Progress: %s", msg)
 
     def run_worker_job_in_current_thread(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:

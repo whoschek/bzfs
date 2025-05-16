@@ -427,6 +427,7 @@ class TestRunSubJob(unittest.TestCase):
         self.assertEqual(0, result)
 
     def test_failure(self):
+        self.job.stats.jobs_all = 2
         result = self.job.run_subjob(cmd=["false"], timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
         self.assertIsInstance(self.job.first_exception, int)
@@ -438,6 +439,7 @@ class TestRunSubJob(unittest.TestCase):
         self.assertTrue(self.job.first_exception != 0)
 
     def test_timeout(self):
+        self.job.stats.jobs_all = 2
         result = self.job.run_subjob(cmd=["sleep", "0"], timeout_secs=1, spawn_process_per_job=True)
         self.assertEqual(0, result)
         result = self.job.run_subjob(cmd=["sleep", "1"], timeout_secs=0.01, spawn_process_per_job=True)
