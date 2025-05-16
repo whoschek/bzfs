@@ -3014,6 +3014,7 @@ class Job:
             assert not self.is_test_mode or stale_src_datasets1 == sorted(stale_src_datasets1), "List is not sorted"
             assert not self.is_test_mode or stale_src_datasets2 == sorted(stale_src_datasets2), "List is not sorted"
             stale_src_datasets = list(heapq.merge(stale_src_datasets1, stale_src_datasets2))  # merge two sorted lists
+            assert not self.is_test_mode or not has_duplicates(stale_src_datasets), "List contains duplicates"
             return stale_src_datasets, cache_files
 
         if self.is_caching_snapshots(src):
@@ -6082,6 +6083,7 @@ def replace_in_lines(lines: List[str], old: str, new: str) -> None:
 
 
 def has_duplicates(sorted_list: List) -> bool:
+    """Returns True if any adjacent items within the given sorted list are equal."""
     return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
 
 

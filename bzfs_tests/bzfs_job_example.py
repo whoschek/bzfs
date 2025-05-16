@@ -282,7 +282,7 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--skip-on-error=fail"]
 # extra_args += ["--skip-on-error=tree"]
 # extra_args += ["--cache-snapshots"]  # perf: less 'zfs list -t snapshot' before snapshot creation, replication & monitoring
-# extra_args += ["--dryrun"]
+# extra_args += ["--dryrun"]  # print what operations would happen if the command were to be executed for real
 # extra_args += ["--verbose"]
 # extra_args += ["--quiet"]
 # extra_args += ["--no-privilege-elevation"]
@@ -299,6 +299,9 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--monitor-snapshots-dont-warn"]
 # extra_args += ["--monitor-snapshots-dont-crit"]
 # os.environ["TZ"] = "UTC"  # change timezone in all respects for the entire program
+# extra_args += ["--jobrunner-dryrun"]  # print what operations would happen if the command were to be executed for real
+# extra_args += ["--jobrunner-log-level=DEBUG"]
+# extra_args += ["--jobrunner-log-level=TRACE"]
 
 
 # Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency.
