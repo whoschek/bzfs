@@ -5030,11 +5030,11 @@ class Job:
         @dataclass(order=True, frozen=True, repr=False)
         class TreeNode:
             class MutableAttributes:
-                __slots__ = ("pending", "barriers")  # uses more compact memory layout than __dict__
+                __slots__ = ("pending", "barrier")  # uses more compact memory layout than __dict__
 
                 def __init__(self):
                     self.pending: int = 0  # number of children that have not yet completed their work
-                    self.barriers: Sequence[TreeNode] = []  # zero or one child TreeNode waiting for this node to complete
+                    self.barrier: Optional[TreeNode] = None  # zero or one child TreeNode waiting for this node to complete
 
             dataset: str  # TreeNodes are ordered by dataset name within a priority queue
             children: Tree = field(compare=False)  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
@@ -5042,8 +5042,9 @@ class Job:
             mut: MutableAttributes = field(compare=False, default_factory=MutableAttributes)
 
             def __repr__(self) -> str:
-                d, pending, nbarriers, nchildren = self.dataset, self.mut.pending, len(self.mut.barriers), len(self.children)
-                return str({"dataset": d, "pending": pending, "nbarriers": nbarriers, "nchildren": nchildren})
+                dataset, pending, nchildren = self.dataset, self.mut.pending, len(self.children)
+                barrier = self.mut.barrier
+                return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
 
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.monotonic_ns()
@@ -5074,7 +5075,7 @@ class Job:
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets = len(datasets)
         datasets_set = set(datasets)
-        immutable_empty_sequence = tuple()
+        immutable_empty_barrier = TreeNode("immutable_empty_barrier", {})
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
             submitted = 0
@@ -5168,10 +5169,8 @@ class Job:
                                 elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
                                     k = enqueue_children(child_node)  # ... recursively down the tree
                                 else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
-                                    assert len(node.mut.barriers) == 0
-                                    assert node.mut.barriers is not immutable_empty_sequence
-                                    assert isinstance(node.mut.barriers, list)
-                                    node.mut.barriers.append(child_node)
+                                    assert node.mut.barrier is None
+                                    node.mut.barrier = child_node
                                     k = 0
                                 node.mut.pending += min(1, k)
                                 n += k
@@ -5184,15 +5183,15 @@ class Job:
                             else:  # job completed without success
                                 tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
                                 while tmp is not None:
-                                    tmp.mut.barriers = immutable_empty_sequence
+                                    tmp.mut.barrier = immutable_empty_barrier
                                     tmp = tmp.parent
                             assert node.mut.pending >= 0
                             while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
                                 # ... if so open the barrier, if there's a barrier, and enqueue jobs waiting on it
                                 if no_skip:
-                                    for barrier in node.mut.barriers:
-                                        node.mut.pending += min(1, enqueue_children(barrier))
-                                node.mut.barriers = immutable_empty_sequence
+                                    if not (node.mut.barrier is None or node.mut.barrier is immutable_empty_barrier):
+                                        node.mut.pending += min(1, enqueue_children(node.mut.barrier))
+                                node.mut.barrier = immutable_empty_barrier
                                 if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
                                     break  # ... if so we aren't quite done yet with this subtree
                                 if node.parent is None:
