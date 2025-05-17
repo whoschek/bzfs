@@ -5027,8 +5027,7 @@ class Job:
         enable_barriers = has_barrier or enable_barriers
         p, log = self.params, self.params.log
 
-        @dataclass(order=True, frozen=True, repr=False)
-        class TreeNode:
+        class TreeNode(NamedTuple):
             class MutableAttributes:
                 __slots__ = ("pending", "barrier")  # uses more compact memory layout than __dict__
 
@@ -5037,14 +5036,16 @@ class Job:
                     self.barrier: Optional[TreeNode] = None  # zero or one child TreeNode waiting for this node to complete
 
             dataset: str  # TreeNodes are ordered by dataset name within a priority queue
-            children: Tree = field(compare=False)  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-            parent: "TreeNode" = field(compare=False, default=None)
-            mut: MutableAttributes = field(compare=False, default_factory=MutableAttributes)
+            children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
+            parent: "TreeNode"
+            mut: MutableAttributes
 
             def __repr__(self) -> str:
-                dataset, pending, nchildren = self.dataset, self.mut.pending, len(self.children)
-                barrier = self.mut.barrier
+                dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
                 return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
+
+        def make_tree_node(dataset: str, children: Tree, parent: TreeNode = None) -> TreeNode:
+            return TreeNode(dataset, children, parent, TreeNode.MutableAttributes())
 
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.monotonic_ns()
@@ -5066,16 +5067,16 @@ class Job:
                 children = tree
                 for component in dataset.split("/"):
                     children = children[component]
-                node = TreeNode(dataset, children)
+                node = make_tree_node(dataset, children)
                 roots.append(node)
             return roots
 
-        assert (not self.is_test_mode) or str(TreeNode("foo", {}))
+        assert (not self.is_test_mode) or str(make_tree_node("foo", {}))
         priority_queue: List[TreeNode] = build_dataset_tree_and_find_roots()
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets = len(datasets)
         datasets_set = set(datasets)
-        immutable_empty_barrier = TreeNode("immutable_empty_barrier", {})
+        immutable_empty_barrier = make_tree_node("immutable_empty_barrier", {})
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
             submitted = 0
@@ -5128,7 +5129,7 @@ class Job:
                         def simple_enqueue_children(node: TreeNode) -> None:
                             children = node.children
                             for child, grandchildren in children.items():  # as processing of parent has now completed
-                                child_node = TreeNode(f"{node.dataset}/{child}", grandchildren)
+                                child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren)
                                 if child_node.dataset in datasets_set:
                                     heapq.heappush(priority_queue, child_node)  # make it available for start of processing
                                 else:  # it's an intermediate node that has no job attached; pass the enqueue operation
@@ -5158,7 +5159,7 @@ class Job:
                             n = 0
                             children = node.children
                             for child, grandchildren in children.items():
-                                child_node = TreeNode(f"{node.dataset}/{child}", grandchildren, parent=node)
+                                child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren, parent=node)
                                 if child != BARRIER_CHAR:
                                     if child_node.dataset in datasets_set:
                                         # it's not a barrier; make job available for immediate start of processing
