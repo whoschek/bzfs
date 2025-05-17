@@ -2943,10 +2943,10 @@ class Job:
         datasets_without_snapshots = self.handle_minmax_snapshots(
             remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
         )
-        for ds in datasets_without_snapshots:
+        for dataset in datasets_without_snapshots:
             for i in range(len(alerts)):
-                alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=ds, snapshot="")
-                alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=ds, snapshot="")
+                alert_latest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
+                alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
 
     def replicate_datasets(self, src_datasets: List[str], task_description: str, max_workers: int) -> bool:
         assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
@@ -3014,6 +3014,7 @@ class Job:
             assert not self.is_test_mode or stale_src_datasets1 == sorted(stale_src_datasets1), "List is not sorted"
             assert not self.is_test_mode or stale_src_datasets2 == sorted(stale_src_datasets2), "List is not sorted"
             stale_src_datasets = list(heapq.merge(stale_src_datasets1, stale_src_datasets2))  # merge two sorted lists
+            assert not self.is_test_mode or not has_duplicates(stale_src_datasets), "List contains duplicates"
             return stale_src_datasets, cache_files
 
         if self.is_caching_snapshots(src):
@@ -3051,6 +3052,7 @@ class Job:
                 if not p.dry_run:
                     set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
                     set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
+
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         log.info(
             p.dry("Replication done: %s"),
@@ -4632,7 +4634,8 @@ class Job:
     def cache_get_snapshots_changed(self, path: str) -> int:
         return self.cache_get_snapshots_changed2(path)[1]
 
-    def cache_get_snapshots_changed2(self, path: str) -> Tuple[int, int]:
+    @staticmethod
+    def cache_get_snapshots_changed2(path: str) -> Tuple[int, int]:
         """Like zfs_get_snapshots_changed() but reads from local cache."""
         try:  # perf: inode metadata reads and writes are fast - ballpark O(200k) ops/sec.
             s = os_stat(path)
@@ -5024,33 +5027,25 @@ class Job:
         enable_barriers = has_barrier or enable_barriers
         p, log = self.params, self.params.log
 
-        @dataclass(order=True, frozen=True, repr=False)
-        class TreeNode:
+        class TreeNode(NamedTuple):
+            class MutableAttributes:
+                __slots__ = ("pending", "barrier")  # uses more compact memory layout than __dict__
 
-            class IntHolder:
-                def __init__(self, value: int = 0):
-                    self.value: int = value
-
-                def __repr__(self) -> str:
-                    return str(self.value)
-
-            class Barriers:
                 def __init__(self):
-                    self.items: Sequence[TreeNode] = []
+                    self.pending: int = 0  # number of children that have not yet completed their work
+                    self.barrier: Optional[TreeNode] = None  # zero or one child TreeNode waiting for this node to complete
 
-                def __repr__(self) -> str:
-                    return str(self.items)
-
-            dataset: str  # ordered by dataset within priority queue
-            children: Tree = field(compare=False)
-            parent: "TreeNode" = field(compare=False, default=None)
-            pending: IntHolder = field(compare=False, default_factory=IntHolder)
-            barriers: Barriers = field(compare=False, default_factory=Barriers)
+            dataset: str  # TreeNodes are ordered by dataset name within a priority queue
+            children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
+            parent: "TreeNode"
+            mut: MutableAttributes
 
             def __repr__(self) -> str:
+                dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
+                return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
 
-                ds, pending, nbarriers, nchildren = self.dataset, self.pending, len(self.barriers.items), len(self.children)
-                return str({"dataset": ds, "pending": pending, "nbarriers": nbarriers, "nchildren": nchildren})
+        def make_tree_node(dataset: str, children: Tree, parent: TreeNode = None) -> TreeNode:
+            return TreeNode(dataset, children, parent, TreeNode.MutableAttributes())
 
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.monotonic_ns()
@@ -5072,16 +5067,16 @@ class Job:
                 children = tree
                 for component in dataset.split("/"):
                     children = children[component]
-                node = TreeNode(dataset, children)
+                node = make_tree_node(dataset, children)
                 roots.append(node)
             return roots
 
-        assert (not self.is_test_mode) or str(TreeNode("foo", {}))
+        assert (not self.is_test_mode) or str(make_tree_node("foo", {}))
         priority_queue: List[TreeNode] = build_dataset_tree_and_find_roots()
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets = len(datasets)
         datasets_set = set(datasets)
-        immutable_empty_sequence = tuple()
+        immutable_empty_barrier = make_tree_node("immutable_empty_barrier", {})
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
             submitted = 0
@@ -5134,7 +5129,7 @@ class Job:
                         def simple_enqueue_children(node: TreeNode) -> None:
                             children = node.children
                             for child, grandchildren in children.items():  # as processing of parent has now completed
-                                child_node = TreeNode(f"{node.dataset}/{child}", grandchildren)
+                                child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren)
                                 if child_node.dataset in datasets_set:
                                     heapq.heappush(priority_queue, child_node)  # make it available for start of processing
                                 else:  # it's an intermediate node that has no job attached; pass the enqueue operation
@@ -5164,7 +5159,7 @@ class Job:
                             n = 0
                             children = node.children
                             for child, grandchildren in children.items():
-                                child_node = TreeNode(f"{node.dataset}/{child}", grandchildren, parent=node)
+                                child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren, parent=node)
                                 if child != BARRIER_CHAR:
                                     if child_node.dataset in datasets_set:
                                         # it's not a barrier; make job available for immediate start of processing
@@ -5175,12 +5170,10 @@ class Job:
                                 elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
                                     k = enqueue_children(child_node)  # ... recursively down the tree
                                 else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
-                                    assert len(node.barriers.items) == 0
-                                    assert node.barriers.items is not immutable_empty_sequence
-                                    assert isinstance(node.barriers.items, list)
-                                    node.barriers.items.append(child_node)
+                                    assert node.mut.barrier is None
+                                    node.mut.barrier = child_node
                                     k = 0
-                                node.pending.value += min(1, k)
+                                node.mut.pending += min(1, k)
                                 n += k
                             assert n >= 0
                             return n
@@ -5191,22 +5184,22 @@ class Job:
                             else:  # job completed without success
                                 tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
                                 while tmp is not None:
-                                    tmp.barriers.items = immutable_empty_sequence
+                                    tmp.mut.barrier = immutable_empty_barrier
                                     tmp = tmp.parent
-                            assert node.pending.value >= 0
-                            while node.pending.value == 0:  # have all jobs in subtree of current node completed?
+                            assert node.mut.pending >= 0
+                            while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
                                 # ... if so open the barrier, if there's a barrier, and enqueue jobs waiting on it
                                 if no_skip:
-                                    for barrier in node.barriers.items:
-                                        node.pending.value += min(1, enqueue_children(barrier))
-                                node.barriers.items = immutable_empty_sequence
-                                if node.pending.value > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
+                                    if not (node.mut.barrier is None or node.mut.barrier is immutable_empty_barrier):
+                                        node.mut.pending += min(1, enqueue_children(node.mut.barrier))
+                                node.mut.barrier = immutable_empty_barrier
+                                if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
                                     break  # ... if so we aren't quite done yet with this subtree
                                 if node.parent is None:
                                     break  # we've reached the root node
                                 node = node.parent  # recurse up the tree
-                                node.pending.value -= 1  # mark subtree as completed
-                                assert node.pending.value >= 0
+                                node.mut.pending -= 1  # mark subtree as completed
+                                assert node.mut.pending >= 0
 
                         assert enable_barriers
                         on_job_completion_with_barriers(done_future.node, no_skip)
@@ -6091,6 +6084,7 @@ def replace_in_lines(lines: List[str], old: str, new: str) -> None:
 
 
 def has_duplicates(sorted_list: List) -> bool:
+    """Returns True if any adjacent items within the given sorted list are equal."""
     return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
 
 
