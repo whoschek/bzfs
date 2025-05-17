@@ -4218,13 +4218,12 @@ class Job:
                     retry_count += 1
                     if retryable_error.no_sleep and retry_count <= 1:
                         log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
-                        continue
-                    # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
-                    sysrandom = sysrandom if sysrandom is not None else random.SystemRandom()
-                    sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
-                    log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
-                    time.sleep(sleep_nanos / 1_000_000_000)
-                    max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
+                    else:  # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
+                        sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
+                        sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
+                        log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
+                        time.sleep(sleep_nanos / 1_000_000_000)
+                        max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
                     if policy.retries > 0:
                         log.warning(
@@ -5033,9 +5032,10 @@ class Job:
 
                 def __init__(self):
                     self.pending: int = 0  # number of children that have not yet completed their work
-                    self.barrier: Optional[TreeNode] = None  # zero or one child TreeNode waiting for this node to complete
+                    self.barrier: Optional[TreeNode] = None  # zero or one barrier TreeNode waiting for this node to complete
 
-            dataset: str  # TreeNodes are ordered by dataset name within a priority queue
+            # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
+            dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
             children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
             parent: "TreeNode"
             mut: MutableAttributes

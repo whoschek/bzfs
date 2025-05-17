@@ -300,8 +300,8 @@ extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs
 # extra_args += ["--monitor-snapshots-dont-crit"]
 # os.environ["TZ"] = "UTC"  # change timezone in all respects for the entire program
 # extra_args += ["--jobrunner-dryrun"]  # print what operations would happen if the command were to be executed for real
-# extra_args += ["--jobrunner-log-level=DEBUG"]
-# extra_args += ["--jobrunner-log-level=TRACE"]
+# extra_args += ["--jobrunner-log-level=DEBUG"]  # default is INFO
+# extra_args += ["--jobrunner-log-level=TRACE"]  # default is INFO
 
 
 # Taking snapshots, and/or replicating, from every N milliseconds to every 10 seconds or so is considered high frequency.
