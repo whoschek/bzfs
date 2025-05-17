@@ -4,11 +4,11 @@
 # How to enable the Git hook on your machine (do this once per clone):
 #   1. Install the helper tool:
 #        pip install pre-commit
-#   2. From the project root run:
+#   2. From the project root directory run:
 #        pre-commit install
 #      This writes an executable hook into .git/hooks/pre-commit that will
 #      run the checks defined below every time you commit.
-#   3. After updating this file, run the same command again so the hook picks
+#   3. After updating this YAML file, run the same command again so the hook picks
 #      up the new configuration.
 #
 # Optional maintenance commands:
@@ -22,13 +22,19 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: check-shebang-scripts-are-executable
-      - id: check-symlinks
-      - id: check-yaml
+      - id: check-executables-have-shebangs  # Check that non-binary executables have a proper shebang
+      - id: check-shebang-scripts-are-executable  # Check that scripts with shebangs are executable
+      - id: check-symlinks  # Check for symlinks that do not point to anything
+      - id: check-yaml  # Attempt to load all yaml files to verify syntax
       - id: check-toml
+      - id: check-json
+        exclude: '.*/log_config\.json$'
+      - id: check-xml
       - id: mixed-line-ending
-        args: [--fix=lf]
-      - id: trailing-whitespace
+        args: [--fix=lf]  # Replace line endings with linefeed
+      - id: trailing-whitespace  # Remove whitespace from the end of lines
+      - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
+      - id: debug-statements  # Check for debugger imports and py37+ breakpoint() calls in python source
   - repo: https://github.com/psf/black
     rev: 25.1.0  # bump version number occasionally with autoupdate
     hooks:
