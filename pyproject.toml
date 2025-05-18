@@ -61,9 +61,9 @@ dev = [  # for development only
   "black>=25.1",
   "coverage>=7.6",
   "mypy>=1.13",
-  "argparse-manpage>=4.6",
+  "argparse-manpage==4.6",
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
-  "genbadge[coverage]>=1.1.1",
+  "genbadge[coverage]==1.1.2",
   "pre-commit==4.2",
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
