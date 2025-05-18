@@ -766,7 +766,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(isinstance(default_opts, str) and default_opts)
         pv_fd, pv_file = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
         os.close(pv_fd)
-        cmd = f"dd if=/dev/zero bs=1k count=16 | LC_ALL=C pv {default_opts} --size 16K --name=275GiB --force 2> {pv_file}"
+        cmd = f"dd if=/dev/zero bs=1k count=16 | LC_ALL=C pv {default_opts} --size 16K --name=275GiB --force 2> {pv_file} >/dev/null"
         try:
             subprocess.run(cmd, shell=True, check=True)
             num_bytes = bzfs.count_num_bytes_transferred_by_zfs_send(pv_file)

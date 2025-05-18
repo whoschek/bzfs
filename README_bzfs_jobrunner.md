@@ -26,7 +26,7 @@
 
 # Introduction
 
-<!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
+<!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
 WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in
 incompatible ways.
@@ -137,7 +137,7 @@ daemons but this is benign as these new processes immediately exit with a messag
 
 # Man Page
 
-<!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
+<!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
 usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]

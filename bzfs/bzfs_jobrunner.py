@@ -20,7 +20,11 @@
 # dependencies = []
 # ///
 
-"""WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."""
+"""
+* WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
+* README_bzfs_jobrunner.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via
+update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
+"""
 
 import argparse
 import contextlib
@@ -656,7 +660,7 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        msg = "Ready to run %s subjobs using %s src hosts %s, %s dst hosts %s"
+        msg = "Ready to run %s subjobs using %s src hosts: %s, %s dst hosts: %s"
         log.info(msg, len(subjobs), len(src_hosts), src_hosts, len(dst_hosts), list(dst_hosts.keys()))
         log.trace("subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)

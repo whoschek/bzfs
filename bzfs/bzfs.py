@@ -29,7 +29,7 @@
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
 * The --create-src-snapshots-* and --delete-* and --compare-* and --monitor-* algorithms also start in run_task().
 * Consider using an IDE/editor that can open multiple windows for the same (long) file, such as PyCharm or Sublime Text, etc.
-* README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.py.
+* README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.sh.
 Simply run that script whenever you change or add ArgumentParser help text.
 """
 
@@ -3831,10 +3831,12 @@ class Job:
             counter[trigger] -= 1
             return True
 
-    def squote(self, remote: Remote, arg: str) -> str:
+    @staticmethod
+    def squote(remote: Remote, arg: str) -> str:
         return arg if remote.ssh_user_host == "" else shlex.quote(arg)
 
-    def dquote(self, arg: str) -> str:
+    @staticmethod
+    def dquote(arg: str) -> str:
         """shell-escapes double quotes and dollar and backticks, then surrounds with double quotes."""
         return '"' + arg.replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
 
@@ -4218,13 +4220,12 @@ class Job:
                     retry_count += 1
                     if retryable_error.no_sleep and retry_count <= 1:
                         log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
-                        continue
-                    # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
-                    sysrandom = sysrandom if sysrandom is not None else random.SystemRandom()
-                    sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
-                    log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
-                    time.sleep(sleep_nanos / 1_000_000_000)
-                    max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
+                    else:  # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
+                        sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
+                        sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
+                        log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
+                        time.sleep(sleep_nanos / 1_000_000_000)
+                        max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
                 else:
                     if policy.retries > 0:
                         log.warning(
@@ -4243,8 +4244,9 @@ class Job:
         # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
         return self.incremental_send_steps(src_snapshots, src_guids, included_guids, is_resume, force_convert_I_to_i)
 
+    @staticmethod
     def incremental_send_steps(
-        self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume, force_convert_I_to_i
+        src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume, force_convert_I_to_i
     ) -> List[Tuple[str, str, str, int]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
@@ -5033,9 +5035,10 @@ class Job:
 
                 def __init__(self):
                     self.pending: int = 0  # number of children that have not yet completed their work
-                    self.barrier: Optional[TreeNode] = None  # zero or one child TreeNode waiting for this node to complete
+                    self.barrier: Optional[TreeNode] = None  # zero or one barrier TreeNode waiting for this node to complete
 
-            dataset: str  # TreeNodes are ordered by dataset name within a priority queue
+            # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
+            dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
             children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
             parent: "TreeNode"
             mut: MutableAttributes
@@ -5449,6 +5452,7 @@ class Job:
         op = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
+            return False  # make type checker happy
         except SystemExit as e:
             log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
@@ -5457,7 +5461,8 @@ class Job:
     zfs_dataset_busy_if_mods = re.compile((zfs_dataset_busy_prefix + ") .*").replace("(", "(?:"))
     zfs_dataset_busy_if_send = re.compile((zfs_dataset_busy_prefix + "|send) .*").replace("(", "(?:"))
 
-    def is_zfs_dataset_busy(self, procs: List[str], dataset: str, busy_if_send: bool) -> bool:
+    @staticmethod
+    def is_zfs_dataset_busy(procs: List[str], dataset: str, busy_if_send: bool) -> bool:
         regex = Job.zfs_dataset_busy_if_send if busy_if_send else Job.zfs_dataset_busy_if_mods
         suffix = " " + dataset
         infix = " " + dataset + "@"

@@ -40,7 +40,7 @@
 
 # Introduction
 
-<!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
+<!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
 *bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or
 remote) source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local
@@ -589,7 +589,7 @@ bzfs-test
 
 # Man Page
 
-<!-- DO NOT EDIT (auto-generated from ArgumentParser help text as the source of "truth", via update_readme.py) -->
+<!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
 usage: bzfs [-h] [--recursive]
