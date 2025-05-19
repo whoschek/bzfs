@@ -552,6 +552,22 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c", "a/b/d"]))
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
+    def test_is_descendant(self):
+        self.assertTrue(bzfs.is_descendant("pool/fs/child", "pool/fs"))
+        self.assertTrue(bzfs.is_descendant("pool/fs/child/grandchild", "pool/fs"))
+        self.assertTrue(bzfs.is_descendant("a/b/c/d", "a/b"))
+        self.assertTrue(bzfs.is_descendant("pool/fs", "pool/fs"))
+        self.assertFalse(bzfs.is_descendant("pool/otherfs", "pool/fs"))
+        self.assertFalse(bzfs.is_descendant("a/c", "a/b"))
+        self.assertFalse(bzfs.is_descendant("pool/fs", "pool/fs/child"))
+        self.assertFalse(bzfs.is_descendant("a/b", "a/b/c"))
+        self.assertFalse(bzfs.is_descendant("tank1/data", "tank2/backup"))
+        self.assertFalse(bzfs.is_descendant("a", ""))
+        self.assertFalse(bzfs.is_descendant("", "a"))
+        self.assertTrue(bzfs.is_descendant("", ""))
+        self.assertFalse(bzfs.is_descendant("pool/fs-backup", "pool/fs"))
+        self.assertTrue(bzfs.is_descendant("pool/fs", "pool"))
+
     def test_validate_default_shell(self):
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)

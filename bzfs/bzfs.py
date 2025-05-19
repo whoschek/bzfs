@@ -5034,7 +5034,7 @@ class Job:
                 __slots__ = ("pending", "barrier")  # uses more compact memory layout than __dict__
 
                 def __init__(self):
-                    self.pending: int = 0  # number of children that have not yet completed their work
+                    self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
                     self.barrier: Optional[TreeNode] = None  # zero or one barrier TreeNode waiting for this node to complete
 
             # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
@@ -5172,7 +5172,7 @@ class Job:
                                         k = enqueue_children(child_node)  # ... recursively down the tree
                                 elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
                                     k = enqueue_children(child_node)  # ... recursively down the tree
-                                else:  # park the node-to-be-enqueued within the (still closed) barrier for the time being
+                                else:  # park the barrier node within the (still closed) barrier for the time being
                                     assert node.mut.barrier is None
                                     node.mut.barrier = child_node
                                     k = 0
@@ -6042,6 +6042,7 @@ def die(msg: str, exit_code=die_status) -> None:
 def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
     """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
     assert isinstance(lines, list)
+    assert len(separator) == 1
     if field == 1:
         return [line[0 : line.index(separator)] for line in lines]
     elif field == 2:
@@ -6080,6 +6081,7 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
 
 def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
     """In a string s, replaces a leading old_prefix string with new_prefix. Assumes the leading string is present."""
+    assert s.startswith(old_prefix)
     return new_prefix + s[len(old_prefix) :]
 
 

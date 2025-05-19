@@ -433,6 +433,7 @@ class BZFSTestCase(ParametrizedTestCase):
             from bzfs import bzfs_jobrunner
 
             job = bzfs_jobrunner.Job()
+            job.is_test_mode = True
             if spawn_process_per_job:
                 args += ["--spawn_process_per_job"]
 

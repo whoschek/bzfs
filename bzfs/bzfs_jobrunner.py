@@ -428,6 +428,8 @@ class Job:
         self.cache_existing_dst_pools: Set[str] = set()
         self.cache_known_dst_pools: Set[str] = set()
 
+        self.is_test_mode: bool = False  # for testing only
+
     def run_main(self, sys_argv: List[str]) -> None:
         self.first_exception = None
         log = self.log
@@ -843,7 +845,9 @@ class Job:
             return die_status
 
     def _bzfs_run_main(self, cmd: List[str]) -> None:
-        bzfs.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
+        bzfs_job = bzfs.Job()
+        bzfs_job.is_test_mode = self.is_test_mode
+        bzfs_job.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
 
     def run_worker_job_spawn_process_per_job(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
         log = self.log
