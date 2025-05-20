@@ -1274,7 +1274,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=argparse.SUPPRESS)
     parser.add_argument(
         "--no-estimate-send-size", action="store_true",
-        # help="Skip 'zfs send -n -v' on replication.\n\n")
+        # help="Skip 'zfs send -n -v'. This may improve performance if replicating small snapshots at high frequency.\n\n")
         help=argparse.SUPPRESS)
 
     def hlp(program: str) -> str:
@@ -3241,7 +3241,7 @@ class Job:
                         if p.dry_run:
                             dry_run_no_send = True
                         if dst_dataset_parent != "":
-                            self.create_filesystem(dst_dataset_parent)
+                            self.create_zfs_filesystem(dst_dataset_parent)
 
                 recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
                 curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
@@ -4113,7 +4113,7 @@ class Job:
             self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
             last_deleted_dataset = dataset
 
-    def create_filesystem(self, filesystem: str) -> None:
+    def create_zfs_filesystem(self, filesystem: str) -> None:
         # zfs create -p -u $filesystem
         # To ensure the filesystems that we create do not get mounted, we apply a separate 'zfs create -p -u'
         # invocation for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
@@ -5026,8 +5026,16 @@ class Job:
         assert "%" not in task_name
         has_barrier = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
         assert (enable_barriers is not False) or not has_barrier
-        enable_barriers = has_barrier or enable_barriers
+        enable_barriers: bool = has_barrier or enable_barriers
         p, log = self.params, self.params.log
+
+        def _process_dataset(dataset: str, tid: str):
+            start_time_nanos = time.monotonic_ns()
+            try:
+                return self.run_with_retries(p.retry_policy, process_dataset, dataset, tid)
+            finally:
+                elapsed_nanos = time.monotonic_ns() - start_time_nanos
+                log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
 
         class TreeNode(NamedTuple):
             class MutableAttributes:
@@ -5050,14 +5058,6 @@ class Job:
         def make_tree_node(dataset: str, children: Tree, parent: TreeNode = None) -> TreeNode:
             return TreeNode(dataset, children, parent, TreeNode.MutableAttributes())
 
-        def _process_dataset(dataset: str, tid: str):
-            start_time_nanos = time.monotonic_ns()
-            try:
-                return self.run_with_retries(p.retry_policy, process_dataset, dataset, tid)
-            finally:
-                elapsed_nanos = time.monotonic_ns() - start_time_nanos
-                log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
-
         def build_dataset_tree_and_find_roots() -> List[TreeNode]:
             """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
             tree: Tree = self.build_dataset_tree(datasets)  # tree consists of nested dictionaries
@@ -5070,20 +5070,19 @@ class Job:
                 children = tree
                 for component in dataset.split("/"):
                     children = children[component]
-                node = make_tree_node(dataset, children)
-                roots.append(node)
+                roots.append(make_tree_node(dataset, children))
             return roots
 
         assert (not self.is_test_mode) or str(make_tree_node("foo", {}))
+        immutable_empty_barrier: TreeNode = make_tree_node("immutable_empty_barrier", {})
         priority_queue: List[TreeNode] = build_dataset_tree_and_find_roots()
         heapq.heapify(priority_queue)  # same order as sorted()
-        len_datasets = len(datasets)
-        datasets_set = set(datasets)
-        immutable_empty_barrier = make_tree_node("immutable_empty_barrier", {})
+        len_datasets: int = len(datasets)
+        datasets_set: Set[str] = set(datasets)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
-            submitted = 0
-            next_update_nanos = time.monotonic_ns()
+            submitted: int = 0
+            next_update_nanos: int = time.monotonic_ns()
             fw_timeout: Optional[float]
 
             def submit_datasets() -> bool:
@@ -5101,11 +5100,10 @@ class Job:
                         # If so it's preferable to submit to the thread pool the smaller one first.
                         break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
                     node: TreeNode = heapq.heappop(priority_queue)
-                    dataset = node.dataset
-                    next_update_nanos += max(0, interval_nanos(dataset))
+                    next_update_nanos += max(0, interval_nanos(node.dataset))
                     nonlocal submitted
                     submitted += 1
-                    future = executor.submit(_process_dataset, dataset, tid=f"{submitted}/{len_datasets}")
+                    future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
                     future.node = node
                     todo_futures.add(future)
                 return len(todo_futures) > 0
@@ -5130,8 +5128,7 @@ class Job:
                     if not enable_barriers:
                         # This simple algorithm is sufficient for almost all use cases:
                         def simple_enqueue_children(node: TreeNode) -> None:
-                            children = node.children
-                            for child, grandchildren in children.items():  # as processing of parent has now completed
+                            for child, grandchildren in node.children.items():  # as processing of parent has now completed
                                 child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren)
                                 if child_node.dataset in datasets_set:
                                     heapq.heappush(priority_queue, child_node)  # make it available for start of processing
@@ -5191,8 +5188,7 @@ class Job:
                                     tmp = tmp.parent
                             assert node.mut.pending >= 0
                             while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
-                                # ... if so open the barrier, if there's a barrier, and enqueue jobs waiting on it
-                                if no_skip:
+                                if no_skip:  # ... if so open the barrier, if it exists, and enqueue jobs waiting on it
                                     if not (node.mut.barrier is None or node.mut.barrier is immutable_empty_barrier):
                                         node.mut.pending += min(1, enqueue_children(node.mut.barrier))
                                 node.mut.barrier = immutable_empty_barrier
@@ -5206,7 +5202,7 @@ class Job:
 
                         assert enable_barriers
                         on_job_completion_with_barriers(done_future.node, no_skip)
-
+            # endwhile submit_datasets()
             assert len(priority_queue) == 0
             assert len(todo_futures) == 0
             return failed
@@ -5856,10 +5852,10 @@ class ProgressReporter:
             readables = selector.select(timeout=0)  # 0 indicates "don't block"
             has_line = False
             curr_time_nanos = time.monotonic_ns()
+            selector_key: selectors.SelectorKey
             for selector_key, _ in readables:  # for each file that's ready for non-blocking read
                 num_readables += 1
-                key: selectors.SelectorKey = selector_key
-                iter_fd, s = key.data
+                iter_fd, s = selector_key.data
                 for line in iter_fd:  # aka iter(fd)
                     sent_bytes += self.update_transfer_stat(line, s, curr_time_nanos)
                     num_lines += 1
@@ -7236,12 +7232,14 @@ class IncludeSnapshotPlanAction(argparse.Action):
         xperiods = SnapshotPeriods()
         has_at_least_one_filter_clause = False
         for org, target_periods in ast.literal_eval(values).items():
+            prefix = re.escape(nprefix(org))
             for target, periods in target_periods.items():
+                infix = re.escape(ninfix(target)) if target else year_with_four_digits_regex.pattern  # disambiguate
                 for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
-                    infix = re.escape(ninfix(target)) if target else year_with_four_digits_regex.pattern  # disambiguate
-                    regex = f"{re.escape(org)}_{infix}.*{re.escape(nsuffix(period_unit))}"
+                    suffix = re.escape(nsuffix(period_unit))
+                    regex = f"{prefix}{infix}.*{suffix}"
                     opts += ["--new-snapshot-filter-group", f"--include-snapshot-regex={regex}"]
                     if include_snapshot_times_and_ranks:
                         duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
