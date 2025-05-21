@@ -4107,10 +4107,11 @@ class Job:
         cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy")
         self.run_ssh_cmd_parallel(
             remote,
-            [(cmd, [f"{dataset}#{snapshot_tag}"]) for snapshot_tag in snapshot_tags],
+            [(cmd, [f"{dataset}#{snapshot_tag}" for snapshot_tag in snapshot_tags])],
             lambda _cmd, batch: self.try_ssh_command(
                 remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
             ),
+            max_batch_items=1,
         )
 
     def delete_datasets(self, remote: Remote, datasets: Iterable[str]) -> None:
