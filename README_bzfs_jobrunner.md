@@ -28,9 +28,6 @@
 
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
-WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in
-incompatible ways.
-
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS
 snapshot creation, replication, pruning, and monitoring, across N source hosts and M destination
 hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For example,

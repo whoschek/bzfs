@@ -21,7 +21,6 @@
 # ///
 
 """
-* WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
 * README_bzfs_jobrunner.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via
 update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
 """
@@ -58,8 +57,6 @@ def argument_parser() -> argparse.ArgumentParser:
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
-WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways.
-
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS snapshot creation, replication,
 pruning, and monitoring, across N source hosts and M destination hosts, using a single shared
 [jobconfig](bzfs_tests/bzfs_job_example.py) script.
@@ -433,9 +430,6 @@ class Job:
     def run_main(self, sys_argv: List[str]) -> None:
         self.first_exception = None
         log = self.log
-        log.info(
-            "WARNING: For now, `bzfs_jobrunner` is work-in-progress, and as such may still change in incompatible ways."
-        )
         log.info("CLI arguments: %s", " ".join(sys_argv))
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
