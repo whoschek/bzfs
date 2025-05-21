@@ -415,7 +415,7 @@ class BZFSTestCase(ParametrizedTestCase):
             args = args + ["--dryrun=recv"]
 
         if no_create_bookmark:
-            args = args + ["--no-create-bookmark"]
+            args = args + ["--create-bookmarks=none"]
 
         if no_use_bookmark:
             args = args + ["--no-use-bookmark"]
@@ -2666,6 +2666,43 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
+    def test_basic_replication_flat_with_bookmarks0(self):
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        for j in range(0, 2):
+            for i in range(0, 3):
+                with stop_on_failure_subtest(i=j * 3 + i):
+                    self.tearDownAndSetup()
+                    if j == 0:
+                        take_snapshot(src_root_dataset, fix("a_minutely"))
+                        take_snapshot(src_root_dataset, fix("b_minutely"))
+                        take_snapshot(src_root_dataset, fix("c_minutely"))
+                        take_snapshot(src_root_dataset, fix("d_daily"))
+                    else:
+                        take_snapshot(src_root_dataset, fix("a_minutely"))
+                        take_snapshot(src_root_dataset, fix("d_daily"))
+                        take_snapshot(src_root_dataset, fix("b_minutely"))
+                        take_snapshot(src_root_dataset, fix("c_minutely"))
+                    self.run_bzfs(
+                        src_root_dataset,
+                        dst_root_dataset,
+                        "--create-bookmarks=" + ["none", "many", "all"][i],
+                        dry_run=(i == 0),
+                    )
+                    if i == 0:
+                        self.assertSnapshotNames(src_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+                        self.assertSnapshotNames(dst_root_dataset, [])
+                        self.assertBookmarkNames(src_root_dataset, [])
+                    elif i == 1:
+                        self.assertSnapshotNames(dst_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+                        if j == 0:
+                            self.assertBookmarkNames(src_root_dataset, ["a_minutely", "d_daily"])
+                        else:
+                            self.assertBookmarkNames(src_root_dataset, ["a_minutely", "c_minutely", "d_daily"])
+                    else:
+                        self.assertSnapshotNames(dst_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+                        self.assertBookmarkNames(src_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+
     def test_basic_replication_flat_with_bookmarks1(self):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
@@ -2756,7 +2793,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset, fix("d1"))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
-                self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-create-bookmark", dry_run=(i == 0))
+                self.run_bzfs(src_root_dataset, dst_root_dataset, no_create_bookmark=True, dry_run=(i == 0))
                 if i == 0:
                     self.assertSnapshotNames(src_root_dataset, ["d1"])
                     self.assertBookmarkNames(src_root_dataset, [])
@@ -4221,7 +4258,7 @@ class LocalTestCase(BZFSTestCase):
             self.skipTest("No recv resume zfs feature is available")
         take_snapshot(src_root_dataset, fix("s1"))
         take_snapshot(src_root_dataset, fix("s2"))
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-use-bookmark", "--no-create-bookmark")
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-use-bookmark", no_create_bookmark=True)
         self.assertSnapshots(dst_root_dataset, 2, "s")
         self.create_resumable_snapshots(3, 4)
         self.generate_recv_resume_token(src_root_dataset + "@s2", src_root_dataset + "@s3", dst_root_dataset)

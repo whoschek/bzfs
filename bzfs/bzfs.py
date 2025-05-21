@@ -1119,18 +1119,25 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "need not be retransmitted regardless of the --no-resume-recv flag, as these snapshots have already "
              "been successfully received at the destination either way.\n\n")
     parser.add_argument(
-        "--no-create-bookmark", action="store_true",
-        help=f"For increased safety, in normal operation {prog_name} replication behaves as follows wrt. ZFS bookmark "
-             "creation, if it is autodetected that the source ZFS pool support bookmarks: "
-             f"Whenever it has successfully completed replication of the most recent source snapshot, {prog_name} "
-             "creates a ZFS bookmark of that snapshot and attaches it to the source dataset. "
+        "--create-bookmarks", choices=["all", "many", "none"], default="many",
+        help=f"For increased safety, {prog_name} replication behaves as follows wrt. ZFS bookmark creation, if it is "
+             "autodetected that the source ZFS pool support bookmarks:\n\n"
+             "* `many` (default): Whenever it has successfully completed replication of the most recent source snapshot, "
+             f"{prog_name} creates a ZFS bookmark of that snapshot, and attaches it to the source dataset. In addition, "
+             f"whenever it has successfully completed a 'zfs send' operation, {prog_name} creates a ZFS bookmark of each "
+             f"hourly, daily, weekly, monthly and yearly source snapshot that was sent during that 'zfs send' operation, "
+             "and attaches it to the source dataset.\n\n"
+             "* `all`: Whenever it has successfully completed a 'zfs send' operation, "
+             f"{prog_name} creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, "
+             "and attaches it to the source dataset. This increases safety at the expense of some performance.\n\n"
+             "* `none`: No bookmark is created.\n\n"
              "Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having "
              "to keep the already replicated snapshot around on the source dataset until the next upcoming snapshot "
              "has been successfully replicated. This way you can send the snapshot from the source dataset to another "
              "host, then bookmark the snapshot on the source dataset, then delete the snapshot from the source "
              "dataset to save disk space, and then still incrementally send the next upcoming snapshot from the "
              "source dataset to the other host by referring to the bookmark.\n\n"
-             "The --no-create-bookmark option disables this safety feature but is discouraged, because bookmarks "
+             "The --create-bookmarks=none option disables this safety feature but is discouraged, because bookmarks "
              "are tiny and relatively cheap and help to ensure that ZFS replication can continue even if source and "
              "destination dataset somehow have no common snapshot anymore. "
              "For example, if a pruning script has accidentally deleted too many (or even all) snapshots on the "
@@ -1159,6 +1166,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
              "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except latest 200' "
              "--include-snapshot-times-and-ranks 'anytime..90 days ago'`\n\n")
+    parser.add_argument(
+        "--no-create-bookmark", action="store_true",
+        help=argparse.SUPPRESS)  # deprecated; was replaced by --create-bookmarks=none
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
         help=f"For increased safety, in normal replication operation {prog_name} replication also looks for bookmarks "
@@ -1641,7 +1651,7 @@ class Params:
         self.enable_privilege_elevation: bool = not args.no_privilege_elevation
         self.no_stream: bool = args.no_stream
         self.resume_recv: bool = not args.no_resume_recv
-        self.create_bookmark: bool = not args.no_create_bookmark
+        self.create_bookmarks: str = "none" if args.no_create_bookmark else args.create_bookmarks  # no_create_bookmark depr
         self.use_bookmark: bool = not args.no_use_bookmark
 
         self.src: Remote = Remote("src", args, self)  # src dataset, host and ssh options
@@ -1987,6 +1997,8 @@ class SnapshotPeriods:
         }
         self._suffix_regex0 = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
         self._suffix_regex1 = re.compile("_" + self._suffix_regex0.pattern)
+        many_keys = ("yearly", "monthly", "weekly", "daily", "hourly")
+        self.many_snapshotlabel_regex = re.compile(rf".*_([1-9][0-9]*)?({'|'.join(many_keys)})")
 
     def suffix_to_duration0(self, suffix: str) -> Tuple[int, str]:
         return self._suffix_to_duration(suffix, self._suffix_regex0)
@@ -3269,7 +3281,7 @@ class Job:
                     self.dst_dataset_exists[dst_dataset] = True
                 with self.stats_lock:
                     self.num_snapshots_replicated += 1
-                self.create_zfs_bookmark(src, oldest_src_snapshot, src_dataset)
+                self.create_zfs_bookmarks(src, src_dataset, [oldest_src_snapshot])
                 self.zfs_set(set_opts, dst, dst_dataset)
                 retry_count = 0
 
@@ -3316,7 +3328,7 @@ class Job:
             recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
             if p.no_stream:
                 # skip intermediate snapshots
-                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, 1)]
+                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, 1, [latest_src_snapshot])]
             else:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
@@ -3328,13 +3340,14 @@ class Job:
                 self.estimate_send_size(
                     src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
                 )
-                for i, (incr_flag, from_snap, to_snap, num_snapshots) in enumerate(steps_todo)
+                for i, (incr_flag, from_snap, to_snap, num_snapshots, to_snapshots) in enumerate(steps_todo)
             ]
             total_size = sum(estimate_send_sizes)
-            total_num = sum(num_snapshots for incr_flag, from_snap, to_snap, num_snapshots in steps_todo)
+            total_num = sum(num_snapshots for incr_flag, from_snap, to_snap, num_snapshots, to_snapshots in steps_todo)
             done_size = 0
             done_num = 0
-            for i, (incr_flag, from_snap, to_snap, curr_num_snapshots) in enumerate(steps_todo):
+            xperiods = SnapshotPeriods()
+            for i, (incr_flag, from_snap, to_snap, curr_num_snapshots, to_snapshots) in enumerate(steps_todo):
                 curr_size = estimate_send_sizes[i]
                 humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
                 human_num = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
@@ -3364,8 +3377,14 @@ class Job:
                 recv_resume_token = None
                 with self.stats_lock:
                     self.num_snapshots_replicated += curr_num_snapshots
-                if i == len(steps_todo) - 1:
-                    self.create_zfs_bookmark(src, to_snap, src_dataset)
+                assert len(to_snapshots) >= 1
+                if p.create_bookmarks == "all":
+                    self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
+                elif p.create_bookmarks == "many":
+                    to_snapshots = [snap for snap in to_snapshots if xperiods.many_snapshotlabel_regex.fullmatch(snap)]
+                    if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
+                        to_snapshots.append(to_snap)
+                    self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
             self.zfs_set(set_opts, dst, dst_dataset)
         return True
 
@@ -4140,19 +4159,28 @@ class Job:
                     self.dst_dataset_exists[parent] = True
             parent += "/"
 
-    def create_zfs_bookmark(self, remote: Remote, src_snapshot: str, src_dataset: str) -> None:
+    def create_zfs_bookmarks(self, remote: Remote, dataset: str, snapshots: List[str]) -> None:
+        """Creates bookmarks for the given snapshots, using the 'zfs bookmark' CLI."""
+        # Unfortunately ZFS has no syntax yet to create multiple bookmarks in a single CLI invocation
         p, log = self.params, self.params.log
-        assert "@" in src_snapshot
-        bookmark = replace_prefix(src_snapshot, old_prefix=f"{src_dataset}@", new_prefix=f"{src_dataset}#")
-        if p.create_bookmark and self.are_bookmarks_enabled(remote):
-            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark", src_snapshot, bookmark)
+
+        def create_zfs_bookmark(cmd):
+            snapshot = cmd[-1]
+            assert "@" in snapshot
+            bookmark_cmd = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
             try:
-                self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stderr=False, cmd=cmd)
+                self.run_ssh_command(remote, log_debug, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
             except subprocess.CalledProcessError as e:
                 # ignore harmless zfs error caused by bookmark with the same name already existing
                 if ": bookmark exists" not in e.stderr:
                     print(e.stderr, file=sys.stderr, end="")
                     raise
+
+        if p.create_bookmarks != "none" and self.are_bookmarks_enabled(remote):
+            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark")
+            self.run_ssh_cmd_parallel(
+                remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
+            )
 
     def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: str, *items) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
@@ -4237,7 +4265,7 @@ class Job:
 
     def incremental_send_steps_wrapper(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
-    ) -> List[Tuple[str, str, str, int]]:
+    ) -> List[Tuple[str, str, str, int, List[str]]]:
         force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True)
         # force_convert_I_to_i == True implies that:
         # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
@@ -4247,7 +4275,7 @@ class Job:
     @staticmethod
     def incremental_send_steps(
         src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume, force_convert_I_to_i
-    ) -> List[Tuple[str, str, str, int]]:
+    ) -> List[Tuple[str, str, str, int, List[str]]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
@@ -4268,16 +4296,16 @@ class Job:
         followed by zero or more -i/-I steps."""
 
         def append_run(i: int, label: str) -> int:
-            step = ("-I", src_snapshots[start], src_snapshots[i], i - start)
+            # step = ("-I", src_snapshots[start], src_snapshots[i], i - start)
             # print(f"{label} {self.send_step_to_str(step)}")
             is_not_resume = len(steps) > 0 or not is_resume
             if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start] and is_not_resume:
-                steps.append(step)
+                steps.append(("-I", src_snapshots[start], src_snapshots[i], i - start + 1, src_snapshots[start + 1 : i + 1]))
             elif "@" in src_snapshots[start] and is_not_resume:
                 for j in range(start, i):  # convert -I step to -i steps
-                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1], 1))
+                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1], 1, src_snapshots[j + 1 : j + 2]))
             else:  # it's a bookmark src or zfs send -t; convert -I step to -i step followed by zero or more -i/-I steps
-                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1], 1))
+                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1], 1, src_snapshots[start + 1 : start + 2]))
                 i = start + 1
             return i - 1
 
@@ -4304,7 +4332,7 @@ class Job:
                         i += 1
                     if i < n:
                         assert start != i
-                        step = ("-i", src_snapshots[start], src_snapshots[i], 1)
+                        step = ("-i", src_snapshots[start], src_snapshots[i], 1, src_snapshots[i : i + 1])
                         # print(f"r1 {self.send_step_to_str(step)}")
                         steps.append(step)
                         i -= 1

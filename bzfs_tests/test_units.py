@@ -3594,6 +3594,10 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     output_snapshots += self.apply_incremental_send_steps(steps, input_snapshots)
                     # print(f"output_snapshots:" + ','.join(output_snapshots))
                     self.assertListEqual(expected_results, output_snapshots)
+                    all_to_snapshots = []
+                    for incr_flag, start_snapshot, end_snapshot, num_snapshots, to_snapshots in steps:
+                        all_to_snapshots += [snapshot[snapshot.find("@") + 1 :] for snapshot in to_snapshots]
+                    self.assertListEqual(expected_results[1:], all_to_snapshots)
 
     def send_step_to_str(self, step: Tuple) -> str:
         # return str(step)
@@ -3603,7 +3607,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
-        for incr_flag, start_snapshot, end_snapshot, num_snapshots in steps:
+        for incr_flag, start_snapshot, end_snapshot, num_snapshots, to_snapshots in steps:
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
             end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
             start = input_snapshots.index(start_snapshot)

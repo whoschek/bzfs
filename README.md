@@ -632,7 +632,7 @@ usage: bzfs [-h] [--recursive]
             [--cache-snapshots [{true,false}]]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream]
-            [--no-resume-recv] [--no-create-bookmark]
+            [--no-resume-recv] [--create-bookmarks {all,many,none}]
             [--no-use-bookmark] [--ssh-cipher STRING]
             [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
             [--ssh-src-user STRING] [--ssh-dst-user STRING]
@@ -1765,22 +1765,34 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--no-create-bookmark"></div>
+<div id="--create-bookmarks"></div>
 
-**--no-create-bookmark**
+**--create-bookmarks** *{all,many,none}*
 
-*  For increased safety, in normal operation bzfs replication behaves as follows wrt. ZFS
-    bookmark creation, if it is autodetected that the source ZFS pool support bookmarks: Whenever
-    it has successfully completed replication of the most recent source snapshot, bzfs creates a
-    ZFS bookmark of that snapshot and attaches it to the source dataset. Bookmarks exist so an
-    incremental stream can continue to be sent from the source dataset without having to keep the
-    already replicated snapshot around on the source dataset until the next upcoming snapshot has
-    been successfully replicated. This way you can send the snapshot from the source dataset to
-    another host, then bookmark the snapshot on the source dataset, then delete the snapshot from
-    the source dataset to save disk space, and then still incrementally send the next upcoming
-    snapshot from the source dataset to the other host by referring to the bookmark.
+*  For increased safety, bzfs replication behaves as follows wrt. ZFS bookmark creation, if it is
+    autodetected that the source ZFS pool support bookmarks:
 
-    The --no-create-bookmark option disables this safety feature but is discouraged, because
+    * `many` (default): Whenever it has successfully completed replication of the most recent
+    source snapshot, bzfs creates a ZFS bookmark of that snapshot, and attaches it to the source
+    dataset. In addition, whenever it has successfully completed a 'zfs send' operation, bzfs
+    creates a ZFS bookmark of each hourly, daily, weekly, monthly and yearly source snapshot that
+    was sent during that 'zfs send' operation, and attaches it to the source dataset.
+
+    * `all`: Whenever it has successfully completed a 'zfs send' operation, bzfs creates a
+    ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, and
+    attaches it to the source dataset. This increases safety at the expense of some performance.
+
+    * `none`: No bookmark is created.
+
+    Bookmarks exist so an incremental stream can continue to be sent from the source dataset
+    without having to keep the already replicated snapshot around on the source dataset until the
+    next upcoming snapshot has been successfully replicated. This way you can send the snapshot
+    from the source dataset to another host, then bookmark the snapshot on the source dataset,
+    then delete the snapshot from the source dataset to save disk space, and then still
+    incrementally send the next upcoming snapshot from the source dataset to the other host by
+    referring to the bookmark.
+
+    The --create-bookmarks=none option disables this safety feature but is discouraged, because
     bookmarks are tiny and relatively cheap and help to ensure that ZFS replication can continue
     even if source and destination dataset somehow have no common snapshot anymore. For example,
     if a pruning script has accidentally deleted too many (or even all) snapshots on the source
