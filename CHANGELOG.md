@@ -8,6 +8,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 destination hosts, using the same single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
 hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts.
+- [bzfs_jobrunner] Replaced the  `--jobid` CLI option with `--job-run` and added the (required) `--job-id` CLI option, which
+is forwarded to bzfs. The old `--jobid` option will continue to work as-is for now, in deprecated status, but the old name
+will be completely removed in a future release.
+- [bzfs_jobrunner] Added name of localhost to log file name suffix.
+- [bzfs_jobrunner] Also log subjobs that were skipped (because a prior subjob failed).
+- [bzfs_jobrunner] Added example for how to force the use of a separate destination root dataset per source host.
+- [bzfs_jobrunner] Added option to customize number of cycles in monitor_snapshot_plan.
+- [bzfs_jobrunner] Added timeout parameter.
+- [bzfs_jobrunner] Added `--jobrunner-dryrun` and `--jobrunner-log-level` CLI options.
+- [bzfs_jobrunner] Added '[bzfs_jobrunner]' tag to log messages.
+- [bzfs_jobrunner] There's no need anymore to specify an argument to `--replicate`. For the time being the corresponding mode
+argument remains available in deprecated status but is actually ignored. The argument will be removed in a future release.
+- [bzfs_jobrunner] Added more input validation.
+- [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
+- [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old flag
+will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in a future
+release.
+- [bzfs] Made `--cache-snapshots` also boost the performance of replication and `--monitor-snapshots`.
+- [bzfs] Log more detailed diagnostics on `--monitor-snapshots`.
+- [bzfs] Replaced the `--no-create-bookmarks` CLI option with `--create-bookmarks=none` and added `--create-bookmarks=many`
+(the default) and `--create-bookmarks=all`. The old `--no-create-bookmarks` will continue to work as-is for now, in
+deprecated status, but the old name will be completely removed in a future release.
+- [bzfs] Added a bash completion script such that typing bzfs SPACE TAB or bzfs_jobrunner TAB will auto-complete all flags.
+- [bzfs] [perf] Auto-disable mbuffer and compression-on-the-wire if replicating over the loopback address.
+- [bzfs] Fixed progress reporting when using 'pv' with French locale and other international locales.
+- [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
+- For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.11.0...v1.12.0
 
 ## [1.11.0] - March 26, 2025
 
