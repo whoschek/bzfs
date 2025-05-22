@@ -149,13 +149,13 @@ jobs:
         sudo add-apt-repository ppa:satadru-umich/zfs-experimental
 
         # see https://launchpad.net/~rapier1/+archive/ubuntu/hpnssh and https://www.psc.edu/hpn-ssh-home/hpn-ssh-faq
-        # sudo add-apt-repository ppa:rapier1/hpnssh
+        sudo add-apt-repository ppa:rapier1/hpnssh
 
         sudo apt update
         ### sudo apt-get -y install zfs-dkms=2.2.5~rc7-noble1 zfsutils-linux
-        sudo apt-get -y install zfs-dkms zfsutils-linux
+        sudo apt-get -y install zfs-dkms zfsutils-linux hpnssh
         zfs --version
-        # hpnssh -V
+        hpnssh -V
 
         ./.github-workflow-scripts/install_ubuntu_24_04_pv_fr.sh
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
@@ -177,8 +177,8 @@ jobs:
         command -v sh | xargs ls -l
     - name: Test with unittest
       run: |
-        # if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
-        # echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
+        if [ "${{ matrix.python-version }}" == "3.14-dev" ]; then export bzfs_test_ssh_program=hpnssh; fi
+        echo "bzfs_test_ssh_program: $bzfs_test_ssh_program"
         export LC_ALL=fr_FR.UTF-8
         dd if=/dev/zero bs=1k count=16 | pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
         dd if=/dev/zero bs=1k count=32 | LC_ALL=C pv --progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M --force >/dev/null
