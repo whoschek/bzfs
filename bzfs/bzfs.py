@@ -1997,8 +1997,6 @@ class SnapshotPeriods:
         }
         self._suffix_regex0 = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
         self._suffix_regex1 = re.compile("_" + self._suffix_regex0.pattern)
-        many_keys = ("yearly", "monthly", "weekly", "daily", "hourly")
-        self.many_snapshotlabel_regex = re.compile(rf".*_([1-9][0-9]*)?({'|'.join(many_keys)})")
 
     def suffix_to_duration0(self, suffix: str) -> Tuple[int, str]:
         return self._suffix_to_duration(suffix, self._suffix_regex0)
@@ -2016,6 +2014,12 @@ class SnapshotPeriods:
             return duration_amount, duration_unit
         else:
             return 0, ""
+
+    def label_milliseconds(self, snapshot: str) -> int:
+        i = snapshot.rfind("_")
+        snapshot = "" if i < 0 else snapshot[i + 1 :]
+        duration_amount, duration_unit = self._suffix_to_duration(snapshot, self._suffix_regex0)
+        return duration_amount * self.suffix_milliseconds.get(duration_unit, 0)
 
 
 #############################################################################
@@ -3348,6 +3352,7 @@ class Job:
             done_num = 0
             xperiods = SnapshotPeriods()
             for i, (incr_flag, from_snap, to_snap, curr_num_snapshots, to_snapshots) in enumerate(steps_todo):
+                assert len(to_snapshots) >= 1
                 curr_size = estimate_send_sizes[i]
                 humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
                 human_num = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
@@ -3377,11 +3382,10 @@ class Job:
                 recv_resume_token = None
                 with self.stats_lock:
                     self.num_snapshots_replicated += curr_num_snapshots
-                assert len(to_snapshots) >= 1
                 if p.create_bookmarks == "all":
                     self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
                 elif p.create_bookmarks == "many":
-                    to_snapshots = [snap for snap in to_snapshots if xperiods.many_snapshotlabel_regex.fullmatch(snap)]
+                    to_snapshots = [snap for snap in to_snapshots if xperiods.label_milliseconds(snap) >= 60 * 60 * 1000]
                     if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
                         to_snapshots.append(to_snap)
                     self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
@@ -4165,7 +4169,7 @@ class Job:
         # Unfortunately ZFS has no syntax yet to create multiple bookmarks in a single CLI invocation
         p, log = self.params, self.params.log
 
-        def create_zfs_bookmark(cmd):
+        def create_zfs_bookmark(cmd: List[str]) -> None:
             snapshot = cmd[-1]
             assert "@" in snapshot
             bookmark_cmd = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
@@ -4275,7 +4279,7 @@ class Job:
 
     @staticmethod
     def incremental_send_steps(
-        src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume, force_convert_I_to_i
+        src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool, force_convert_I_to_i: bool
     ) -> List[Tuple[str, str, str, int, List[str]]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
@@ -4300,7 +4304,7 @@ class Job:
             # step = ("-I", src_snapshots[start], src_snapshots[i], i - start)
             # print(f"{label} {self.send_step_to_str(step)}")
             is_not_resume = len(steps) > 0 or not is_resume
-            if i - start > 1 and not force_convert_I_to_i and "@" in src_snapshots[start] and is_not_resume:
+            if i - start > 1 and (not force_convert_I_to_i) and "@" in src_snapshots[start] and is_not_resume:
                 steps.append(("-I", src_snapshots[start], src_snapshots[i], i - start + 1, src_snapshots[start + 1 : i + 1]))
             elif "@" in src_snapshots[start] and is_not_resume:
                 for j in range(start, i):  # convert -I step to -i steps

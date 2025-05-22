@@ -1082,6 +1082,24 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.SnapshotLabel("foo/bar_", "", "", "").validate_label("")
         self.assertTrue(str(bzfs.SnapshotLabel("foo_", "", "", "")))
 
+    def test_label_milliseconds(self):
+        xperiods = bzfs.SnapshotPeriods()
+        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 1, xperiods.label_milliseconds("foo_yearly"))
+        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 2, xperiods.label_milliseconds("foo_2yearly"))
+        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 2, xperiods.label_milliseconds("_2yearly"))
+        self.assertEqual(0, xperiods.label_milliseconds("_0yearly"))
+        self.assertEqual(0, xperiods.label_milliseconds("2yearly"))
+        self.assertEqual(0, xperiods.label_milliseconds("x"))
+        self.assertEqual(0, xperiods.label_milliseconds(""))
+        self.assertEqual(xperiods.suffix_milliseconds["monthly"], xperiods.label_milliseconds("foo_monthly"))
+        self.assertEqual(xperiods.suffix_milliseconds["weekly"], xperiods.label_milliseconds("foo_weekly"))
+        self.assertEqual(xperiods.suffix_milliseconds["daily"], xperiods.label_milliseconds("foo_daily"))
+        self.assertEqual(xperiods.suffix_milliseconds["hourly"], xperiods.label_milliseconds("foo_hourly"))
+        self.assertEqual(xperiods.suffix_milliseconds["minutely"] * 60, xperiods.label_milliseconds("foo_60minutely"))
+        self.assertEqual(xperiods.suffix_milliseconds["minutely"] * 59, xperiods.label_milliseconds("foo_59minutely"))
+        self.assertEqual(xperiods.suffix_milliseconds["secondly"], xperiods.label_milliseconds("foo_secondly"))
+        self.assertEqual(xperiods.suffix_milliseconds["millisecondly"], xperiods.label_milliseconds("foo_millisecondly"))
+
     def test_CreateSrcSnapshotConfig(self):
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         good_args = bzfs.argument_parser().parse_args(
@@ -3596,6 +3614,9 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     self.assertListEqual(expected_results, output_snapshots)
                     all_to_snapshots = []
                     for incr_flag, start_snapshot, end_snapshot, num_snapshots, to_snapshots in steps:
+                        self.assertIn(incr_flag, ["-I", "-i"])
+                        self.assertGreaterEqual(num_snapshots, 1)
+                        self.assertGreaterEqual(len(to_snapshots), 1)
                         all_to_snapshots += [snapshot[snapshot.find("@") + 1 :] for snapshot in to_snapshots]
                     self.assertListEqual(expected_results[1:], all_to_snapshots)
 
