@@ -20,7 +20,7 @@ _bzfs_jobrunner() {
     local cur opts
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
-    opts="--create-src-snapshots --daemon-monitor-snapshots-frequency --daemon-prune-dst-frequency --daemon-prune-src-frequency --daemon-replication-frequency --dst-host --dst-hosts --dst-root-datasets --dst-snapshot-plan --dst-user --help --help, -h --job-id --job-run --jobrunner-dryrun --jobrunner-log-level --localhost --monitor-dst-snapshots --monitor-snapshot-plan --monitor-src-snapshots --prune-dst-snapshots --prune-src-bookmarks --prune-src-snapshots --replicate --retain-dst-targets --root-dataset-pairs --src-bookmark-plan --src-host --src-hosts --src-snapshot-plan --src-user --version --work-period-seconds --worker-timeout-seconds --workers -h"
+    opts="--create-src-snapshots --daemon-monitor-snapshots-frequency --daemon-prune-dst-frequency --daemon-prune-src-frequency --daemon-replication-frequency --dst-host --dst-hosts --dst-root-datasets --dst-snapshot-plan --dst-user --help --help, -h --jitter --job-id --job-run --jobrunner-dryrun --jobrunner-log-level --localhost --monitor-dst-snapshots --monitor-snapshot-plan --monitor-src-snapshots --prune-dst-snapshots --prune-src-bookmarks --prune-src-snapshots --replicate --retain-dst-targets --root-dataset-pairs --src-bookmark-plan --src-host --src-hosts --src-snapshot-plan --src-user --version --work-period-seconds --worker-timeout-seconds --workers -h"
     COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
     return 0
 }

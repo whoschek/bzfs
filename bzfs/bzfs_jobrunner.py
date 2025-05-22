@@ -32,6 +32,7 @@ import importlib.util
 import logging
 import os
 import pwd
+import random
 import shutil
 import socket
 import subprocess
@@ -322,8 +323,12 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "there are cores on the machine; 75%% uses num_procs = num_cores * 0.75. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(
         "--work-period-seconds", type=float, min=0, default=0, action=bzfs.CheckRange, metavar="FLOAT",
-        help="Reduces bandwidth spikes by evenly spreading the start of worker jobs over this much time; "
+        help="Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; "
              "0 disables this feature (default: %(default)s). Examples: 0, 60, 86400\n\n")
+    parser.add_argument(
+        "--jitter", action="store_true",
+        help="Randomize job start time and host order to avoid potential thundering herd problems in large distributed "
+             "systems (optional). Randomizing job start time is only relevant if --work-period-seconds > 0.\n\n")
     parser.add_argument(
         "--worker-timeout-seconds", type=float, min=0, default=None, action=bzfs.CheckRange, metavar="FLOAT",
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
@@ -443,6 +448,7 @@ class Job:
         self.validate_non_empty_string(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
         src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
+        nb_src_hosts = len(src_hosts)
         log.debug("src_hosts before subsetting: %s", src_hosts)
         if args.src_host is not None:  # retain only the src hosts that are also contained in args.src_host
             assert isinstance(args.src_host, list)
@@ -450,6 +456,7 @@ class Job:
             self.validate_is_subset(retain_src_hosts, src_hosts, "--src-host", "--src-hosts")
             src_hosts = [host for host in src_hosts if host in retain_src_hosts]
         dst_hosts = self.validate_dst_hosts(literal_eval(args.dst_hosts))
+        nb_dst_hosts = len(dst_hosts)
         if args.dst_host is not None:  # retain only the dst hosts that are also contained in args.dst_host
             assert isinstance(args.dst_host, list)
             retain_dst_hosts = set(args.dst_host)
@@ -467,6 +474,9 @@ class Job:
             or all(src_magic_substitution_token in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys()),
             "Multiple sources must not write to the same destination dataset",
         )
+        if args.jitter:  # randomize host order to avoid thundering herd problems in large distributed systems
+            random.shuffle(src_hosts)
+            dst_hosts = shuffle_dict(dst_hosts)
         job_id = sanitize(args.job_id)
         job_run = args.job_run if args.job_run is not None else args.jobid  # --jobid is deprecated; was renamed to --job-run
         job_run = sanitize(job_run) if job_run else uuid.uuid1().hex
@@ -656,10 +666,12 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-        msg = "Ready to run %s subjobs using %s src hosts: %s, %s dst hosts: %s"
-        log.info(msg, len(subjobs), len(src_hosts), src_hosts, len(dst_hosts), list(dst_hosts.keys()))
+        msg = "Ready to run %s subjobs using %s/%s src hosts: %s, %s/%s dst hosts: %s"
+        log.info(
+            msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
+        )
         log.trace("subjobs: \n%s", pretty_print_formatter(subjobs))
-        self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds)
+        self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
         ex = self.first_exception
         if isinstance(ex, int):
             assert ex != 0
@@ -724,12 +736,23 @@ class Job:
         return results
 
     def run_subjobs(
-        self, subjobs: Dict[str, List[str]], max_workers: int, timeout_secs: Optional[float], work_period_seconds: float
+        self,
+        subjobs: Dict[str, List[str]],
+        max_workers: int,
+        timeout_secs: Optional[float],
+        work_period_seconds: float,
+        jitter: bool,
     ) -> None:
         self.stats = Stats()
         self.stats.jobs_all = len(subjobs)
         log = self.log
-        interval_nanos = round(1_000_000_000 * max(0.0, work_period_seconds) / max(1, len(subjobs)))
+        num_intervals = 1 + len(subjobs) if jitter else len(subjobs)
+        interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
+        assert interval_nanos >= 0
+        if jitter:  # randomize job start time to avoid thundering herd problems in large distributed systems
+            sleep_nanos = random.randint(0, interval_nanos)
+            log.info("Jitter: Delaying job start time by sleeping for %s ...", bzfs.human_readable_duration(sleep_nanos))
+            time.sleep(sleep_nanos / 1_000_000_000)  # seconds
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(bzfs.BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
@@ -752,7 +775,7 @@ class Job:
             log.trace("%s", "spawn_process_per_job: False")
             next_update_nanos = time.monotonic_ns()
             for subjob in sorted_subjobs:
-                time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)
+                time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)  # seconds
                 next_update_nanos += interval_nanos
                 s = subjob
                 if not self.run_subjob(subjobs[subjob], name=s, timeout_secs=timeout_secs, spawn_process_per_job=False) == 0:
@@ -873,7 +896,7 @@ class Job:
             self.validate_host_name(src_hostname, context)
         return src_hosts
 
-    def validate_dst_hosts(self, dst_hosts: Dict) -> Dict:
+    def validate_dst_hosts(self, dst_hosts: Dict) -> Dict[str, List[str]]:
         context = "--dst-hosts"
         self.validate_type(dst_hosts, dict, context)
         for dst_hostname, targets in dst_hosts.items():
@@ -883,7 +906,7 @@ class Job:
                 self.validate_type(target, str, f"{context} target")
         return dst_hosts
 
-    def validate_dst_root_datasets(self, dst_root_datasets: Dict) -> Dict:
+    def validate_dst_root_datasets(self, dst_root_datasets: Dict) -> Dict[str, str]:
         context = "--dst-root-datasets"
         self.validate_type(dst_root_datasets, dict, context)
         for dst_hostname, dst_root_dataset in dst_root_datasets.items():
@@ -891,7 +914,7 @@ class Job:
             self.validate_type(dst_root_dataset, str, f"{context} root dataset")
         return dst_root_datasets
 
-    def validate_snapshot_plan(self, snapshot_plan: Dict, context: str) -> Dict:
+    def validate_snapshot_plan(self, snapshot_plan: Dict, context: str) -> Dict[str, Dict[str, Dict[str, int]]]:
         self.validate_type(snapshot_plan, dict, context)
         for org, target_periods in snapshot_plan.items():
             self.validate_type(org, str, f"{context} org")
@@ -904,7 +927,7 @@ class Job:
                     self.validate_non_negative_int(period_amount, f"{context} org/target/period_amount")
         return snapshot_plan
 
-    def validate_monitor_snapshot_plan(self, monitor_snapshot_plan: Dict) -> Dict:
+    def validate_monitor_snapshot_plan(self, monitor_snapshot_plan) -> Dict[str, Dict[str, Dict[str, Union[str, int]]]]:
         context = "--monitor-snapshot-plan"
         self.validate_type(monitor_snapshot_plan, dict, context)
         for org, target_periods in monitor_snapshot_plan.items():
@@ -995,6 +1018,12 @@ def flatten(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
     return [item for pair in root_dataset_pairs for item in pair]
 
 
+def shuffle_dict(dictionary: Dict) -> Dict:
+    items = list(dictionary.items())
+    random.shuffle(items)
+    return dict(items)
+
+
 def sanitize(filename: str) -> str:
     for s in (" ", "..", "/", "\\", sep):
         filename = filename.replace(s, "!")
@@ -1006,7 +1035,7 @@ def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     return f"{sep}{sanitize(localhostname)}{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
 
 
-def format_dict(dictionary) -> str:
+def format_dict(dictionary: Dict) -> str:
     return bzfs.format_dict(dictionary)
 
 

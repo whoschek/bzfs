@@ -4253,7 +4253,7 @@ class Job:
                     retry_count += 1
                     if retryable_error.no_sleep and retry_count <= 1:
                         log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
-                    else:  # pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
+                    else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
                         sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
                         sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
                         log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
@@ -4293,7 +4293,7 @@ class Job:
         -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
         -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
         * The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
-        * 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
+        * The 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
         src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
         is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
         * The is_resume param is necessary as 'zfs send -t' does not support sending more than a single snapshot

@@ -239,6 +239,12 @@ workers = "100%"  # aka max_workers = 1.0 * num_cores
 work_period_seconds = 0
 
 
+# Randomize job start time and host order to avoid potential thundering herd problems in large distributed systems.
+# Randomizing job start time is only relevant if --work-period-seconds > 0.
+# jitter = True  # randomize
+jitter = False  # don't randomize
+
+
 # If this much time has passed after a worker process has started executing, kill the straggling worker. Other workers remain
 # unaffected. A value of None disables this feature:
 # worker_timeout_seconds = 3600
@@ -340,6 +346,7 @@ cmd += [f"--dst-snapshot-plan={dst_snapshot_plan}"]
 cmd += [f"--monitor-snapshot-plan={monitor_snapshot_plan}"]
 cmd += [f"--workers={workers}"]
 cmd += [f"--work-period-seconds={work_period_seconds}"]
+cmd += ["--jitter"] if jitter else []
 cmd += [f"--worker-timeout-seconds={worker_timeout_seconds}"] if worker_timeout_seconds is not None else []
 cmd += extra_args + unknown_args + ["--root-dataset-pairs"] + root_dataset_pairs
 sys.exit(subprocess.run(cmd, input=f"{src_hosts}", text=True).returncode)

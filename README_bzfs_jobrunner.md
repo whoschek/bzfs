@@ -152,7 +152,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--monitor-snapshot-plan DICT_STRING]
                       [--src-user STRING] [--dst-user STRING] --job-id
                       STRING [--job-run STRING] [--workers INT[%]]
-                      [--work-period-seconds FLOAT]
+                      [--work-period-seconds FLOAT] [--jitter]
                       [--worker-timeout-seconds FLOAT]
                       [--jobrunner-dryrun]
                       [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
@@ -452,8 +452,18 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 **--work-period-seconds** *FLOAT*
 
-*  Reduces bandwidth spikes by evenly spreading the start of worker jobs over this much time; 0
+*  Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; 0
     disables this feature (default: 0). Examples: 0, 60, 86400
+
+<!-- -->
+
+<div id="--jitter"></div>
+
+**--jitter**
+
+*  Randomize job start time and host order to avoid potential thundering herd problems in large
+    distributed systems (optional). Randomizing job start time is only relevant if
+    --work-period-seconds > 0.
 
 <!-- -->
 
