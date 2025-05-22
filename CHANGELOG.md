@@ -21,6 +21,8 @@ will be completely removed in a future release.
 - [bzfs_jobrunner] There's no need anymore to specify an argument to `--replicate`. For the time being the corresponding mode
 argument remains available in deprecated status but is actually ignored. The argument will be removed in a future release.
 - [bzfs_jobrunner] Added more input validation.
+- [bzfs_jobrunner] Added `--jitter` CLI option to randomize job start time and host order to avoid potential thundering herd
+problems in large distributed systems.
 - [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
 - [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old flag
 will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in a future
@@ -32,6 +34,7 @@ release.
 deprecated status, but the old name will be completely removed in a future release.
 - [bzfs] Added a bash completion script such that typing bzfs SPACE TAB or bzfs_jobrunner TAB will auto-complete all flags.
 - [bzfs] [perf] Auto-disable mbuffer and compression-on-the-wire if replicating over the loopback address.
+- [bzfs] [perf] Create bookmarks in parallel.
 - [bzfs] Fixed progress reporting when using 'pv' with French locale and other international locales.
 - [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.11.0...v1.12.0
