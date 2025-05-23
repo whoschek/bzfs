@@ -1597,6 +1597,7 @@ class Params:
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
         self.unset_matching_env_vars(args)
+        self.xperiods = SnapshotPeriods()
 
         assert len(args.root_dataset_pairs) > 0
         self.root_dataset_pairs: List[Tuple[str, str]] = args.root_dataset_pairs
@@ -1972,7 +1973,7 @@ class SnapshotLabel(NamedTuple):
 
 
 #############################################################################
-class SnapshotPeriods:
+class SnapshotPeriods:  # thread-safe
     def __init__(self):
         # immutable variables:
         self.suffix_milliseconds: Final = {
@@ -1995,8 +1996,8 @@ class SnapshotPeriods:
             "secondly": "seconds",
             "millisecondly": "milliseconds",
         }
-        self._suffix_regex0 = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
-        self._suffix_regex1 = re.compile("_" + self._suffix_regex0.pattern)
+        self._suffix_regex0: Final = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
+        self._suffix_regex1: Final = re.compile("_" + self._suffix_regex0.pattern)
 
     def suffix_to_duration0(self, suffix: str) -> Tuple[int, str]:
         return self._suffix_to_duration(suffix, self._suffix_regex0)
@@ -2049,9 +2050,9 @@ class CreateSrcSnapshotConfig:
                         suffix = nsuffix(period_unit)
                         suffixes.append(suffix)
                         labels.append(SnapshotLabel(prefix=nprefix(org), infix=ninfix(target), timestamp="", suffix=suffix))
-        xperiods = SnapshotPeriods()
+        xperiods: SnapshotPeriods = p.xperiods
         if self.skip_create_src_snapshots:
-            duration_amount, duration_unit = xperiods.suffix_to_duration0(p.daemon_frequency)
+            duration_amount, duration_unit = p.xperiods.suffix_to_duration0(p.daemon_frequency)
             if duration_amount <= 0 or not duration_unit:
                 die(f"Invalid --daemon-frequency: {p.daemon_frequency}")
             suffixes = [nsuffix(p.daemon_frequency)]
@@ -2120,7 +2121,7 @@ class MonitorSnapshotsConfig:
         self.no_latest_check: bool = args.monitor_snapshots_no_latest_check
         self.no_oldest_check: bool = args.monitor_snapshots_no_oldest_check
         alerts = []
-        xperiods = SnapshotPeriods()
+        xperiods: SnapshotPeriods = p.xperiods
         for org, target_periods in self.monitor_snapshots.items():
             prefix = nprefix(org)
             for target, periods in target_periods.items():
@@ -3350,7 +3351,6 @@ class Job:
             total_num = sum(num_snapshots for incr_flag, from_snap, to_snap, num_snapshots, to_snapshots in steps_todo)
             done_size = 0
             done_num = 0
-            xperiods = SnapshotPeriods()
             for i, (incr_flag, from_snap, to_snap, curr_num_snapshots, to_snapshots) in enumerate(steps_todo):
                 assert len(to_snapshots) >= 1
                 curr_size = estimate_send_sizes[i]
@@ -3385,7 +3385,7 @@ class Job:
                 if p.create_bookmarks == "all":
                     self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
                 elif p.create_bookmarks == "many":
-                    to_snapshots = [snap for snap in to_snapshots if xperiods.label_milliseconds(snap) >= 60 * 60 * 1000]
+                    to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= 60 * 60 * 1000]
                     if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
                         to_snapshots.append(to_snap)
                     self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
