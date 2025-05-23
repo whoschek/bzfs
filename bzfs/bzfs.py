@@ -2725,10 +2725,10 @@ class Job:
                 dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
                 num_dst_snaps_with_guids = len(dst_snaps_with_guids)
                 if p.delete_dst_bookmarks:
-                    replace_in_lines(dst_snaps_with_guids, old="#", new="@")  # treat bookmarks as snapshots
+                    replace_in_lines(dst_snaps_with_guids, old="#", new="@", count=1)  # treat bookmarks as snapshots
                 dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, all_except=p.delete_dst_snapshots_except)
                 if p.delete_dst_bookmarks:
-                    replace_in_lines(dst_snaps_with_guids, old="@", new="#")  # restore pre-filtering bookmark state
+                    replace_in_lines(dst_snaps_with_guids, old="@", new="#", count=1)  # restore pre-filtering bookmark state
                 if filter_needs_creation_time:
                     dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
                 missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
@@ -2808,7 +2808,7 @@ class Job:
                         dst, cmd, sorted(orphans), ordered=False
                     ):
                         if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
-                            replace_in_lines(datasets_having_snapshots, old="#", new="@")  # treat bookmarks as snapshots
+                            replace_in_lines(datasets_having_snapshots, old="#", new="@", count=1)  # treat bookmarks as snap
                         datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
                         dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
                 else:
@@ -6114,9 +6114,9 @@ def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
     return new_prefix + s[len(old_prefix) :]
 
 
-def replace_in_lines(lines: List[str], old: str, new: str) -> None:
+def replace_in_lines(lines: List[str], old: str, new: str, count: int = -1) -> None:
     for i in range(len(lines)):
-        lines[i] = lines[i].replace(old, new)
+        lines[i] = lines[i].replace(old, new, count)
 
 
 def has_duplicates(sorted_list: List) -> bool:
