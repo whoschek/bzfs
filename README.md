@@ -124,8 +124,8 @@ creation, replication, pruning, and monitoring, across N source hosts and M dest
 using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For example, this
 simplifies the deployment of an efficient geo-replicated backup service where each of the M
 destination hosts is located in a separate geographic region and pulls replicas from (the same set
-of) N source hosts. It also simplifies low latency replication from a primary to a secondary, or
-backup to removable drives, etc.
+of) N source hosts. It also simplifies low latency replication from a primary to a secondary or to
+M read replicas, or backup to removable drives, etc.
 
 # Quickstart
 

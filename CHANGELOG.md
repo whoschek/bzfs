@@ -7,22 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs_jobrunner] Added ability to [bzfs_jobrunner](README_bzfs_jobrunner.md) to replicate across N source hosts and M
 destination hosts, using the same single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
-hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts.
+hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts. It also
+simplifies low latency replication from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
+- [bzfs_jobrunner] Added example for how to force the use of a separate destination root dataset per source host.
+- [bzfs_jobrunner] Added name of localhost to log file name suffix.
+- [bzfs_jobrunner] Also log subjobs that were skipped (because a prior subjob failed).
+- [bzfs_jobrunner] Added `--jobrunner-dryrun` and `--jobrunner-log-level` CLI options.
+- [bzfs_jobrunner] Added `--jitter` CLI option to randomize job start time and host order to avoid potential thundering herd
+problems in large distributed systems.
+- [bzfs_jobrunner] Added timeout parameter.
+- [bzfs_jobrunner] Added option to customize number of cycles in monitor_snapshot_plan.
+- [bzfs_jobrunner] Added '[bzfs_jobrunner]' tag to log messages.
+- [bzfs_jobrunner] Added more input validation.
 - [bzfs_jobrunner] Replaced the  `--jobid` CLI option with `--job-run` and added the (required) `--job-id` CLI option, which
 is forwarded to bzfs. The old `--jobid` option will continue to work as-is for now, in deprecated status, but the old name
 will be completely removed in a future release.
-- [bzfs_jobrunner] Added name of localhost to log file name suffix.
-- [bzfs_jobrunner] Also log subjobs that were skipped (because a prior subjob failed).
-- [bzfs_jobrunner] Added example for how to force the use of a separate destination root dataset per source host.
-- [bzfs_jobrunner] Added option to customize number of cycles in monitor_snapshot_plan.
-- [bzfs_jobrunner] Added timeout parameter.
-- [bzfs_jobrunner] Added `--jobrunner-dryrun` and `--jobrunner-log-level` CLI options.
-- [bzfs_jobrunner] Added '[bzfs_jobrunner]' tag to log messages.
 - [bzfs_jobrunner] There's no need anymore to specify an argument to `--replicate`. For the time being the corresponding mode
 argument remains available in deprecated status but is actually ignored. The argument will be removed in a future release.
-- [bzfs_jobrunner] Added more input validation.
-- [bzfs_jobrunner] Added `--jitter` CLI option to randomize job start time and host order to avoid potential thundering herd
-problems in large distributed systems.
 - [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
 - [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old flag
 will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in a future

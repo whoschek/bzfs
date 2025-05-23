@@ -36,7 +36,7 @@ parser = argparse.ArgumentParser(
 Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication,
 pruning, and monitoring, across N source hosts and M destination hosts, using the same single shared jobconfig script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service, or low latency replication
-from a primary to a secondary, or backup to removable drives, etc.
+from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
 Typically, this script should be periodically executed on each source host and each destination host, e.g. by a cron job
 (or similar). However, you can also run it on a single third-party host and have that talk to all source hosts and
 destination hosts, which is convenient for basic use cases and for testing.
