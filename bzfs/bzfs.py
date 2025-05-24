@@ -599,6 +599,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "* 'oldest 100%%' aka 'oldest 0..oldest 100%%' (include all snapshots)\n\n"
              "* 'oldest 0%%' aka 'oldest 0..oldest 0%%' (include no snapshots)\n\n"
              "* 'oldest 0' aka 'oldest 0..oldest 0' (include no snapshots)\n\n"
+             "*Note:* If multiple RANKRANGEs are specified within a single --include-snapshot-times-and-ranks option, each "
+             "subsequent rank range operates on the output of the preceding rank rage.\n\n"
              "*Note:* Percentage calculations are not based on the number of snapshots "
              "contained in the dataset on disk, but rather based on the number of snapshots arriving at the filter. "
              "For example, if only two daily snapshots arrive at the filter because a prior filter excludes hourly "
@@ -5699,6 +5701,10 @@ class ConnectionPool:
         self._lock: threading.Lock = threading.Lock()
 
     def get_connection(self) -> Connection:
+        """Any Connection object returned on get_connection() also remains intentionally contained in the priority queue,
+        and that identical Connection object is later, on return_connection(), temporarily removed from the priority queue,
+        updated with an incremented "free" slot count and then immediately reinserted into the priority queue. In effect,
+        any Connection object remains intentionally contained in the priority queue at all times."""
         with self._lock:
             conn = self.priority_queue.pop() if len(self.priority_queue) > 0 else None
             if conn is None or conn.is_full():
@@ -5715,7 +5721,7 @@ class ConnectionPool:
     def return_connection(self, conn: Connection) -> None:
         assert conn is not None
         with self._lock:
-            # update priority = remove conn from queue, update priority, finally reinsert updated conn into queue
+            # update priority = remove conn from queue, increment priority, finally reinsert updated conn into queue
             self.priority_queue.remove(conn, assert_is_contained=True)
             conn.increment_free(1)
             self.last_modified += 1
