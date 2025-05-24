@@ -67,7 +67,7 @@ simplifies low latency replication from a primary to a secondary or to M read re
 
 This program can be used to efficiently replicate ...
 
-a) within a single machine, or
+a) within a single machine (local mode), or
 
 b) from a single source host to one or more destination hosts (pull or push or pull-push mode), or
 
@@ -529,7 +529,7 @@ class Job:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
                 opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
                 opts += [f"--log-file-infix={sep}{job_id}"]
-                opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, None)}{sep}"]
+                opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}"]
                 opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
@@ -551,7 +551,7 @@ class Job:
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
                             for src, dst in args.root_dataset_pairs
                         ]
-                        dataset_pairs = self.skip_datasets_with_nonexisting_dst_pool(dataset_pairs)
+                        dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                         if len(dataset_pairs) > 0:
                             daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
                             subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + daemon_opts + opts + flatten(dataset_pairs)
@@ -564,7 +564,7 @@ class Job:
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
                     f"--log-file-prefix={prog_name}{sep}{tag}{sep}",
                     f"--log-file-infix={sep}{job_id}",
-                    f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, None)}{sep}",
+                    f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
@@ -601,7 +601,7 @@ class Job:
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
-                    dataset_pairs = self.skip_datasets_with_nonexisting_dst_pool(dataset_pairs)
+                    dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts + flatten(dataset_pairs)
                         j += 1
@@ -639,7 +639,7 @@ class Job:
             if args.monitor_src_snapshots:
                 marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
-                opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, None))
+                opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, ""))
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
@@ -660,7 +660,7 @@ class Job:
                     opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                     opts += unknown_args + ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
-                    dataset_pairs = self.skip_datasets_with_nonexisting_dst_pool(dataset_pairs)
+                    dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
                         subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts + flatten(dataset_pairs)
                         j += 1
@@ -709,30 +709,34 @@ class Job:
             opts += [f"--log-file-suffix={sep}{job_run}{log_suffix(lhn, src_hostname, dst_hostname)}{sep}"]
         return opts
 
-    def skip_datasets_with_nonexisting_dst_pool(self, root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+        """Skip datasets that point to removeable destination drives that are not currently (locally) attached, if any."""
+
         def zpool(dataset: str) -> str:
             return dataset.split("/", 1)[0]
 
         assert len(root_dataset_pairs) > 0
         unknown_dst_pools = {zpool(dst) for src, dst in root_dataset_pairs}
         unknown_dst_pools = unknown_dst_pools.difference(self.cache_known_dst_pools)
+        self.cache_known_dst_pools.update(unknown_dst_pools)  # union
+
         # Here we treat a zpool as existing if the zpool isn't local, aka if it isn't prefixed with "-:". A remote host
-        # will raise an appropriate error anyway if it turns out that the remote zpool doesn't actually exist.
-        if len(unknown_dst_pools) > 0 and all(pool.startswith("-:") for pool in unknown_dst_pools):  # `zfs list` if local
-            existing_pools = {pool[len("-:") :] for pool in unknown_dst_pools}
+        # will raise an appropriate error if it turns out that the remote zpool doesn't actually exist.
+        unknown_local_dst_pools = {pool for pool in unknown_dst_pools if pool.startswith("-:")}
+        if len(unknown_local_dst_pools) > 0:  # `zfs list` if local
+            existing_pools = {pool[len("-:") :] for pool in unknown_local_dst_pools}
             cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(existing_pools)
             existing_pools = set(subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True).stdout.splitlines())
             existing_pools = {"-:" + pool for pool in existing_pools}
             self.cache_existing_dst_pools.update(existing_pools)  # union
-        else:
-            self.cache_existing_dst_pools.update(unknown_dst_pools)  # union
-        self.cache_known_dst_pools.update(unknown_dst_pools)  # union
+        unknown_remote_dst_pools = unknown_dst_pools.difference(unknown_local_dst_pools)
+        self.cache_existing_dst_pools.update(unknown_remote_dst_pools)  # union
         results = []
         for src, dst in root_dataset_pairs:
             if zpool(dst) in self.cache_existing_dst_pools:
                 results.append((src, dst))
             else:
-                self.log.warning("Skipping dst dataset for which dst pool does not exist: %s", dst)
+                self.log.warning("Skipping dst dataset for which local dst pool does not exist: %s", dst)
         return results
 
     def run_subjobs(
@@ -793,7 +797,7 @@ class Job:
 
     def run_subjob(
         self, cmd: List[str], name: str, timeout_secs: Optional[float], spawn_process_per_job: bool
-    ) -> Optional[int]:
+    ) -> Optional[int]:  # thread-safe
         start_time_nanos = time.monotonic_ns()
         returncode = None
         log = self.log

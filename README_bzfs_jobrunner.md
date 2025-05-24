@@ -38,7 +38,7 @@ or to M read replicas, or backup to removable drives, etc.
 
 This program can be used to efficiently replicate ...
 
-a) within a single machine, or
+a) within a single machine (local mode), or
 
 b) from a single source host to one or more destination hosts (pull or push or pull-push mode),
 or
