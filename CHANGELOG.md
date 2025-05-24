@@ -28,11 +28,11 @@ argument remains available in deprecated status but is actually ignored. The arg
 - [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old flag
 will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in a future
 release.
-- [bzfs] Made `--cache-snapshots` also boost the performance of replication and `--monitor-snapshots`.
-- [bzfs] Log more detailed diagnostics on `--monitor-snapshots`.
+- [bzfs] [perf] Made `--cache-snapshots` also boost the performance of replication and `--monitor-snapshots`.
 - [bzfs] Replaced the `--no-create-bookmarks` CLI option with `--create-bookmarks=none` and added `--create-bookmarks=many`
 (the default) and `--create-bookmarks=all`. The old `--no-create-bookmarks` will continue to work as-is for now, in
 deprecated status, but the old name will be completely removed in a future release.
+- [bzfs] Log more detailed diagnostics on `--monitor-snapshots`.
 - [bzfs] Added a bash completion script such that typing bzfs SPACE TAB or bzfs_jobrunner TAB will auto-complete all flags.
 - [bzfs] [perf] Auto-disable mbuffer and compression-on-the-wire if replicating over the loopback address.
 - [bzfs] [perf] Create bookmarks in parallel.
