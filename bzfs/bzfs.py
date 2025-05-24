@@ -6824,8 +6824,8 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or dataset.endswith("/..")
         or "/./" in dataset
         or "/../" in dataset
-        or any(char in "'~@#`%$^&*+=|,\\" or char == '"' or (char.isspace() and char != " ") for char in dataset)
-        or not dataset[0].isalpha()
+        or any(char in "'~@#`%$%^&*+=|,\\" or char == '"' or (char.isspace() and char != " ") for char in dataset)
+        or not (dataset[0].isalnum() and dataset[0].isascii())
     ):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
 
