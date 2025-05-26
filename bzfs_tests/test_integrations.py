@@ -91,7 +91,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
     sudo_cmd = ["sudo", "-n"]
     set_sudo_cmd(["sudo", "-n"])
 
-test_mode = getenv_any("test_mode", "adhoc")  # Consider toggling this when testing isolated code changes
+test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
 
 
 def suite():
@@ -635,11 +635,8 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_basic_replication_flat_simple(self):
-        LocalTestCase(param=self.param).test_basic_replication_flat_simple()
-
-    # def test_delete_dst_snapshots_except_with_source(self):
-    #     LocalTestCase(param=self.param).test_delete_dst_snapshots_except_with_source()
+    def test_delete_dst_snapshots_except_with_source(self):
+        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_with_source()
 
     # def test_delete_dst_snapshots_except_with_dummy_source(self):
     #     LocalTestCase(param=self.param).test_delete_dst_snapshots_except_with_dummy_source()
