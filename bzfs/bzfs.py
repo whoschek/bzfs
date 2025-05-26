@@ -3104,7 +3104,7 @@ class Job:
         filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
         types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-        src_cmd = p.split_args(f"{p.zfs_program} list -Hp -d 1 -t {types} -s createtxg -s type -o {props}", src_dataset)
+        src_cmd = p.split_args(f"{p.zfs_program} list -Hp -d 0 -t {types} -s createtxg -s type -o {props}", src_dataset)
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
