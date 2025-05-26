@@ -1888,6 +1888,12 @@ class Remote:
                 tuple(self.ssh_private_key_files), tuple(self.ssh_extra_opts))
         # fmt: on
 
+    def d1(self) -> str:
+        if "11.4.81.193.1" in self.params.available_programs[self.location].get("uname", "") or platform.system() == "SunOS":
+            return "-d 0"
+        else:
+            return "-d 1"
+
     def __repr__(self) -> str:
         return str(self.__dict__)
 
@@ -2713,10 +2719,10 @@ class Job:
                     src_kind = kind
                     if not p.delete_dst_snapshots_no_crosscheck:
                         src_kind = "snapshot,bookmark" if self.are_bookmarks_enabled(src) else "snapshot"
-                    src_cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
+                    src_cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} {src.d1()} -s name -Hp -o guid", src_dataset)
                 else:
                     src_cmd = None
-                dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+                dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} {dst.d1()} -s createtxg -Hp -o {props}", dst_dataset)
                 self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
                 src_snaps_with_guids, dst_snaps_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
                     lambda: set(self.run_ssh_command(src, log_trace, cmd=src_cmd).splitlines() if src_cmd else []),
@@ -2806,7 +2812,7 @@ class Job:
                             orphans.add(dst_dataset)
                 if run == 0:
                     # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
-                    cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
+                    cmd = p.split_args(f"{p.zfs_program} list -t {btype} {dst.d1()} -S name -Hp -o name")
                     for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(
                         dst, cmd, sorted(orphans), ordered=False
                     ):
@@ -3090,7 +3096,7 @@ class Job:
         log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
-        dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
+        dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot {dst.d1()} -s createtxg -Hp -o guid,name", dst_dataset)
 
         # list GUID and name for src snapshots + bookmarks, primarily sort ascending by transaction group (which is more
         # precise than creation time), secondarily sort such that snapshots appear after bookmarks for the same GUID.
@@ -3104,7 +3110,9 @@ class Job:
         filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
         types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-        src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 0 -Hp -o {props}", src_dataset)
+        src_cmd = p.split_args(
+            f"{p.zfs_program} list -t {types} -s createtxg -s type {src.d1()} -Hp -o {props}", src_dataset
+        )
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
@@ -4627,8 +4635,8 @@ class Job:
     ) -> List[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
         the callback functions on them. Ignores the timestamp of the input labels and the timestamp of the snapshot names."""
-        p = self.params
-        cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
+        p = self.params  # sort by dataset,createtxg
+        cmd = p.split_args(f"{p.zfs_program} list -t snapshot {remote.d1()} -Hp -o createtxg,creation,name")
         datasets_with_snapshots: Set[str] = set()
         for lines in self.zfs_list_snapshots_in_parallel(remote, cmd, sorted_datasets, ordered=False):
             # streaming group by dataset name (consumes constant memory only)
@@ -4796,7 +4804,7 @@ class Job:
             types = "snapshot"
             if p.use_bookmark and r.location == "src" and self.are_bookmarks_enabled(r):
                 types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
-            cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
+            cmd = p.split_args(f"{p.zfs_program} list -t {types} {r.d1()} -Hp -o {props}")  # sorted by dataset, createtxg
             for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets):
                 yield from lines
 
