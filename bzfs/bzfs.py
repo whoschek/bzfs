@@ -4307,7 +4307,7 @@ class Job:
             # print(f"{label} {self.send_step_to_str(step)}")
             is_not_resume = len(steps) > 0 or not is_resume
             if i - start > 1 and (not force_convert_I_to_i) and "@" in src_snapshots[start] and is_not_resume:
-                steps.append(("-I", src_snapshots[start], src_snapshots[i], i - start + 1, src_snapshots[start + 1 : i + 1]))
+                steps.append(("-I", src_snapshots[start], src_snapshots[i], i - start, src_snapshots[start + 1 : i + 1]))
             elif "@" in src_snapshots[start] and is_not_resume:
                 for j in range(start, i):  # convert -I step to -i steps
                     steps.append(("-i", src_snapshots[j], src_snapshots[j + 1], 1, src_snapshots[j + 1 : j + 2]))
@@ -4458,9 +4458,9 @@ class Job:
         n = len(recv_opts)
         while i < n:
             stripped = recv_opts[i].strip()
-            if stripped in {"-o", "-x"}:
+            if stripped in ("-o", "-x"):
                 i += 1
-                if i == n or recv_opts[i].strip() in {"-o", "-x"}:
+                if i == n or recv_opts[i].strip() in ("-o", "-x"):
                     die(f"Missing value for {stripped} option in --zfs-receive-program-opt(s): {' '.join(recv_opts)}")
                 propnames.add(recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0])
             i += 1
