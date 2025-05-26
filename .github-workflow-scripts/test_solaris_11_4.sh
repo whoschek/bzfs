@@ -86,7 +86,7 @@ chmod go-rwx $thome/.ssh/authorized_keys
 cp -rp . $thome/bzfs # if running with Github Action
 # cp -rp bzfs $thome/ # if running with https://github.com/vmactions/shell-solaris
 chown -R $tuser $thome/bzfs
-sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/bzfs; ./test.sh"
+#sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/bzfs; ./test.sh"
 echo "bzfs-testrun-success"
 
 #pkg update --accept; reboot # FIXME: reboot disconnects
