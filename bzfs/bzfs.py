@@ -1889,7 +1889,9 @@ class Remote:
         # fmt: on
 
     def d1(self) -> str:
-        if "11.4.81.193.1" in self.params.available_programs[self.location].get("uname", "") or platform.system() == "SunOS":
+        if (
+            "11.4.81.193.1" in self.params.available_programs[self.location].get("uname", "")
+        ) or platform.system() == "SunOS":
             return "-d 0"
         else:
             return "-d 1"
