@@ -3291,6 +3291,7 @@ class Job:
                 self.create_zfs_bookmarks(src, src_dataset, [oldest_src_snapshot])
                 self.zfs_set(set_opts, dst, dst_dataset)
                 retry_count = 0
+                dry_run_no_send = dry_run_no_send or p.dry_run
 
         # endif not latest_common_src_snapshot
         # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
