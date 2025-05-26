@@ -3104,7 +3104,7 @@ class Job:
         filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
         types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-        src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
+        src_cmd = p.split_args(f"{p.zfs_program} list -Hp -d 1 -t {types} -s createtxg -s type -o {props}", src_dataset)
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
@@ -3370,7 +3370,8 @@ class Job:
                 dense_size = p.two_or_more_spaces_regex.sub("", humansize.strip())
                 log.info(
                     p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-                    f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
+                    # f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
+                    f"{from_snap} .. {to_snap} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
                 )
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
                 if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
