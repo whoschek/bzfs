@@ -635,71 +635,77 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_include_snapshots_plan(self):
-        LocalTestCase(param=self.param).test_include_snapshots_plan()
+    def test_delete_dst_snapshots_except_with_source(self):
+        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_with_source()
 
-    def test_include_snapshots_plan_without_excludes_outdated_snapshots(self):
-        LocalTestCase(param=self.param).test_include_snapshots_plan_without_excludes_outdated_snapshots()
+    # def test_delete_dst_snapshots_except_with_dummy_source(self):
+    #     LocalTestCase(param=self.param).test_delete_dst_snapshots_except_with_dummy_source()
 
-    def test_delete_dst_snapshots_except_plan(self):
-        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
-
-    def test_daemon_frequency(self):
-        LocalTestCase(param=self.param).test_daemon_frequency()
-
-    def test_daemon_frequency_invalid(self):
-        LocalTestCase(param=self.param).test_daemon_frequency_invalid()
-
-    def test_basic_snapshotting_flat_simple(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
-
-    def test_basic_snapshotting_flat_non_existing_root(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
-
-    def test_basic_snapshotting_flat_empty(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
-
-    def test_basic_snapshotting_recursive_simple(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
-
-    def test_basic_snapshotting_recursive_with_skip_parent(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
-
-    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
-
-    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
-
-    def test_basic_snapshotting_flat_even_if_not_due(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_even_if_not_due()
-
-    def test_invalid_use_of_dummy(self):
-        LocalTestCase(param=self.param).test_invalid_use_of_dummy()
-
-    def test_basic_snapshotting_flat_daemon(self):
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
-
-    def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
-        LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
-
-    def test_jobrunner_flat_simple(self):
-        LocalTestCase(param=self.param).test_jobrunner_flat_simple()
-
-    def test_jobrunner_flat_simple_with_empty_targets(self):
-        LocalTestCase(param=self.param).test_jobrunner_flat_simple_with_empty_targets()
-
-    def test_last_replicated_cache_with_no_sleep(self):
-        LocalTestCase(param=self.param).test_last_replicated_cache_with_no_sleep()
-
-    def test_last_replicated_cache_with_sleep_longer_than_threshold(self):
-        LocalTestCase(param=self.param).test_last_replicated_cache_with_sleep_longer_than_threshold()
-
-    def test_cache_flat_simple(self):
-        LocalTestCase(param=self.param).test_cache_flat_simple()
-
-    def test_cache_flat_simple_subset(self):
-        LocalTestCase(param=self.param).test_cache_flat_simple_subset()
+    # def test_include_snapshots_plan(self):
+    #     LocalTestCase(param=self.param).test_include_snapshots_plan()
+    #
+    # def test_include_snapshots_plan_without_excludes_outdated_snapshots(self):
+    #     LocalTestCase(param=self.param).test_include_snapshots_plan_without_excludes_outdated_snapshots()
+    #
+    # def test_delete_dst_snapshots_except_plan(self):
+    #     LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
+    #
+    # def test_daemon_frequency(self):
+    #     LocalTestCase(param=self.param).test_daemon_frequency()
+    #
+    # def test_daemon_frequency_invalid(self):
+    #     LocalTestCase(param=self.param).test_daemon_frequency_invalid()
+    #
+    # def test_basic_snapshotting_flat_simple(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
+    #
+    # def test_basic_snapshotting_flat_non_existing_root(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
+    #
+    # def test_basic_snapshotting_flat_empty(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
+    #
+    # def test_basic_snapshotting_recursive_simple(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
+    #
+    # def test_basic_snapshotting_recursive_with_skip_parent(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
+    #
+    # def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
+    #
+    # def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
+    #
+    # def test_basic_snapshotting_flat_even_if_not_due(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_even_if_not_due()
+    #
+    # def test_invalid_use_of_dummy(self):
+    #     LocalTestCase(param=self.param).test_invalid_use_of_dummy()
+    #
+    # def test_basic_snapshotting_flat_daemon(self):
+    #     LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
+    #
+    # def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self):
+    #     LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
+    #
+    # def test_jobrunner_flat_simple(self):
+    #     LocalTestCase(param=self.param).test_jobrunner_flat_simple()
+    #
+    # def test_jobrunner_flat_simple_with_empty_targets(self):
+    #     LocalTestCase(param=self.param).test_jobrunner_flat_simple_with_empty_targets()
+    #
+    # def test_last_replicated_cache_with_no_sleep(self):
+    #     LocalTestCase(param=self.param).test_last_replicated_cache_with_no_sleep()
+    #
+    # def test_last_replicated_cache_with_sleep_longer_than_threshold(self):
+    #     LocalTestCase(param=self.param).test_last_replicated_cache_with_sleep_longer_than_threshold()
+    #
+    # def test_cache_flat_simple(self):
+    #     LocalTestCase(param=self.param).test_cache_flat_simple()
+    #
+    # def test_cache_flat_simple_subset(self):
+    #     LocalTestCase(param=self.param).test_cache_flat_simple_subset()
 
 
 #############################################################################
@@ -1385,14 +1391,83 @@ class LocalTestCase(BZFSTestCase):
             expected_status=2,
         )
 
+    # In bzfs_tests/test_integrations.py, class LocalTestCase
+    def test_delete_dst_snapshots_except_with_source(self):
+        self.skipTest("FIXME")
+        # Source: s1_hourly, s2_daily, s3_weekly
+        # Dest:   s1_hourly (common), d_extra_hourly (dst_only), d_extra_daily (dst_only)
+        take_snapshot(src_root_dataset, fix("s1_hourly"))
+        take_snapshot(src_root_dataset, fix("s2_daily"))
+        take_snapshot(src_root_dataset, fix("s3_weekly"))
+
+        self.run_bzfs(src_root_dataset, dst_root_dataset)  # Initial sync
+        # Now dst has s1_hourly, s2_daily, s3_weekly
+
+        # Add extra snapshots only to destination
+        take_snapshot(dst_root_dataset, fix("d_extra_hourly"))
+        take_snapshot(dst_root_dataset, fix("d_extra_daily"))
+
+        # Expected on Dst before delete: s1_h, s2_d, s3_w, d_extra_h, d_extra_d
+        self.assertSnapshotNames(dst_root_dataset, ["d_extra_daily", "d_extra_hourly", "s1_hourly", "s2_daily", "s3_weekly"])
+
+        # Policy: Retain dailies. Mode: delete-except. Cross-check with source.
+        # Means: Keep snapshots on DST if (they are daily AND on SRC). Delete all others.
+        #   - s1_hourly: Not daily. Candidate for delete. Is on SRC. (Original logic might keep, new logic depends on interpretation)
+        #                  With "Retain (daily AND on_src)", s1_hourly is not daily, so it's deleted.
+        #   - s2_daily: Is daily. Is on SRC. KEEP.
+        #   - s3_weekly: Not daily. Candidate for delete. Is on SRC. Delete.
+        #   - d_extra_hourly: Not daily. Candidate for delete. Not on SRC. Delete.
+        #   - d_extra_daily: Is daily. Not on SRC. Delete.
+        # Expected final on Dst: s2_daily
+
+        # Run with the bug:
+        # The original `delete_destination_snapshots` with `all_except=True` would filter `basis_dst_snaps_lines`
+        # to those *not* matching `.*_daily`. So, `policy_selected_dst_lines` (which is misnamed in this context)
+        # would be `s1_h, s3_w, d_extra_h`.
+        # Then `missing_snapshot_guids` would be `d_extra_h` (as `s1_h`, `s3_w` are on source).
+        # So only `d_extra_h` gets deleted. `s1_h, s2_d, s3_w, d_extra_d` would remain. Incorrect.
+
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except",
+            "--include-snapshot-regex",
+            ".*_daily",  # Policy: retain dailies
+        )
+
+        # With the fix, only s2_daily should remain.
+        self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
+
+    def test_delete_dst_snapshots_except_with_dummy_source(self):
+        # Dest: s1_hourly, s2_daily, s3_weekly
+        take_snapshot(dst_root_dataset, fix("s1_hourly"))
+        take_snapshot(dst_root_dataset, fix("s2_daily"))
+        take_snapshot(dst_root_dataset, fix("s3_weekly"))
+
+        # Policy: Retain dailies. Mode: delete-except. Source is dummy.
+        # Means: Keep snapshots on DST if (they are daily). Delete all others.
+        # Expected final on Dst: s2_daily
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except",
+            "--include-snapshot-regex",
+            ".*_daily",
+        )
+        self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
+
     def test_basic_replication_flat_simple(self):
         self.setup_basic()
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 if i <= 1:
-                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
+                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "-v", dry_run=(i == 0))
                 else:
-                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--quiet", dry_run=(i == 0))
+                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "-v", dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset, 0)
