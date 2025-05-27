@@ -3614,9 +3614,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     # print(f"output_snapshots:" + ','.join(output_snapshots))
                     self.assertListEqual(expected_results, output_snapshots)
                     all_to_snapshots = []
-                    for incr_flag, start_snapshot, end_snapshot, num_snapshots, to_snapshots in steps:
+                    for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:
                         self.assertIn(incr_flag, ["-I", "-i"])
-                        self.assertGreaterEqual(num_snapshots, 1)
                         self.assertGreaterEqual(len(to_snapshots), 1)
                         all_to_snapshots += [snapshot[snapshot.find("@") + 1 :] for snapshot in to_snapshots]
                     self.assertListEqual(expected_results[1:], all_to_snapshots)
@@ -3629,7 +3628,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
-        for incr_flag, start_snapshot, end_snapshot, num_snapshots, to_snapshots in steps:
+        for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
             end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
             start = input_snapshots.index(start_snapshot)

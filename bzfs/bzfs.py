@@ -1685,10 +1685,10 @@ class Params:
 
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = getenv_int("min_pipe_transfer_size", 1024 * 1024)
-        self.max_datasets_per_batch_on_list_snaps = getenv_int("max_datasets_per_batch_on_list_snaps", 1024)
-        self.max_datasets_per_minibatch_on_list_snaps = getenv_int("max_datasets_per_minibatch_on_list_snaps", -1)
+        self.max_datasets_per_batch_on_list_snaps: int = getenv_int("max_datasets_per_batch_on_list_snaps", 1024)
+        self.max_datasets_per_minibatch_on_list_snaps: int = getenv_int("max_datasets_per_minibatch_on_list_snaps", -1)
         self.max_snapshots_per_minibatch_on_delete_snaps = getenv_int("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
-        self.dedicated_tcp_connection_per_zfs_send = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
+        self.dedicated_tcp_connection_per_zfs_send: bool = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
         self.threads: Tuple[int, bool] = args.threads
         timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
         self.timeout_nanos: Optional[int] = timeout_nanos
@@ -3335,7 +3335,7 @@ class Job:
             recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
             if p.no_stream:
                 # skip intermediate snapshots
-                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, 1, [latest_src_snapshot])]
+                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, [latest_src_snapshot])]
             else:
                 # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
                 # a series of -i/-I send/receive steps that skip excluded src snapshots.
@@ -3347,14 +3347,15 @@ class Job:
                 self.estimate_send_size(
                     src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
                 )
-                for i, (incr_flag, from_snap, to_snap, num_snapshots, to_snapshots) in enumerate(steps_todo)
+                for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo)
             ]
             total_size = sum(estimate_send_sizes)
-            total_num = sum(num_snapshots for incr_flag, from_snap, to_snap, num_snapshots, to_snapshots in steps_todo)
+            total_num = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
             done_size = 0
             done_num = 0
-            for i, (incr_flag, from_snap, to_snap, curr_num_snapshots, to_snapshots) in enumerate(steps_todo):
+            for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo):
                 assert len(to_snapshots) >= 1
+                curr_num_snapshots = len(to_snapshots)
                 curr_size = estimate_send_sizes[i]
                 humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
                 human_num = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
@@ -4272,7 +4273,7 @@ class Job:
 
     def incremental_send_steps_wrapper(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
-    ) -> List[Tuple[str, str, str, int, List[str]]]:
+    ) -> List[Tuple[str, str, str, List[str]]]:
         force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True)
         # force_convert_I_to_i == True implies that:
         # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
@@ -4282,7 +4283,7 @@ class Job:
     @staticmethod
     def incremental_send_steps(
         src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool, force_convert_I_to_i: bool
-    ) -> List[Tuple[str, str, str, int, List[str]]]:
+    ) -> List[Tuple[str, str, str, List[str]]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
         (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
@@ -4307,12 +4308,12 @@ class Job:
             # print(f"{label} {self.send_step_to_str(step)}")
             is_not_resume = len(steps) > 0 or not is_resume
             if i - start > 1 and (not force_convert_I_to_i) and "@" in src_snapshots[start] and is_not_resume:
-                steps.append(("-I", src_snapshots[start], src_snapshots[i], i - start, src_snapshots[start + 1 : i + 1]))
+                steps.append(("-I", src_snapshots[start], src_snapshots[i], src_snapshots[start + 1 : i + 1]))
             elif "@" in src_snapshots[start] and is_not_resume:
                 for j in range(start, i):  # convert -I step to -i steps
-                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1], 1, src_snapshots[j + 1 : j + 2]))
+                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1], src_snapshots[j + 1 : j + 2]))
             else:  # it's a bookmark src or zfs send -t; convert -I step to -i step followed by zero or more -i/-I steps
-                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1], 1, src_snapshots[start + 1 : start + 2]))
+                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1], src_snapshots[start + 1 : start + 2]))
                 i = start + 1
             return i - 1
 
@@ -4339,7 +4340,7 @@ class Job:
                         i += 1
                     if i < n:
                         assert start != i
-                        step = ("-i", src_snapshots[start], src_snapshots[i], 1, src_snapshots[i : i + 1])
+                        step = ("-i", src_snapshots[start], src_snapshots[i], src_snapshots[i : i + 1])
                         # print(f"r1 {self.send_step_to_str(step)}")
                         steps.append(step)
                         i -= 1
@@ -4355,7 +4356,7 @@ class Job:
         return steps
 
     @staticmethod
-    def send_step_to_str(step: Tuple[str, str, str, int]) -> str:
+    def send_step_to_str(step: Tuple[str, str, str]) -> str:
         # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
         return str(step)
 
