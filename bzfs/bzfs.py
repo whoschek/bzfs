@@ -6039,7 +6039,7 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
     i = lst.index("-w") if "-w" in lst else -1
     if i >= 0:
         i += 1
-        if i == len(lst) or (lst[i] != "none" and lst[i] != "compress"):
+        if i == len(lst) or (lst[i] != "none" and lst[i] != "compress" and lst[i] != "crypto"):
             lst.insert(i, "none")
     return lst
 
