@@ -46,9 +46,12 @@ from logging import Logger
 from subprocess import DEVNULL, PIPE
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
+# constants:
 prog_name = "bzfs_jobrunner"
+bzfs_prog_name = "bzfs"
 src_magic_substitution_token = "^SRC_HOST"
 dst_magic_substitution_token = "^DST_HOST"
+die_status = 3
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -148,7 +151,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--create-src-snapshots", action="store_true",
         help="Take snapshots on the selected source hosts as necessary. Typically, this command should be called by a "
              "program (or cron job) running on each src host.\n\n")
-    parser.add_argument(
+    parser.add_argument(  # `choices` are deprecated; use --replicate without argument instead
         "--replicate", choices=["pull", "push"], default=None, const="pull", nargs="?", metavar="",
         help="Replicate snapshots from the selected source hosts to the selected destinations hosts as necessary. For pull "
              "mode (recommended), this command should be called by a program (or cron job) running on each dst "
@@ -371,10 +374,6 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
 
 #############################################################################
-# constants:
-die_status = 3
-
-
 def load_module(progname: str) -> types.ModuleType:
 
     def die(msg: str, exit_code=die_status) -> None:
@@ -403,7 +402,7 @@ def load_module(progname: str) -> types.ModuleType:
 
 
 # constants:
-bzfs: types.ModuleType = load_module("bzfs")
+bzfs: types.ModuleType = load_module(bzfs_prog_name)
 assert die_status == bzfs.die_status
 sep = ","
 
@@ -534,7 +533,7 @@ class Job:
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
-                subjobs[subjob_name] = ["bzfs"] + opts
+                subjobs[subjob_name] = [bzfs_prog_name] + opts
 
             if args.replicate:
                 j = 0
@@ -544,6 +543,7 @@ class Job:
                         dst_snapshot_plan, set(targets), lhn, src_host, dst_hostname, marker, job_id, job_run + npad()
                     )
                     if len(opts) > 0:
+                        opts += [f"--daemon-frequency={args.daemon_replication_frequency}"]
                         opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
                         opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
                         opts += unknown_args + ["--"]
@@ -553,8 +553,7 @@ class Job:
                         ]
                         dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                         if len(dataset_pairs) > 0:
-                            daemon_opts = [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                            subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + daemon_opts + opts + flatten(dataset_pairs)
+                            subjobs[subjob_name + jpad(j, marker)] = [bzfs_prog_name] + opts + flatten(dataset_pairs)
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -572,7 +571,7 @@ class Job:
                 opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
-                subjobs[subjob_name] = ["bzfs"] + opts
+                subjobs[subjob_name] = [bzfs_prog_name] + opts
 
             if args.prune_src_snapshots:
                 prune_src(["--delete-dst-snapshots"], src_snapshot_plan, "prune-src-snapshots")
@@ -603,16 +602,16 @@ class Job:
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
-                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts + flatten(dataset_pairs)
+                        subjobs[subjob_name + jpad(j, marker)] = [bzfs_prog_name] + opts + flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
             def monitor_snapshots_opts(tag: str, monitor_plan: Dict, logsuffix: str) -> List[str]:
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
-                opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
                 opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
                 opts += [f"--log-file-infix={sep}{job_id}"]
                 opts += [f"--log-file-suffix={sep}{job_run}{npad()}{logsuffix}{sep}"]
+                opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
                 return opts
 
             def build_monitor_plan(monitor_plan: Dict, snapshot_plan: Dict, cycles_prefix: str) -> Dict:
@@ -644,7 +643,7 @@ class Job:
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
-                subjobs[subjob_name] = ["bzfs"] + opts
+                subjobs[subjob_name] = [bzfs_prog_name] + opts
 
             if args.monitor_dst_snapshots:
                 j = 0
@@ -662,7 +661,7 @@ class Job:
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
-                        subjobs[subjob_name + jpad(j, marker)] = ["bzfs"] + opts + flatten(dataset_pairs)
+                        subjobs[subjob_name + jpad(j, marker)] = [bzfs_prog_name] + opts + flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -718,7 +717,6 @@ class Job:
         assert len(root_dataset_pairs) > 0
         unknown_dst_pools = {zpool(dst) for src, dst in root_dataset_pairs}
         unknown_dst_pools = unknown_dst_pools.difference(self.cache_known_dst_pools)
-        self.cache_known_dst_pools.update(unknown_dst_pools)  # union
 
         # Here we treat a zpool as existing if the zpool isn't local, aka if it isn't prefixed with "-:". A remote host
         # will raise an appropriate error if it turns out that the remote zpool doesn't actually exist.
@@ -731,6 +729,7 @@ class Job:
             self.cache_existing_dst_pools.update(existing_pools)  # union
         unknown_remote_dst_pools = unknown_dst_pools.difference(unknown_local_dst_pools)
         self.cache_existing_dst_pools.update(unknown_remote_dst_pools)  # union
+        self.cache_known_dst_pools.update(unknown_dst_pools)  # union
         results = []
         for src, dst in root_dataset_pairs:
             if zpool(dst) in self.cache_existing_dst_pools:

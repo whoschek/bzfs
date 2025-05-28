@@ -78,9 +78,8 @@ from os import stat as os_stat, utime as os_utime
 from os.path import exists as os_path_exists, join as os_path_join
 from pathlib import Path
 from subprocess import CalledProcessError, DEVNULL, PIPE
-from typing import Deque, Dict, Iterable, Iterator, List, Literal, NamedTuple, Sequence, Set, Tuple
-from typing import Any, Callable, Final, Generator, Generic, Optional
-from typing import ItemsView, TextIO, TypeVar, Union
+from typing import Any, Callable, Deque, Dict, Iterable, Iterator, List, Literal, NamedTuple, Optional, Sequence, Set, Tuple
+from typing import Final, Generator, Generic, ItemsView, TextIO, TypeVar, Union
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -1239,7 +1238,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--timeout", default=None, metavar="DURATION",
         # help="Exit the program (or current task with non-zero --daemon-lifetime) with an error after this much time has "
-        #      "elapsed. Default is to never timeout. Examples: '600 seconds', '90 minutes', '1000years'\n\n")
+        #      "elapsed. Default is to never timeout. Examples: '600 seconds', '90 minutes', '10years'\n\n")
         help=argparse.SUPPRESS)
     threads_default = 100  # percent
     parser.add_argument(
@@ -2153,7 +2152,7 @@ class MonitorSnapshotsConfig:
                             critical_millis += 0 if critical_millis <= 0 else cycles * duration_milliseconds
                             warning_millis = unixtime_infinity_secs if warning_millis <= 0 else warning_millis
                             critical_millis = unixtime_infinity_secs if critical_millis <= 0 else critical_millis
-                            alert_config = AlertConfig(alert_type.capitalize(), warning_millis, critical_millis)
+                            alert_config = AlertConfig(sys.intern(alert_type.capitalize()), warning_millis, critical_millis)
                             if alert_type == "latest":
                                 if not self.no_latest_check:
                                     alert_latest = alert_config
@@ -2404,7 +2403,7 @@ class Job:
                 round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, config.anchors)
                 for duration_amount, duration_unit in config.suffix_durations.values()
             ),
-            default=curr_datetime + timedelta(days=1000 * 365),  # infinity
+            default=curr_datetime + timedelta(days=10 * 365),  # infinity
         )
         offset: timedelta = next_snapshotting_event_dt - datetime.now(config.tz)
         offset_nanos = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
@@ -5232,7 +5231,7 @@ class Job:
                                     break  # ... if so we aren't quite done yet with this subtree
                                 if node.parent is None:
                                     break  # we've reached the root node
-                                node = node.parent  # recurse up the tree
+                                node = node.parent  # recurse up the tree to propagate completion upward
                                 node.mut.pending -= 1  # mark subtree as completed
                                 assert node.mut.pending >= 0
 
@@ -5875,7 +5874,7 @@ class ProgressReporter:
                 is_resetting = self.is_resetting
                 self.is_resetting = False
             if is_pausing:
-                next_update_nanos = time.monotonic_ns() + 1000 * 365 * 86400 * 1_000_000_000  # infinity
+                next_update_nanos = time.monotonic_ns() + 10 * 365 * 86400 * 1_000_000_000  # infinity
             if is_resetting:
                 sent_bytes, last_status_len = 0, 0
                 num_lines, num_readables = 0, 0
@@ -6132,9 +6131,8 @@ def has_duplicates(sorted_list: List) -> bool:
 
 
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
-    """Returns True if the name matches at least one of the include regexes but none of the exclude regexes;
-    else False. A regex that starts with a `!` is a negation - the regex matches if the regex without the
-    `!` prefix does not match."""
+    """Returns True if the name matches at least one of the include regexes but none of the exclude regexes; else False.
+    A regex that starts with a `!` is a negation - the regex matches if the regex without the `!` prefix does not match."""
     for regex, is_negation in exclude_regexes:
         is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
         if is_negation:
@@ -6258,13 +6256,13 @@ def xappend(lst, *items) -> List[str]:
     return lst
 
 
-def human_readable_bytes(size: float, separator=" ", precision=None, long=False) -> str:
-    sign = "-" if size < 0 else ""
-    s = abs(size)
+def human_readable_bytes(num_bytes: float, separator=" ", precision=None, long=False) -> str:
+    sign = "-" if num_bytes < 0 else ""
+    s = abs(num_bytes)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
     n = len(units) - 1
     i = 0
-    long_form = f" ({size} bytes)" if long else ""
+    long_form = f" ({num_bytes} bytes)" if long else ""
     while s >= 1024 and i < n:
         s /= 1024
         i += 1
@@ -6408,6 +6406,7 @@ def set_last_modification_time(path: str, unixtime_in_secs: Union[int, Tuple[int
 
 
 def drain(iterable: Iterable) -> None:
+    """Consumes all items in the iterable, effectively draining it."""
     deque(iterable, maxlen=0)
 
 
