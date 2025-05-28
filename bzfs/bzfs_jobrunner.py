@@ -73,7 +73,7 @@ b) from a single source host to one or more destination hosts (pull or push or p
 
 c) from multiple source hosts to a single destination host (pull or push or pull-push mode), or
 
-d) from N source hosts to M destination hosts (pull or push or pull-push mode, N can be large, M=2 or M=3 are typical
+d) from N source hosts to M destination hosts (pull or push or pull-push mode, N and M can be large, M=2 or M=3 are typical
 geo-replication factors)
 
 You can run this program on a single third-party host and have that talk to all source hosts and destination hosts, which is
@@ -474,7 +474,7 @@ class Job:
             or all(src_magic_substitution_token in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys()),
             "Multiple sources must not write to the same destination dataset",
         )
-        if args.jitter:  # randomize host order to avoid thundering herd problems in large distributed systems
+        if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
         job_id = sanitize(args.job_id)
@@ -753,7 +753,7 @@ class Job:
         num_intervals = 1 + len(subjobs) if jitter else len(subjobs)
         interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
         assert interval_nanos >= 0
-        if jitter:  # randomize job start time to avoid thundering herd problems in large distributed systems
+        if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
             sleep_nanos = random.randint(0, interval_nanos)
             log.info("Jitter: Delaying job start time by sleeping for %s ...", bzfs.human_readable_duration(sleep_nanos))
             time.sleep(sleep_nanos / 1_000_000_000)  # seconds

@@ -3970,7 +3970,7 @@ class Job:
                     )
             resultset.update(snapshots)  # union
         snapshots = [line for line in basis_snapshots if "#" in line or (line in resultset) != all_except]
-        is_debug = p.log.isEnabledFor(log_debug)
+        is_debug = log.isEnabledFor(log_debug)
         for snapshot in snapshots:
             is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return snapshots

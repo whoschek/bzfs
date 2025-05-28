@@ -16,8 +16,8 @@
 
 """
 Emits a bash completion script such that typing bzfs <TAB> or bzfs_jobrunner <TAB> will auto-complete all flags.
-Usage: ./shell-completion-generator.py > /etc/bash_completion.d/bzfs-shell-completion
-or     ./shell-completion-generator.py > ~/.bash_completion.d/bzfs-shell-completion
+Usage: ./bash_completion.d/shell-completion-generator.py > /etc/bash_completion.d/bzfs-shell-completion
+or     ./bash_completion.d/shell-completion-generator.py > ~/.bash_completion.d/bzfs-shell-completion
 """
 
 import argparse

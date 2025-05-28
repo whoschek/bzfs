@@ -45,8 +45,8 @@ or
 
 c) from multiple source hosts to a single destination host (pull or push or pull-push mode), or
 
-d) from N source hosts to M destination hosts (pull or push or pull-push mode, N can be large,
-M=2 or M=3 are typical geo-replication factors)
+d) from N source hosts to M destination hosts (pull or push or pull-push mode, N and M can be
+large, M=2 or M=3 are typical geo-replication factors)
 
 You can run this program on a single third-party host and have that talk to all source hosts and
 destination hosts, which is convenient for basic use cases and for testing. However, typically, a

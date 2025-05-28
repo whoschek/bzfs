@@ -230,7 +230,7 @@ workers = "100%"  # aka max_workers = 1.0 * num_cores
 # workers = "200%"  # aka max_workers = 2.0 * num_cores
 # workers = "25%"  # aka max_workers = 0.25 * num_cores
 # workers = 4  # aka max_workers = 4
-# workers = 1  # aka max_workers = 1  # for debugging, run jobs sequentially
+# workers = 1  # aka max_workers = 1  # for easier debugging, run jobs sequentially
 
 
 # Reduce bandwidth spikes by evenly spreading the start of worker jobs over this much time; 0 disables this feature:

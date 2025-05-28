@@ -58,13 +58,13 @@ Distribution = "https://pypi.org/project/bzfs"
 
 [project.optional-dependencies]
 dev = [  # for development only
-  "black>=25.1",
-  "coverage>=7.6",
-  "mypy>=1.13",
-  "argparse-manpage==4.6",
+  "black>=25.1",  # see https://github.com/psf/black
+  "coverage>=7.6",  # see https://github.com/nedbat/coveragepy
+  "mypy>=1.13",  # see https://github.com/python/mypy
+  "argparse-manpage==4.6",  # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
-  "genbadge[coverage]==1.1.2",
-  "pre-commit==4.2",
+  "genbadge[coverage]==1.1.2",  # see https://smarie.github.io/python-genbadge/
+  "pre-commit==4.2",  # see https://github.com/pre-commit/pre-commit
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
 # cd ~/devel/bzfs
