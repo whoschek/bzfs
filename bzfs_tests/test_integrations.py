@@ -1408,7 +1408,7 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
 
-    def test_delete_dst_snapshots_except_with_dummy_source(self):
+    def test_delete_dst_snapshots_except_with_dummy_source0(self):
         take_snapshot(dst_root_dataset, fix("s1_hourly"))
         take_snapshot(dst_root_dataset, fix("s2_daily"))
         take_snapshot(dst_root_dataset, fix("s3_weekly"))
@@ -1424,6 +1424,79 @@ class LocalTestCase(BZFSTestCase):
             "--include-snapshot-regex=.*_daily",  # Policy: retain dailies
         )
         self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
+
+    def test_delete_dst_snapshots_except_with_dummy_source1(self):
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:01:00_secondly")
+        time.sleep(1.1)
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:02:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_millisecondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-02_00:00:00_millisecondly")
+        time.sleep(1.1)
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-03_00:00:00_millisecondly")
+        self.assertSnapshotNameRegexes(
+            src_root_dataset,
+            [
+                "s1.*_millisecondly",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_millisecondly",
+                "s1.*_millisecondly",
+            ],
+        )
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except-plan",
+            str({"s1": {"onsite": {"secondly": 1, "millisecondly": 1}}}),
+        )
+        self.assertSnapshotNames(
+            src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly", "s1_onsite_2024-01-03_00:00:00_millisecondly"]
+        )
+
+    def test_delete_dst_snapshots_except_with_dummy_source2(self):
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:01:00_secondly")
+        time.sleep(1.1)
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:02:00_secondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_millisecondly")
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-02_00:00:00_millisecondly")
+        time.sleep(1.1)
+        take_snapshot(src_root_dataset, "s1_onsite_2024-01-03_00:00:00_millisecondly")
+        self.assertSnapshotNameRegexes(
+            src_root_dataset,
+            [
+                "s1.*_millisecondly",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_millisecondly",
+                "s1.*_millisecondly",
+            ],
+        )
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            src_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--include-snapshot-regex=.*_(secondly|millisecondly)",  # i.e. retain all snapshots, is unioned with plan below
+            "--delete-dst-snapshots-except-plan",
+            str({"s1": {"onsite": {"secondly": 1, "millisecondly": 1}}}),
+        )
+        self.assertSnapshotNameRegexes(
+            src_root_dataset,
+            [
+                "s1.*_millisecondly",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_secondly",
+                "s1.*_millisecondly",
+                "s1.*_millisecondly",
+            ],
+        )
 
     def test_basic_replication_flat_simple(self):
         self.setup_basic()
