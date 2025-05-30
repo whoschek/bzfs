@@ -367,6 +367,44 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         mock_run.assert_not_called()  # No local pools to check
         self.job.log.warning.assert_not_called()
 
+    @patch("subprocess.run")
+    def unexpected_error_on_local_dst_pool_check_raises_exception(self, mock_subprocess_run):
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
+            returncode=2,
+            stdout="",
+            stderr="Permission denied",
+        )
+        with self.assertRaises(SystemExit) as cm:
+            self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:nonexistent_pool/dataset")])
+        self.assertEqual(3, cm.exception.code)
+        self.assertIn("Unexpected error 2 on checking for existing local dst pools: Permission denied", str(cm.exception))
+
+    @patch("subprocess.run")
+    def local_dst_pool_not_found_skips_dataset(self, mock_subprocess_run):
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
+            returncode=1,
+            stdout="",
+            stderr="dataset not found",
+        )
+        result = self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:nonexistent_pool/dataset")])
+        self.assertEqual([], result)
+        self.job.log.warning.assert_called_once_with(
+            "Skipping dst dataset for which local dst pool does not exist: -:nonexistent_pool/dataset"
+        )
+
+    @patch("subprocess.run")
+    def local_dst_pool_exists_processes_dataset(self, mock_subprocess_run):
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
+            returncode=0,
+            stdout="existing_pool/dataset\n",
+            stderr="",
+        )
+        result = self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:existing_pool/dataset")])
+        self.assertEqual([("src/dataset", "-:existing_pool/dataset")], result)
+
 
 #############################################################################
 class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):

@@ -724,10 +724,10 @@ class Job:
         if len(unknown_local_dst_pools) > 0:  # `zfs list` if local
             existing_pools = {pool[len("-:") :] for pool in unknown_local_dst_pools}
             cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + sorted(existing_pools)
-            prc = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
-            if prc.returncode not in (0, 1):  # 1 means dataset not found
-                self.die(f"Unexpected error {prc.returncode} on checking for existing local dst pools: {prc.stderr.strip()}")
-            existing_pools = set(prc.stdout.splitlines())
+            sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
+            if sp.returncode not in (0, 1):  # 1 means dataset not found
+                self.die(f"Unexpected error {sp.returncode} on checking for existing local dst pools: {sp.stderr.strip()}")
+            existing_pools = set(sp.stdout.splitlines())
             existing_pools = {"-:" + pool for pool in existing_pools}
             self.cache_existing_dst_pools.update(existing_pools)  # union
         unknown_remote_dst_pools = unknown_dst_pools.difference(unknown_local_dst_pools)
