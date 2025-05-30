@@ -25,6 +25,7 @@ will be completely removed in a future release.
 - [bzfs_jobrunner] There's no need anymore to specify an argument to `--replicate`. For the time being the corresponding mode
 argument remains available in deprecated status but is actually ignored. The argument will be removed in a future release.
 - [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
+- [bzfs] Also support `--delete-dst-snapshots-except` if source is not a dummy.
 - [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old flag
 will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in a future
 release.
@@ -38,6 +39,8 @@ deprecated status, but the old name will be completely removed in a future relea
 - [bzfs] [perf] Create bookmarks in parallel.
 - [bzfs] Fixed progress reporting when using 'pv' with French locale and other international locales.
 - [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
+- Added [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs) link to an AI that can answer
+questions about the bzfs codebase.
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.11.0...v1.12.0
 
 ## [1.11.0] - March 26, 2025
