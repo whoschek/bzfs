@@ -3301,6 +3301,7 @@ class Job:
                     self.num_snapshots_replicated += 1
                 self.create_zfs_bookmarks(src, src_dataset, [oldest_src_snapshot])
                 self.zfs_set(set_opts, dst, dst_dataset)
+                dry_run_no_send = dry_run_no_send or p.dry_run
                 retry_count = 0
 
         # endif not latest_common_src_snapshot
