@@ -1949,7 +1949,7 @@ class TestCurrentDateTime(unittest.TestCase):
 
     def test_iana_timezone(self):
         if sys.version_info < (3, 9):
-            self.skipTest("ZoneInfo required python >= 3.9")
+            self.skipTest("ZoneInfo requires python >= 3.9")
         from zoneinfo import ZoneInfo  # requires python >= 3.9
 
         tz_spec = "Asia/Tokyo"
@@ -2380,6 +2380,45 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Next boundary = 2024 + 2 = 2026.
         expected = datetime(2026, 6, 30, 2, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_timezone_preservation(self):
+        if sys.version_info < (3, 9):
+            self.skipTest("ZoneInfo requires python >= 3.9")
+        from zoneinfo import ZoneInfo  # requires python >= 3.9
+
+        # Create a timezone with DST
+        tz = ZoneInfo("America/New_York")
+
+        # Create a timestamp just before DST transition
+        dt_before_dst = datetime(2023, 3, 12, 1, 30, 0, tzinfo=tz)  # Just before "spring forward"
+
+        # Create custom anchors
+        custom = bzfs.PeriodAnchors(daily_hour=3, daily_minute=0, daily_second=0)
+
+        # Round to next daily anchor - should be 3:00 same day, respecting DST change
+        result = round_datetime_up_to_duration_multiple(dt_before_dst, 1, "daily", anchors=custom)
+
+        # Expected result should be 3:00 AM after DST shift (which is actually 4:00 AM in wall clock time)
+        # If timezone is handled incorrectly, this will be off by an hour
+        expected = datetime(2023, 3, 12, 3, 0, 0, tzinfo=tz)
+
+        # This will fail if the timezone handling is incorrect
+        self.assertEqual(expected.hour, result.hour)
+        self.assertEqual(expected.tzinfo, result.tzinfo)
+        self.assertEqual(expected.utcoffset(), result.utcoffset())
+
+    def test_monthly_anchor_invalid_day(self):
+        # Custom monthly: snapshots every month on the 31st
+        custom = bzfs.PeriodAnchors(monthly_monthday=31, monthly_hour=12, monthly_minute=0, monthly_second=0)
+
+        # February case - should round to Feb 28th (or 29th in leap year) but instead will incorrectly handle this
+        dt = datetime(2025, 2, 15, 10, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom)
+
+        # This will fail if the function tries to create an invalid date (Feb 31st)
+        # or incorrectly jumps to March 31st instead of using Feb 28th
+        expected = datetime(2025, 2, 28, 12, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
 
