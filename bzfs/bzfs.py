@@ -3980,7 +3980,7 @@ class Job:
                         snapshots, include_snapshot_times=timerange, include_snapshot_ranks=_filter.options
                     )
             resultset.update(snapshots)  # union
-        snapshots = [line for line in basis_snapshots if "#" in line or (line in resultset) != all_except]
+        snapshots = [line for line in basis_snapshots if "#" in line or ((line in resultset) != all_except)]
         is_debug = log.isEnabledFor(log_debug)
         for snapshot in snapshots:
             is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -5489,7 +5489,6 @@ class Job:
         op = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
-            return False  # make type checker happy
         except SystemExit as e:
             log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
