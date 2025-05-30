@@ -4022,6 +4022,42 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/zoo"))
         self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
 
+    def test_delete_empty_dst_datasets_with_excluded_children_having_snapshots(self):
+        # Setup:
+        # dst_root/parent       (policy-selected, no snapshots itself)
+        # dst_root/parent/child_excluded (policy-excluded, HAS snapshots)
+        # dst_root/parent/child_included (policy-selected, no snapshots)
+        parent_ds = create_filesystem(dst_root_dataset, "parent")
+        child_excluded_ds = create_filesystem(parent_ds, "child_excluded")
+        child_included_ds = create_filesystem(parent_ds, "child_included")
+        take_snapshot(child_excluded_ds, fix("snap_on_excluded"))
+
+        # Check initial state
+        self.assertTrue(dataset_exists(parent_ds))
+        self.assertTrue(dataset_exists(child_excluded_ds))
+        self.assertTrue(dataset_exists(child_included_ds))
+        self.assertEqual(1, len(snapshots(child_excluded_ds)))
+
+        # Run bzfs: delete empty datasets, exclude child_excluded from management
+        # Source is dummy, so all selected datasets on dst are candidates for deletion if empty.
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            dst_root_dataset,
+            "--recursive",
+            "--skip-replication",
+            "--delete-empty-dst-datasets",  # The command under test
+            "--include-dataset-regex=parent",  # Selects parent and parent/child_included
+            "--include-dataset-regex=parent/child_included",  # Explicitly
+            "--exclude-dataset-regex=parent/child_excluded",  # Exclude this one
+        )
+
+        # Expected: parent_ds should NOT be deleted because its child_excluded (though not managed) has a snapshot.
+        self.assertTrue(
+            dataset_exists(parent_ds), "Parent dataset should not be deleted as its excluded child has snapshots"
+        )
+        self.assertTrue(dataset_exists(child_excluded_ds), "Excluded child with snapshot should remain")
+        self.assertFalse(dataset_exists(child_included_ds), "Included empty child should be deleted")
+
     def test_delete_dst_snapshots_nothing_todo(self):
         self.setup_basic_with_recursive_replication_done()
         self.assertTrue(dataset_exists(src_root_dataset + "/foo/b"))
