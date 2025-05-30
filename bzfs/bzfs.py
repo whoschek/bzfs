@@ -6414,6 +6414,9 @@ def set_last_modification_time_safe(path: str, unixtime_in_secs: Union[int, Tupl
 
 
 def set_last_modification_time(path: str, unixtime_in_secs: Union[int, Tuple[int, int]], if_more_recent=False) -> None:
+    """if_more_recent=True is a concurrency control mechanism that prevents us from overwriting a newer (monotonically
+    increasing) snapshots_changed value (which is a UTC Unix time in integer seconds) that might have been written to the
+    cache file by a different, more up-to-date bzfs process."""
     unixtime_in_secs = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
     if not os_path_exists(path):
         with open(path, "a"):
