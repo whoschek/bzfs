@@ -273,6 +273,42 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(re.error):
             bzfs.compile_regexes(["fo$o"], re_suffix)
 
+    def test_filter_lines(self):
+        input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
+
+        # Empty input_set
+        self.assertListEqual([], bzfs.filter_lines(input_list, set()))
+
+        # input_set with some matching elements
+        self.assertListEqual(["apple\tred", "cherry\tred"], bzfs.filter_lines(input_list, {"apple", "cherry"}))
+
+        # input_set with no matching elements
+        self.assertListEqual([], bzfs.filter_lines(input_list, {"grape", "kiwi"}))
+
+        # Empty input_list
+        self.assertListEqual([], bzfs.filter_lines([], {"apple"}))
+
+        # input_set with all elements matching
+        self.assertListEqual(input_list, bzfs.filter_lines(input_list, {"apple", "banana", "cherry", "date"}))
+
+    def test_filter_lines_except(self):
+        input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
+
+        # Empty input_set
+        self.assertListEqual(input_list, bzfs.filter_lines_except(input_list, set()))
+
+        # input_set with some elements to exclude
+        self.assertListEqual(["banana\tyellow", "date\tbrown"], bzfs.filter_lines_except(input_list, {"apple", "cherry"}))
+
+        # input_set with no elements present in the input_list (exclude nothing new)
+        self.assertListEqual(input_list, bzfs.filter_lines_except(input_list, {"grape", "kiwi"}))
+
+        # Empty input_list
+        self.assertListEqual([], bzfs.filter_lines_except([], {"apple"}))
+
+        # input_set with all elements from input_list (exclude all)
+        self.assertListEqual([], bzfs.filter_lines_except(input_list, {"apple", "banana", "cherry", "date"}))
+
     def test_fix_send_recv_opts(self):
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.fix_recv_opts(["-n"]))

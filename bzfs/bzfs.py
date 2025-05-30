@@ -2726,15 +2726,26 @@ class Job:
                     return False
                 dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
                 num_dst_snaps_with_guids = len(dst_snaps_with_guids)
+                basis_dst_snaps_with_guids = dst_snaps_with_guids.copy()
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="#", new="@", count=1)  # treat bookmarks as snapshots
-                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, all_except=p.delete_dst_snapshots_except)
+                all_except = p.delete_dst_snapshots_except
+                if p.delete_dst_snapshots_except and not self.is_dummy(src):
+                    all_except = False
+                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, all_except=all_except)
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="@", new="#", count=1)  # restore pre-filtering bookmark state
                 if filter_needs_creation_time:
                     dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
-                missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
-                missing_snapshot_tags = self.filter_lines(dst_snaps_with_guids, missing_snapshot_guids)
+                    basis_dst_snaps_with_guids = cut(field=2, lines=basis_dst_snaps_with_guids)
+                if p.delete_dst_snapshots_except and not self.is_dummy(src):
+                    # Retain dst snapshots that match snapshot filter policy AND are on src dataset, aka
+                    # Delete dst snapshots except snapshots that match snapshot filter policy AND are on src dataset
+                    missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).intersection(src_snaps_with_guids)
+                    missing_snapshot_tags = filter_lines_except(basis_dst_snaps_with_guids, missing_snapshot_guids)
+                else:
+                    missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
+                    missing_snapshot_tags = filter_lines(dst_snaps_with_guids, missing_snapshot_guids)
                 separator = "#" if p.delete_dst_bookmarks else "@"
                 missing_snapshot_tags = cut(field=2, separator=separator, lines=missing_snapshot_tags)
                 if p.delete_dst_bookmarks:
@@ -4060,13 +4071,6 @@ class Job:
             else:
                 is_debug and log.debug("Excluding b/c property regex: %s", propname)
         return results
-
-    @staticmethod
-    def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
-        """For each line in input_list, includes the line if input_set contains the first column field of that line."""
-        if len(input_set) == 0:
-            return []
-        return [line for line in input_list if line[0 : line.index("\t")] in input_set]
 
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
         if len(snapshot_tags) == 0:
@@ -6084,6 +6088,20 @@ def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List
         return [line[line.index(separator) + 1 :] for line in lines]
     else:
         raise ValueError("Unsupported parameter value")
+
+
+def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
+    """For each line in input_list, includes the line if input_set contains the first column field of that line."""
+    if len(input_set) == 0:
+        return []
+    return [line for line in input_list if line[0 : line.index("\t")] in input_set]
+
+
+def filter_lines_except(input_list: List[str], input_set: Set[str]) -> List[str]:
+    """For each line in input_list, includes the line if input_set does not contain the first column field of that line."""
+    if len(input_set) == 0:
+        return input_list
+    return [line for line in input_list if line[0 : line.index("\t")] not in input_set]
 
 
 def has_siblings(sorted_datasets: List[str]) -> bool:

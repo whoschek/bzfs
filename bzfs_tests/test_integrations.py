@@ -1385,6 +1385,46 @@ class LocalTestCase(BZFSTestCase):
             expected_status=2,
         )
 
+    def test_delete_dst_snapshots_except_with_source(self):
+        take_snapshot(src_root_dataset, fix("s1_hourly"))
+        take_snapshot(src_root_dataset, fix("s2_daily"))
+        take_snapshot(src_root_dataset, fix("s3_weekly"))
+        self.run_bzfs(src_root_dataset, dst_root_dataset)
+
+        # Add extra snapshots only to destination
+        take_snapshot(dst_root_dataset, fix("d_extra_hourly"))
+        take_snapshot(dst_root_dataset, fix("d_extra_daily"))
+        self.assertSnapshotNames(dst_root_dataset, ["d_extra_daily", "d_extra_hourly", "s1_hourly", "s2_daily", "s3_weekly"])
+
+        # Policy: Retain dailies. Mode: delete-except. Check with source.
+        # Means: Keep snapshots on DST if (they are daily AND on SRC). Delete all others.
+        self.run_bzfs(
+            src_root_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except",
+            "--include-snapshot-regex=.*_daily",  # Policy: retain dailies
+        )
+        self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
+
+    def test_delete_dst_snapshots_except_with_dummy_source(self):
+        take_snapshot(dst_root_dataset, fix("s1_hourly"))
+        take_snapshot(dst_root_dataset, fix("s2_daily"))
+        take_snapshot(dst_root_dataset, fix("s3_weekly"))
+
+        # Policy: Retain dailies. Mode: delete-except. Source is dummy.
+        # Means: Keep snapshots on DST if (they are daily). Delete all others.
+        self.run_bzfs(
+            bzfs.dummy_dataset,
+            dst_root_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            "--delete-dst-snapshots-except",
+            "--include-snapshot-regex=.*_daily",  # Policy: retain dailies
+        )
+        self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
+
     def test_basic_replication_flat_simple(self):
         self.setup_basic()
         for i in range(0, 3):
@@ -4185,6 +4225,24 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_root_dataset, ["s2"])
         self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
+
+    def test_delete_dst_snapshots_recursive_with_dummy(self):
+        self.setup_basic_with_recursive_replication_done()
+        for i in range(0, 2):
+            self.run_bzfs(
+                bzfs.dummy_dataset,
+                dst_root_dataset,
+                "--recursive",
+                "--skip-replication",
+                "--delete-dst-snapshots",
+                dry_run=(i == 0),
+            )
+            if i == 0:
+                self.assertSnapshots(dst_root_dataset, 3, "s")
+            else:
+                self.assertSnapshots(dst_root_dataset, 0)
+                self.assertSnapshots(dst_root_dataset + "/foo", 0)
+                self.assertSnapshots(dst_root_dataset + "/foo/a", 0)
 
     def test_delete_dst_snapshots_recursive_with_delete_empty_dst_datasets_with_dummy(self):
         self.setup_basic_with_recursive_replication_done()
