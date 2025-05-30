@@ -36,7 +36,7 @@ from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
 from typing import Dict, List, Optional, Set, Tuple
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs import bzfs
 from bzfs.bzfs import find_match, getenv_any, Remote, round_datetime_up_to_duration_multiple, PeriodAnchors
@@ -1440,6 +1440,53 @@ class TestHelperFunctions(unittest.TestCase):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(config.dont_warn)
         self.assertTrue(config.dont_crit)
+
+    @patch("bzfs.bzfs.Job.itr_ssh_cmd_parallel")
+    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel):
+        job = bzfs.Job()
+        job.params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        self.mock_remote = MagicMock(spec=bzfs.Remote)  # spec helps catch calls to non-existent attrs
+
+        mock_itr_parallel.return_value = [  # normal input
+            [
+                "12345\tdataset/valid1",
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345, "dataset/valid2": 789}, results)
+
+        # Simulate output from a failing 'zfs list' command captured on its stdout.
+        # This could be partial output, or error messages if zfs wrote them to stdout.
+        mock_itr_parallel.return_value = [
+            [
+                "12345\tdataset/valid1",
+                "ERROR: zfs command failed for dataset/invalid2",  # Line without tab, from stdout
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345}, results)
+
+        mock_itr_parallel.return_value = [
+            [
+                "12345\tdataset/valid1",
+                "123\t",  # empty dataset
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345}, results)
+
+        mock_itr_parallel.return_value = [
+            [
+                "12345\tdataset/valid1",
+                "\tfoo",  # missing timestamp
+                "789\tdataset/valid2",
+            ]
+        ]
+        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
+        self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
 
 
 #############################################################################

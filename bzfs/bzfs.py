@@ -4752,13 +4752,14 @@ class Job:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
         results = {}
         for lines in self.itr_ssh_cmd_parallel(
-            remote,
-            [(cmd, datasets)],
-            lambda _cmd, batch: try_zfs_list_command(_cmd, batch),
-            ordered=False,
+            remote, [(cmd, datasets)], lambda _cmd, batch: try_zfs_list_command(_cmd, batch), ordered=False
         ):
             for line in lines:
+                if "\t" not in line:
+                    break  # partial output from failing 'zfs list' command
                 snapshots_changed, dataset = line.split("\t", 1)
+                if not dataset:
+                    break  # partial output from failing 'zfs list' command
                 if snapshots_changed == "-" or not snapshots_changed:
                     snapshots_changed = "0"
                 results[dataset] = int(snapshots_changed)
