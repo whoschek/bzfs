@@ -1423,6 +1423,12 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.MonitorSnapshotsConfig(args, params)
 
         args = bzfs.argument_parser().parse_args(
+            ["src", "dst", "--monitor-snapshots=" + plan({"latest": {"warning": "2 millisxxxxx"}})]
+        )
+        with self.assertRaises(SystemExit):
+            bzfs.MonitorSnapshotsConfig(args, params)
+
+        args = bzfs.argument_parser().parse_args(
             [
                 "src",
                 "dst",

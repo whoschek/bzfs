@@ -2137,14 +2137,15 @@ class MonitorSnapshotsConfig:
                         critical_millis: int = 0
                         cycles: int = 1
                         for kind, value in alert_dict.items():
+                            context = args.monitor_snapshots
                             if kind == "warning":
-                                warning_millis = max(0, parse_duration_to_milliseconds(str(value)))
+                                warning_millis = max(0, parse_duration_to_milliseconds(str(value), context=context))
                             elif kind == "critical":
-                                critical_millis = max(0, parse_duration_to_milliseconds(str(value)))
+                                critical_millis = max(0, parse_duration_to_milliseconds(str(value), context=context))
                             elif kind == "cycles":
                                 cycles = max(0, int(value))
                             else:
-                                die(f"{m}'{kind}' must be 'warning', 'critical' or 'cycles' within {args.monitor_snapshots}")
+                                die(f"{m}'{kind}' must be 'warning', 'critical' or 'cycles' within {context}")
                         if warning_millis > 0 or critical_millis > 0:
                             duration_amount, duration_unit = xperiods.suffix_to_duration1(label.suffix)
                             duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
@@ -6339,7 +6340,7 @@ def percent(number: int, total: int) -> str:
     return f"{number}={'NaN' if total == 0 else human_readable_float(100 * number / total)}%"
 
 
-def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "") -> int:
+def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
     unit_milliseconds = {
         "milliseconds": 1,
         "millis": 1,
@@ -6357,7 +6358,10 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "") -> int
         r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
     )
     if not match:
-        raise ValueError(f"Invalid duration format: {duration}")
+        if context:
+            die(f"Invalid duration format: {duration} within {context}")
+        else:
+            raise ValueError(f"Invalid duration format: {duration}")
     quantity = int(match.group(1))
     unit = match.group(2)
     return quantity * unit_milliseconds[unit]
