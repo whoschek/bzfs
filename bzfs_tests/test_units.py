@@ -1599,7 +1599,7 @@ class TestParseDatasetLocator(unittest.TestCase):
             "host_2024-01-02",
             "03:04:56:tank1/foo/bar",
             "user@host_2024-01-02",
-            False,
+            True,
         )
         self.run_test("user@localhost:tank1/foo/bar", "user", "localhost", "tank1/foo/bar", "user@localhost", False)
         self.run_test("host.local:tank1/foo/bar", "", "host.local", "tank1/foo/bar", "host.local", False)
