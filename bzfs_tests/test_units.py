@@ -3469,8 +3469,8 @@ class TestConnectionPool(unittest.TestCase):
             cpool.return_connection(None)
         with self.assertRaises(AssertionError):
             cpool.return_connection(conn3)
-        with self.assertRaises(AssertionError):
-            cpool.return_connection(conn3)
+        cpool.shutdown("bar")
+        cpool.return_connection(conn3)
 
     def test_multiple_TCP_connections(self):
         capacity = 2
@@ -3840,9 +3840,8 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.pq.push(2)
         self.pq.remove(2)
         self.assertEqual(self.pq._lst, [1, 3])
-        with self.assertRaises(AssertionError):
-            self.pq.remove(0, assert_is_contained=True)
-        self.pq.remove(1, assert_is_contained=True)
+        self.assertFalse(self.pq.remove(0))
+        self.assertTrue(self.pq.remove(1))
         self.assertEqual(self.pq._lst, [3])
 
     def test_remove_nonexistent_element(self):
@@ -3851,8 +3850,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.pq.push(2)
 
         # Attempt to remove an element that doesn't exist (should raise IndexError)
-        with self.assertRaises(IndexError):
-            self.pq.remove(4)
+        self.assertFalse(self.pq.remove(4))
 
     def test_peek(self):
         self.pq.push(3)

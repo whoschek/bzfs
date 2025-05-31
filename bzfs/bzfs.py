@@ -5728,17 +5728,18 @@ class ConnectionPool:
         assert conn is not None
         with self._lock:
             # update priority = remove conn from queue, increment priority, finally reinsert updated conn into queue
-            self.priority_queue.remove(conn, assert_is_contained=True)
-            conn.increment_free(1)
-            self.last_modified += 1
-            conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
-            self.priority_queue.push(conn)
+            if self.priority_queue.remove(conn):  # conn is not contained only if ConnectionPool.shutdown() was called
+                conn.increment_free(1)
+                self.last_modified += 1
+                conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
+                self.priority_queue.push(conn)
 
     def shutdown(self, msg_prefix: str) -> None:
-        if self.remote.reuse_ssh_connection:
-            for conn in self.priority_queue:
-                conn.shutdown(msg_prefix, self.remote.params)
-        self.priority_queue.clear()
+        with self._lock:
+            if self.remote.reuse_ssh_connection:
+                for conn in self.priority_queue:
+                    conn.shutdown(msg_prefix, self.remote.params)
+            self.priority_queue.clear()
 
     def __repr__(self) -> str:
         with self._lock:
@@ -7706,13 +7707,14 @@ class SmallPriorityQueue(Generic[T]):
         """Returns the smallest (or largest if reverse == True) element without removing it."""
         return self._lst[-1] if self._reverse else self._lst[0]
 
-    def remove(self, element: T, assert_is_contained: bool = False) -> None:
-        """Removes the first occurrence of the specified element from the queue. The element must be contained."""
+    def remove(self, element: T) -> bool:
+        """Removes the first occurrence of the specified element from the queue; returns True if the element was contained"""
         lst = self._lst
         i = bisect.bisect_left(lst, element)
-        if assert_is_contained:
-            assert i < len(lst) and lst[i] == element
-        del lst[i]  # do not underestimate the real-world performance of an optimized memmove()
+        is_contained = i < len(lst) and lst[i] == element
+        if is_contained:
+            del lst[i]  # is an optimized memmove()
+        return is_contained
 
     def __len__(self) -> int:
         return len(self._lst)
