@@ -69,6 +69,8 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
+import types
 from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from dataclasses import dataclass, field
@@ -79,7 +81,8 @@ from os.path import exists as os_path_exists, join as os_path_join
 from pathlib import Path
 from subprocess import CalledProcessError, DEVNULL, PIPE
 from typing import Any, Callable, Deque, Dict, Iterable, Iterator, List, Literal, NamedTuple, Optional, Sequence, Set, Tuple
-from typing import Final, Generator, Generic, ItemsView, TextIO, TypeVar, Union
+from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
+
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -2240,25 +2243,26 @@ class Job:
         self.injection_lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
-    def cleanup(self):
+    def shutdown(self):
         """Exit any multiplexed ssh sessions that may be leftover."""
         cache_items = self.remote_conf_cache.values()
         for i, cache_item in enumerate(cache_items):
             cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
     def terminate(self, old_term_handler, except_current_process=False):
-        try:
-            self.cleanup()
-        finally:
+        def post_shutdown():
             signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
             terminate_process_subtree(except_current_process=except_current_process)
+
+        with xfinally(post_shutdown):
+            self.shutdown()
 
     def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
         assert isinstance(self.error_injection_triggers, dict)
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
         log_params = LogParams(args)
-        try:
+        with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
             log = get_logger(log_params, args, log)
             log.info("%s", "Log file is: " + log_params.log_file)
             aux_args = []
@@ -2290,7 +2294,7 @@ class Job:
                             msg += lock_file
                             log.error("%s", msg)
                             die(msg, still_running_status)
-                        try:
+                        with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # avoid accumulating stale lockfiles
                             # On CTRL-C and SIGTERM, send signal also to descendant processes to also terminate descendants
                             old_term_handler = signal.getsignal(signal.SIGTERM)
                             signal.signal(signal.SIGTERM, lambda sig, f: self.terminate(old_term_handler))
@@ -2304,11 +2308,7 @@ class Job:
                                 signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
                                 signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
                             for i in range(2 if self.max_command_line_bytes else 1):
-                                self.cleanup()
-                        finally:
-                            Path(lock_file).unlink(missing_ok=True)  # avoid accumulation of stale lock files
-        finally:
-            reset_logger()
+                                self.shutdown()
 
     def run_tasks(self) -> None:
         def log_error_on_exit(error, status_code):
@@ -2324,7 +2324,7 @@ class Job:
             self.validate_once()
             self.replication_start_time_nanos = time.monotonic_ns()
             self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
-            try:
+            with xfinally(lambda: self.progress_reporter.stop()):
                 daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
                 while True:  # loop for daemon mode
                     self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
@@ -2356,8 +2356,6 @@ class Job:
                             self.append_exception(e, "task", task_description)
                     if not self.sleep_until_next_daemon_iteration(daemon_stoptime_nanos):
                         break
-            finally:
-                self.progress_reporter.stop()
             if not p.skip_replication:
                 self.print_replication_stats(self.replication_start_time_nanos)
             error_count = self.all_exceptions_count
@@ -7829,6 +7827,58 @@ class SynchronizedDict(Generic[K, V]):
     def items(self) -> ItemsView[K, V]:
         with self._lock:
             return self._dict.copy().items()
+
+
+#############################################################################
+class _XFinally(contextlib.AbstractContextManager):
+    def __init__(self, cleanup: Callable[[], None]) -> None:
+        self._cleanup = cleanup  # Zero‑argument callable executed after the `with` block exits.
+
+    def __exit__(
+        self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[types.TracebackType]
+    ) -> bool:
+        try:
+            self._cleanup()
+        except BaseException as cleanup_exc:
+            if exc is None:
+                raise  # No main error --> propagate cleanup error normally
+            # Both failed
+            # if sys.version_info >= (3, 11):
+            #     raise ExceptionGroup("main error and cleanup error", [exc, cleanup_exc]) from None
+            # <= 3.10: attach so it shows up in traceback but doesn't mask
+            exc.__context__ = cleanup_exc
+            return False  # reraise original exception
+        return False  # propagate main exception if any
+
+
+def xfinally(cleanup: Callable[[], None]) -> _XFinally:
+    """Usage: with xfinally(lambda: cleanup()): ...
+    Returns a context manager that guarantees that cleanup() runs on exit and guarantees any error in cleanup() will never
+    mask an exception raised earlier inside the body of the `with` block, while still surfacing both problems when possible.
+
+    Problem it solves
+    -----------------
+    A naive ``try ... finally`` may lose the original exception:
+
+        try:
+            work()
+        finally:
+            cleanup()  # <-- if this raises an exception, it replaces the real error!
+
+    `_XFinally` preserves exception priority:
+
+    * Body raises, cleanup succeeds --> original body exception is re‑raised.
+    * Body raises, cleanup also raises --> re‑raises body exception; cleanup exception is linked via ``__context__``.
+    * Body succeeds, cleanup raises --> cleanup exception propagates normally.
+
+    Example:
+    -------
+    >>> with xfinally(reset_logger):   # doctest: +SKIP
+    ...     run_tasks()
+
+    The single *with* line replaces verbose ``try/except/finally`` boilerplate while preserving full error information.
+    """
+    return _XFinally(cleanup)
 
 
 #############################################################################

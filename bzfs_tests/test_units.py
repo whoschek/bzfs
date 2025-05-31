@@ -49,6 +49,7 @@ is_functional_test = test_mode == "functional"  # run most tests but only in a s
 
 def suite():
     suite = unittest.TestSuite()
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestXFinally))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTerminateProcessSubtree))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSubprocessRun))
@@ -82,6 +83,54 @@ def suite():
 
 def argparser_parse_args(args: List[str]) -> argparse.Namespace:
     return bzfs.argument_parser().parse_args(args + ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")])
+
+
+#############################################################################
+class TestXFinally(unittest.TestCase):
+
+    def test_xfinally_executes_cleanup_on_success(self):
+        cleanup = MagicMock()
+        with bzfs.xfinally(cleanup):
+            pass
+        cleanup.assert_called_once()
+
+    def test_xfinally_executes_cleanup_on_exception(self):
+        cleanup = MagicMock()
+        with self.assertRaises(ValueError):
+            with bzfs.xfinally(cleanup):
+                raise ValueError("Body error")
+        cleanup.assert_called_once()
+
+    def test_xfinally_propagates_cleanup_exception(self):
+        cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
+        with self.assertRaises(RuntimeError) as cm:
+            with bzfs.xfinally(cleanup):
+                pass
+        self.assertEqual("Cleanup error", str(cm.exception))
+        cleanup.assert_called_once()
+
+    # @unittest.skipIf(sys.version_info != (3, 10), "Requires Python <= 3.10")
+    @unittest.skipIf(sys.version_info < (3, 10), "Requires Python >= 3.10")
+    def test_xfinally_handles_cleanup_exception_python_3_10_or_lower(self):
+        cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
+        with self.assertRaises(ValueError) as cm:
+            with bzfs.xfinally(cleanup):
+                raise ValueError("Body error")
+        self.assertIsInstance(cm.exception.__context__, RuntimeError)
+        self.assertEqual("Cleanup error", str(cm.exception.__context__))
+        cleanup.assert_called_once()
+
+    @unittest.skipIf(not sys.version_info >= (3, 11), "Requires Python >= 3.11")
+    def test_xfinally_handles_cleanup_exception_python_3_11_or_higher(self):
+        self.skipTest("disabled until python 3.11 is the minimum supported")
+        cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
+        with self.assertRaises(ExceptionGroup) as cm:
+            with bzfs.xfinally(cleanup):
+                raise ValueError("Body error")
+        self.assertEqual(2, len(cm.exception.exceptions))
+        self.assertIsInstance(cm.exception.exceptions[0], ValueError)
+        self.assertIsInstance(cm.exception.exceptions[1], RuntimeError)
+        cleanup.assert_called_once()
 
 
 #############################################################################
