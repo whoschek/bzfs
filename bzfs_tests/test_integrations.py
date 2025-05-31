@@ -4968,8 +4968,8 @@ class LocalTestCase(BZFSTestCase):
         self.run_bzfs(
             src_dataset,
             dst_dataset,
-            retries=1,
             "--retry-min-sleep-secs=0.2", # Small delay for the test
+            retries=1,
             expected_status=0 # Expecting success on retry
         )
 

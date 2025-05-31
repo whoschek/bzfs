@@ -21,20 +21,21 @@ or     ./bash_completion.d/shell-completion-generator.py > ~/.bash_completion.d/
 """
 
 import argparse
-import importlib
+import importlib # Kept for now, though direct usage in harvest is replaced
 import sys
 from pathlib import Path
 from typing import Set, Dict
 
 programs = ("bzfs", "bzfs_jobrunner")
 
-# add dir so `import bzfs` works when run from repo
-BASE = (Path(__file__).resolve().parent / ".." / "bzfs").resolve()
-sys.path.insert(0, str(BASE))
+# add repo root to sys.path so `from bzfs import bzfs` works
+REPO_ROOT = (Path(__file__).resolve().parent / "..").resolve()
+sys.path.insert(0, str(REPO_ROOT))
 
 
 def version_line() -> str:
-    import bzfs
+    from bzfs import bzfs # Imports bzfs/bzfs.py as a module
+    # argparse is already imported at the top level
 
     for act in bzfs.argument_parser()._actions:
         if isinstance(act, argparse._VersionAction):
@@ -42,12 +43,23 @@ def version_line() -> str:
     raise RuntimeError("Version not found in bzfs argument parser.")
 
 
-def harvest(module: str):
+def harvest(module_name_str: str): # module_name_str is "bzfs" or "bzfs_jobrunner"
     """Returns (safe_name, flag_set, value_tokens_map) for a program based on its argument_parser() specs."""
-    parser = importlib.import_module(module).argument_parser()
-    safe = module.replace("-", "_")
+    # argparse, Set, Dict are already imported at the top level
+
     flags: Set[str] = set()
     vals: Dict[str, str] = {}
+
+    if module_name_str == "bzfs":
+        from bzfs import bzfs as program_module
+    elif module_name_str == "bzfs_jobrunner":
+        from bzfs import bzfs_jobrunner as program_module
+    else:
+        raise ValueError(f"Unknown program for completion: {module_name_str}")
+
+    parser = program_module.argument_parser()
+    safe = module_name_str.replace("-", "_") # Use original module_name_str for safe name
+
     for act in parser._actions:
         if act.help is argparse.SUPPRESS:
             continue
