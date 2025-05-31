@@ -77,6 +77,7 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestModuleImports))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
@@ -4511,6 +4512,67 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
 
 #############################################################################
+class TestJobRunZfsSendReceive(unittest.TestCase):
+    def tearDown(self):
+        patch.stopall()
+
+    def test_resumable_receive_interruption_retry_behavior(self):
+        # 1. Set up mocks
+        mock_subprocess_run = patch('bzfs.bzfs.subprocess_run').start()
+        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+            returncode=1,
+            cmd="zfs recv ...",
+            stderr="cannot receive new filesystem stream: checksum mismatch or incomplete stream\nPartially received snapshot is saved"
+        )
+
+        patch('bzfs.bzfs.Job.check_zfs_dataset_busy', return_value=True).start() # True means not busy
+        patch('bzfs.bzfs.Job._recv_resume_token', return_value=(None, [], [])).start()
+        patch('bzfs.bzfs.Job.estimate_send_size', return_value=0).start()
+        mock_is_program_available = patch('bzfs.bzfs.Job.is_program_available').start()
+        mock_is_program_available.return_value = True
+        patch('bzfs.bzfs.Job.refresh_ssh_connection_if_necessary', return_value=None).start()
+        patch('bzfs.bzfs.Job.squote', side_effect=lambda x: x).start()
+        patch('bzfs.bzfs.Job.dquote', side_effect=lambda x: x).start()
+        patch('bzfs.bzfs.Job.prepare_zfs_send_receive', return_value=("send_cmd_str", "local_pipe_str", "recv_cmd_str")).start()
+
+        # Mock ConnectionPools
+        mock_connection_pools = MagicMock()
+        patch('bzfs.bzfs.ConnectionPools', return_value=mock_connection_pools).start()
+
+
+        # 2. Create minimal Params and Job instances
+        p = bzfs.Params(argparser_parse_args(args=["src_dataset_locator", "dst_dataset_locator"]))
+        p.src.is_nonlocal = False
+        p.dst.is_nonlocal = False
+        p.connection_pools = {"src": MagicMock(), "dst": MagicMock()}
+        p.src.ssh_user_host = ""
+        p.dst.ssh_user_host = ""
+        p.src.location = "src"
+        p.dst.location = "dst"
+        p.log_params = MagicMock()
+        p.log_params.pv_log_file = "dummy_pv.log"
+
+
+        job = bzfs.Job()
+        job.params = p
+        job.src_properties = {"src_dataset": {"recordsize": 131072}}
+        job.progress_reporter = MagicMock()
+        job.is_first_replication_task = bzfs.SynchronizedBool(True)
+        job.snap_create_config = MagicMock()
+        job.snap_create_config.enabled = False
+
+
+        # 3. Call job.run_zfs_send_receive ("src_dataset", "dst_dataset", ["send_cmd"], ["recv_cmd"], 0, "0B", False, "test_error")
+        # 4. Before the fix
+        with self.assertRaises(bzfs.RetryableError) as cm:
+            job.run_zfs_send_receive("src_dataset", "dst_dataset", ["send_cmd"], ["recv_cmd"], 0, "0B", False, "test_error")
+        self.assertTrue(cm.exception.no_sleep)
+
+        # Monkeypatching and "after fix" assertions removed as per request.
+        # The test now only verifies the original behavior.
+
+
+#############################################################################
 class TestPerformance(unittest.TestCase):
 
     def test_close_fds(self):
@@ -4537,3 +4599,15 @@ def stop_on_failure_subtest(**params):
         yield
     except AssertionError:
         raise AssertionError(f"SubTest failed with parameters: {params}")
+
+
+#############################################################################
+class TestModuleImports(unittest.TestCase):
+    def test_auxiliary_functions_are_importable_and_callable(self):
+        from bzfs import bzfs
+        from bzfs import bzfs_utils
+        from bzfs import bzfs_jobrunner
+
+        self.assertEqual(bzfs._bzfs_aux_test(), "bzfs_ok")
+        self.assertEqual(bzfs_utils._utils_aux_test(), "utils_ok")
+        self.assertEqual(bzfs_jobrunner._jobrunner_aux_test(), "jobrunner_ok")

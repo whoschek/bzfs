@@ -4934,6 +4934,48 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
+    def test_replication_with_resumable_receive_interruption(self):
+        if not is_zpool_recv_resume_feature_enabled_or_active():
+            self.skipTest("ZFS resumable receive feature is not available or active.")
+
+        self.setup_basic()
+        src_dataset = src_root_dataset + "/test_resume"
+        dst_dataset = dst_root_dataset + "/test_resume"
+        create_filesystem(src_dataset)
+
+        # Ensure snapshot is large enough to trigger interruption by inject_dst_pipe_fail
+        # inject_dst_pipe_fail_kbytes is in KiB, convert to bytes
+        snapshot_size_bytes = bzfs.inject_dst_pipe_fail_kbytes * 1024 * 2
+        if snapshot_size_bytes == 0: # If inject_dst_pipe_fail_kbytes is 0, dd count would be 0.
+            snapshot_size_bytes = 2 * 1024 * 1024 # Default to 2MB if not set, to ensure dd runs.
+
+        self.create_resumable_snapshots(1, 2, size_in_bytes=snapshot_size_bytes) # Creates s1
+
+        # First Run (Simulate Interruption)
+        self.run_bzfs(
+            src_dataset,
+            dst_dataset,
+            inject_params={"inject_dst_pipe_fail": True},
+            retries=0,
+            expected_status=1 # Expecting failure due to interruption and no retries
+        )
+
+        self.assertFalse(dataset_exists(dst_dataset + "@" + fix("s1")), "Snapshot s1 should not exist on destination after interruption.")
+        self.assert_receive_resume_token(dst_dataset, exists=True)
+
+        # Second Run (Test Retry with Fix)
+        # The fix is in bzfs.py, so this run should demonstrate the corrected retry behavior (delay then resume)
+        self.run_bzfs(
+            src_dataset,
+            dst_dataset,
+            retries=1,
+            "--retry-min-sleep-secs=0.2", # Small delay for the test
+            expected_status=0 # Expecting success on retry
+        )
+
+        self.assertTrue(dataset_exists(dst_dataset + "@" + fix("s1")), "Snapshot s1 should exist on destination after successful retry.")
+        self.assert_receive_resume_token(dst_dataset, exists=False)
+
     def test_jobrunner_flat_simple(self):
         def run_jobrunner(*args, **kwargs):
             self.run_bzfs(
