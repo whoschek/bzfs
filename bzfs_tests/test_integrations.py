@@ -1445,6 +1445,7 @@ class LocalTestCase(BZFSTestCase):
                 "s1.*_millisecondly",
             ],
         )
+        time.sleep(1.1)
         self.run_bzfs(
             bzfs.dummy_dataset,
             src_root_dataset,
@@ -1477,6 +1478,7 @@ class LocalTestCase(BZFSTestCase):
                 "s1.*_millisecondly",
             ],
         )
+        time.sleep(1.1)
         self.run_bzfs(
             bzfs.dummy_dataset,
             src_root_dataset,

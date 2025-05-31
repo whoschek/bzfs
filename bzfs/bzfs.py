@@ -7684,8 +7684,7 @@ class SmallPriorityQueue(Generic[T]):
     indexed priority queue via https://github.com/nvictus/pqdict but, to avoid an external dependency, is actually
     implemented using a simple yet effective binary search-based sorted list that can handle updates to the priority of
     elements that are already contained in the queue, via removal of the element, followed by update of the element, followed
-    by (re)insertion. Do not underestimate the real-world performance of an optimized memmove() and optimized binary search.
-    Note: Duplicate elements (if any) are maintained in their order of insertion relative to other duplicates."""
+    by (re)insertion. Duplicate elements (if any) are maintained in their order of insertion relative to other duplicates."""
 
     def __init__(self, reverse: bool = False) -> None:
         self._lst: List[T] = []
