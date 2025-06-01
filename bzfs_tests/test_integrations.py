@@ -1426,6 +1426,8 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
 
     def test_delete_dst_snapshots_except_with_dummy_source1(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("Destroying snapshots on src needs extra permissions")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:01:00_secondly")
         time.sleep(1.1)
@@ -1445,7 +1447,6 @@ class LocalTestCase(BZFSTestCase):
                 "s1.*_millisecondly",
             ],
         )
-        time.sleep(1.1)
         self.run_bzfs(
             bzfs.dummy_dataset,
             src_root_dataset,
@@ -1459,6 +1460,8 @@ class LocalTestCase(BZFSTestCase):
         )
 
     def test_delete_dst_snapshots_except_with_dummy_source2(self):
+        if self.is_no_privilege_elevation():
+            self.skipTest("Destroying snapshots on src needs extra permissions")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:01:00_secondly")
         time.sleep(1.1)
@@ -1478,7 +1481,6 @@ class LocalTestCase(BZFSTestCase):
                 "s1.*_millisecondly",
             ],
         )
-        time.sleep(1.1)
         self.run_bzfs(
             bzfs.dummy_dataset,
             src_root_dataset,
