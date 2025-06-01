@@ -27,6 +27,8 @@ update_readme.sh. Simply run that script whenever you change or add ArgumentPars
 
 import argparse
 import contextlib
+import importlib.machinery
+import importlib.util
 import logging
 import os
 import pwd
@@ -44,10 +46,9 @@ from logging import Logger
 from subprocess import DEVNULL, PIPE
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from . import bzfs
-
 # constants:
 prog_name = "bzfs_jobrunner"
+bzfs_prog_name = "bzfs"
 src_magic_substitution_token = "^SRC_HOST"
 dst_magic_substitution_token = "^DST_HOST"
 die_status = 3
@@ -373,7 +374,35 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
 
 #############################################################################
+def load_module(progname: str) -> types.ModuleType:
+
+    def die(msg: str, exit_code=die_status) -> None:
+        logging.getLogger(prog_name).error("%s", msg)
+        ex = SystemExit(msg)
+        ex.code = exit_code
+        raise ex
+
+    prog_path = shutil.which(progname)
+    if not prog_path:
+        sibling_prog_path = os.path.join(os.path.dirname(sys.argv[0]), progname)
+        prog_path = sibling_prog_path if os.path.isfile(sibling_prog_path) else prog_path
+    if not prog_path:
+        die(f"{progname}: command not found on PATH")
+    prog_path = os.path.realpath(prog_path)  # resolve symlink, if any
+    loader = importlib.machinery.SourceFileLoader(progname, prog_path)
+    spec = importlib.util.spec_from_loader(progname, loader)
+    module = importlib.util.module_from_spec(spec)
+    if spec.name not in sys.modules:
+        sys.modules[spec.name] = module
+    loader.exec_module(module)
+    if hasattr(module, "run_main"):
+        return module
+    else:  # It's a wrapper script as `bzfs` was installed as a package by 'pip install'; load that installed package
+        return importlib.import_module(f"{progname}.{progname}")
+
+
 # constants:
+bzfs: types.ModuleType = load_module(bzfs_prog_name)
 assert die_status == bzfs.die_status
 sep = ","
 
@@ -1055,6 +1084,3 @@ def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused
 #############################################################################
 if __name__ == "__main__":
     main()
-
-def _jobrunner_aux_test() -> str:
-    return "jobrunner_ok"

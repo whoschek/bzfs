@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import platform
-import os
 import re
 import subprocess
 from typing import Iterable, List
@@ -341,15 +340,5 @@ def is_solaris_zfs() -> bool:
 
 
 def run_cmd(*params, splitlines=True):
-    cmd_list = list(params[0])
-
-    if sudo_cmd and cmd_list[0:len(sudo_cmd)] == sudo_cmd:
-        current_path = os.environ.get('PATH', '')
-        # Ensure we don't add 'env PATH=...' if it's already there from a previous manipulation
-        # (though this function is simple and won't call itself recursively with sudo_cmd)
-        if not (len(cmd_list) > len(sudo_cmd) and cmd_list[len(sudo_cmd)] == "env" and cmd_list[len(sudo_cmd)+1].startswith("PATH=")):
-             modified_cmd = sudo_cmd + ["env", f"PATH={current_path}"] + cmd_list[len(sudo_cmd):]
-             params = (modified_cmd,) + params[1:]
-
     stdout = subprocess.run(*params, stdout=subprocess.PIPE, text=True, check=True).stdout
     return stdout.splitlines() if splitlines else stdout[0:-1]  # omit trailing newline char

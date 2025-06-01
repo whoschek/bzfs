@@ -8,4 +8,16 @@ fi
 echo "TMPDIR: $TMPDIR"
 
 cd $(realpath $(dirname "$0"))
-python3 -m unittest discover -s bzfs_tests -p "test_*.py"
+
+FAILFAST_OPT=""
+# If CI env var is not set (local run), enable failfast
+if [ -z "$CI" ]; then
+  echo "Running in failfast mode (CI environment variable is not set)."
+  FAILFAST_OPT="-f"
+else
+  echo "Running without failfast mode (CI environment variable is set to '$CI')."
+fi
+
+# -v makes unittest verbose (equivalent to verbosity=2 for TextTestRunner from command line)
+echo "Running tests with verbosity..."
+python3 -m unittest discover -s bzfs_tests -p "test_*.py" $FAILFAST_OPT -v

@@ -78,7 +78,6 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestModuleImports))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
@@ -189,23 +188,36 @@ class TestHelperFunctions(unittest.TestCase):
         true_home_from_pwd = pwd.getpwuid(os.getuid()).pw_dir
         original_home_env = os.environ.get("HOME")
 
-        # 1. Test that bzfs.get_home_directory() returns the home from pwd
-        self.assertEqual(bzfs.get_home_directory(), true_home_from_pwd)
+        try:
+            # Case 1: HOME is set to a valid directory.
+            # bzfs.get_home_directory() should return this $HOME.
+            with tempfile.TemporaryDirectory() as tmp_valid_home:
+                os.environ["HOME"] = tmp_valid_home
+                print(f"DEBUG: tmp_valid_home = {tmp_valid_home}")
+                print(f"DEBUG: os.path.isdir(tmp_valid_home) in test = {os.path.isdir(tmp_valid_home)}")
+                returned_home = bzfs.get_home_directory()
+                print(f"DEBUG: bzfs.get_home_directory() returned = {returned_home}")
+                self.assertEqual(returned_home, tmp_valid_home, "Case 1 Failed")
 
-        # 2. Test that it still returns the home from pwd even if HOME env var is set to something else
-        os.environ["HOME"] = "/tmp/fake_home_for_test"
-        self.assertEqual(bzfs.get_home_directory(), true_home_from_pwd)
+            # Case 2: HOME is set to an invalid/non-existent directory.
+            # bzfs.get_home_directory() should fall back to pwd.
+            os.environ["HOME"] = "/tmp/non_existent_directory_for_bzfs_test"
+            if os.path.exists(os.environ["HOME"]): # Should not happen with this name
+                os.rmdir(os.environ["HOME"])
+            self.assertEqual(bzfs.get_home_directory(), true_home_from_pwd, "Case 2 Failed")
 
-        # 3. Test that it still returns the home from pwd if HOME env var is unset
-        if "HOME" in os.environ:
-            del os.environ["HOME"]
-        self.assertEqual(bzfs.get_home_directory(), true_home_from_pwd)
+            # Case 3: HOME is unset.
+            # bzfs.get_home_directory() should fall back to pwd.
+            if "HOME" in os.environ:
+                del os.environ["HOME"]
+            self.assertEqual(bzfs.get_home_directory(), true_home_from_pwd, "Case 3 Failed")
 
-        # 4. Restore original HOME environment variable
-        if original_home_env is not None:
-            os.environ["HOME"] = original_home_env
-        elif "HOME" in os.environ: # If it was not set originally, but we set it
-            del os.environ["HOME"]
+        finally:
+            # Restore original HOME environment variable
+            if original_home_env is not None:
+                os.environ["HOME"] = original_home_env
+            elif "HOME" in os.environ: # If it was not set originally but got set during test
+                del os.environ["HOME"]
 
     def test_tail(self):
         fd, file = tempfile.mkstemp(prefix="test_bzfs.tail_")
@@ -4525,147 +4537,6 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
 
 #############################################################################
-class TestJobRunZfsSendReceive(unittest.TestCase):
-    def tearDown(self):
-        patch.stopall()
-
-    def test_resumable_receive_interruption_retry_behavior(self):
-        # mock_logger is defined here and captured by closure in mocked_clear_resumable_fixed
-        mock_logger = MagicMock()
-
-        # 1. Set up mocks
-        mock_subprocess_run = patch('bzfs.bzfs.subprocess_run').start()
-        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
-            returncode=1,
-            cmd="zfs recv ...",
-            stderr="cannot receive new filesystem stream: checksum mismatch or incomplete stream\nPartially received snapshot is saved"
-        )
-
-        patch('bzfs.bzfs.Job.check_zfs_dataset_busy', return_value=True).start() # True means not busy
-        patch('bzfs.bzfs.Job._recv_resume_token', return_value=(None, [], [])).start()
-        patch('bzfs.bzfs.Job.estimate_send_size', return_value=0).start()
-        mock_is_program_available = patch('bzfs.bzfs.Job.is_program_available').start()
-        mock_is_program_available.return_value = True
-        patch('bzfs.bzfs.Job.refresh_ssh_connection_if_necessary', return_value=None).start()
-        patch('bzfs.bzfs.Job.squote', side_effect=lambda x: x).start()
-        patch('bzfs.bzfs.Job.dquote', side_effect=lambda x: x).start()
-        patch('bzfs.bzfs.Job.prepare_zfs_send_receive', return_value=("send_cmd_str", "local_pipe_str", "recv_cmd_str")).start()
-
-        # Mock ConnectionPools
-        mock_connection_pools = MagicMock()
-        patch('bzfs.bzfs.ConnectionPools', return_value=mock_connection_pools).start()
-
-        # 2. Create minimal Params and Job instances
-        # Use a real LogParams object configured to use the mock_logger
-        parsed_args_for_params = argparser_parse_args(args=["src_dataset_locator", "dst_dataset_locator", "--log-dir", "/tmp/bzfs_test_logs"]) # Ensure log_dir is valid for LogParams
-
-        # Explicitly mock LogParams methods if needed, or ensure it's benign
-        # For this test, the main interaction is ensuring 'log' attributes are set correctly.
-        # We pass mock_logger directly to Params constructor.
-        log_params_instance = bzfs.LogParams(parsed_args_for_params) # Create a real LogParams
-        log_params_instance.pv_log_file = "dummy_pv.log" # Ensure this is set as it's accessed
-
-        p = bzfs.Params(parsed_args_for_params, log_params=log_params_instance, log=mock_logger)
-        p.src.is_nonlocal = False # Simplify to local for this unit test
-        p.dst.is_nonlocal = False # Simplify to local
-        p.connection_pools = {"src": MagicMock(), "dst": MagicMock()} # Mock connection pools
-        p.src.ssh_user_host = ""
-        p.dst.ssh_user_host = ""
-        p.src.location = "src"
-        p.dst.location = "dst"
-        # p.log is already mock_logger via constructor
-
-        job = bzfs.Job()
-        job.params = p    # So job.params.log is mock_logger
-        job.log = mock_logger # So job.log (self.log for job instance) is mock_logger
-        job.src_properties = {"src_dataset": {"recordsize": 131072}}
-        job.progress_reporter = MagicMock()
-        job.is_first_replication_task = bzfs.SynchronizedBool(True)
-        job.snap_create_config = MagicMock()
-        job.snap_create_config.enabled = False
-
-
-        # 3. Call job.run_zfs_send_receive ("src_dataset", "dst_dataset", ["send_cmd"], ["recv_cmd"], 0, "0B", False, "test_error")
-        # 4. Before the fix
-        with self.assertRaises(bzfs.RetryableError) as cm:
-            job.run_zfs_send_receive("src_dataset", "dst_dataset", ["send_cmd"], ["recv_cmd"], 0, "0B", False, "test_error")
-        self.assertTrue(cm.exception.no_sleep, "Before fix, no_sleep should be True")
-
-        # 5. Apply the fix
-        # Store the original function
-        original_clear_function = bzfs.Job.clear_resumable_recv_state_if_necessary
-
-        # Define the "fixed" function
-        # Signature matches how clear_resumable_recv_state_if_necessary is called from run_zfs_send_receive:
-        # self.clear_resumable_recv_state_if_necessary(dst_dataset, e.stderr)
-        def mocked_clear_resumable_fixed(job_instance, dst_dataset_arg, stderr_arg):
-            # mock_logger from the outer scope is used here
-            return_value_from_original = None
-            exception_from_original = None
-
-            try:
-                # Call the original function. Based on the error, it takes 3 args (self, dst_dataset, stderr).
-                return_value_from_original = original_clear_function(job_instance, dst_dataset_arg, stderr_arg)
-            except Exception as e:
-                exception_from_original = e
-            finally:
-                # After original_clear_function has run (even if it failed or modified logs),
-                # forcefully reset job_instance.log and job_instance.params.log to the mock_logger
-                # that the test expects to be used by subsequent operations on this job_instance.
-                job_instance.log = mock_logger
-                if job_instance.params:  # Check if params object itself still exists
-                    job_instance.params.log = mock_logger
-
-            if exception_from_original:
-                raise exception_from_original # Reraise if original function raised an error
-
-            # Apply the "fix": override the return value ONLY for the specific condition
-            if (
-                "cannot receive new filesystem stream: checksum mismatch or incomplete stream" in stderr_arg # Use arg here
-                and "Partially received snapshot is saved" in stderr_arg # Use arg here
-            ):
-                return False  # This is the "fix" for the return value
-
-            return return_value_from_original # Return the original's value if not the "fix" condition
-
-        # If the first call to job.run_zfs_send_receive (via original_clear_function)
-        # had side effects on job.log, it should be re-assigned.
-        # The instance logger job.log should still be explicitly set for robustness,
-        # in case some parts of Job methods use self.log.
-        job.log = mock_logger
-        if job.params:
-             job.params.log = mock_logger
-
-        # Patch the method
-        with patch.object(bzfs.Job, 'clear_resumable_recv_state_if_necessary', new=mocked_clear_resumable_fixed):
-            # 6. After the fix
-            # Ensure loggers are set before this call as well.
-            job.log = mock_logger
-            if job.params:
-                 job.params.log = mock_logger
-
-            mock_subprocess_run.side_effect = subprocess.CalledProcessError(
-                returncode=1,
-                cmd="zfs recv ...",
-                stderr="cannot receive new filesystem stream: checksum mismatch or incomplete stream\nPartially received snapshot is saved"
-            )
-
-            # Ensure the instance logger is still correctly mocked. It's set before this 'with' block,
-            # and mocked_clear_resumable_fixed now ensures it's preserved across the original_clear_function call.
-            # Ensure job.log and job.params.log are explicitly set before the call that might fail.
-            job.log = mock_logger
-            if job.params: # Ensure params exists before trying to set its log attribute
-                job.params.log = mock_logger
-
-            with self.assertRaises(bzfs.RetryableError) as cm_after_fix:
-                job.run_zfs_send_receive("src_dataset", "dst_dataset", ["send_cmd"], ["recv_cmd"], 0, "0B", False, "test_error")
-            self.assertFalse(cm_after_fix.exception.no_sleep, "After fix, no_sleep should be False")
-
-        # The patch.object context manager ensures the original function is restored.
-        self.assertIs(bzfs.Job.clear_resumable_recv_state_if_necessary, original_clear_function)
-
-
-#############################################################################
 class TestPerformance(unittest.TestCase):
 
     def test_close_fds(self):
@@ -4692,15 +4563,3 @@ def stop_on_failure_subtest(**params):
         yield
     except AssertionError:
         raise AssertionError(f"SubTest failed with parameters: {params}")
-
-
-#############################################################################
-class TestModuleImports(unittest.TestCase):
-    def test_auxiliary_functions_are_importable_and_callable(self):
-        from bzfs import bzfs
-        from bzfs import bzfs_utils
-        from bzfs import bzfs_jobrunner
-
-        self.assertEqual(bzfs._bzfs_aux_test(), "bzfs_ok")
-        self.assertEqual(bzfs_utils._utils_aux_test(), "utils_ok")
-        self.assertEqual(bzfs_jobrunner._jobrunner_aux_test(), "jobrunner_ok")

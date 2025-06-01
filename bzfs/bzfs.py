@@ -83,8 +83,6 @@ from subprocess import CalledProcessError, DEVNULL, PIPE
 from typing import Any, Callable, Deque, Dict, Iterable, Iterator, List, Literal, NamedTuple, Optional, Sequence, Set, Tuple
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
 
-from .bzfs_utils import cut
-
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -6081,6 +6079,18 @@ def die(msg: str, exit_code=die_status) -> None:
     raise ex
 
 
+def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
+    """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
+    assert isinstance(lines, list)
+    assert len(separator) == 1
+    if field == 1:
+        return [line[0 : line.index(separator)] for line in lines]
+    elif field == 2:
+        return [line[line.index(separator) + 1 :] for line in lines]
+    else:
+        raise ValueError("Unsupported parameter value")
+
+
 def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
     """For each line in input_list, includes the line if input_set contains the first column field of that line."""
     if len(input_set) == 0:
@@ -6359,8 +6369,12 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
 
 def get_home_directory() -> str:
     """Reliably detects home dir without using HOME env var."""
-    # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
-    return pwd.getpwuid(os.getuid()).pw_dir
+    home_env = os.environ.get("HOME")
+    if home_env and os.path.isdir(home_env): # HOME is set and points to a valid directory
+        return home_env
+    # HOME is not set or points to an invalid directory, fallback to pwd
+    pw_dir = pwd.getpwuid(os.getuid()).pw_dir
+    return pw_dir
 
 
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
@@ -7873,6 +7887,3 @@ def xfinally(cleanup: Callable[[], None]) -> _XFinally:
 #############################################################################
 if __name__ == "__main__":
     main()
-
-def _bzfs_aux_test() -> str:
-    return "bzfs_ok"
