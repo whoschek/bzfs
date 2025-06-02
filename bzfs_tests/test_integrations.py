@@ -96,10 +96,11 @@ test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing i
 
 
 def suite():
-    is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
+    is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
+    is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
     suite = unittest.TestSuite()
-    if not is_adhoc_test and not is_functional_test:
+    if not (is_smoke_test or is_functional_test or is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
 
@@ -111,11 +112,11 @@ def suite():
             for affix in [""]:
                 # no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
-                if os.geteuid() != 0 and not is_adhoc_test and not is_functional_test:
+                if not (os.geteuid() == 0 or is_smoke_test or is_functional_test or is_adhoc_test):
                     no_privilege_elevation_modes.append(True)
                 for no_privilege_elevation in no_privilege_elevation_modes:
                     encrypted_datasets = [False]
-                    if not is_adhoc_test and not is_functional_test:
+                    if not (is_smoke_test or is_functional_test or is_adhoc_test):
                         encrypted_datasets += [True]
                     for encrypted_dataset in encrypted_datasets:
                         params = {
@@ -127,11 +128,13 @@ def suite():
                             "no_privilege_elevation": no_privilege_elevation,
                             "encrypted_dataset": encrypted_dataset,
                         }
-                        if is_adhoc_test:
+                        if is_smoke_test:
+                            suite.addTest(ParametrizedTestCase.parametrize(SmokeTestCase, params))
+                        elif is_adhoc_test:
                             suite.addTest(ParametrizedTestCase.parametrize(AdhocTestCase, params))
                         else:
                             suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
-    if is_adhoc_test:
+    if is_smoke_test or is_adhoc_test:
         return suite
 
     # ssh_modes = []
@@ -623,6 +626,29 @@ class BZFSTestCase(ParametrizedTestCase):
         else:
             self.assertEqual("-", receive_resume_token)
         return receive_resume_token
+
+
+#############################################################################
+class SmokeTestCase(BZFSTestCase):
+    """Runs only a small subset of tests."""
+
+    def test_include_snapshots_plan(self):
+        LocalTestCase(param=self.param).test_include_snapshots_plan()
+
+    def test_basic_replication_recursive1(self):
+        LocalTestCase(param=self.param).test_basic_replication_recursive1()
+
+    def test_delete_dst_snapshots_except_plan(self):
+        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
+
+    def test_basic_snapshotting_flat_simple(self):
+        LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
+
+    def test_jobrunner_flat_simple(self):
+        LocalTestCase(param=self.param).test_jobrunner_flat_simple()
+
+    def test_xbasic_replication_flat_with_bookmarks1(self):
+        LocalTestCase(param=self.param).test_xbasic_replication_flat_with_bookmarks1()
 
 
 #############################################################################
@@ -2815,7 +2841,7 @@ class LocalTestCase(BZFSTestCase):
                         self.assertSnapshotNames(dst_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
                         self.assertBookmarkNames(src_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
 
-    def test_basic_replication_flat_with_bookmarks1(self):
+    def test_xbasic_replication_flat_with_bookmarks1(self):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))

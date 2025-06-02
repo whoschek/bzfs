@@ -43,9 +43,11 @@ from bzfs_main.bzfs import find_match, getenv_any, Remote, round_datetime_up_to_
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 # constants:
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
-is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
+test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
+is_unit_test = test_mode == "unit"  # run only unit tests aka skip integration tests
+is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
 is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
+is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
 
 
 def suite():
@@ -3623,7 +3625,7 @@ class TestConnectionPool(unittest.TestCase):
         # loglevel = logging.DEBUG
         loglevel = bzfs.log_trace
         is_logging = log.isEnabledFor(loglevel)
-        num_steps = 1000 if not is_adhoc_test and not is_functional_test else 75
+        num_steps = 75 if is_unit_test or is_smoke_test or is_functional_test or is_adhoc_test else 1000
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
         for maxsessions in range(1, 10 + 1):

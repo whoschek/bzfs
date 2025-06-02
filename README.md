@@ -561,7 +561,9 @@ sudo ls
 # export bzfs_test_ssh_port=12345
 # export bzfs_test_ssh_port=22
 
-export bzfs_test_mode=functional  # run most tests but only in a single local config combination (takes some 4 minutes)
+# export bzfs_test_mode=unit  # run only unit tests (takes < 5 seconds; skip integration tests)
+export bzfs_test_mode=smoke  # also run a small subset of integration tests (takes < 1 minute)
+# export bzfs_test_mode=functional  # also run most integration tests but only in a single local config (takes ~4 minutes)
 # unset bzfs_test_mode  # run all tests (this can take hours)
 
 # verify user can ssh in passwordless via loopback interface and private key;

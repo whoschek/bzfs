@@ -49,6 +49,20 @@ on:
         description: "Names of jobs to run, e.g. 'test_ubuntu_24_04,test_ubuntu_22_04'"
         type: string
         default: ""
+      bzfs_test_mode:
+        description: "bzfs_test_mode env var choice"
+        type: choice
+        options:
+        - unit
+        - smoke
+        - functional
+        - adhoc
+        - ""
+        default: ""  # empty string means 'run all tests'
+      bzfs_test_mode_string:
+        description: "bzfs_test_mode env var custom string"
+        type: string
+        default: ""  # empty string means 'run all tests'
       num_runs:
         description: "Number of times to run the jobs"
         type: string
@@ -69,6 +83,7 @@ permissions:
   contents: read
 
 env:
+  bzfs_test_mode: ${{ github.event.inputs.bzfs_test_mode_string != '' && github.event.inputs.bzfs_test_mode_string || github.event.inputs.bzfs_test_mode || '' }}
   NUM_RUNS: ${{ github.event.inputs.num_runs != '' && github.event.inputs.num_runs || '1' }}
 
 jobs:
@@ -80,6 +95,7 @@ jobs:
       - id: set_test_matrix
         shell: bash
         run: |
+          echo "Using bzfs_test_mode=$bzfs_test_mode"
           echo "iteration_test_matrix_output=[$(seq -s ',' 1 "$NUM_RUNS")]" >> $GITHUB_OUTPUT
 
 
