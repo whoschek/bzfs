@@ -561,6 +561,9 @@ sudo ls
 # export bzfs_test_ssh_port=12345
 # export bzfs_test_ssh_port=22
 
+export bzfs_test_mode=functional  # run most tests but only in a single local config combination (takes some 4 minutes)
+# unset bzfs_test_mode  # run all tests (this can take hours)
+
 # verify user can ssh in passwordless via loopback interface and private key;
 # you should not be asked for a password
 ssh -p $bzfs_test_ssh_port 127.0.0.1 echo hello
