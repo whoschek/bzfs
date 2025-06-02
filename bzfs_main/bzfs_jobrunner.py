@@ -727,6 +727,7 @@ class Job:
             log.trace("%s", "spawn_process_per_job: True")
             helper = bzfs.Job()
             helper.params = bzfs.Params(self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"]), log=log)
+            helper.is_test_mode = self.is_test_mode
 
             helper.process_datasets_in_parallel_and_fault_tolerant(
                 sorted_subjobs,
