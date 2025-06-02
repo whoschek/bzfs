@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+export PYTHONPATH="$(dirname "$(dirname "$(realpath "$0")")")"
+exec python3 -m bzfs_main.bzfs_jobrunner ${1+"$@"}

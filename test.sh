@@ -7,5 +7,5 @@ if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
 fi
 echo "TMPDIR: $TMPDIR"
 
-cd $(realpath $(dirname "$0"))
-python3 -m bzfs_tests.test_bzfs
+cd $(dirname $(realpath "$0"))
+python3 -m bzfs_tests.test_all

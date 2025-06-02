@@ -16,25 +16,20 @@
 
 """
 Emits a bash completion script such that typing bzfs <TAB> or bzfs_jobrunner <TAB> will auto-complete all flags.
-Usage: ./bash_completion.d/shell-completion-generator.py > /etc/bash_completion.d/bzfs-shell-completion
-or     ./bash_completion.d/shell-completion-generator.py > ~/.bash_completion.d/bzfs-shell-completion
+Usage: python3 -m bash_completion_d.shell-completion-generator > /etc/bash_completion.d/bzfs-shell-completion
+or     python3 -m bash_completion_d.shell-completion-generator > ~/.bash_completion.d/bzfs-shell-completion
 """
 
 import argparse
 import importlib
-import sys
 from pathlib import Path
 from typing import Set, Dict
 
 programs = ("bzfs", "bzfs_jobrunner")
 
-# add dir so `import bzfs` works when run from repo
-BASE = (Path(__file__).resolve().parent / ".." / "bzfs").resolve()
-sys.path.insert(0, str(BASE))
-
 
 def version_line() -> str:
-    import bzfs
+    from bzfs_main import bzfs
 
     for act in bzfs.argument_parser()._actions:
         if isinstance(act, argparse._VersionAction):
@@ -44,7 +39,7 @@ def version_line() -> str:
 
 def harvest(module: str):
     """Returns (safe_name, flag_set, value_tokens_map) for a program based on its argument_parser() specs."""
-    parser = importlib.import_module(module).argument_parser()
+    parser = importlib.import_module("bzfs_main." + module).argument_parser()
     safe = module.replace("-", "_")
     flags: Set[str] = set()
     vals: Dict[str, str] = {}

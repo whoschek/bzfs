@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
@@ -27,31 +26,28 @@ update_readme.sh. Simply run that script whenever you change or add ArgumentPars
 
 import argparse
 import contextlib
-import importlib.machinery
-import importlib.util
-import logging
 import os
 import pwd
 import random
-import shutil
 import socket
 import subprocess
 import sys
 import threading
 import time
-import types
 import uuid
 from ast import literal_eval
 from logging import Logger
 from subprocess import DEVNULL, PIPE
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
+from bzfs_main import bzfs
+from bzfs_main.bzfs import die_status, prog_name as bzfs_prog_name
+
 # constants:
 prog_name = "bzfs_jobrunner"
-bzfs_prog_name = "bzfs"
 src_magic_substitution_token = "^SRC_HOST"
 dst_magic_substitution_token = "^DST_HOST"
-die_status = 3
+sep = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -371,40 +367,6 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "auto-appended later).\n\n")
     return parser
     # fmt: on
-
-
-#############################################################################
-def load_module(progname: str) -> types.ModuleType:
-
-    def die(msg: str, exit_code=die_status) -> None:
-        logging.getLogger(prog_name).error("%s", msg)
-        ex = SystemExit(msg)
-        ex.code = exit_code
-        raise ex
-
-    prog_path = shutil.which(progname)
-    if not prog_path:
-        sibling_prog_path = os.path.join(os.path.dirname(sys.argv[0]), progname)
-        prog_path = sibling_prog_path if os.path.isfile(sibling_prog_path) else prog_path
-    if not prog_path:
-        die(f"{progname}: command not found on PATH")
-    prog_path = os.path.realpath(prog_path)  # resolve symlink, if any
-    loader = importlib.machinery.SourceFileLoader(progname, prog_path)
-    spec = importlib.util.spec_from_loader(progname, loader)
-    module = importlib.util.module_from_spec(spec)
-    if spec.name not in sys.modules:
-        sys.modules[spec.name] = module
-    loader.exec_module(module)
-    if hasattr(module, "run_main"):
-        return module
-    else:  # It's a wrapper script as `bzfs` was installed as a package by 'pip install'; load that installed package
-        return importlib.import_module(f"{progname}.{progname}")
-
-
-# constants:
-bzfs: types.ModuleType = load_module(bzfs_prog_name)
-assert die_status == bzfs.die_status
-sep = ","
 
 
 #############################################################################
@@ -874,6 +836,8 @@ class Job:
 
     def run_worker_job_spawn_process_per_job(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
         log = self.log
+        if len(cmd) > 0 and cmd[0] == bzfs_prog_name:
+            cmd = [sys.executable, "-m", "bzfs_main." + cmd[0]] + cmd[1:]
         if self.jobrunner_dryrun:
             return 0
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, text=True)  # run job in a separate subprocess

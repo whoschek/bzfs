@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # Copyright 2024 Wolfgang Hoschek AT mac DOT com
 #
@@ -69,7 +68,6 @@ import sys
 import tempfile
 import threading
 import time
-import traceback
 import types
 from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
@@ -83,6 +81,7 @@ from subprocess import CalledProcessError, DEVNULL, PIPE
 from typing import Any, Callable, Deque, Dict, Iterable, Iterator, List, Literal, NamedTuple, Optional, Sequence, Set, Tuple
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
 
+from bzfs_main.utils import cut
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -201,10 +200,10 @@ ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
 versions >= 3.8 (including latest stable which is currently python-3.13).
 
-{prog_name} is a stand-alone program with zero required dependencies, consisting of a single file, akin to a
+{prog_name} is a stand-alone program with zero required dependencies, akin to a
 stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server
 environments. No external Python packages are required; indeed no Python package management at all is required.
-You can just copy the file wherever you like, for example into /usr/local/bin or similar, and simply run it like
+You can just symlink the program wherever you like, for example into /usr/local/bin or similar, and simply run it like
 any stand-alone shell script or binary executable.
 
 {prog_name} automatically replicates the snapshots of multiple datasets in parallel for best performance.
@@ -6077,18 +6076,6 @@ def die(msg: str, exit_code=die_status) -> None:
     ex = SystemExit(msg)
     ex.code = exit_code
     raise ex
-
-
-def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
-    """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
-    assert isinstance(lines, list)
-    assert len(separator) == 1
-    if field == 1:
-        return [line[0 : line.index(separator)] for line in lines]
-    elif field == 2:
-        return [line[line.index(separator) + 1 :] for line in lines]
-    else:
-        raise ValueError("Unsupported parameter value")
 
 
 def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:

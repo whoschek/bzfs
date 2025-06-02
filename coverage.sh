@@ -7,7 +7,7 @@ if [ -d "/run/user/$(id -u)" ] && [ -w "/run/user/$(id -u)" ]; then
 fi
 echo "TMPDIR: $TMPDIR"
 
-cd $(realpath $(dirname "$0"))
+cd $(dirname $(realpath "$0"))
 if [ "$(uname -s)" = "FreeBSD" ]; then
   echo "Running on FreeBSD"
 elif [ "$(uname -s)" = "SunOS" ]; then
@@ -18,7 +18,7 @@ else
 fi
 
 # see https://coverage.readthedocs.io/
-PYTHONPATH=. python3 -m coverage run --branch --include="bzfs/*.py" --omit='bzfs_tests/*.py,*/__init__.py' -m bzfs_tests.test_bzfs
+PYTHONPATH=. python3 -m coverage run --branch --include="bzfs_main/*.py" --omit='bzfs_tests/*.py,*/__init__.py' -m bzfs_tests.test_all
 python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
 

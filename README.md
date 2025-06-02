@@ -99,12 +99,11 @@ bzfs is written in Python and continously runs a wide set of unit tests and inte
 ensure coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris,
 on all Python versions >= 3.8 (including latest stable which is currently python-3.13).
 
-bzfs is a stand-alone program with zero required dependencies, consisting of a single file, akin
-to a stand-alone shell script or binary executable. It is designed to be able to run in restricted
-barebones server environments. No external Python packages are required; indeed no Python package
-management at all is required. You can just copy the file wherever you like, for example into
-/usr/local/bin or similar, and simply run it like any stand-alone shell script or binary
-executable.
+bzfs is a stand-alone program with zero required dependencies, akin to a stand-alone shell script
+or binary executable. It is designed to be able to run in restricted barebones server
+environments. No external Python packages are required; indeed no Python package management at all
+is required. You can just symlink the program wherever you like, for example into /usr/local/bin
+or similar, and simply run it like any stand-alone shell script or binary executable.
 
 bzfs automatically replicates the snapshots of multiple datasets in parallel for best performance.
 Similarly, it quickly deletes (or monitors or compares) snapshots of multiple datasets in
@@ -425,10 +424,11 @@ sudo apt-get -y install zfsutils-linux python3  # ensure zfs and python are inst
 sudo apt-get -y install zstd pv mbuffer  # auxiliary helpers are optional
 
 git clone https://github.com/whoschek/bzfs.git
-cd bzfs/bzfs
+cd bzfs/bzfs_main
 ./bzfs --help  # Run the CLI
 ./bzfs_jobrunner --help
-sudo cp bzfs bzfs_jobrunner /usr/local/bin/  # Optional system installation
+sudo ln -sf $(pwd)/bzfs /usr/local/bin/bzfs  # Optional system installation
+sudo ln -sf $(pwd)/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner  # Optional system installation
 
 # Alternatively, install a release via pip:
 pip install bzfs

@@ -1,8 +1,16 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 # Run this script to update README.md from the help info contained in bzfs.py.
 set -e
-cd $(realpath $(dirname "$0"))
-export PATH=bzfs:$PATH
-python3 -m bzfs_docs.update_readme bzfs/bzfs.py README.md
-python3 -m bzfs_docs.update_readme bzfs/bzfs_jobrunner.py README_bzfs_jobrunner.md
-./bash_completion.d/shell-completion-generator.py > ./bash_completion.d/bzfs-shell-completion
+cd $(dirname $(realpath "$0"))
+
+tmp_venv=venv-argparse-manpage  # bzfs_main.* must be part of the venv for `argparse-manpage` to work correctly
+rm -rf $tmp_venv
+python3 -m venv $tmp_venv
+source $tmp_venv/bin/activate
+pip install -e '.[dev]'
+
+python3 -m bzfs_docs.update_readme bzfs_main.bzfs README.md
+python3 -m bzfs_docs.update_readme bzfs_main.bzfs_jobrunner README_bzfs_jobrunner.md
+python3 -m bash_completion_d.shell-completion-generator > ./bash_completion_d/bzfs-shell-completion
+
+rm -rf $tmp_venv

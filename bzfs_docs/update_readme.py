@@ -20,17 +20,17 @@ import subprocess
 import sys
 import tempfile
 
-from bzfs import bzfs
-from bzfs import bzfs_jobrunner
-from bzfs.bzfs import find_match
+from bzfs_main import bzfs
+from bzfs_main import bzfs_jobrunner
+from bzfs_main.bzfs import find_match
 
 
 def main():
     """
     Run this script to update README.md from the help info contained in bzfs.py.
-    Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs/bzfs.py README.md
+    Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main/bzfs.py README.md
     This essentially does the following steps:
-    argparse-manpage --pyfile bzfs/bzfs.py --function argument_parser > /tmp/manpage.1
+    argparse-manpage --module bzfs_main.bzfs --function argument_parser > /tmp/manpage.1
     pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
     Then takes that output, auto-cleans it and auto-replaces certain sections of README.md with it.
 
@@ -40,16 +40,16 @@ def main():
     pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
     """
     if len(sys.argv) != 3:
-        print("Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme /path/to/bzfs.py path/to/README.md")
+        print("Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs path/to/README.md")
         sys.exit(1)
 
-    bzfs_py_file, readme_file = sys.argv[1], sys.argv[2]
+    bzfs_module, readme_file = sys.argv[1], sys.argv[2]
     tmp_manpage1_path = os.path.join(tempfile.gettempdir(), "manpage.1")
     tmp_manpage_md_path = os.path.join(tempfile.gettempdir(), "manpage.md")
 
     # Step 1: Generate manpage
     with open(tmp_manpage1_path, "w") as fd:
-        cmd = ["argparse-manpage", "--pyfile", bzfs_py_file, "--function", "argument_parser"]
+        cmd = ["argparse-manpage", "--module", bzfs_module, "--function", "argument_parser"]
         subprocess.run(cmd, check=True, stdout=fd)
 
     # Step 2: Convert to markdown using pandoc
@@ -135,7 +135,7 @@ def main():
     os.environ["COLUMNS"] = "72"
     help_msg = (
         bzfs.argument_parser().format_usage()
-        if "_jobrunner" not in bzfs_py_file
+        if "_jobrunner" not in bzfs_module
         else bzfs_jobrunner.argument_parser().format_usage()
     )
     help_msg = ["```\n"] + help_msg.splitlines(keepends=True) + ["```\n"]

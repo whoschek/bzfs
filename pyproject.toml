@@ -75,25 +75,25 @@ dev = [  # for development only
 # pip list --not-required
 
 [project.scripts]
-bzfs = "bzfs.bzfs:main"
-bzfs_jobrunner = "bzfs.bzfs_jobrunner:main"
-bzfs-test = "bzfs_tests.test_bzfs:main"
+bzfs = "bzfs_main.bzfs:main"
+bzfs_jobrunner = "bzfs_main.bzfs_jobrunner:main"
+bzfs-test = "bzfs_tests.test_all:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["bzfs_docs"]
+exclude = ["bzfs_docs", "bash_completion_d"]
 
 [tool.setuptools.package-data]
-tests = ["*.json"]
+bzfs_tests = ["*.json"]
 
 [tool.setuptools.dynamic]
-version = {attr = "bzfs.bzfs.__version__"}
+version = {attr = "bzfs_main.bzfs.__version__"}
 
 [tool.hatch.build]
-include = ["bzfs/**", "bzfs_tests/**"]
+include = ["bzfs_main/**", "bzfs_tests/**"]
 
 [tool.hatch.version]
-path = "bzfs/bzfs.py"
+path = "bzfs_main/bzfs.py"
 pattern = "^__version__ = ['\"](?P<version>[^'\"]+)['\"]$"
 
 [tool.black]

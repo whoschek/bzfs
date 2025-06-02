@@ -36,9 +36,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from unittest.mock import patch
 
-from bzfs import bzfs
-from bzfs.bzfs import die_status, find_match, getenv_any, getenv_bool
-from bzfs_tests.test_units import TestIncrementalSendSteps, stop_on_failure_subtest
+from bzfs_main import bzfs, bzfs_jobrunner
+from bzfs_main.bzfs import die_status, find_match, getenv_any, getenv_bool
+from bzfs_tests.test_bzfs import TestIncrementalSendSteps, stop_on_failure_subtest
 from bzfs_tests.zfs_util import (
     bookmark_name,
     bookmarks,
@@ -64,6 +64,7 @@ from bzfs_tests.zfs_util import (
     zfs_version,
 )
 
+# constants:
 src_pool_name = "wb_src"
 dst_pool_name = "wb_dest"
 pool_size_bytes_default = 100 * 1024 * 1024
@@ -427,16 +428,10 @@ class BZFSTestCase(ParametrizedTestCase):
         args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
         if use_jobrunner:
-            bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
-            if bzfs_dir not in os.environ["PATH"]:
-                os.environ["PATH"] = bzfs_dir + os.pathsep + os.environ["PATH"]
-            from bzfs import bzfs_jobrunner
-
             job = bzfs_jobrunner.Job()
             job.is_test_mode = True
             if spawn_process_per_job:
                 args += ["--spawn_process_per_job"]
-
         else:
             job = bzfs.Job()
             job.is_test_mode = True
@@ -505,7 +500,7 @@ class BZFSTestCase(ParametrizedTestCase):
         returncode = 0
         try:
             if use_jobrunner:
-                job.run_main(["bzfs_jobrunner"] + args)
+                job.run_main([bzfs_jobrunner.prog_name] + args)
             else:
                 job.run_main(bzfs.argument_parser().parse_args(args), args)
         except subprocess.CalledProcessError as e:
@@ -5276,8 +5271,6 @@ class LocalTestCase(BZFSTestCase):
                     *pull_args_no_monitoring,
                     expected_status=bzfs.critical_status,
                 )
-
-                from bzfs import bzfs_jobrunner
 
                 # error: the following arguments are required: --root-dataset-pairs
                 with self.assertRaises(SystemExit) as context:

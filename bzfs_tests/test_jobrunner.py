@@ -13,26 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
-import os
 import platform
 import shutil
 import signal
 import subprocess
-import sys
-import tempfile
-import types
 import unittest
 from subprocess import DEVNULL, PIPE
 from typing import Union
 from unittest.mock import patch, MagicMock
 
-from bzfs.bzfs import die_status
-
-bzfs_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep + "bzfs"
-if bzfs_dir not in os.environ["PATH"]:
-    os.environ["PATH"] = bzfs_dir + os.pathsep + os.environ["PATH"]
-from bzfs import bzfs_jobrunner
+from bzfs_main import bzfs_jobrunner
+from bzfs_main.bzfs_jobrunner import die_status
 
 
 def suite():
@@ -42,7 +33,6 @@ def suite():
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobSpawnProcessPerJob))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobInCurrentThread))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJob))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestXLoadModule))
     return suite
 
 
@@ -467,7 +457,7 @@ class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
 
 
 #############################################################################
-@patch("bzfs.bzfs_jobrunner.Job._bzfs_run_main")
+@patch("bzfs_main.bzfs_jobrunner.Job._bzfs_run_main")
 class TestRunSubJobInCurrentThread(unittest.TestCase):
     def setUp(self):
         self.job = bzfs_jobrunner.Job()
@@ -515,7 +505,7 @@ class TestRunSubJobInCurrentThread(unittest.TestCase):
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = SystemExit(die_status)
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
-        self.assertEqual(bzfs_jobrunner.die_status, result)
+        self.assertEqual(die_status, result)
 
     def test_single_element_cmd_edge(self, mock_bzfs_run_main):
         cmd = ["bzfs"]
@@ -527,7 +517,7 @@ class TestRunSubJobInCurrentThread(unittest.TestCase):
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = ValueError
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
-        self.assertEqual(bzfs_jobrunner.die_status, result)
+        self.assertEqual(die_status, result)
 
 
 #############################################################################
@@ -563,56 +553,6 @@ class TestRunSubJob(unittest.TestCase):
     def test_nonexisting_cmd(self):
         with self.assertRaises(FileNotFoundError):
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
-
-
-#############################################################################
-class TestXLoadModule(unittest.TestCase):
-    # build a process-lifetime console-script stub
-    _STUB_DIR = tempfile.mkdtemp(prefix="bzfs_stub_")
-    _STUB_WRAPPER = os.path.join(_STUB_DIR, "bzfs")
-    with open(_STUB_WRAPPER, "w") as fp:
-        fp.write("import importlib as _il\n" "_il.import_module('bzfs.bzfs')\n")
-    os.chmod(_STUB_WRAPPER, 0o755)
-
-    def test_command_not_found_on_path_raises_error(self):
-        with self.assertRaises(SystemExit) as context:
-            bzfs_jobrunner.load_module("nonexistent_prog")
-        self.assertEqual(die_status, context.exception.code)
-
-    def test_a_wrapper_script_triggers_package_import(self):
-        progname = "bzfs"
-        sentinel = types.ModuleType("sentinel")
-
-        patched_path = f"{self._STUB_DIR}{os.pathsep}{os.environ.get('PATH', '')}"
-        with patch.dict(os.environ, {"PATH": patched_path}, clear=False):
-            real_import = importlib.import_module
-
-            def fake_import(name, *args, **kw):
-                if name in (f"{progname}.{progname}", "bzfs.bzfs"):
-                    return sentinel
-                return real_import(name, *args, **kw)
-
-            with patch("importlib.import_module", side_effect=fake_import):
-                result = bzfs_jobrunner.load_module(progname)
-                self.assertIs(result, sentinel)
-
-        # cleanup sys.modules
-        for key in ["sentinel"]:
-            sys.modules.pop(key, None)
-
-    def test_load_module_directly_without_wrapper_script(self):
-        progname = "bzfs"
-        # sys.modules.pop(progname, None)
-        bzfs = bzfs_jobrunner.load_module(progname)
-        self.assertIsNotNone(bzfs.get_simple_logger(progname))
-        bzfs_jobrunner.load_module(progname)
-        self.assertIsNotNone(bzfs.get_simple_logger(progname))
-
-    def test_load_module_directly_withsibling_and_without_wrapper_script(self):
-        progname = "bzfs"
-        with patch("shutil.which", return_value=None), patch.object(sys, "argv", new=["./bzfs/bzfs_jobrunner"]):
-            bzfs = bzfs_jobrunner.load_module(progname)
-        self.assertIsNotNone(bzfs.get_simple_logger(progname))
 
 
 #############################################################################
