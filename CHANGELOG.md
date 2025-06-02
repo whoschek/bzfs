@@ -41,6 +41,9 @@ deprecated status, but the old name will be completely removed in a future relea
 - [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
 - Added [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs) link to an AI that can answer
 questions about the bzfs codebase.
+- Use standard python module imports throughout to improve ease of use of the codebase.
+Installation via pip remains unchanged. Optional system installation from the git repo is now done by adding symlinks to the
+startup shell script, [like so](README.md#Installation).
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.11.0...v1.12.0
 
 ## [1.11.0] - March 26, 2025
