@@ -409,7 +409,8 @@ class Job:
         self.validate_non_empty_string(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
         src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
-        nb_src_hosts = len(src_hosts)
+        basis_src_hosts = src_hosts
+        nb_src_hosts = len(basis_src_hosts)
         log.debug("src_hosts before subsetting: %s", src_hosts)
         if args.src_host is not None:  # retain only the src hosts that are also contained in args.src_host
             assert isinstance(args.src_host, list)
@@ -430,10 +431,21 @@ class Job:
             dst_root_datasets.keys(), retain_dst_targets.keys(), "--dst-root-dataset.keys", "--retain-dst-targets.keys"
         )
         self.validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
+        if len(basis_src_hosts) > 1 and any(
+            dst_root_dataset and src_magic_substitution_token not in dst_root_dataset
+            for dst_root_dataset in dst_root_datasets.values()
+        ):
+            self.die(
+                "Cowardly refusing to proceed as multiple source hosts are defined in the configuration, but "
+                f"not all non-empty datasets in --dst-root-datasets contain the '{src_magic_substitution_token}' "
+                "substitution token to prevent collisions on writing destination datasets. "
+                f"Problematic dst_root_datasets: {dst_root_datasets} for src_hosts: {basis_src_hosts}"
+            )
         self.validate_true(
             len(src_hosts) <= 1
             or all(src_magic_substitution_token in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys()),
-            "Multiple sources must not write to the same destination dataset",
+            "Cowardly refusing to proceed as multiple source hosts must not be configured to write to the same "
+            "destination dataset",
         )
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.shuffle(src_hosts)
