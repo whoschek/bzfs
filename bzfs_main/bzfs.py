@@ -3599,7 +3599,7 @@ class Job:
         if "cannot resume send" in stderr and (
             "is no longer the same snapshot used in the initial send" in stderr
             or "used in the initial send no longer exists" in stderr
-            or re.match(r"incremental source [0-9a-fx]+ no longer exists", stderr)
+            or re.match(r".*incremental source [0-9a-fx]+ no longer exists", stderr)
         ):
             return clear_resumable_recv_state()
 
