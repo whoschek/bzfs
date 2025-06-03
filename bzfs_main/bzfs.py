@@ -1797,6 +1797,7 @@ class Params:
                self.args.delete_dst_datasets, self.args.delete_dst_snapshots, self.args.delete_dst_snapshots_except,
                self.args.delete_empty_dst_datasets,
                self.args.compare_snapshot_lists, self.args.monitor_snapshots,
+               self.args.log_file_infix,
                self.src.basis_ssh_host, self.dst.basis_ssh_host,
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
