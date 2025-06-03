@@ -620,7 +620,7 @@ jobs:
 
 
   upload_website_to_github_pages:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.event.inputs.bzfs_test_mode == '' && github.event.inputs.bzfs_test_mode_string == ''
     runs-on: ubuntu-24.04
     needs:
       - generate_website
