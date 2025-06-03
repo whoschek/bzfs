@@ -1470,6 +1470,11 @@ usage: bzfs [-h] [--recursive]
     (within the specified datasets). In other words, this flag enables to specify which snapshots
     to retain instead of which snapshots to delete.
 
+    *Note*: When a real (non-dummy) source dataset is specified, snapshots selected by this
+    'retain' policy are only kept on the destination if they also exist on the source. If the
+    source is 'dummy', then snapshots on the destination are kept if they match this 'retain'
+    policy, without any check against the source.
+
 <!-- -->
 
 <div id="--delete-dst-snapshots-except-plan"></div>

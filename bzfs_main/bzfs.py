@@ -907,7 +907,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="This flag indicates that the --include/exclude-snapshot-* options shall have inverted semantics for the "
              "--delete-dst-snapshots option, thus deleting all snapshots except for the selected snapshots (within the "
              "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other "
-             "words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n")
+             "words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n"
+             "*Note*: When a real (non-dummy) source dataset is specified, snapshots selected by this 'retain' policy are "
+             "only kept on the destination if they also exist on the source. If the source is 'dummy', then snapshots on "
+             "the destination are kept if they match this 'retain' policy, without any check against the source.\n\n")
     parser.add_argument(
         "--delete-dst-snapshots-except-plan", action=DeleteDstSnapshotsExceptPlanAction, default=None, metavar="DICT_STRING",
         help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datasets via "
@@ -2730,8 +2733,13 @@ class Job:
                 basis_dst_snaps_with_guids = dst_snaps_with_guids.copy()
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="#", new="@", count=1)  # treat bookmarks as snapshots
+                #  The check against the source dataset happens *after* filtering the dst snapshots with filter_snapshots().
+                # `p.delete_dst_snapshots_except` means the user wants to specify snapshots to *retain* aka *keep*
                 all_except = p.delete_dst_snapshots_except
                 if p.delete_dst_snapshots_except and not self.is_dummy(src):
+                    # However, as here we are in "except" mode AND the source is NOT a dummy, we first filter to get what
+                    # the policy says to *keep* (so all_except=False for the filter_snapshots() call), then from that "keep"
+                    # list, we later further refine by checking what's on the source dataset.
                     all_except = False
                 dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, all_except=all_except)
                 if p.delete_dst_bookmarks:
@@ -2739,26 +2747,39 @@ class Job:
                 if filter_needs_creation_time:
                     dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
                     basis_dst_snaps_with_guids = cut(field=2, lines=basis_dst_snaps_with_guids)
-                if p.delete_dst_snapshots_except and not self.is_dummy(src):
+                if p.delete_dst_snapshots_except and not self.is_dummy(src):  # Non-dummy Source + "Except" (Keep) Mode
                     # Retain dst snapshots that match snapshot filter policy AND are on src dataset, aka
-                    # Delete dst snapshots except snapshots that match snapshot filter policy AND are on src dataset
-                    missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).intersection(src_snaps_with_guids)
-                    missing_snapshot_tags = filter_lines_except(basis_dst_snaps_with_guids, missing_snapshot_guids)
-                else:
-                    missing_snapshot_guids = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
-                    missing_snapshot_tags = filter_lines(dst_snaps_with_guids, missing_snapshot_guids)
+                    # Delete dst snapshots except snapshots that match snapshot filter policy AND are on src dataset.
+                    # Concretely, `dst_snaps_with_guids` contains GUIDs of DST snapshots that the filter policy says to KEEP.
+                    # We only actually keep them if they are ALSO on the SRC.
+                    # So, snapshots to DELETE (`dst_tags_to_delete`) are ALL snapshots on DST (`basis_dst_snaps_with_guids`)
+                    # EXCEPT those whose GUIDs are in `dst_snaps_with_guids` AND ALSO in `src_snaps_with_guids`.
+                    except_dst_guids = set(cut(field=1, lines=dst_snaps_with_guids)).intersection(src_snaps_with_guids)
+                    dst_tags_to_delete = filter_lines_except(basis_dst_snaps_with_guids, except_dst_guids)
+                else:  # Standard Delete Mode OR Dummy Source + "Except" (Keep) Mode
+                    # In standard delete mode:
+                    #   `dst_snaps_with_guids` contains GUIDs of policy-selected snapshots on DST.
+                    #   We delete those that are NOT on SRC.
+                    #   `dst_tags_to_delete` = `dst_snaps_with_guids` - `src_snaps_with_guids`.
+                    # In dummy source + "except" (keep) mode:
+                    #   `all_except` was True.
+                    #   `dst_snaps_with_guids` contains snaps NOT matching the "keep" policy -- these are the ones to delete.
+                    #   `src_snaps_with_guids` is empty.
+                    #   `dst_tags_to_delete` = `dst_snaps_with_guids` - {} = `dst_snaps_with_guids`.
+                    dst_guids_to_delete = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
+                    dst_tags_to_delete = filter_lines(dst_snaps_with_guids, dst_guids_to_delete)
                 separator = "#" if p.delete_dst_bookmarks else "@"
-                missing_snapshot_tags = cut(field=2, separator=separator, lines=missing_snapshot_tags)
+                dst_tags_to_delete = cut(field=2, separator=separator, lines=dst_tags_to_delete)
                 if p.delete_dst_bookmarks:
-                    self.delete_bookmarks(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                    self.delete_bookmarks(dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
                 else:
-                    self.delete_snapshots(dst, dst_dataset, snapshot_tags=missing_snapshot_tags)
+                    self.delete_snapshots(dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
                 with self.stats_lock:
                     nonlocal num_snapshots_found
                     num_snapshots_found += num_dst_snaps_with_guids
                     nonlocal num_snapshots_deleted
-                    num_snapshots_deleted += len(missing_snapshot_tags)
-                    if len(missing_snapshot_tags) > 0 and not p.delete_dst_bookmarks:
+                    num_snapshots_deleted += len(dst_tags_to_delete)
+                    if len(dst_tags_to_delete) > 0 and not p.delete_dst_bookmarks:
                         self.dst_properties[dst_dataset][SNAPSHOTS_CHANGED] = 0  # invalidate cache
                 return True
 
@@ -3949,7 +3970,11 @@ class Job:
         return results
 
     def filter_snapshots(self, basis_snapshots: List[str], all_except: bool = False) -> List[str]:
-        """Returns all snapshots that pass all include/exclude policies."""
+        """Returns all snapshots that pass all include/exclude policies.
+        `all_except=False` returns snapshots *matching* the filters,
+        for example those that should be deleted if we are in "delete selected" mode.
+        `all_except=True` returns snapshots *not* matching the filters,
+        for example those that should be deleted if we are in "retain selected" mode."""
 
         def resolve_timerange(timerange: UnixTimeRange) -> UnixTimeRange:
             assert timerange is not None
