@@ -2335,7 +2335,8 @@ class Job:
                         p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
                         if p.daemon_lifetime_nanos > 0:
                             self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
-                        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset}"
+                        recsep = " " if p.recursive_flag else ""
+                        task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recsep}--> {dst.basis_root_dataset}"
                         if len(p.root_dataset_pairs) > 1:
                             log.info("Starting task: %s", task_description + " ...")
                         try:
@@ -2569,7 +2570,8 @@ class Job:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         max_workers = min(self.max_workers[src.location], self.max_workers[dst.location])
-        task_description = f"{src.basis_root_dataset} {p.recursive_flag} --> {dst.basis_root_dataset} ..."
+        recursive_sep = " " if p.recursive_flag else ""
+        task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recursive_sep}--> {dst.basis_root_dataset} ..."
         failed = False
         src_datasets = None
         basis_src_datasets = []
@@ -2602,7 +2604,7 @@ class Job:
         # spread over multiple command line invocations, respecting the limits that the operating system places on the
         # maximum length of a single command line, per `getconf ARG_MAX`.
         if not p.create_src_snapshots_config.skip_create_src_snapshots:
-            log.info(p.dry("--create-src-snapshots: %s"), f"{src.basis_root_dataset} {p.recursive_flag} ...")
+            log.info(p.dry("--create-src-snapshots: %s"), f"{src.basis_root_dataset} {p.recursive_flag}{recursive_sep}...")
             if len(basis_src_datasets) == 0:
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
