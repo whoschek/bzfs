@@ -1040,6 +1040,134 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             bzfs.reset_logger()
 
+    def test_progress_reporter_exhausted_iterator_sees_appended_data(self):
+        # Create a temporary file. We will keep the file descriptor from mkstemp open for the read iterator
+        temp_file_fd_write, temp_file_path = tempfile.mkstemp(prefix="test_iterator_behavior_")
+        try:
+            # Write initial lines to the file using the write file descriptor
+            initial_lines = ["line1\n", "line2\n"]
+            with open(temp_file_fd_write, "w") as fd_write:
+                for line in initial_lines:
+                    fd_write.write(line)
+                # fd_write is closed here, but temp_file_path is still valid.
+
+            # Open the file for reading and keep this file descriptor (fd_read) open for the duration of the iterator's life.
+            with open(temp_file_path, "r") as fd_read:  # fd_read will remain open
+                iter_fd = iter(fd_read)  # Create the iterator on the open fd_read
+
+                # Consume all lines from iter_fd
+                read_lines_initial = []
+                for line in iter_fd:
+                    read_lines_initial.append(line)
+                self.assertEqual(read_lines_initial, initial_lines, "Initial lines not read correctly.")
+
+                # Verify that the iterator is indeed exhausted (while fd_read is still open)
+                with self.assertRaises(StopIteration, msg="Iterator should be exhausted after reading all initial lines."):
+                    next(iter_fd)
+
+                # Append new lines to the *same underlying file path*.
+                # The original fd_read is still open and iter_fd is tied to it.
+                appended_lines = ["line3_appended\n", "line4_appended\n"]
+                # Open for append - this is a *different* file descriptor instance, but it operates on the same file on disk.
+                with open(temp_file_path, "a") as f_append:
+                    for line in appended_lines:
+                        f_append.write(line)
+
+                # Attempt to read from the original, exhausted iter_fd again.
+                # fd_read (to which iter_fd is bound) is still open.
+                read_lines_after_append_from_original_iterator = []
+                # This loop should yield additional lines even though 'iter_fd' was previously exhausted.
+                for line in iter_fd:  # Attempting to iterate over the *exhausted* iterator
+                    read_lines_after_append_from_original_iterator.append(line)
+
+                self.assertEqual(
+                    read_lines_after_append_from_original_iterator,
+                    ["line3_appended\n", "line4_appended\n"],
+                    "Exhausted iterator (on an still-open file) should yiels new lines even if the underlying file was appended to.",
+                )
+        finally:
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+
+    def test_progress_reporter_state_with_reused_pv_file(self):
+
+        class MockLogParams:
+            def __init__(self, pv_log_file_base: str):
+                self.pv_log_file = pv_log_file_base
+
+        class MockParams:
+            def __init__(self, pv_log_file_base: str):
+                self.log_params = MockLogParams(pv_log_file_base)
+                self.quiet = False
+                self.terminal_columns = 80
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            # Simulate a base pv_log_file name that might be reused
+            pv_log_file_base = os.path.join(temp_dir, "test_progress.pv")
+
+            # --- Simulate First PV Operation ---
+            # pv usually outputs lines ending with \r for intermediate, \n for final.
+            # Format: "TOTAL_KNOWN_SIZE: CURRENT_BYTES OTHER_PV_STATS\r"
+            # Example: "100KiB: 10KiB [==> ] 10% ETA 0:09"
+
+            # Operation 1 writes to pv_log_file_base
+            # For this test, we don't need the thread suffix because we are testing
+            # the scenario where the main thread (or a single worker) handles multiple
+            # operations sequentially, leading to the same base pv_log_file name.
+            # The fix would make the *effective* pv_log_file name unique per operation.
+
+            # Let's assume the ProgressReporter is tracking this base file.
+            # We will manually call the reporter's update method to simulate its internal loop.
+            mock_params = MockParams(pv_log_file_base)
+            reporter = bzfs.ProgressReporter(mock_params, use_select=False, progress_update_intervals=(0.01, 0.02))
+
+            # Simulate ProgressReporter opening the file (it does this internally based on enqueue), For this test, we'll
+            # manually manage a TransferStat object, as the reporter would. The key is that if the filename is the same,
+            # the *same* TransferStat object associated with that selector key would be reused.
+
+            # Create a TransferStat as the reporter would associate with pv_log_file_base
+            eta_dummy = reporter.TransferStat.ETA(timestamp_nanos=0, seq_nr=0, line_tail="")
+            stat_obj_for_pv_log_file = reporter.TransferStat(bytes_in_flight=0, eta=eta_dummy)
+            current_time_ns = time.monotonic_ns()
+
+            # Simulate PV output for Operation 1
+            op1_lines = [
+                "100KiB: 10KiB [=>   ] 10%\r",  # 10KB transferred
+                "100KiB: 50KiB [==>  ] 50%\r",  # 50KB transferred
+                "100KiB: 100KiB [====>] 100%\n",  # 100KB transferred (final line)
+            ]
+            total_bytes_op1 = 0
+            for line in op1_lines:
+                delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
+                total_bytes_op1 += delta_bytes
+                current_time_ns += 1000  # Advance time slightly
+            self.assertEqual(total_bytes_op1, 100 * 1024, "Total bytes for Op1 incorrect")
+            # After op1 final line (ends with \n), bytes_in_flight in stat_obj_for_pv_log_file should be 0
+            self.assertEqual(
+                stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op1"
+            )
+
+            # --- Simulate Second PV Operation (reusing the same pv_log_file_base name) ---
+            # If the pv_log_file name is not unique per op, the reporter continues to use the *same* stat_obj_for_pv_log_file
+            op2_lines = [
+                "200KiB: 20KiB [=>   ] 10%\r",  # 20KB transferred for THIS operation
+                "200KiB: 100KiB [==>  ] 50%\r",  # 100KB transferred for THIS operation
+                "200KiB: 200KiB [====>] 100%\n",  # 200KB transferred for THIS operation (final line)
+            ]
+            total_bytes_op2 = 0
+            for line in op2_lines:
+                # CRITICAL: We are passing the SAME stat_obj_for_pv_log_file
+                delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
+                total_bytes_op2 += delta_bytes
+                current_time_ns += 1000
+            self.assertEqual(total_bytes_op2, 200 * 1024, "Total bytes for Op2 incorrect")
+            self.assertEqual(
+                stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op2"
+            )
+        finally:
+            shutil.rmtree(temp_dir)
+
     def test_has_duplicates(self):
         self.assertFalse(bzfs.has_duplicates([]))
         self.assertFalse(bzfs.has_duplicates([42]))
