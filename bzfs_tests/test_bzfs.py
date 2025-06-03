@@ -1090,83 +1090,83 @@ class TestHelperFunctions(unittest.TestCase):
                 os.remove(temp_file_path)
 
     def test_progress_reporter_state_with_reused_pv_file(self):
+        # We will manually call the reporter's update method to simulate its internal loop.
+        mock_params = MagicMock(spec=bzfs.Params)
+        reporter = bzfs.ProgressReporter(mock_params, use_select=False, progress_update_intervals=(0.01, 0.02))
 
-        class MockLogParams:
-            def __init__(self, pv_log_file_base: str):
-                self.pv_log_file = pv_log_file_base
+        # Simulate ProgressReporter opening the file (it does this internally based on enqueue), For this test, we'll
+        # manually manage a TransferStat object, as the reporter would. The key is that if the filename is the same,
+        # the *same* TransferStat object associated with that selector key would be reused.
 
-        class MockParams:
-            def __init__(self, pv_log_file_base: str):
-                self.log_params = MockLogParams(pv_log_file_base)
-                self.quiet = False
-                self.terminal_columns = 80
+        # Create a TransferStat as the reporter would associate with pv_log_file_base
+        eta_dummy = reporter.TransferStat.ETA(timestamp_nanos=0, seq_nr=0, line_tail="")
+        stat_obj_for_pv_log_file = reporter.TransferStat(bytes_in_flight=0, eta=eta_dummy)
+        current_time_ns = time.monotonic_ns()
+
+        # Simulate First PV Operation
+        # Format: "TOTAL_KNOWN_SIZE: CURRENT_BYTES OTHER_PV_STATS\r"
+        op1_lines = [
+            "100KiB: 10KiB [=>   ] 10%\r",  # 10KB transferred
+            "100KiB: 50KiB [==>  ] 50%\r",  # 50KB transferred
+            "100KiB: 100KiB [====>] 100%\n",  # 100KB transferred (final line)
+        ]
+        total_bytes_op1 = 0
+        for line in op1_lines:
+            delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
+            total_bytes_op1 += delta_bytes
+            current_time_ns += 1000  # Advance time slightly
+        self.assertEqual(total_bytes_op1, 100 * 1024, "Total bytes for Op1 incorrect")
+        # After op1 final line (ends with \n), bytes_in_flight in stat_obj_for_pv_log_file should be 0
+        self.assertEqual(stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op1")
+
+        # Simulate Second PV Operation (reusing the same pv_log_file_base name)
+        # If the pv_log_file name is not unique per op, the reporter continues to use the *same* stat_obj_for_pv_log_file
+        op2_lines = [
+            "200KiB: 20KiB [=>   ] 10%\r",  # 20KB transferred for THIS operation
+            "200KiB: 100KiB [==>  ] 50%\r",  # 100KB transferred for THIS operation
+            "200KiB: 200KiB [====>] 100%\n",  # 200KB transferred for THIS operation (final line)
+        ]
+        total_bytes_op2 = 0
+        for line in op2_lines:
+            # CRITICAL: We are passing the SAME stat_obj_for_pv_log_file
+            delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
+            total_bytes_op2 += delta_bytes
+            current_time_ns += 1000
+        self.assertEqual(total_bytes_op2, 200 * 1024, "Total bytes for Op2 incorrect")
+        self.assertEqual(stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op2")
+
+    def test_reporter_handles_pv_log_file_disappearing_before_initial_open(self):
+        # Test if ProgressReporter handles FileNotFoundError during the initial open of a pv_log_file.
+        mock_params = MagicMock(spec=bzfs.Params)
+        mock_params.log = MagicMock(spec=logging.Logger)
+        mock_params.pv_program_opts = bzfs.argument_parser().get_default("pv_program_opts").split()
 
         temp_dir = tempfile.mkdtemp()
-        try:
-            # Simulate a base pv_log_file name that might be reused
-            pv_log_file_base = os.path.join(temp_dir, "test_progress.pv")
+        self.addCleanup(shutil.rmtree, temp_dir)
+        pv_log_file = os.path.join(temp_dir, "test.pv")
+        reporter = bzfs.ProgressReporter(mock_params, use_select=False, progress_update_intervals=None)
+        self.assertSetEqual(set(), reporter.file_name_set)
+        self.assertSetEqual(set(), reporter.file_name_queue)
+        reporter.enqueue_pv_log_file(pv_log_file)
+        self.assertSetEqual(set(), reporter.file_name_set)
+        self.assertSetEqual({pv_log_file}, reporter.file_name_queue)
 
-            # --- Simulate First PV Operation ---
-            # pv usually outputs lines ending with \r for intermediate, \n for final.
-            # Format: "TOTAL_KNOWN_SIZE: CURRENT_BYTES OTHER_PV_STATS\r"
-            # Example: "100KiB: 10KiB [==> ] 10% ETA 0:09"
+        def mock_open(*args, **kwargs):
+            if args[0] == pv_log_file:
+                raise FileNotFoundError(f"File {pv_log_file} disappeared before opening.")
+            return open(*args, **kwargs)
 
-            # Operation 1 writes to pv_log_file_base
-            # For this test, we don't need the thread suffix because we are testing
-            # the scenario where the main thread (or a single worker) handles multiple
-            # operations sequentially, leading to the same base pv_log_file name.
-            # The fix would make the *effective* pv_log_file name unique per operation.
+        with patch("builtins.open", mock_open):
+            reporter.start()
+            time.sleep(0.1)  # Give the reporter thread a moment to attempt to open the file
+            reporter.stop()
 
-            # Let's assume the ProgressReporter is tracking this base file.
-            # We will manually call the reporter's update method to simulate its internal loop.
-            mock_params = MockParams(pv_log_file_base)
-            reporter = bzfs.ProgressReporter(mock_params, use_select=False, progress_update_intervals=(0.01, 0.02))
-
-            # Simulate ProgressReporter opening the file (it does this internally based on enqueue), For this test, we'll
-            # manually manage a TransferStat object, as the reporter would. The key is that if the filename is the same,
-            # the *same* TransferStat object associated with that selector key would be reused.
-
-            # Create a TransferStat as the reporter would associate with pv_log_file_base
-            eta_dummy = reporter.TransferStat.ETA(timestamp_nanos=0, seq_nr=0, line_tail="")
-            stat_obj_for_pv_log_file = reporter.TransferStat(bytes_in_flight=0, eta=eta_dummy)
-            current_time_ns = time.monotonic_ns()
-
-            # Simulate PV output for Operation 1
-            op1_lines = [
-                "100KiB: 10KiB [=>   ] 10%\r",  # 10KB transferred
-                "100KiB: 50KiB [==>  ] 50%\r",  # 50KB transferred
-                "100KiB: 100KiB [====>] 100%\n",  # 100KB transferred (final line)
-            ]
-            total_bytes_op1 = 0
-            for line in op1_lines:
-                delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
-                total_bytes_op1 += delta_bytes
-                current_time_ns += 1000  # Advance time slightly
-            self.assertEqual(total_bytes_op1, 100 * 1024, "Total bytes for Op1 incorrect")
-            # After op1 final line (ends with \n), bytes_in_flight in stat_obj_for_pv_log_file should be 0
-            self.assertEqual(
-                stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op1"
-            )
-
-            # --- Simulate Second PV Operation (reusing the same pv_log_file_base name) ---
-            # If the pv_log_file name is not unique per op, the reporter continues to use the *same* stat_obj_for_pv_log_file
-            op2_lines = [
-                "200KiB: 20KiB [=>   ] 10%\r",  # 20KB transferred for THIS operation
-                "200KiB: 100KiB [==>  ] 50%\r",  # 100KB transferred for THIS operation
-                "200KiB: 200KiB [====>] 100%\n",  # 200KB transferred for THIS operation (final line)
-            ]
-            total_bytes_op2 = 0
-            for line in op2_lines:
-                # CRITICAL: We are passing the SAME stat_obj_for_pv_log_file
-                delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
-                total_bytes_op2 += delta_bytes
-                current_time_ns += 1000
-            self.assertEqual(total_bytes_op2, 200 * 1024, "Total bytes for Op2 incorrect")
-            self.assertEqual(
-                stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op2"
-            )
-        finally:
-            shutil.rmtree(temp_dir)
+        mock_params.log.warning.assert_called_with(
+            "ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_log_file
+        )
+        self.assertSetEqual(set(), reporter.file_name_set)
+        self.assertSetEqual(set(), reporter.file_name_queue)
+        self.assertIsNone(reporter.exception)
 
     def test_has_duplicates(self):
         self.assertFalse(bzfs.has_duplicates([]))

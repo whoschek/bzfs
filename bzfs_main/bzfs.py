@@ -2363,7 +2363,7 @@ class Job:
             if not p.skip_replication:
                 self.print_replication_stats(self.replication_start_time_nanos)
             error_count = self.all_exceptions_count
-            if error_count > 0:
+            if error_count > 0 and p.daemon_lifetime_nanos == 0:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
                 raise self.first_exception  # reraise first swallowed exception
@@ -3814,9 +3814,8 @@ class Job:
         # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
         # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
         control_persist_limit_nanos = (self.control_persist_secs - self.control_persist_margin_secs) * 1_000_000_000
-        now = time.monotonic_ns()  # no real need to compute this inside the critical section of conn.lock
         with conn.lock:
-            if now - conn.last_refresh_time < control_persist_limit_nanos:
+            if time.monotonic_ns() - conn.last_refresh_time < control_persist_limit_nanos:
                 return  # ssh master is alive, reuse its TCP connection (this is the common case & the ultra-fast path)
             ssh_cmd = conn.ssh_cmd
             ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
@@ -5882,6 +5881,7 @@ class ProgressReporter:
             sent_bytes: int
             timestamp_nanos: int
 
+        log = self.params.log
         update_interval_secs, sliding_window_secs = (
             self.progress_update_intervals if self.progress_update_intervals is not None else self.get_update_intervals()
         )
@@ -5914,8 +5914,14 @@ class ProgressReporter:
                 next_update_nanos = start_time_nanos + update_interval_nanos
                 latest_samples: Deque[Sample] = deque([Sample(0, start_time_nanos)])  # sliding window w/ recent measurements
             for pv_log_file in local_file_name_queue:
-                Path(pv_log_file).touch()
-                fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
+                try:
+                    Path(pv_log_file).touch()
+                    fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
+                except FileNotFoundError:
+                    with self.lock:
+                        self.file_name_set.remove(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
+                    log.warning("ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_log_file)
+                    continue  # skip to the next file in the queue
                 fds.append(fd)
                 eta = self.TransferStat.ETA(timestamp_nanos=0, seq_nr=-len(fds), line_tail="")
                 selector.register(fd, selectors.EVENT_READ, data=(iter(fd), self.TransferStat(bytes_in_flight=0, eta=eta)))
@@ -6018,10 +6024,10 @@ class InterruptibleSleep:
         end_time_nanos = time.monotonic_ns() + duration_nanos
         with self._lock:
             while not self.is_stopping:
-                duration_nanos = end_time_nanos - time.monotonic_ns()
-                if duration_nanos <= 0:
+                diff_nanos = end_time_nanos - time.monotonic_ns()
+                if diff_nanos <= 0:
                     return
-                self._condition.wait(timeout=duration_nanos / 1_000_000_000)  # release, then block until notified or timeout
+                self._condition.wait(timeout=diff_nanos / 1_000_000_000)  # release, then block until notified or timeout
 
     def interrupt(self) -> None:
         """Wakes up currently sleeping threads and makes any future sleep()s a noop."""
@@ -6081,20 +6087,20 @@ ssh_master_domain_socket_file_pid_regex = re.compile(r"^[0-9]+")  # see socket_n
 
 def delete_stale_files(root_dir: str, prefix: str, millis: int = 60 * 60 * 1000, dirs=False, exclude=None, ssh=False):
     """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
-    nanos = millis * 1_000_000
-    now = time.time_ns()
+    seconds = millis / 1000
+    now = time.time()
     for entry in os.scandir(root_dir):
         if entry.name == exclude or not entry.name.startswith(prefix):
             continue
         try:
-            if ((dirs and entry.is_dir()) or (not dirs and not entry.is_dir())) and now - entry.stat().st_mtime_ns >= nanos:
+            if ((dirs and entry.is_dir()) or (not dirs and not entry.is_dir())) and now - entry.stat().st_mtime >= seconds:
                 if dirs:
                     shutil.rmtree(entry.path, ignore_errors=True)
                 elif not (ssh and stat.S_ISSOCK(entry.stat().st_mode)):
                     os.remove(entry.path)
                 elif match := ssh_master_domain_socket_file_pid_regex.match(entry.name[len(prefix) :]):
                     pid = int(match.group(0))
-                    if pid_exists(pid) is False or now - entry.stat().st_mtime_ns >= 31 * 24 * 60 * 60 * 1000 * 1_000_000:
+                    if pid_exists(pid) is False or now - entry.stat().st_mtime >= 31 * 24 * 60 * 60:
                         os.remove(entry.path)  # bzfs process is nomore alive hence its ssh master process isn't alive either
         except FileNotFoundError:
             pass  # harmless
@@ -6801,15 +6807,18 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
     for file in files:
         if os.path.isfile(file):
-            with open(file, mode="r", newline="", encoding="utf-8") as fd:
-                line = None
-                for line in fd:
-                    if line.endswith("\r"):
-                        continue  # skip all but the most recent status update of each transfer
-                    total_bytes += parse_pv_line(line)
+            try:
+                with open(file, mode="r", newline="", encoding="utf-8") as fd:
                     line = None
-                if line is not None:
-                    total_bytes += parse_pv_line(line)
+                    for line in fd:
+                        if line.endswith("\r"):
+                            continue  # skip all but the most recent status update of each transfer
+                        total_bytes += parse_pv_line(line)
+                        line = None
+                    if line is not None:
+                        total_bytes += parse_pv_line(line)  # consume last line of file w/ intermediate status update, if any
+            except FileNotFoundError:
+                pass  # harmless
     return total_bytes
 
 
