@@ -5919,7 +5919,7 @@ class ProgressReporter:
                     fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
                 except FileNotFoundError:
                     with self.lock:
-                        self.file_name_set.remove(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
+                        self.file_name_set.discard(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
                     log.warning("ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_log_file)
                     continue  # skip to the next file in the queue
                 fds.append(fd)
