@@ -934,7 +934,7 @@ class Job:
                         self.validate_type(value, Union[str, int], f"{context} org/target/alert_dict/value")
         return monitor_snapshot_plan
 
-    def validate_is_subset(self, x: Iterable, y: Iterable, x_name: str, y_name: str) -> None:
+    def validate_is_subset(self, x: Iterable[str], y: Iterable[str], x_name: str, y_name: str) -> None:
         if isinstance(x, str) or not isinstance(x, Iterable):
             self.die(f"{x_name} must be an Iterable")
         if isinstance(y, str) or not isinstance(y, Iterable):
