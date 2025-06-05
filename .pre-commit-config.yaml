@@ -35,6 +35,16 @@ repos:
       - id: trailing-whitespace  # Remove whitespace from the end of lines
       - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
       - id: debug-statements  # Check for debugger imports and py37+ breakpoint() calls in python source
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.12
+    hooks:
+      - id: ruff
+        args: [--config=pyproject.toml]
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.16.0
+    hooks:
+      - id: mypy
+        args: [--config-file=pyproject.toml]
   - repo: https://github.com/psf/black
     rev: 25.1.0  # bump version number occasionally with autoupdate
     hooks:

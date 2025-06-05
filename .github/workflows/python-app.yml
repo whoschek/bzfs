@@ -130,19 +130,12 @@ jobs:
       run: |
         ./test.sh
         echo "bzfs-testrun-success"
-    - name: Run mypy static type checker
-      shell: bash
+    - name: Install pre-commit, ruff and mypy
       run: |
-        pip install --upgrade "mypy==1.*"
-        mypy --check-untyped-defs bzfs/*.py || true  # see https://mypy.readthedocs.io
-    - name: Lint with flake8
-      shell: bash
+        pip install --upgrade "pre-commit==4.2" "ruff==0.*" "mypy==1.*"
+    - name: Run pre-commit
       run: |
-        pip install --upgrade "flake8==7.*"
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide. https://www.flake8rules.com
-        flake8 . --count --ignore=E128,E203,W503 --exit-zero --max-complexity=15 --max-line-length=127 --statistics
+        pre-commit run --all-files --show-diff-on-failure
 
 
   test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.1
