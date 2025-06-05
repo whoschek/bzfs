@@ -75,17 +75,17 @@ class TestHelperFunctions(unittest.TestCase):
             self.job.validate_true(0, "name")
 
     def test_validate_is_subset(self):
-        self.job.validate_is_subset([1], [1, 2], "x", "y")
-        self.job.validate_is_subset([], [1, 2], "x", "y")
+        self.job.validate_is_subset(["1"], ["1", "2"], "x", "y")
+        self.job.validate_is_subset([], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], [], "x", "y")
         with self.assertRaises(SystemExit):
-            self.job.validate_is_subset([3], [1, 2], "x", "y")
+            self.job.validate_is_subset(["3"], ["1", "2"], "x", "y")
         with self.assertRaises(SystemExit):
-            self.job.validate_is_subset([3, 4], [], "x", "y")
+            self.job.validate_is_subset(["3", "4"], [], "x", "y")
         with self.assertRaises(SystemExit):
-            self.job.validate_is_subset("foo", [3], "x", "y")
+            self.job.validate_is_subset("foo", ["3"], "x", "y")
         with self.assertRaises(SystemExit):
-            self.job.validate_is_subset([3], "foo", "x", "y")
+            self.job.validate_is_subset(["3"], "foo", "x", "y")
 
     def _make_mock_socket(self, bind_side_effect=None):
         sock = MagicMock()
