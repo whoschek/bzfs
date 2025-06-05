@@ -105,11 +105,7 @@ target-version = "py38"
 line-length = 127
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "C90"]
-ignore = ["E203"]
-
-[tool.ruff.lint.mccabe]
-max-complexity = 15
+select = ["E9", "F63", "F7", "F82"]
 
 [tool.mypy]
 check_untyped_defs = true
