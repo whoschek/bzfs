@@ -127,7 +127,7 @@ class TestXFinally(unittest.TestCase):
     def test_xfinally_handles_cleanup_exception_python_3_11_or_higher(self):
         self.skipTest("disabled until python 3.11 is the minimum supported")
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
-        with self.assertRaises(ExceptionGroup) as cm:
+        with self.assertRaises(ExceptionGroup) as cm:  # noqa: F821  # type: ignore
             with bzfs.xfinally(cleanup):
                 raise ValueError("Body error")
         self.assertEqual(2, len(cm.exception.exceptions))

@@ -2211,8 +2211,8 @@ class Job:
         self.params: Params
         self.all_dst_dataset_exists: Dict[str, Dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
-        self.src_properties: Dict[str, Dict[str, str | int]] = {}
-        self.dst_properties: Dict[str, Dict[str, str | int]] = {}
+        self.src_properties: Dict[str, Dict[str, Union[str, int]]] = {}
+        self.dst_properties: Dict[str, Dict[str, Union[str, int]]] = {}
         self.all_exceptions: List[str] = []
         self.all_exceptions_count = 0
         self.max_exceptions_to_summarize = 10000
@@ -5149,7 +5149,7 @@ class Job:
             todo_futures: Set[Future] = set()
             submitted: int = 0
             next_update_nanos: int = time.monotonic_ns()
-            fw_timeout: Optional[float]
+            fw_timeout: Optional[float] = None
 
             def submit_datasets() -> bool:
                 nonlocal fw_timeout

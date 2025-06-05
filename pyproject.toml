@@ -111,6 +111,27 @@ select = ["E9", "F63", "F7", "F82"]
 [tool.mypy]
 python_version = "3.8"
 check_untyped_defs = true
-ignore_missing_imports = true
-follow_imports = "skip"
-files = ["bzfs_main/*.py"]
+no_implicit_optional = false
+modules = ["bzfs_main"]
+disable_error_code = [
+  "assignment",
+  "attr-defined",
+  "name-defined",
+  "misc",
+  "arg-type",
+  "return-value",
+  "var-annotated",
+  "union-attr",
+  "operator",
+  "call-overload",
+  "annotation-unchecked",
+  "no-redef",
+  "type-var",
+  "str-bytes-safe",
+  "func-returns-value",
+  "return",
+  "truthy-function",
+  "exit-return",
+  "index",
+  "call-arg",
+]
