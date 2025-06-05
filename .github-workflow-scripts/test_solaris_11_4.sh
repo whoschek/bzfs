@@ -65,6 +65,7 @@ ssh-keygen -t rsa -f $HOME/.ssh/testid_rsa -q -N ""  # create private key and pu
 cat $HOME/.ssh/testid_rsa.pub >> $HOME/.ssh/authorized_keys
 ls -al $HOME
 
+echo "Using bzfs_test_mode=$bzfs_test_mode"
 echo "Now running coverage"; ./coverage.sh
 echo "Now running tests as root user"; ./test.sh
 
@@ -86,7 +87,7 @@ chmod go-rwx $thome/.ssh/authorized_keys
 cp -rp . $thome/bzfs # if running with Github Action
 # cp -rp bzfs $thome/ # if running with https://github.com/vmactions/shell-solaris
 chown -R $tuser $thome/bzfs
-sudo -u $tuser sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/bzfs; ./test.sh"
+sudo -u $tuser bzfs_test_mode=$bzfs_test_mode sh -c 'export PATH=/python3/bin:$PATH; '"cd $thome/bzfs; bzfs_test_mode=$bzfs_test_mode ./test.sh"
 echo "bzfs-testrun-success"
 
 #pkg update --accept; reboot # FIXME: reboot disconnects

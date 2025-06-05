@@ -44,6 +44,7 @@ echo "Default shell of $my_user after change:"
 getent passwd $my_user | cut -d: -f7
 export SHELL=/bin/sh
 
+echo "Using bzfs_test_mode=$bzfs_test_mode"
 echo "Now running tests as root user"; ./test.sh
 echo "Now running coverage"; ./coverage.sh
 
@@ -70,5 +71,5 @@ chsh -s /bin/sh $my_user
 echo "Default shell of $my_user after change:"
 getent passwd $my_user | cut -d: -f7
 
-sudo -u $tuser sh -c "cd $thome/bzfs; ./test.sh"
+sudo -u $tuser sh -c "cd $thome/bzfs; bzfs_test_mode=$bzfs_test_mode ./test.sh"
 echo "bzfs-testrun-success"

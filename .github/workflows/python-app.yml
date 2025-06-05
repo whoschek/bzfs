@@ -376,7 +376,7 @@ jobs:
         sudo mkdir -p /root/.ssh
         sudo cp -a $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub /root/.ssh/
         cat $HOME/.ssh/id_rsa.pub | sudo tee -a /root/.ssh/authorized_keys > /dev/null
-        sudo ./test.sh
+        sudo bzfs_test_mode=$bzfs_test_mode ./test.sh
     - name: Run tests and generate code coverage
       run: |
         ./coverage.sh
@@ -445,6 +445,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "14.2"
+        envs: "bzfs_test_mode"
         run: |
           ./.github-workflow-scripts/test_freebsd_14_1.sh
     - name: Upload code coverage report to workflow run page
@@ -468,6 +469,7 @@ jobs:
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
         release: "13.4"
+        envs: "bzfs_test_mode"
         run: |
          touch coverage_report.txt; exit 0  # ./.github-workflow-scripts/test_freebsd_13_3.sh
     - name: Upload code coverage report to workflow run page
@@ -492,6 +494,7 @@ jobs:
       uses: vmactions/solaris-vm@v1.1.1  # see https://github.com/vmactions/solaris-vm
       with:
         release: "11.4"
+        envs: "bzfs_test_mode"
         mem: 8192
         cpu: 4
         run: |

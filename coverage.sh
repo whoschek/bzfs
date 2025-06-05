@@ -22,6 +22,4 @@ PYTHONPATH=. python3 -m coverage run --branch --include="bzfs_main/*.py" --omit=
 python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
 
-if [ "$bzfs_test_mode" != "unit" ]; then
-  PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
-fi
+PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
