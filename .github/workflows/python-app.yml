@@ -130,9 +130,6 @@ jobs:
       run: |
         ./test.sh
         echo "bzfs-testrun-success"
-    - name: Install pre-commit, ruff and mypy
-      run: |
-        pip install --upgrade "pre-commit==4.2" "ruff==0.*" "mypy==1.*"
     - name: Run pre-commit
       run: |
         pre-commit run --all-files --show-diff-on-failure
