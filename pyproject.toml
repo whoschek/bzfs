@@ -106,7 +106,7 @@ line-length = 127
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C90"]
-ignore = ["E128", "E203", "W503"]
+ignore = ["E203", "W503"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15

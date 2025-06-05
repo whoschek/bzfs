@@ -45,6 +45,7 @@ repos:
     hooks:
       - id: mypy
         args: [--config-file=pyproject.toml]
+        pass_filenames: false
   - repo: https://github.com/psf/black
     rev: 25.1.0  # bump version number occasionally with autoupdate
     hooks:
