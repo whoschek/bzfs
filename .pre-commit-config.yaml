@@ -36,7 +36,7 @@ repos:
       - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
       - id: debug-statements  # Check for debugger imports and py37+ breakpoint() calls in python source
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.12
+    rev: v0.11.13
     hooks:
       - id: ruff
       # config options like `target-version` live in pyproject.toml
