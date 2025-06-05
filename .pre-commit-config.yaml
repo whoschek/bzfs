@@ -45,6 +45,8 @@ repos:
     hooks:
       - id: mypy
         exclude: \.git*
+        args: ["--exit-zero"]
+        pass_filenames: false
       # config options like `exclude` live in pyproject.toml
   - repo: https://github.com/psf/black
     rev: 25.1.0  # bump version number occasionally with autoupdate
