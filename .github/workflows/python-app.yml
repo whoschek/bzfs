@@ -136,7 +136,7 @@ jobs:
         pip install --upgrade "pre-commit==4.2" "ruff==0.*" "mypy==1.*"
     - name: Run pre-commit
       run: |
-        pre-commit run --all-files --show-diff-on-failure
+        pre-commit run --all-files
 
 
   test_ubuntu_24_04_zfs_latest:  # currently uses >= zfs-2.3.1
