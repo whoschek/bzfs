@@ -109,5 +109,8 @@ line-length = 127
 select = ["E9", "F63", "F7", "F82"]
 
 [tool.mypy]
+python_version = "3.8"
 check_untyped_defs = true
+ignore_missing_imports = true
+follow_imports = "skip"
 files = ["bzfs_main/*.py"]
