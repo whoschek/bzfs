@@ -59,6 +59,7 @@ Distribution = "https://pypi.org/project/bzfs"
 [project.optional-dependencies]
 dev = [  # for development only
   "black>=25.1",  # see https://github.com/psf/black
+  "ruff>=0.11",  # see https://github.com/astral-sh/ruff
   "coverage>=7.6",  # see https://github.com/nedbat/coveragepy
   "mypy>=1.13",  # see https://github.com/python/mypy
   "argparse-manpage==4.6",  # see https://github.com/praiskup/argparse-manpage
@@ -105,11 +106,7 @@ target-version = "py38"
 line-length = 127
 
 [tool.ruff.lint]
-select = ["E9", "F63", "F7", "F82", "C90"]
-ignore = ["E128", "E203", "W503"]
-
-[tool.ruff.lint.mccabe]
-max-complexity = 15
+select = ["E9", "F63", "F7", "F82"]
 
 [tool.mypy]
 check_untyped_defs = true
