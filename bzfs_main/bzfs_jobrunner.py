@@ -431,22 +431,29 @@ class Job:
             dst_root_datasets.keys(), retain_dst_targets.keys(), "--dst-root-dataset.keys", "--retain-dst-targets.keys"
         )
         self.validate_is_subset(dst_hosts.keys(), dst_root_datasets.keys(), "--dst-hosts.keys", "--dst-root-dataset.keys")
-        if len(basis_src_hosts) > 1 and any(
-            dst_root_dataset and src_magic_substitution_token not in dst_root_dataset
-            for dst_root_dataset in dst_root_datasets.values()
-        ):
+        bad_root_datasets = {
+            dst_host: root_dataset
+            for dst_host in sorted(dst_hosts.keys())
+            if src_magic_substitution_token not in (root_dataset := dst_root_datasets[dst_host])
+        }
+        if len(src_hosts) > 1 and len(bad_root_datasets) > 0:
+            self.die(
+                "Cowardly refusing to proceed as multiple source hosts must not be configured to write to the same "
+                "destination dataset. "
+                f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(src_hosts)}"
+            )
+        bad_root_datasets = {
+            dst_host: root_dataset
+            for dst_host, root_dataset in sorted(dst_root_datasets.items())
+            if root_dataset and src_magic_substitution_token not in root_dataset
+        }
+        if len(basis_src_hosts) > 1 and len(bad_root_datasets) > 0:
             self.die(
                 "Cowardly refusing to proceed as multiple source hosts are defined in the configuration, but "
-                f"not all non-empty datasets in --dst-root-datasets contain the '{src_magic_substitution_token}' "
+                f"not all non-empty root datasets in --dst-root-datasets contain the '{src_magic_substitution_token}' "
                 "substitution token to prevent collisions on writing destination datasets. "
-                f"Problematic dst_root_datasets: {dst_root_datasets} for src_hosts: {basis_src_hosts}"
+                f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(basis_src_hosts)}"
             )
-        self.validate_true(
-            len(src_hosts) <= 1
-            or all(src_magic_substitution_token in dst_root_datasets[dst_host] for dst_host in dst_hosts.keys()),
-            "Cowardly refusing to proceed as multiple source hosts must not be configured to write to the same "
-            "destination dataset",
-        )
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
@@ -1005,6 +1012,10 @@ def shuffle_dict(dictionary: Dict) -> Dict:
     items = list(dictionary.items())
     random.shuffle(items)
     return dict(items)
+
+
+def sorted_dict(dictionary: Dict) -> Dict:
+    return dict(sorted(dictionary.items()))
 
 
 def sanitize(filename: str) -> str:

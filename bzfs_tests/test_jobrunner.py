@@ -131,9 +131,72 @@ class TestHelperFunctions(unittest.TestCase):
             parser.parse_args(["--version"])
         self.assertEqual(0, e.exception.code)
 
+    def test_sorted_dict_empty_dictionary_returns_empty(self):
+        result = bzfs_jobrunner.sorted_dict({})
+        self.assertEqual(result, {})
+
+    def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self):
+        result = bzfs_jobrunner.sorted_dict({"a": 1})
+        self.assertEqual(result, {"a": 1})
+
+    def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self):
+        result = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
+        self.assertEqual(result, {"a": 1, "b": 2, "c": 3})
+
+    def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self):
+        result = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
+        self.assertEqual(result, {1: "one", 2: "two", 3: "three"})
+
+    def test_sorted_dict_with_mixed_key_types_raises_error(self):
+        with self.assertRaises(TypeError):
+            bzfs_jobrunner.sorted_dict({"a": 1, 2: "two"})
+
 
 #############################################################################
 class TestValidation(unittest.TestCase):
+    def test_multisource_substitution_token_validation_with_empty_target(self):
+        job = bzfs_jobrunner.Job()
+        job.log = MagicMock()
+        job.is_test_mode = True
+
+        # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
+        base_argv = [
+            bzfs_jobrunner.prog_name,
+            "--job-id=test",
+            "--root-dataset-pairs",
+            "tank/data",
+            "backup/data",
+            "--src-hosts=" + str(["srcA", "srcB"]),
+            "--dst-hosts=" + str({"dstX": ["target", ""]}),
+            "--dst-root-datasets=" + str({"dstX": ""}),
+            "--retain-dst-targets=" + str({"dstX": ["target", ""]}),
+            "--create-src-snapshots",  # Dummy command to make arg parsing happy
+        ]
+        expect_msg = "source hosts must not be configured to write to the same destination dataset"
+
+        # Scenario 1: Run for srcA only, should pass.
+        argv_srcA = base_argv + ["--src-host", "srcA"]
+        with patch("sys.argv", argv_srcA):
+            with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
+                job.run_main(argv_srcA)  # Should not raise SystemExit
+                mock_run_subjobs.assert_called_once()
+
+        # Scenario 1: Run for srcB only, should pass.
+        argv_srcB = base_argv + ["--src-host", "srcB"]
+        with patch("sys.argv", argv_srcA):
+            with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
+                job.run_main(argv_srcB)  # Should not raise SystemExit
+                mock_run_subjobs.assert_called_once()
+
+        # Scenario 3: Run for both (no --src-host filter), should fail.
+        job = bzfs_jobrunner.Job()
+        job.log = MagicMock()
+        with patch("sys.argv", base_argv):  # No --src-host filter
+            with self.assertRaises(SystemExit) as cm:
+                job.run_main(base_argv)
+            self.assertEqual(die_status, cm.exception.code)
+            self.assertIn(expect_msg, str(cm.exception))
+
     def test_multisource_substitution_token_validation_passes_safe_config(self):
         job = bzfs_jobrunner.Job()
         job.log = MagicMock()
@@ -148,8 +211,8 @@ class TestValidation(unittest.TestCase):
             "backup/data",
             "--src-hosts=" + str(["srcA", "srcB"]),
             "--dst-hosts=" + str({"dstX": ["target"]}),
-            "--dst-root-datasets=" + str({"dstX": "pool/backup_^SRC_HOST"}),  # Correctly uses ^SRC_HOST
-            "--retain-dst-targets=" + str({"dstX": ["target"]}),
+            "--dst-root-datasets=" + str({"dstX": "pool/backup_^SRC_HOST", "dstY": ""}),  # Correctly uses ^SRC_HOST
+            "--retain-dst-targets=" + str({"dstX": ["target"], "dstY": ["target"]}),
             "--create-src-snapshots",  # Dummy command to make arg parsing happy
         ]
 
@@ -174,6 +237,7 @@ class TestValidation(unittest.TestCase):
     def test_multisource_substitution_token_validation_rejects_unsafe_config(self):
         job = bzfs_jobrunner.Job()
         job.log = MagicMock()
+        job.is_test_mode = True
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
         base_argv = [
@@ -184,11 +248,11 @@ class TestValidation(unittest.TestCase):
             "backup/data",
             "--src-hosts=" + str(["srcA", "srcB"]),
             "--dst-hosts=" + str({"dstX": ["target"]}),
-            "--dst-root-datasets=" + str({"dstX": "pool/backup_fixed_path"}),  # incorrectly uses ^SRC_HOST
-            "--retain-dst-targets=" + str({"dstX": ["target"]}),
+            "--dst-root-datasets=" + str({"dstX": "pool/^SRC_HOST", "dstZ": "pool/fixed"}),  # incorrectly uses ^SRC_HOST
+            "--retain-dst-targets=" + str({"dstX": ["target"], "dstZ": ["target"]}),
             "--create-src-snapshots",  # Dummy command to make arg parsing happy
         ]
-        expected_err_msg = "but not all non-empty datasets in --dst-root-datasets contain the '^SRC_HOST' substitution token"
+        expect_msg = "but not all non-empty root datasets in --dst-root-datasets contain the '^SRC_HOST' substitution token"
 
         # Scenario 1: Run for srcA only, should fail.
         argv_srcA = base_argv + ["--src-host", "srcA"]
@@ -196,7 +260,7 @@ class TestValidation(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(argv_srcA)
             self.assertEqual(die_status, cm.exception.code)
-            self.assertIn(expected_err_msg, str(cm.exception))
+            self.assertIn(expect_msg, str(cm.exception))
 
         # Scenario 2: Run for srcB only, should fail.
         argv_srcB = base_argv + ["--src-host", "srcB"]
@@ -204,7 +268,7 @@ class TestValidation(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(argv_srcB)
             self.assertEqual(die_status, cm.exception.code)
-            self.assertIn(expected_err_msg, str(cm.exception))
+            self.assertIn(expect_msg, str(cm.exception))
 
         # Scenario 3: Run for both (no --src-host filter), should fail.
         job = bzfs_jobrunner.Job()
@@ -213,7 +277,7 @@ class TestValidation(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(base_argv)
             self.assertEqual(die_status, cm.exception.code)
-            self.assertIn(expected_err_msg, str(cm.exception))
+            self.assertIn(expect_msg, str(cm.exception))
 
 
 #############################################################################
