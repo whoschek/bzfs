@@ -4959,7 +4959,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_jobrunner_flat_simple(self):
         def run_jobrunner(*args, **kwargs):
-            self.run_bzfs(
+            return self.run_bzfs(
                 *args,
                 **kwargs,
                 use_jobrunner=True,
@@ -5305,7 +5305,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_jobrunner_flat_simple_with_empty_targets(self):
         def run_jobrunner(*args, **kwargs):
-            self.run_bzfs(
+            return self.run_bzfs(
                 *args,
                 **kwargs,
                 use_jobrunner=True,

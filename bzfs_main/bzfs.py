@@ -2267,7 +2267,7 @@ class Job:
         log_params = LogParams(args)
         with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
             log = get_logger(log_params, args, log)
-            log.info("%s", "Log file is: " + log_params.log_file)
+            log.info("%s", f"Log file is: {log_params.log_file}")
             aux_args = []
             if getattr(args, "include_snapshot_plan", None):
                 aux_args += args.include_snapshot_plan
@@ -2380,7 +2380,7 @@ class Job:
             log_error_on_exit(f"{e} within regex '{e.pattern}'", die_status)
             raise SystemExit(die_status) from e
         finally:
-            log.info("%s", "Log file was: " + p.log_params.log_file)
+            log.info("%s", f"Log file was: {p.log_params.log_file}")
 
         log.info("Success. Goodbye!")
         print("", end="", file=sys.stderr)
