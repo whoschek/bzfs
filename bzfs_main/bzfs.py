@@ -5179,6 +5179,7 @@ class Job:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             todo_futures: Set[Future] = set()
+            future_nodes: dict[Future, TreeNode] = {}
             submitted: int = 0
             next_update_nanos: int = time.monotonic_ns()
             fw_timeout: Optional[float] = None
@@ -5202,7 +5203,7 @@ class Job:
                     nonlocal submitted
                     submitted += 1
                     future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
-                    future.node = node  # type: ignore[attr-defined]
+                    future_nodes[future] = node
 
             failed = False
             while submit_datasets():
@@ -5210,7 +5211,8 @@ class Job:
                     todo_futures, fw_timeout, return_when=FIRST_COMPLETED
                 )
                 for done_future in done_futures_set:
-                    dataset = done_future.node.dataset  # type: ignore[attr-defined]
+                    node = future_nodes.pop(done_future)
+                    dataset = node.dataset
                     try:
                         no_skip: bool = done_future.result()  # does not block as processing has already completed
                     except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
@@ -5234,7 +5236,7 @@ class Job:
                                     simple_enqueue_children(child_node)  # ... recursively down the tree
 
                         if no_skip:
-                            simple_enqueue_children(done_future.node)  # type: ignore[attr-defined]
+                            simple_enqueue_children(node)
                     else:
                         # The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner.
                         # Here, a "dataset" string is treated as an identifier for any kind of job rather than a reference
@@ -5299,7 +5301,7 @@ class Job:
                                 assert node.mut.pending >= 0
 
                         assert enable_barriers
-                        on_job_completion_with_barriers(done_future.node, no_skip)  # type: ignore[attr-defined]
+                        on_job_completion_with_barriers(node, no_skip)
             # endwhile submit_datasets()
             assert len(priority_queue) == 0
             assert len(todo_futures) == 0
