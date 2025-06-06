@@ -5155,9 +5155,6 @@ class Job:
                 dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
                 return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
 
-        def make_tree_node(dataset: str, children: Tree, parent: Optional[TreeNode] = None) -> TreeNode:
-            return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
-
         def build_dataset_tree_and_find_roots() -> List[TreeNode]:
             """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
             tree: Tree = self.build_dataset_tree(datasets)  # tree consists of nested dictionaries
@@ -5206,8 +5203,6 @@ class Job:
                     submitted += 1
                     future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
                     future.node = node  # type: ignore[attr-defined]
-                    todo_futures.add(future)
-                return len(todo_futures) > 0
 
             failed = False
             while submit_datasets():
