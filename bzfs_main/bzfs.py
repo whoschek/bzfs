@@ -2245,7 +2245,7 @@ class Job:
         self.num_snapshots_replicated: int = 0
         self.control_persist_secs: int = 90
         self.control_persist_margin_secs: int = 2
-        self.progress_reporter: ProgressReporter = None
+        self.progress_reporter: Optional[ProgressReporter] = None
         self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
         self.timeout_nanos: Optional[int] = None
