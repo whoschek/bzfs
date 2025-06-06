@@ -3797,7 +3797,7 @@ class TestConnectionPool(unittest.TestCase):
                         if is_logging:
                             log.log(loglevel, f"itr maxsessions: {maxsessions}, items: {items}, step: {step}")
                             log.log(loglevel, f"clen: {len(cpool.priority_queue)}, cpool: {cpool.priority_queue}")
-                            log.log(loglevel, f"dlen: {len(dpool.priority_queue)}, dpool: {dpool.priority_queue}")
+                            log.log(loglevel, f"dlen: {len(dpool.priority_list)}, dpool: {dpool.priority_list}")
                         if not conns or rng.randint(0, 1):
                             log.log(loglevel, "get")
                             conns.append(self.get_connection(cpool, dpool))
@@ -3818,7 +3818,7 @@ class TestConnectionPool(unittest.TestCase):
                     print("Ooops!")
                     print(f"maxsessions: {maxsessions}, items: {items}, step: {step}, item: {item}")
                     print(f"clen: {len(cpool.priority_queue)}, cpool: {cpool.priority_queue}")
-                    print(f"dlen: {len(dpool.priority_queue)}, dpool: {dpool.priority_queue}")
+                    print(f"dlen: {len(dpool.priority_list)}, dpool: {dpool.priority_list}")
                     raise
                 log.log(loglevel, "cpool: %s", cpool)
                 # log.log(bzfs.log_debug, "cpool: %s", cpool)
@@ -3831,32 +3831,32 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection):
         super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection)
-        self.priority_queue: List[bzfs.Connection] = []  # type: ignore[assignment]
+        self.priority_list: List[bzfs.Connection] = []
 
     def get_connection(self) -> bzfs.Connection:
         with self._lock:
-            self.priority_queue.sort()
-            conn = self.priority_queue[-1] if self.priority_queue else None
+            self.priority_list.sort()
+            conn = self.priority_list[-1] if self.priority_list else None
             if conn is None or conn.is_full():
                 conn = bzfs.Connection(self.remote, self.capacity, self.cid)
                 self.last_modified += 1
                 conn.update_last_modified(self.last_modified)  # LIFO tiebreaker favors latest conn as that's most alive
                 self.cid += 1
-                self.priority_queue.append(conn)
+                self.priority_list.append(conn)
             conn.increment_free(-1)
             return conn
 
     def return_connection(self, old_conn: bzfs.Connection) -> None:
         assert old_conn is not None
         with self._lock:
-            assert any(old_conn is c for c in self.priority_queue)
+            assert any(old_conn is c for c in self.priority_list)
             old_conn.increment_free(1)
             self.last_modified += 1
             old_conn.update_last_modified(self.last_modified)
 
     def __repr__(self) -> str:
         with self._lock:
-            return str({"capacity": self.capacity, "queue_len": len(self.priority_queue), "queue": self.priority_queue})
+            return str({"capacity": self.capacity, "queue_len": len(self.priority_list), "queue": self.priority_list})
 
 
 #############################################################################
