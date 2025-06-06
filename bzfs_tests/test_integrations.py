@@ -33,7 +33,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from unittest.mock import patch
 
 from bzfs_main import bzfs, bzfs_jobrunner
@@ -296,31 +296,31 @@ class BZFSTestCase(ParametrizedTestCase):
     def run_bzfs(
         self,
         *args,
-        dry_run: bool = None,
+        dry_run: Optional[bool] = None,
         no_create_bookmark: bool = False,
         no_use_bookmark: bool = False,
         skip_on_error: str = "fail",
         retries: int = 0,
         expected_status: int = 0,
-        error_injection_triggers: Dict[str, Counter] = None,
-        delete_injection_triggers: Dict[str, Counter] = None,
-        param_injection_triggers: Dict[str, Dict[str, bool]] = None,
-        inject_params: Dict[str, bool] = None,
-        max_command_line_bytes: int = None,
-        creation_prefix: str = None,
-        max_exceptions_to_summarize: int = None,
-        max_datasets_per_minibatch_on_list_snaps: int = None,
-        control_persist_margin_secs: int = None,
-        isatty: bool = None,
+        error_injection_triggers: Optional[Dict[str, Counter]] = None,
+        delete_injection_triggers: Optional[Dict[str, Counter]] = None,
+        param_injection_triggers: Optional[Dict[str, Dict[str, bool]]] = None,
+        inject_params: Optional[Dict[str, bool]] = None,
+        max_command_line_bytes: Optional[int] = None,
+        creation_prefix: Optional[str] = None,
+        max_exceptions_to_summarize: Optional[int] = None,
+        max_datasets_per_minibatch_on_list_snaps: Optional[int] = None,
+        control_persist_margin_secs: Optional[int] = None,
+        isatty: Optional[bool] = None,
         progress_update_intervals: Optional[Tuple[float, float]] = None,
-        use_select: bool = None,
+        use_select: Optional[bool] = None,
         use_jobrunner: bool = False,
-        spawn_process_per_job: bool = None,
-        include_snapshot_plan_excludes_outdated_snapshots: bool = None,
+        spawn_process_per_job: Optional[bool] = None,
+        include_snapshot_plan_excludes_outdated_snapshots: Optional[bool] = None,
         cache_snapshots: bool = False,
-    ):
+    ) -> Union[bzfs.Job, bzfs_jobrunner.Job]:
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
-        args = list(args)
+        args_list = list(args)
         src_host = ["--ssh-src-host", "127.0.0.1"]
         dst_host = ["--ssh-dst-host", "127.0.0.1"]
         ssh_dflt_port = "2222" if ssh_program == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
@@ -335,9 +335,9 @@ class BZFSTestCase(ParametrizedTestCase):
         dst_ssh_config_file = ["--ssh-dst-config-file", ssh_config_file]
         params = self.param
         if params and params.get("ssh_mode") == "push":
-            args = args + dst_host + dst_port
+            args_list = args_list + dst_host + dst_port
         elif params and params.get("ssh_mode") == "pull":
-            args = args + src_host + src_port
+            args_list = args_list + src_host + src_port
         elif params and params.get("ssh_mode") == "pull-push":
             if (
                 getenv_bool("test_enable_IPv6", True)
@@ -347,18 +347,18 @@ class BZFSTestCase(ParametrizedTestCase):
             ):
                 src_host = ["--ssh-src-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
                 dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
-            args = args + src_host + dst_host + src_port + dst_port
+            args_list = args_list + src_host + dst_host + src_port + dst_port
             if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
-                args = args + src_user + src_ssh_config_file + dst_ssh_config_file + ["--ssh-cipher="]
-            args = args + ["--bwlimit=10000m"]
+                args_list = args_list + src_user + src_ssh_config_file + dst_ssh_config_file + ["--ssh-cipher="]
+            args_list = args_list + ["--bwlimit=10000m"]
         elif params and params.get("ssh_mode", "local") != "local":
             raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])
 
         if platform.system() == "Linux":
-            args += src_private_key
+            args_list += src_private_key
         else:
-            args += src_private_key2
-        args = args + [
+            args_list += src_private_key2
+        args_list = args_list + [
             "--ssh-src-extra-opts",
             "-o StrictHostKeyChecking=no",
             "--ssh-dst-extra-opts",
@@ -368,23 +368,25 @@ class BZFSTestCase(ParametrizedTestCase):
             if ssh_program == "ssh" and has_netcat_prog and not is_solaris_zfs() and not platform.system() == "FreeBSD":
                 r = rng.randint(0, 2)
                 if r % 3 == 0:
-                    args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
+                    args_list = args_list + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
                 elif r % 3 == 1:
-                    args = args + ["--ssh-dst-extra-opt=-oProxyCommand=nc %h %p"]
+                    args_list = args_list + ["--ssh-dst-extra-opt=-oProxyCommand=nc %h %p"]
 
-        for arg in args:
+        for arg in args_list:
             assert "--retries" not in arg
-        args += [f"--retries={retries}"]
-        args += self.log_dir_opt()
+        args_list += [f"--retries={retries}"]
+        args_list += self.log_dir_opt()
 
         if params and "skip_missing_snapshots" in params:
-            i = find_match(args, lambda arg: arg.startswith("-"))
+            i = find_match(args_list, lambda arg: arg.startswith("-"))
             i = 0 if i < 0 else i
-            args = args[0:i] + ["--skip-missing-snapshots=" + str(params["skip_missing_snapshots"])] + args[i:]
+            args_list = (
+                args_list[0:i] + ["--skip-missing-snapshots=" + str(params["skip_missing_snapshots"])] + args_list[i:]
+            )
 
         if self.is_no_privilege_elevation():
             # test ZFS delegation in combination with --no-privilege-elevation flag
-            args = args + ["--no-privilege-elevation"]
+            args_list = args_list + ["--no-privilege-elevation"]
             src_permissions = "send,snapshot,hold"
             if not is_solaris_zfs():
                 src_permissions += ",bookmark"
@@ -402,56 +404,57 @@ class BZFSTestCase(ParametrizedTestCase):
             if dataset_exists(dst_pool_name):
                 run_cmd(cmd)
 
-        if ssh_program != "ssh" and "--ssh-program" not in args and "--ssh-program=" not in args:
-            args = args + ["--ssh-program=" + ssh_program]
+        if ssh_program != "ssh" and "--ssh-program" not in args_list and "--ssh-program=" not in args_list:
+            args_list = args_list + ["--ssh-program=" + ssh_program]
 
         if ssh_program == "hpnssh":
             # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
-            args = args + ["--ssh-src-extra-opt=-oFallback=no"]
-            args = args + ["--ssh-dst-extra-opt=-oFallback=no"]
+            args_list = args_list + ["--ssh-src-extra-opt=-oFallback=no"]
+            args_list = args_list + ["--ssh-dst-extra-opt=-oFallback=no"]
 
         if params and params.get("verbose", None):
-            args = args + ["--verbose"]
+            args_list = args_list + ["--verbose"]
 
         if params and "min_pipe_transfer_size" in params:
             old_min_pipe_transfer_size = os.environ.get(bzfs.env_var_prefix + "min_pipe_transfer_size")
             os.environ[bzfs.env_var_prefix + "min_pipe_transfer_size"] = str(int(params["min_pipe_transfer_size"]))
 
         if dry_run:
-            args = args + ["--dryrun=recv"]
+            args_list = args_list + ["--dryrun=recv"]
 
         if no_create_bookmark:
-            args = args + ["--create-bookmarks=none"]
+            args_list = args_list + ["--create-bookmarks=none"]
 
         if no_use_bookmark:
-            args = args + ["--no-use-bookmark"]
+            args_list = args_list + ["--no-use-bookmark"]
 
         if skip_on_error:
-            args = args + ["--skip-on-error=" + skip_on_error]
+            args_list = args_list + ["--skip-on-error=" + skip_on_error]
 
-        args = args + ["--exclude-envvar-regex=EDITOR"]
-        args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
+        args_list = args_list + ["--exclude-envvar-regex=EDITOR"]
+        args_list += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
+        job: Union[bzfs.Job, bzfs_jobrunner.Job]
         if use_jobrunner:
             job = bzfs_jobrunner.Job()
             job.is_test_mode = True
             if spawn_process_per_job:
-                args += ["--spawn_process_per_job"]
+                args_list += ["--spawn_process_per_job"]
         else:
             job = bzfs.Job()
             job.is_test_mode = True
 
         if error_injection_triggers is not None:
             job.error_injection_triggers = error_injection_triggers
-            args = args + ["--threads=1"]
+            args_list = args_list + ["--threads=1"]
 
         if delete_injection_triggers is not None:
             job.delete_injection_triggers = delete_injection_triggers
-            args = args + ["--threads=1"]
+            args_list = args_list + ["--threads=1"]
 
         if param_injection_triggers is not None:
             job.param_injection_triggers = param_injection_triggers
-            args = args + ["--threads=1"]
+            args_list = args_list + ["--threads=1"]
 
         if inject_params is not None:
             job.inject_params = inject_params
@@ -505,15 +508,15 @@ class BZFSTestCase(ParametrizedTestCase):
         returncode = 0
         try:
             if use_jobrunner:
-                job.run_main([bzfs_jobrunner.prog_name] + args)
+                job.run_main([bzfs_jobrunner.prog_name] + args_list)
             else:
-                job.run_main(bzfs.argument_parser().parse_args(args), args)
+                job.run_main(bzfs.argument_parser().parse_args(args_list), args_list)
         except subprocess.CalledProcessError as e:
             returncode = e.returncode
             if expected_status != returncode:
                 traceback.print_exc()
         except SystemExit as e:
-            returncode = e.code
+            returncode = e.code if isinstance(e.code, int) else 0
             if expected_status != returncode:
                 traceback.print_exc()
         finally:
@@ -5581,18 +5584,18 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
 
 #############################################################################
-def create_filesystems(path: str, props: List[str] = None) -> str:
+def create_filesystems(path: str, props: Optional[List[str]] = None) -> str:
     create_filesystem(src_root_dataset, path, props=props)
     return create_filesystem(dst_root_dataset, path, props=props)
 
 
-def recreate_filesystem(dataset: str, props: List[str] = None) -> str:
+def recreate_filesystem(dataset: str, props: Optional[List[str]] = None) -> str:
     if dataset_exists(dataset):
         destroy(dataset, recursive=True)
     return create_filesystem(dataset, props=props)
 
 
-def create_volumes(path: str, props: List[str] = None) -> str:
+def create_volumes(path: str, props: Optional[List[str]] = None) -> str:
     create_volume(src_root_dataset, path, size="1M", props=props)
     return create_volume(dst_root_dataset, path, size="1M", props=props)
 

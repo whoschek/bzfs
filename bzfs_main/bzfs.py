@@ -78,7 +78,22 @@ from os import stat as os_stat, utime as os_utime
 from os.path import exists as os_path_exists, join as os_path_join
 from pathlib import Path
 from subprocess import CalledProcessError, DEVNULL, PIPE
-from typing import Any, Callable, Deque, Dict, Iterable, Iterator, List, Literal, NamedTuple, Optional, Sequence, Set, Tuple
+from typing import (
+    Any,
+    Callable,
+    Deque,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Literal,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    FrozenSet,
+)
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
 
 from bzfs_main.utils import cut
@@ -1587,8 +1602,8 @@ class Params:
         self,
         args: argparse.Namespace,
         sys_argv: Optional[List[str]] = None,
-        log_params: LogParams = None,
-        log: Logger = None,
+        log_params: Optional[LogParams] = None,
+        log: Optional[Logger] = None,
         inject_params: Optional[Dict[str, bool]] = None,
     ):
         """Option values for all aspects; reads from ArgumentParser via args."""
@@ -1597,8 +1612,8 @@ class Params:
         self.args: argparse.Namespace = args
         self.sys_argv: List[str] = sys_argv if sys_argv is not None else []
         assert isinstance(self.sys_argv, list)
-        self.log_params: LogParams = log_params
-        self.log: Logger = log
+        self.log_params: Optional[LogParams] = log_params
+        self.log: Optional[Logger] = log
         self.inject_params: Dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
@@ -5121,7 +5136,7 @@ class Job:
                 dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
                 return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
 
-        def make_tree_node(dataset: str, children: Tree, parent: TreeNode = None) -> TreeNode:
+        def make_tree_node(dataset: str, children: Tree, parent: Optional[TreeNode] = None) -> TreeNode:
             return TreeNode(dataset, children, parent, TreeNode.MutableAttributes())
 
         def build_dataset_tree_and_find_roots() -> List[TreeNode]:
@@ -5282,9 +5297,10 @@ class Job:
         available_programs = params.available_programs
         if "local" not in available_programs:
             cmd = [p.shell_program_local, "-c", self.find_available_programs()]
-            available_programs["local"] = dict.fromkeys(
-                subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines()
-            )
+            available_programs["local"] = {
+                prog: ""
+                for prog in subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines()
+            }
             cmd = [p.shell_program_local, "-c", "exit"]
             if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
                 self.disable_program("sh", ["local"])
@@ -5809,8 +5825,8 @@ class ProgressReporter:
         self.inject_error: bool = fail  # for testing only
 
         # mutable variables:
-        self.thread: threading.Thread = None
-        self.exception: BaseException = None
+        self.thread: Optional[threading.Thread] = None
+        self.exception: Optional[BaseException] = None
         self.lock: threading.Lock = threading.Lock()
         self.sleeper: InterruptibleSleep = InterruptibleSleep(self.lock)  # sleeper shares lock with reporter
         self.file_name_queue: Set[str] = set()
@@ -6044,7 +6060,7 @@ def fix_send_recv_opts(
     exclude_long_opts: Set[str],
     exclude_short_opts: str,
     include_arg_opts: Set[str],
-    exclude_arg_opts: Set[str] = frozenset(),
+    exclude_arg_opts: FrozenSet[str] = frozenset(),
 ) -> List[str]:
     """These opts are instead managed via bzfs CLI args --dryrun, etc."""
     assert "-" not in exclude_short_opts
@@ -6482,14 +6498,14 @@ def unixtime_fromisoformat(datetime_str: str) -> int:
 def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
     """Converts a UTC Unix time in integer seconds into an ISO 8601 datetime string in the local time zone.
     Example: 2024-09-03_12:26:15"""
-    tz = timezone.utc  # outputs time in UTC
+    tz: Optional[tzinfo] = timezone.utc  # outputs time in UTC
     tz = None  # outputs time in local time zone
     dt = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
     return dt.isoformat(sep="_", timespec="seconds")
 
 
 def current_datetime(
-    tz_spec: str = None,
+    tz_spec: Optional[str] = None,
     now_fn: Optional[Callable[[Optional[tzinfo]], datetime]] = None,
 ) -> datetime:
     """Returns a datetime that is the current time in the given timezone, or in the local timezone if tz_spec is absent."""
@@ -6498,7 +6514,7 @@ def current_datetime(
     return now_fn(get_timezone(tz_spec))
 
 
-def get_timezone(tz_spec: str = None) -> tzinfo:
+def get_timezone(tz_spec: Optional[str] = None) -> tzinfo:
     """Returns the given timezone, or the local timezone if the timezone spec is absent. The optional timezone spec is of
     the form "UTC" or "+HH:MM" or "-HH:MM" for fixed UTC offsets."""
     if tz_spec is None:
@@ -6827,7 +6843,13 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     return total_bytes
 
 
-def parse_dataset_locator(input_text: str, validate: bool = True, user: str = None, host: str = None, port: int = None):
+def parse_dataset_locator(
+    input_text: str,
+    validate: bool = True,
+    user: Optional[str] = None,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+) -> Tuple[str, str, str, str, str]:
     def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator ...
         return hostname.replace("|", ":")  # ... and any colons that may be part of a (valid) ZFS dataset name
 
@@ -6901,7 +6923,7 @@ def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = ""
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
-def validate_port(port: int, message: str) -> None:
+def validate_port(port: Union[str, int], message: str) -> None:
     if isinstance(port, int):
         port = str(port)
     if port and not port.isdigit():
@@ -6977,7 +6999,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     log.propagate = False  # don't propagate log messages up to the root logger to avoid emitting duplicate messages
 
     if not any(isinstance(h, logging.StreamHandler) and h.stream in [sys.stdout, sys.stderr] for h in sublog.handlers):
-        handler = logging.StreamHandler(stream=sys.stdout)
+        handler: logging.Handler = logging.StreamHandler(stream=sys.stdout)
         handler.setFormatter(get_default_log_formatter(log_params=log_params))
         handler.setLevel(log_params.log_level)
         log.addHandler(handler)
@@ -7022,7 +7044,7 @@ log_level_prefixes = {
 }
 
 
-def get_default_log_formatter(prefix: str = "", log_params: LogParams = None) -> logging.Formatter:
+def get_default_log_formatter(prefix: str = "", log_params: Optional[LogParams] = None) -> logging.Formatter:
     _level_prefixes = log_level_prefixes
     _log_stderr = log_stderr
     _log_stdout = log_stdout
@@ -7097,14 +7119,14 @@ def add_trace_loglevel():
     logging.addLevelName(log_trace, "TRACE")
 
 
-def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple:
-    socktype = None
-    address = address.strip()
-    if ":" in address:
-        host, port = address.rsplit(":", 1)
-        address = (host.strip(), int(port.strip()))
+def get_syslog_address(address: str, log_syslog_socktype: str) -> Tuple[Union[str, Tuple[str, int]], Optional[int]]:
+    socktype: Optional[int] = None
+    addr: Union[str, Tuple[str, int]] = address.strip()
+    if ":" in addr:
+        host, port_str = addr.rsplit(":", 1)
+        addr = (host.strip(), int(port_str.strip()))
         socktype = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM  # for TCP
-    return address, socktype
+    return addr, socktype
 
 
 def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
