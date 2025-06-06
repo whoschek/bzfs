@@ -3831,7 +3831,7 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection):
         super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection)
-        self.priority_queue = []
+        self.priority_queue: List[bzfs.Connection] = []  # type: ignore
 
     def get_connection(self) -> bzfs.Connection:
         with self._lock:

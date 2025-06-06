@@ -37,6 +37,7 @@ import time
 import uuid
 from ast import literal_eval
 from logging import Logger
+from bzfs_main.bzfs import log_trace
 from subprocess import DEVNULL, PIPE
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
@@ -652,7 +653,7 @@ class Job:
         log.info(
             msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
         )
-        log.trace("subjobs: \n%s", pretty_print_formatter(subjobs))
+        log.log(log_trace, "subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
         ex = self.first_exception
         if isinstance(ex, int):
@@ -745,7 +746,7 @@ class Job:
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(bzfs.BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
-            log.trace("%s", "spawn_process_per_job: True")
+            log.log(log_trace, "%s", "spawn_process_per_job: True")
             helper = bzfs.Job()
             helper.params = bzfs.Params(self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"]), log=log)
             helper.is_test_mode = self.is_test_mode
@@ -762,7 +763,7 @@ class Job:
                 task_name="Subjob",
             )
         else:
-            log.trace("%s", "spawn_process_per_job: False")
+            log.log(log_trace, "%s", "spawn_process_per_job: False")
             next_update_nanos = time.monotonic_ns()
             for subjob in sorted_subjobs:
                 time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)  # seconds
@@ -795,7 +796,7 @@ class Job:
                 stats.jobs_running += 1
                 stats.started_job_names.add(name)
                 msg = str(stats)
-            log.trace("Starting worker job: %s", cmd_str)
+            log.log(log_trace, "Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
             start_time_nanos = time.monotonic_ns()
             if spawn_process_per_job:

@@ -33,7 +33,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from unittest.mock import patch
 
 from bzfs_main import bzfs, bzfs_jobrunner
@@ -295,32 +295,32 @@ class BZFSTestCase(ParametrizedTestCase):
 
     def run_bzfs(
         self,
-        *args,
-        dry_run: bool = None,
+        *arguments,
+        dry_run: Optional[bool] = None,
         no_create_bookmark: bool = False,
         no_use_bookmark: bool = False,
         skip_on_error: str = "fail",
         retries: int = 0,
         expected_status: int = 0,
-        error_injection_triggers: Dict[str, Counter] = None,
-        delete_injection_triggers: Dict[str, Counter] = None,
-        param_injection_triggers: Dict[str, Dict[str, bool]] = None,
-        inject_params: Dict[str, bool] = None,
-        max_command_line_bytes: int = None,
-        creation_prefix: str = None,
-        max_exceptions_to_summarize: int = None,
-        max_datasets_per_minibatch_on_list_snaps: int = None,
-        control_persist_margin_secs: int = None,
-        isatty: bool = None,
+        error_injection_triggers: Optional[Dict[str, Counter]] = None,
+        delete_injection_triggers: Optional[Dict[str, Counter]] = None,
+        param_injection_triggers: Optional[Dict[str, Dict[str, bool]]] = None,
+        inject_params: Optional[Dict[str, bool]] = None,
+        max_command_line_bytes: Optional[int] = None,
+        creation_prefix: Optional[str] = None,
+        max_exceptions_to_summarize: Optional[int] = None,
+        max_datasets_per_minibatch_on_list_snaps: Optional[int] = None,
+        control_persist_margin_secs: Optional[int] = None,
+        isatty: Optional[bool] = None,
         progress_update_intervals: Optional[Tuple[float, float]] = None,
-        use_select: bool = None,
+        use_select: Optional[bool] = None,
         use_jobrunner: bool = False,
-        spawn_process_per_job: bool = None,
-        include_snapshot_plan_excludes_outdated_snapshots: bool = None,
+        spawn_process_per_job: Optional[bool] = None,
+        include_snapshot_plan_excludes_outdated_snapshots: Optional[bool] = None,
         cache_snapshots: bool = False,
-    ):
+    ) -> Union[bzfs.Job, bzfs_jobrunner.Job]:
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
-        args = list(args)
+        args = list(arguments)
         src_host = ["--ssh-src-host", "127.0.0.1"]
         dst_host = ["--ssh-dst-host", "127.0.0.1"]
         ssh_dflt_port = "2222" if ssh_program == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
@@ -432,6 +432,7 @@ class BZFSTestCase(ParametrizedTestCase):
         args = args + ["--exclude-envvar-regex=EDITOR"]
         args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
+        job: Union[bzfs.Job, bzfs_jobrunner.Job]
         if use_jobrunner:
             job = bzfs_jobrunner.Job()
             job.is_test_mode = True
@@ -513,6 +514,7 @@ class BZFSTestCase(ParametrizedTestCase):
             if expected_status != returncode:
                 traceback.print_exc()
         except SystemExit as e:
+            assert isinstance(e.code, int)
             returncode = e.code
             if expected_status != returncode:
                 traceback.print_exc()
@@ -5581,18 +5583,18 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
 
 #############################################################################
-def create_filesystems(path: str, props: List[str] = None) -> str:
+def create_filesystems(path: str, props: Optional[List[str]] = None) -> str:
     create_filesystem(src_root_dataset, path, props=props)
     return create_filesystem(dst_root_dataset, path, props=props)
 
 
-def recreate_filesystem(dataset: str, props: List[str] = None) -> str:
+def recreate_filesystem(dataset: str, props: Optional[List[str]] = None) -> str:
     if dataset_exists(dataset):
         destroy(dataset, recursive=True)
     return create_filesystem(dataset, props=props)
 
 
-def create_volumes(path: str, props: List[str] = None) -> str:
+def create_volumes(path: str, props: Optional[List[str]] = None) -> str:
     create_volume(src_root_dataset, path, size="1M", props=props)
     return create_volume(dst_root_dataset, path, size="1M", props=props)
 

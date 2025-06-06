@@ -16,7 +16,7 @@
 import platform
 import re
 import subprocess
-from typing import Iterable, List
+from typing import List, Mapping, Optional
 
 sudo_cmd = []
 
@@ -55,11 +55,11 @@ def destroy_snapshots(dataset: str, snapshots=[]) -> None:  # noqa: B006
 
 def create_volume(
     dataset: str,
-    path: str = None,
+    path: Optional[str] = None,
     mk_parents=True,
-    size: int = None,
+    size: Optional[int] = None,
     props=[],  # noqa: B006
-    blocksize: int = None,
+    blocksize: Optional[int] = None,
     sparse=False,
 ) -> str:
     path = "" if path is None else "/" + path
@@ -81,7 +81,15 @@ def create_volume(
     return dataset
 
 
-def create_filesystem_simple(dataset: str, path: str = None, mk_parents=True, no_mount=True, props=[]) -> str:  # noqa: B006
+def create_filesystem_simple(
+    dataset: str,
+    path: Optional[str] = None,
+    mk_parents=True,
+    no_mount=True,
+    props: Optional[List[str]] = None,
+) -> str:
+    if props is None:
+        props = []
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ["zfs", "create"]
@@ -99,7 +107,7 @@ def create_filesystem_simple(dataset: str, path: str = None, mk_parents=True, no
 zfs_version_is_at_least_2_1_0 = None
 
 
-def create_filesystem(dataset: str, path: str = None, no_mount=True, props=[]):  # noqa: B006
+def create_filesystem(dataset: str, path: Optional[str] = None, no_mount=True, props: Optional[List[str]] = None):
     """implies mk_parents=True
     if no_mount=True:
     To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
@@ -108,6 +116,8 @@ def create_filesystem(dataset: str, path: str = None, no_mount=True, props=[]): 
     If the zfs version doesn't support the 'zfs create -u' flag then we manually unmount immediately after each
     dataset creation.
     """
+    if props is None:
+        props = []
     mk_parents = True
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"
@@ -194,9 +204,23 @@ def snapshot_property(snapshot: str, prop: str) -> str:
 
 
 def zfs_list(
-    names=[], props=["name"], types=[], max_depth: int = None, parsable=True, sort_props=[], splitlines=True  # noqa: B006
+    names: Optional[List[str]] = None,
+    props: Optional[List[str]] = None,
+    types: Optional[List[str]] = None,
+    max_depth: Optional[int] = None,
+    parsable=True,
+    sort_props: Optional[List[str]] = None,
+    splitlines=True,
 ):
     cmd = ["zfs", "list"]
+    if names is None:
+        names = []
+    if props is None:
+        props = ["name"]
+    if types is None:
+        types = []
+    if sort_props is None:
+        sort_props = []
     if max_depth is None:
         cmd.append("-r")
     else:
@@ -225,16 +249,26 @@ def zfs_list(
 
 
 def zfs_get(
-    names=[],  # noqa: B006
-    props=["all"],  # noqa: B006
-    types=[],  # noqa: B006
-    max_depth: int = None,
+    names: Optional[List[str]] = None,
+    props: Optional[List[str]] = None,
+    types: Optional[List[str]] = None,
+    max_depth: Optional[int] = None,
     parsable=True,
-    fields=[],  # noqa: B006
-    sources=[],  # noqa: B006
+    fields: Optional[List[str]] = None,
+    sources: Optional[List[str]] = None,
     splitlines=True,
 ):
     cmd = ["zfs", "get"]
+    if names is None:
+        names = []
+    if props is None:
+        props = ["all"]
+    if types is None:
+        types = []
+    if fields is None:
+        fields = []
+    if sources is None:
+        sources = []
     if max_depth is None:
         cmd.append("-r")
     else:
@@ -266,7 +300,7 @@ def zfs_get(
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_set(names: List[str] = [], properties: Iterable[str] = {}) -> None:  # noqa: B006
+def zfs_set(names: List[str] = [], properties: Mapping[str, str] = {}) -> None:  # noqa: B006
     def run_zfs_set(props):
         cmd = sudo_cmd + ["zfs", "set"]
         for prop in props:
@@ -282,7 +316,14 @@ def zfs_set(names: List[str] = [], properties: Iterable[str] = {}) -> None:  # n
             run_zfs_set([f"{name}={value}"])
 
 
-def zfs_inherit(names: List[str] = [], propname: str = None, recursive=False, revert=False) -> None:  # noqa: B006
+def zfs_inherit(
+    names: Optional[List[str]] = None,
+    propname: Optional[str] = None,
+    recursive=False,
+    revert=False,
+) -> None:
+    if names is None:
+        names = []
     assert propname
     cmd = sudo_cmd + ["zfs", "inherit"]
     if recursive:
