@@ -93,7 +93,6 @@ from typing import (
     Set,
     Tuple,
     FrozenSet,
-    cast,
 )
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
 
@@ -5181,11 +5180,8 @@ class Job:
         len_datasets: int = len(datasets)
         datasets_set: Set[str] = set(datasets)
 
-        class NodeFuture(Future):
-            node: TreeNode
-
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            todo_futures: Set[NodeFuture] = set()
+            todo_futures: Set[Future] = set()
             submitted: int = 0
             next_update_nanos: int = time.monotonic_ns()
             fw_timeout: Optional[float] = None
@@ -5208,21 +5204,18 @@ class Job:
                     next_update_nanos += max(0, interval_nanos(node.dataset))
                     nonlocal submitted
                     submitted += 1
-                    future = cast(
-                        NodeFuture, executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
-                    )
-                    future.node = node
+                    future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
+                    future.node = node  # type: ignore[attr-defined]
                     todo_futures.add(future)
                 return len(todo_futures) > 0
 
             failed = False
             while submit_datasets():
-                done_futures_set, todo_futures_tmp = concurrent.futures.wait(
+                done_futures_set, todo_futures = concurrent.futures.wait(
                     todo_futures, fw_timeout, return_when=FIRST_COMPLETED
                 )
-                todo_futures = cast(Set[NodeFuture], todo_futures_tmp)
-                for done_future in cast(Set[NodeFuture], done_futures_set):
-                    dataset = done_future.node.dataset
+                for done_future in done_futures_set:
+                    dataset = done_future.node.dataset  # type: ignore[attr-defined]
                     try:
                         no_skip: bool = done_future.result()  # does not block as processing has already completed
                     except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
@@ -5246,7 +5239,7 @@ class Job:
                                     simple_enqueue_children(child_node)  # ... recursively down the tree
 
                         if no_skip:
-                            simple_enqueue_children(done_future.node)
+                            simple_enqueue_children(done_future.node)  # type: ignore[attr-defined]
                     else:
                         # The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner.
                         # Here, a "dataset" string is treated as an identifier for any kind of job rather than a reference
@@ -5311,7 +5304,7 @@ class Job:
                                 assert node.mut.pending >= 0
 
                         assert enable_barriers
-                        on_job_completion_with_barriers(done_future.node, no_skip)
+                        on_job_completion_with_barriers(done_future.node, no_skip)  # type: ignore[attr-defined]
             # endwhile submit_datasets()
             assert len(priority_queue) == 0
             assert len(todo_futures) == 0
