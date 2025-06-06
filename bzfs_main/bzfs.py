@@ -1583,7 +1583,7 @@ class LogParams:
         os.symlink(os.path.relpath(current_dir, start=log_parent_dir), dst_file)
         os.replace(dst_file, os.path.join(log_parent_dir, current))  # atomic rename
         delete_stale_files(dot_current_dir, prefix="", millis=10, dirs=True, exclude=os.path.basename(current_dir))
-        self.params: Params = None
+        self.params: Optional[Params] = None
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -1719,7 +1719,7 @@ class Params:
             else 0
         )
 
-        self.os_cpu_count: int = os.cpu_count()
+        self.os_cpu_count: int = os.cpu_count() or 0
         self.os_geteuid: int = os.geteuid()
         self.prog_version: str = __version__
         self.python_version: str = sys.version
@@ -1837,8 +1837,8 @@ class Remote:
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
-        self.ssh_config_file: str = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
-        self.ssh_cipher: str = p.validate_arg(args.ssh_cipher)
+        self.ssh_config_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
+        self.ssh_cipher: Optional[str] = p.validate_arg(args.ssh_cipher)
         self.ssh_private_key_files: List[str] = [p.validate_arg(key) for key in getattr(args, f"ssh_{loc}_private_key")]
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"]
@@ -1920,9 +1920,10 @@ class CopyPropertiesConfig:
         grup = group
         self.group: str = group
         self.flag: str = flag  # one of -o or -x
-        sources: str = p.validate_arg(getattr(args, f"{grup}_sources"))
+        sources: Optional[str] = p.validate_arg(getattr(args, f"{grup}_sources"))
+        sources = sources or ""
         self.sources: str = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
-        self.targets: str = p.validate_arg(getattr(args, f"{grup}_targets"))
+        self.targets: Optional[str] = p.validate_arg(getattr(args, f"{grup}_targets"))
         self.include_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_include_regex"))
         self.exclude_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
 
@@ -2052,7 +2053,7 @@ class CreateSrcSnapshotConfig:
         # immutable variables:
         self.skip_create_src_snapshots: bool = not args.create_src_snapshots
         self.create_src_snapshots_even_if_not_due: bool = args.create_src_snapshots_even_if_not_due
-        tz_spec: str = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
+        tz_spec: Optional[str] = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
         self.tz: tzinfo = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: str = args.create_src_snapshots_timeformat
@@ -3053,7 +3054,7 @@ class Job:
                 cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
                 cache_file = self.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
-                snapshots_changed: int = self.src_properties[src_dataset][SNAPSHOTS_CHANGED]  # get prop "for free"
+                snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])  # get prop "for free"
                 if (
                     snapshots_changed != 0
                     and time.time() > snapshots_changed + time_threshold_secs
@@ -3114,7 +3115,7 @@ class Job:
                 dst_snapshots_changed = dst_snapshots_changed_dict.get(dst_dataset, 0)
                 dst_cache_file = self.last_modified_cache_file(dst, dst_dataset)
                 src_dataset = dst2src(dst_dataset)
-                src_snapshots_changed: int = self.src_properties[src_dataset][SNAPSHOTS_CHANGED]
+                src_snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])
                 if not p.dry_run:
                     set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
                     set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
@@ -3202,7 +3203,7 @@ class Job:
         latest_dst_snapshot = ""
         latest_dst_guid = ""
         latest_common_src_snapshot = ""
-        props_cache = {}
+        props_cache: Dict[Tuple[str, str, str], Dict[str, Optional[str]]] = {}
         done_checking = False
 
         if self.dst_dataset_exists[dst_dataset]:
@@ -3447,8 +3448,8 @@ class Job:
         self, src_dataset: str, send_cmd: List[str], recv_cmd: List[str], size_estimate_bytes: int, size_estimate_human: str
     ) -> Tuple[str, str, str]:
         p = self.params
-        send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
-        recv_cmd = " ".join([shlex.quote(item) for item in recv_cmd])
+        send_cmd_str = " ".join([shlex.quote(item) for item in send_cmd])
+        recv_cmd_str = " ".join([shlex.quote(item) for item in recv_cmd])
 
         if self.is_program_available("zstd", "src") and self.is_program_available("zstd", "dst"):
             _compress_cmd = self.compress_cmd("src", size_estimate_bytes)
@@ -3491,13 +3492,13 @@ class Job:
         if src_pipe.startswith(" |"):
             src_pipe = src_pipe[2:]  # strip leading ' |' part
         if self.inject_params.get("inject_src_send_error", False):
-            send_cmd = f"{send_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
+            send_cmd_str = f"{send_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if src_pipe != "":
-            src_pipe = f"{send_cmd} | {src_pipe}"
+            src_pipe = f"{send_cmd_str} | {src_pipe}"
             if p.src.ssh_user_host != "":
                 src_pipe = p.shell_program + " -c " + self.dquote(src_pipe)
         else:
-            src_pipe = send_cmd
+            src_pipe = send_cmd_str
 
         # assemble pipeline running on middle leg between source and destination. only enabled for pull-push mode
         local_pipe = ""
@@ -3528,20 +3529,20 @@ class Job:
         if dst_pipe.startswith(" |"):
             dst_pipe = dst_pipe[2:]  # strip leading ' |' part
         if self.inject_params.get("inject_dst_receive_error", False):
-            recv_cmd = f"{recv_cmd} --injectedGarbageParameter"  # for testing; induce CLI parse error
+            recv_cmd_str = f"{recv_cmd_str} --injectedGarbageParameter"  # for testing; induce CLI parse error
         if dst_pipe != "":
-            dst_pipe = f"{dst_pipe} | {recv_cmd}"
+            dst_pipe = f"{dst_pipe} | {recv_cmd_str}"
             if p.dst.ssh_user_host != "":
                 dst_pipe = p.shell_program + " -c " + self.dquote(dst_pipe)
         else:
-            dst_pipe = recv_cmd
+            dst_pipe = recv_cmd_str
 
         # If there's no support for shell pipelines, we can't do compression, mbuffering, monitoring and rate-limiting,
         # so we fall back to simple zfs send/receive.
         if not self.is_program_available("sh", "src"):
-            src_pipe = send_cmd
+            src_pipe = send_cmd_str
         if not self.is_program_available("sh", "dst"):
-            dst_pipe = recv_cmd
+            dst_pipe = recv_cmd_str
         if not self.is_program_available("sh", "local"):
             local_pipe = ""
 
@@ -4243,7 +4244,7 @@ class Job:
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
         if recv_resume_token:
             zfs_send_program_opts = ["-Pnv", "-t", recv_resume_token]
-            items = ""
+            items = ()
         cmd = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
         try:
             lines = self.try_ssh_command(remote, log_trace, cmd=cmd)
@@ -4429,7 +4430,7 @@ class Job:
         output_columns: str,
         propnames: str,
         splitlines: bool,
-        props_cache: Dict[Tuple[str, str, str], Dict[str, str]],
+        props_cache: Dict[Tuple[str, str, str], Dict[str, Optional[str]]],
     ) -> Dict[str, Optional[str]]:
         """Returns the results of 'zfs get' CLI on the given dataset on the given remote."""
         if not propnames:
@@ -4453,7 +4454,11 @@ class Job:
         return props
 
     def add_recv_property_options(
-        self, full_send: bool, recv_opts: List[str], dataset: str, cache: Dict[Tuple[str, str, str], Dict[str, str]]
+        self,
+        full_send: bool,
+        recv_opts: List[str],
+        dataset: str,
+        cache: Dict[Tuple[str, str, str], Dict[str, Optional[str]]],
     ) -> Tuple[List[str], List[str]]:
         """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according to CLI
         params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
@@ -4470,11 +4475,19 @@ class Job:
                 # a single 'zfs get' call. Therefore, here we use a separate 'zfs get' call for each ZFS user property.
                 # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
                 try:
-                    props = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
-                    props = self.filter_properties(props, config.include_regexes, config.exclude_regexes)
-                    user_propnames = [name for name in props.keys() if ":" in name]
-                    sys_propnames = ",".join([name for name in props.keys() if ":" not in name])
-                    props = self.zfs_get(p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
+                    props_any = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
+                    props_filtered = self.filter_properties(props_any, config.include_regexes, config.exclude_regexes)
+                    user_propnames = [name for name in props_filtered.keys() if ":" in name]
+                    sys_propnames = ",".join([name for name in props_filtered.keys() if ":" not in name])
+                    props = self.zfs_get(
+                        p.src,
+                        dataset,
+                        config.sources,
+                        "property,value",
+                        sys_propnames,
+                        True,
+                        cache,
+                    )
                     for propnames in user_propnames:
                         props.update(self.zfs_get(p.src, dataset, config.sources, "property,value", propnames, False, cache))
                 except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
@@ -4651,9 +4664,11 @@ class Job:
                 )
         msgs.sort()
         prefx = "Next scheduled snapshot time: "
-        msgs = "\n".join(f"{prefx}{next_event_dt} for {dataset}@{label}{msg}" for next_event_dt, dataset, label, msg in msgs)
-        if len(msgs) > 0:
-            log.info("Next scheduled snapshot times ...\n%s", msgs)
+        msgs_text = "\n".join(
+            f"{prefx}{next_event_dt} for {dataset}@{label}{msg}" for next_event_dt, dataset, label, msg in msgs
+        )
+        if len(msgs_text) > 0:
+            log.info("Next scheduled snapshot times ...\n%s", msgs_text)
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
         label_indexes = {label: k for k, label in enumerate(config_labels)}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
@@ -4665,7 +4680,7 @@ class Job:
         sorted_datasets: List[str],
         labels: List[SnapshotLabel],
         fn_latest: Callable[[int, int, str, str], None],  # callback function for latest snapshot
-        fn_oldest: Callable[[int, int, str, str], None] = None,  # callback function for oldest snapshot
+        fn_oldest: Optional[Callable[[int, int, str, str], None]] = None,  # callback function for oldest snapshot
         fn_on_finish_dataset: Callable[[str], None] = lambda dataset: None,
     ) -> List[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
@@ -4888,17 +4903,19 @@ class Job:
                 sum_written: int = field(default=0)
                 snapshot_count_since: int = field(default=0)
                 sum_written_since: int = field(default=0)
-                latest_snapshot_idx: int = field(default=None)
-                latest_snapshot_row_str: str = field(default=None)
-                latest_snapshot_creation: str = field(default=None)
-                oldest_snapshot_row_str: str = field(default=None)
-                oldest_snapshot_creation: str = field(default=None)
+                latest_snapshot_idx: Optional[int] = field(default=None)
+                latest_snapshot_row_str: Optional[str] = field(default=None)
+                latest_snapshot_creation: Optional[str] = field(default=None)
+                oldest_snapshot_row_str: Optional[str] = field(default=None)
+                oldest_snapshot_creation: Optional[str] = field(default=None)
 
             # print metadata of snapshots of current dataset to TSV file; custom stats can later be computed from there
             stats = defaultdict(SnapshotStats)
             header = "location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
             nonlocal is_first_row
-            is_first_row = is_first_row and fd.write(header.replace(" ", "\t") + "\n") and False
+            if is_first_row:
+                fd.write(header.replace(" ", "\t") + "\n")
+                is_first_row = False
             for i, entry in enumerate(entries):
                 loc = location = entry[0]
                 creation, guid, createtxg, written, name = entry[1].cols
