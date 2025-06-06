@@ -34,8 +34,11 @@ def main() -> None:
         version = zfs_version()
         if version is None:
             # Example: "11.4" for solaris
-            version = subprocess.run(["uname", "-v"], stdout=subprocess.PIPE, text=True, check=True).stdout
-            version = version.strip().split()[0]
+            try:
+                version = subprocess.run(["uname", "-v"], stdout=subprocess.PIPE, text=True, check=True).stdout
+                version = version.strip().split()[0]
+            except subprocess.CalledProcessError:
+                version = "2.3.2"
 
         touch(f"{ROOT_DIR}/zfs", version)
         touch(f"{ROOT_DIR}/python", f"{sys.version_info.major}.{sys.version_info.minor}")
@@ -87,7 +90,11 @@ def generate_badge(left_txt: str, right_txt, color: str) -> None:
     badge = Badge(left_txt=left_txt, right_txt=right_txt, color=color)
     print(badge)
     os.makedirs(ROOT_DIR, exist_ok=True)
-    badge.write_to(f"{ROOT_DIR}/{left_txt}-badge.svg", use_shields=True)
+    output_file = f"{ROOT_DIR}/{left_txt}-badge.svg"
+    try:
+        badge.write_to(output_file, use_shields=True)
+    except Exception:  # no network connectivity (or other error)
+        badge.write_to(output_file, use_shields=False)
 
 
 #############################################################################
