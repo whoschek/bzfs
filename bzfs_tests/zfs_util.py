@@ -16,7 +16,7 @@
 import platform
 import re
 import subprocess
-from typing import Iterable, List, Optional
+from typing import List, Optional, Mapping
 
 sudo_cmd = []
 
@@ -300,7 +300,7 @@ def zfs_get(
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_set(names: List[str] = [], properties: Iterable[str] = {}) -> None:  # noqa: B006
+def zfs_set(names: List[str] = [], properties: Mapping[str, str] = {}) -> None:  # noqa: B006
     def run_zfs_set(props):
         cmd = sudo_cmd + ["zfs", "set"]
         for prop in props:

@@ -93,6 +93,7 @@ from typing import (
     Set,
     Tuple,
     FrozenSet,
+    cast,
 )
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
 
@@ -2293,7 +2294,7 @@ class Job:
                 log.info("Auxiliary CLI arguments: %s", " ".join(aux_args))
                 args = argument_parser().parse_args(xappend(aux_args, "--", args.root_dataset_pairs), namespace=args)
             log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
-            log.trace("Parsed CLI arguments: %s", args)
+            log.log(log_trace, "Parsed CLI arguments: %s", args)
             try:
                 self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
             except SystemExit as e:
@@ -2544,14 +2545,15 @@ class Job:
                 max_datasets_per_minibatch = max(1, bs // cpus)
             max_datasets_per_minibatch = min(bs, max_datasets_per_minibatch)
             self.max_datasets_per_minibatch_on_list_snaps[r.location] = max_datasets_per_minibatch
-            log.trace(
+            log.log(
+                log_trace,
                 "%s",
                 f"max_datasets_per_batch_on_list_snaps: {p.max_datasets_per_batch_on_list_snaps}, "
                 f"max_datasets_per_minibatch_on_list_snaps: {max_datasets_per_minibatch}, "
                 f"max_workers: {self.max_workers[r.location]}, "
                 f"location: {r.location}",
             )
-        log.trace("Validated Param values: %s", pretty_print_formatter(self.params))
+        log.log(log_trace, "Validated Param values: %s", pretty_print_formatter(self.params))
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
         p = self.params
@@ -3235,7 +3237,7 @@ class Job:
                 src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids))
             )
             log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
-            log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
+            log.log(log_trace, "latest_dst_snapshot: %s", latest_dst_snapshot)
 
             if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
                 # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
@@ -3270,7 +3272,7 @@ class Job:
 
         # endif self.dst_dataset_exists[dst_dataset]
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
-        log.trace("latest_dst_snapshot: %s", latest_dst_snapshot)
+        log.log(log_trace, "latest_dst_snapshot: %s", latest_dst_snapshot)
         dry_run_no_send = False
         right_just = 7
 
@@ -3391,7 +3393,7 @@ class Job:
                 steps_todo = self.incremental_send_steps_wrapper(
                     cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
                 )
-            log.trace("steps_todo: %s", list_formatter(steps_todo, "; "))
+            log.log(log_trace, "steps_todo: %s", list_formatter(steps_todo, "; "))
             estimate_send_sizes = [
                 self.estimate_send_size(
                     src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
@@ -3605,7 +3607,7 @@ class Job:
             log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
             cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
             self.try_ssh_command(p.dst, log_trace, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-            log.trace(p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
+            log.log(log_trace, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
             return True
 
         p, log = self.params, self.params.log
@@ -3840,12 +3842,12 @@ class Job:
             # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
             t = self.timeout()
             if subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=t).returncode == 0:
-                log.trace("ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
+                log.log(log_trace, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
             else:  # ssh master is not alive; start a new master:
-                log.trace("ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+                log.log(log_trace, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                 ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 ssh_socket_cmd += ["-M", f"-oControlPersist={self.control_persist_secs}s", remote.ssh_user_host, "exit"]
-                log.trace("Executing: %s", list_formatter(ssh_socket_cmd))
+                log.log(log_trace, "Executing: %s", list_formatter(ssh_socket_cmd))
                 process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=self.timeout())
                 if process.returncode != 0:
                     log.error("%s", process.stderr.rstrip())
@@ -4588,7 +4590,7 @@ class Job:
         ):
             """Schedules creation of a snapshot for the given label if the label's existing latest snapshot is too old."""
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
-            log.trace("Latest snapshot creation: %s for %s", creation_dt, label)
+            log.log(log_trace, "Latest snapshot creation: %s for %s", creation_dt, label)
             duration_amount, duration_unit = config.suffix_durations[label.suffix]
             next_event_dt = round_datetime_up_to_duration_multiple(
                 creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.anchors
@@ -5135,26 +5137,27 @@ class Job:
                 elapsed_nanos = time.monotonic_ns() - start_time_nanos
                 log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
 
-        class TreeNode(NamedTuple):
-            class MutableAttributes:
-                __slots__ = ("pending", "barrier")  # uses more compact memory layout than __dict__
+        class TreeNodeMutableAttributes:
+            __slots__ = ("pending", "barrier")  # uses more compact memory layout than __dict__
 
-                def __init__(self):
-                    self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
-                    self.barrier: Optional[TreeNode] = None  # zero or one barrier TreeNode waiting for this node to complete
+            def __init__(self) -> None:
+                self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
+                self.barrier: Optional[TreeNode] = None  # zero or one barrier TreeNode waiting for this node to complete
+
+        class TreeNode(NamedTuple):
 
             # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
             dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
             children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
             parent: "TreeNode"
-            mut: MutableAttributes
+            mut: TreeNodeMutableAttributes
 
             def __repr__(self) -> str:
                 dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
                 return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
 
         def make_tree_node(dataset: str, children: Tree, parent: Optional[TreeNode] = None) -> TreeNode:
-            return TreeNode(dataset, children, parent, TreeNode.MutableAttributes())
+            return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
 
         def build_dataset_tree_and_find_roots() -> List[TreeNode]:
             """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
@@ -5177,8 +5180,12 @@ class Job:
         heapq.heapify(priority_queue)  # same order as sorted()
         len_datasets: int = len(datasets)
         datasets_set: Set[str] = set(datasets)
+
+        class NodeFuture(Future):
+            node: TreeNode
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            todo_futures: Set[Future] = set()
+            todo_futures: Set[NodeFuture] = set()
             submitted: int = 0
             next_update_nanos: int = time.monotonic_ns()
             fw_timeout: Optional[float] = None
@@ -5201,15 +5208,20 @@ class Job:
                     next_update_nanos += max(0, interval_nanos(node.dataset))
                     nonlocal submitted
                     submitted += 1
-                    future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
+                    future = cast(
+                        NodeFuture, executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
+                    )
                     future.node = node
                     todo_futures.add(future)
                 return len(todo_futures) > 0
 
             failed = False
             while submit_datasets():
-                done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
-                for done_future in done_futures:
+                done_futures_set, todo_futures_tmp = concurrent.futures.wait(
+                    todo_futures, fw_timeout, return_when=FIRST_COMPLETED
+                )
+                todo_futures = cast(Set[NodeFuture], todo_futures_tmp)
+                for done_future in cast(Set[NodeFuture], done_futures_set):
                     dataset = done_future.node.dataset
                     try:
                         no_skip: bool = done_future.result()  # does not block as processing has already completed
@@ -5373,20 +5385,20 @@ class Job:
                     programs.pop(program)
                     uname = program[len("uname-") :]
                     programs["uname"] = uname
-                    log.trace(f"available_programs[{key}][uname]: %s", uname)
+                    log.log(log_trace, f"available_programs[{key}][uname]: %s", uname)
                     programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
-                    log.trace(f"available_programs[{key}][os]: %s", programs["os"])
+                    log.log(log_trace, f"available_programs[{key}][os]: %s", programs["os"])
                 elif program.startswith("default_shell-"):
                     programs.pop(program)
                     default_shell = program[len("default_shell-") :]
                     programs["default_shell"] = default_shell
-                    log.trace(f"available_programs[{key}][default_shell]: %s", default_shell)
+                    log.log(log_trace, f"available_programs[{key}][default_shell]: %s", default_shell)
                     validate_default_shell(default_shell, r)
                 elif program.startswith("getconf_cpu_count-"):
                     programs.pop(program)
                     getconf_cpu_count = program[len("getconf_cpu_count-") :]
                     programs["getconf_cpu_count"] = getconf_cpu_count
-                    log.trace(f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
+                    log.log(log_trace, f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
 
         for key, programs in available_programs.items():
             log.debug(f"available_programs[{key}]: %s", list_formatter(programs, separator=", "))
@@ -5458,7 +5470,7 @@ class Job:
                 available_programs[location][zfs_version_is_at_least_2_1_0] = True
             if is_version_at_least(version, "2.2.0"):
                 available_programs[location][zfs_version_is_at_least_2_2_0] = True
-        log.trace(f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
+        log.log(log_trace, f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
 
         if p.shell_program != disable_prg:
             try:
@@ -5561,7 +5573,7 @@ class Job:
         regex = Job.zfs_dataset_busy_if_send if busy_if_send else Job.zfs_dataset_busy_if_mods
         suffix = " " + dataset
         infix = " " + dataset + "@"
-        return any(filter(lambda proc: (proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc), procs))
+        return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)
 
     def run_ssh_cmd_batched(
         self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29, sep=" "
@@ -5745,10 +5757,12 @@ class Connection:
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
             is_trace = p.log.isEnabledFor(log_trace)
-            is_trace and p.log.trace(f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
+            is_trace and p.log.log(
+                log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd])
+            )
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
-                p.log.trace("%s", process.stderr.rstrip())
+                p.log.log(log_trace, "%s", process.stderr.rstrip())
 
 
 #############################################################################
@@ -5986,7 +6000,7 @@ class ProgressReporter:
                 sys.stdout.write(f"{status_line}\r")
                 sys.stdout.flush()
 
-                # log.trace("\nnum_lines: %s, num_readables: %s", num_lines, num_readables)
+                # log.log(log_trace, "\nnum_lines: %s, num_readables: %s", num_lines, num_readables)
                 last_status_len = len(status_line.rstrip())
                 next_update_nanos += update_interval_nanos
                 latest_samples.append(Sample(sent_bytes, curr_time_nanos))

@@ -113,7 +113,6 @@ select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
 modules = ["bzfs_main"]
 python_version = "3.8"
 disable_error_code = [
-  "attr-defined",
   "name-defined",
   "misc",
   "arg-type",
