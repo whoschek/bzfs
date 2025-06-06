@@ -6488,9 +6488,13 @@ def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
     return dt.isoformat(sep="_", timespec="seconds")
 
 
-def current_datetime(tz_spec: str = None, now_fn: Callable[[Optional[tzinfo]], datetime] = None) -> datetime:
+def current_datetime(
+    tz_spec: str = None,
+    now_fn: Optional[Callable[[Optional[tzinfo]], datetime]] = None,
+) -> datetime:
     """Returns a datetime that is the current time in the given timezone, or in the local timezone if tz_spec is absent."""
-    now_fn = now_fn or datetime.now
+    if now_fn is None:
+        now_fn = datetime.now
     return now_fn(get_timezone(tz_spec))
 
 
