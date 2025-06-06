@@ -2039,7 +2039,7 @@ class CreateSrcSnapshotConfig:
         self.skip_create_src_snapshots: bool = not args.create_src_snapshots
         self.create_src_snapshots_even_if_not_due: bool = args.create_src_snapshots_even_if_not_due
         tz_spec: Optional[str] = args.create_src_snapshots_timezone if args.create_src_snapshots_timezone else None
-        self.tz: tzinfo = get_timezone(tz_spec)
+        self.tz: Optional[tzinfo] = get_timezone(tz_spec)
         self.current_datetime: datetime = current_datetime(tz_spec)
         self.timeformat: str = args.create_src_snapshots_timeformat
         self.anchors: PeriodAnchors = PeriodAnchors.parse(args)
@@ -3208,9 +3208,12 @@ class Job:
             # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
             # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
             # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
-            def latest_common_snapshot(snapshots_with_guids: List[str], intersect_guids: Set[str]) -> Tuple[str, str]:
+            def latest_common_snapshot(
+                snapshots_with_guids: List[str], intersect_guids: Set[str]
+            ) -> Tuple[Optional[str], str]:
                 """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously
                 used for 'zfs list -s ...'"""
+
                 for _line in reversed(snapshots_with_guids):
                     _guid, _snapshot = _line.split("\t", 1)
                     if _guid in intersect_guids:
@@ -6511,7 +6514,7 @@ def current_datetime(
     return now_fn(get_timezone(tz_spec))
 
 
-def get_timezone(tz_spec: Optional[str] = None) -> tzinfo:
+def get_timezone(tz_spec: Optional[str] = None) -> Optional[tzinfo]:
     """Returns the given timezone, or the local timezone if the timezone spec is absent. The optional timezone spec is of
     the form "UTC" or "+HH:MM" or "-HH:MM" for fixed UTC offsets."""
     if tz_spec is None:
@@ -6982,11 +6985,12 @@ def get_logger(log_params: LogParams, args: argparse.Namespace, log: Optional[Lo
     if log is not None:
         assert isinstance(log, Logger)
         return log  # use third party provided logger object
-    elif args.log_config_file:
-        log = get_dict_config_logger(log_params, args)  # use logger defined in config file, and afterwards ...
+
+    if args.log_config_file:
+        return get_dict_config_logger(log_params, args)
+
     # ... add our own handlers unless matching handlers are already present
-    default_log = get_default_logger(log_params, args)
-    return log if args.log_config_file else default_log
+    return get_default_logger(log_params, args)
 
 
 def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
@@ -7418,7 +7422,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
 
     @staticmethod
     def get_include_snapshot_times(times) -> UnixTimeRange:
-        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> int:
+        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> Union[timedelta, int]:
             if isinstance(time_spec, timedelta):
                 return time_spec
             if isinstance(time_spec, int):

@@ -33,7 +33,7 @@ def version_line() -> str:
 
     for act in bzfs.argument_parser()._actions:
         if isinstance(act, argparse._VersionAction):
-            return act.version
+            return str(act.version)
     raise RuntimeError("Version not found in bzfs argument parser.")
 
 

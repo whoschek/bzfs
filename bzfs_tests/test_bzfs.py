@@ -3895,7 +3895,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
     def test_send_step_to_str(self):
         bzfs.Job().send_step_to_str(("-I", "d@s1", "d@s3"))
 
-    def permute_snapshot_series(self, max_length=9) -> List[Dict]:
+    def permute_snapshot_series(self, max_length: int = 9) -> List[defaultdict[Optional[str], List[str]]]:
         """
         Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly
         snapshots from replication. The expectation is that after replication dst contains all daily snapshots
@@ -3914,8 +3914,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
                 steps = "d" * N + "h" * (L - N)
                 # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
                 for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
-                    snaps = defaultdict(list)
-                    count = defaultdict(int)
+                    snaps: defaultdict[Optional[str], List[str]] = defaultdict(list)
+                    count: defaultdict[str, int] = defaultdict(int)
                     for char in permutation:
                         count[char] += 1  # tag snapshots with a monotonically increasing number within each category
                         char_count = f"{count[char]:01}" if max_length < 10 else f"{count[char]:02}"  # zero pad number

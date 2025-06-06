@@ -360,7 +360,7 @@ def build(name: str, check=True) -> str:
     return name
 
 
-def zfs_version() -> str:
+def zfs_version() -> Optional[str]:
     """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5"""
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info

@@ -73,6 +73,12 @@ afix = ""
 zpool_features = None
 creation_prefix = "bzfs_test:"
 
+# Global variables populated during setup
+src_pool = ""
+dst_pool = ""
+src_root_dataset = ""
+dst_root_dataset = ""
+
 zfs_encryption_key_fd, zfs_encryption_key = tempfile.mkstemp(prefix="test_bzfs.key_")
 os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
 os.close(zfs_encryption_key_fd)

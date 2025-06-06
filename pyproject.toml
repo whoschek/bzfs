@@ -112,10 +112,8 @@ select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
 [tool.mypy]
 python_version = "3.8"
 disable_error_code = [
-  "name-defined",
   "misc",
   "arg-type",
-  "return-value",
   "var-annotated",
   "union-attr",
   "operator",
