@@ -45,6 +45,7 @@ deprecated status, but the old name will be completely removed in a future relea
  Installation via pip remains unchanged. Optional system installation from the git repo is now done by adding symlinks to the
  startup shell script, [like so](README.md#Installation).
 - Reverted commit 5abc75c6 (cleanup around dataset tree nodes) as its changes were already present.
+- Removed the temporary `NodeFuture` subclass; futures now store their dataset node directly.
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.11.0...v1.12.0
 
 ## [1.11.0] - March 26, 2025
