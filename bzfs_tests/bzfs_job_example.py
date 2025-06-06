@@ -19,7 +19,8 @@
 # your local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets.
 # Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH. Run the final script like so:
 #
-# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
+# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks \
+# --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
 #
 # Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or
 # every hour, or every day, or similar.
@@ -32,7 +33,7 @@ import subprocess
 import sys
 
 parser = argparse.ArgumentParser(
-    description=f"""
+    description="""
 Jobconfig script that generates deployment specific parameters to manage periodic ZFS snapshot creation, replication,
 pruning, and monitoring, across N source hosts and M destination hosts, using the same single shared jobconfig script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service, or low latency replication
@@ -65,7 +66,7 @@ root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 
 recursive = True
 
 
-# List of one or more source hostnames. Each of the M destination hosts receives replicas from (the same set of) N source hosts:
+# List of one or more source hostnames. Each of the M destination hosts receives replicas from (the same set of) N src hosts:
 # src_hosts = ["prod001", "prod002", "prod999"]
 src_hosts = ["nas"]
 

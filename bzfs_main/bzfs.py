@@ -1192,7 +1192,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 
     ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
     # for speed with confidentiality and integrity
-    # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done
+    # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done  # noqa: E501
     # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
     # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
     parser.add_argument(
@@ -1458,7 +1458,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         flag = "'" + flag + "'"  # one of -o or -x
 
         def h(text: str) -> str:
-            return argparse.SUPPRESS if option_name == "zfs_set" else text
+            return argparse.SUPPRESS if option_name == "zfs_set" else text  # noqa: B023
 
         argument_group = parser.add_argument_group(
             grup + " (Experimental)",
@@ -2292,7 +2292,7 @@ class Job:
                             # Acquire an exclusive lock; will raise an error if lock is already held by another process.
                             # The (advisory) lock is auto-released when the process terminates or the fd is closed.
                             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
-                        except BlockingIOError as e:
+                        except BlockingIOError:
                             msg = "Exiting as same previous periodic job is still running without completion yet per "
                             msg += lock_file
                             log.error("%s", msg)
@@ -2310,7 +2310,7 @@ class Job:
                             finally:
                                 signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
                                 signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
-                            for i in range(2 if self.max_command_line_bytes else 1):
+                            for _ in range(2 if self.max_command_line_bytes else 1):
                                 self.shutdown()
 
     def run_tasks(self) -> None:
@@ -2350,7 +2350,7 @@ class Job:
                                 self.validate_task()
                                 self.run_task()
                             except RetryableError as retryable_error:
-                                raise retryable_error.__cause__
+                                raise retryable_error.__cause__ from None
                         except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                             if p.skip_on_error == "fail" or (
                                 isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
@@ -2475,7 +2475,7 @@ class Job:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         for remote in [src, dst]:
-            r, loc = remote, remote.location
+            r = remote
             r.ssh_user, r.ssh_host, r.ssh_user_host, r.pool, r.root_dataset = parse_dataset_locator(
                 r.basis_root_dataset, user=r.basis_ssh_user, host=r.basis_ssh_host, port=r.ssh_port
             )
@@ -3431,7 +3431,7 @@ class Job:
     def prepare_zfs_send_receive(
         self, src_dataset: str, send_cmd: List[str], recv_cmd: List[str], size_estimate_bytes: int, size_estimate_human: str
     ) -> Tuple[str, str, str]:
-        p, log = self.params, self.params.log
+        p = self.params
         send_cmd = " ".join([shlex.quote(item) for item in send_cmd])
         recv_cmd = " ".join([shlex.quote(item) for item in recv_cmd])
 
@@ -4014,7 +4014,7 @@ class Job:
     def filter_snapshots_by_regex(self, snapshots: List[str], regexes: Tuple[RegexList, RegexList]) -> List[str]:
         """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
         exclude_snapshot_regexes, include_snapshot_regexes = regexes
-        p, log = self.params, self.params.log
+        log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         results = []
         for snapshot in snapshots:
@@ -4029,7 +4029,7 @@ class Job:
         return results
 
     def filter_snapshots_by_creation_time(self, snapshots: List[str], include_snapshot_times: UnixTimeRange) -> List[str]:
-        p, log = self.params, self.params.log
+        log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
         results = []
@@ -4055,7 +4055,7 @@ class Job:
 
         assert isinstance(include_snapshot_ranks, list)
         assert len(include_snapshot_ranks) > 0
-        p, log = self.params, self.params.log
+        log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
@@ -4087,7 +4087,7 @@ class Job:
 
     def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
-        p, log = self.params, self.params.log
+        log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         results = {}
         for propname, propvalue in props.items():
@@ -4114,7 +4114,7 @@ class Job:
         )
 
     def delete_snapshot(self, r: Remote, dataset: str, snapshots_to_delete: str) -> None:
-        p, log = self.params, self.params.log
+        p = self.params
         cmd = self.delete_snapshot_cmd(r, snapshots_to_delete)
         is_dry = p.dry_run and self.is_solaris_zfs(r)  # solaris-11.4 knows no 'zfs destroy -n' flag
         try:
@@ -4174,7 +4174,7 @@ class Job:
         # To ensure the filesystems that we create do not get mounted, we apply a separate 'zfs create -p -u'
         # invocation for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
         # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
-        p, log = self.params, self.params.log
+        p = self.params
         parent = ""
         no_mount = "-u" if self.is_program_available(zfs_version_is_at_least_2_1_0, "dst") else ""
         for component in filesystem.split("/"):
@@ -4199,7 +4199,7 @@ class Job:
     def create_zfs_bookmarks(self, remote: Remote, dataset: str, snapshots: List[str]) -> None:
         """Creates bookmarks for the given snapshots, using the 'zfs bookmark' CLI."""
         # Unfortunately ZFS has no syntax yet to create multiple bookmarks in a single CLI invocation
-        p, log = self.params, self.params.log
+        p = self.params
 
         def create_zfs_bookmark(cmd: List[str]) -> None:
             snapshot = cmd[-1]
@@ -4221,7 +4221,7 @@ class Job:
 
     def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: str, *items) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
-        p, log = self.params, self.params.log
+        p = self.params
         if p.no_estimate_send_size or self.is_solaris_zfs(remote):
             return 0  # solaris-11.4 does not have a --parsable equivalent
         zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
@@ -4298,7 +4298,7 @@ class Job:
                             f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )
-                    raise retryable_error.__cause__
+                    raise retryable_error.__cause__ from None
 
     def incremental_send_steps_wrapper(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
@@ -4391,7 +4391,7 @@ class Job:
 
     def zfs_set(self, properties: List[str], remote: Remote, dataset: str) -> None:
         """Applies the given property key=value pairs via 'zfs set' CLI to the given dataset on the given remote."""
-        p, log = self.params, self.params.log
+        p = self.params
         if len(properties) == 0:
             return
         # set properties in batches without creating a command line that's too big for the OS to handle
@@ -4419,7 +4419,7 @@ class Job:
         """Returns the results of 'zfs get' CLI on the given dataset on the given remote."""
         if not propnames:
             return {}
-        p, log = self.params, self.params.log
+        p = self.params
         cache_key = (sources, output_columns, propnames)
         props = props_cache.get(cache_key)
         if props is None:
@@ -4730,8 +4730,8 @@ class Job:
 
     def update_last_modified_cache(self, datasets_to_snapshot: Dict[SnapshotLabel, List[str]]) -> None:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
-        p, log = self.params, self.params.log
-        src, dst = p.src, p.dst
+        p = self.params
+        src = p.src
         if not self.is_caching_snapshots(src):
             return
         src_datasets_set: Set[str] = set()
@@ -4773,7 +4773,7 @@ class Job:
             except UnicodeDecodeError:
                 return []
 
-        p, log = self.params, self.params.log
+        p = self.params
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o snapshots_changed,name")
         results = {}
         for lines in self.itr_ssh_cmd_parallel(
@@ -4891,7 +4891,7 @@ class Job:
                 rel_name = relativize_dataset(name, root_dataset)
                 creation_iso = isotime_from_unixtime(int(creation))
                 row = loc, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name, creation, written
-                # Example: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576
+                # Example: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576  # noqa: E501
                 row_str = "\t".join(row)
                 if not p.dry_run:
                     fd.write(row_str + "\n")
@@ -5332,11 +5332,11 @@ class Job:
         for key, programs in available_programs.items():
             for program in list(programs.keys()):
                 if program.startswith("uname-"):
-                    # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux
+                    # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux  # noqa: E501
                     # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
-                    # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc # https://blogs.oracle.com/solaris/post/building-open-source-software-on-oracle-solaris-114-cbe-release
+                    # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc # https://blogs.oracle.com/solaris/post/building-open-source-software-on-oracle-solaris-114-cbe-release  # noqa: E501
                     # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
-                    # uname-Darwin foo 23.6.0 Darwin Kernel Version 23.6.0: Mon Jul 29 21:13:04 PDT 2024; root:xnu-10063.141.2~1/RELEASE_ARM64_T6020 arm64
+                    # uname-Darwin foo 23.6.0 Darwin Kernel Version 23.6.0: Mon Jul 29 21:13:04 PDT 2024; root:xnu-10063.141.2~1/RELEASE_ARM64_T6020 arm64  # noqa: E501
                     programs.pop(program)
                     uname = program[len("uname-") :]
                     programs["uname"] = uname
@@ -5382,7 +5382,8 @@ class Job:
         # print num CPUs on Solaris:
         cmds.append(f"command -v {p.psrinfo_program} > /dev/null && printf getconf_cpu_count- && {p.psrinfo_program} -p")
         cmds.append(  # print num CPUs on POSIX except Solaris
-            f"! command -v {p.psrinfo_program} && command -v {p.getconf_program} > /dev/null && printf getconf_cpu_count- && {p.getconf_program} _NPROCESSORS_ONLN"
+            f"! command -v {p.psrinfo_program} && command -v {p.getconf_program} > /dev/null &&"
+            f" printf getconf_cpu_count- && {p.getconf_program} _NPROCESSORS_ONLN"
         )
         cmds.append(f"command -v {p.uname_program} > /dev/null && printf uname- && {p.uname_program} -a || true")
         return "; ".join(cmds)
@@ -6043,7 +6044,7 @@ def fix_send_recv_opts(
     exclude_long_opts: Set[str],
     exclude_short_opts: str,
     include_arg_opts: Set[str],
-    exclude_arg_opts: Set[str] = set(),
+    exclude_arg_opts: Set[str] = frozenset(),
 ) -> List[str]:
     """These opts are instead managed via bzfs CLI args --dryrun, etc."""
     assert "-" not in exclude_short_opts
@@ -6572,7 +6573,7 @@ class PeriodAnchors:
 
 
 def round_datetime_up_to_duration_multiple(
-    dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors = PeriodAnchors()
+    dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors
 ) -> datetime:
     """Given a timezone-aware datetime and a duration, returns a datetime (in the same timezone) that is greater than or
     equal to dt, and rounded up (ceiled) and snapped to an anchor plus a multiple of the duration. The snapping is done
@@ -6699,17 +6700,17 @@ def round_datetime_up_to_duration_multiple(
 
 def subprocess_run(*args, **kwargs):
     """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
-    input = kwargs.pop("input", None)
+    input_value = kwargs.pop("input", None)
     timeout = kwargs.pop("timeout", None)
     check = kwargs.pop("check", False)
-    if input is not None:
+    if input_value is not None:
         if kwargs.get("stdin") is not None:
             raise ValueError("input and stdin are mutually exclusive")
         kwargs["stdin"] = subprocess.PIPE
 
     with subprocess.Popen(*args, **kwargs) as proc:
         try:
-            stdout, stderr = proc.communicate(input, timeout=timeout)
+            stdout, stderr = proc.communicate(input_value, timeout=timeout)
         except BaseException as e:
             try:
                 if isinstance(e, subprocess.TimeoutExpired):
@@ -7656,20 +7657,20 @@ class CheckRange(argparse.Action):
 
     def interval(self):
         if hasattr(self, 'min'):
-            l = f'[{self.min}'
+            lo = f'[{self.min}'
         elif hasattr(self, 'inf'):
-            l = f'({self.inf}'
+            lo = f'({self.inf}'
         else:
-            l = '(-infinity'
+            lo = '(-infinity'
 
         if hasattr(self, 'max'):
-            u = f'{self.max}]'
+            up = f'{self.max}]'
         elif hasattr(self, 'sup'):
-            u = f'{self.sup})'
+            up = f'{self.sup})'
         else:
-            u = '+infinity)'
+            up = '+infinity)'
 
-        return f'valid range: {l}, {u}'
+        return f'valid range: {lo}, {up}'
 
     def __call__(self, parser, namespace, values, option_string=None):
         for name, op in self.ops.items():

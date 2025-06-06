@@ -62,7 +62,7 @@ def main():
             dataset = bookmark.split("@" if args.snapshot else "#", 1)[0]
             datasets[dataset].append((int(creation_time), bookmark))
 
-        for dataset, bookmarks in sorted(datasets.items()):
+        for dataset, bookmarks in sorted(datasets.items()):  # noqa: B007
             n = max(0, len(bookmarks) - args.min_bookmarks_to_retain)
             for bookmark in [bm for ts, bm in sorted(bookmarks) if ts <= int(time.time()) - args.days * 86400][0:n]:
                 msg = "Would delete" if args.dry_run else "Deleting"

@@ -140,7 +140,7 @@ finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifet
 auto-restarted by 'cron', or earlier if they fail. While the daemons are running, 'cron' will attempt to start new
 (unnecessary) daemons but this is benign as these new processes immediately exit with a message like this:
 "Exiting as same previous periodic job is still running without completion yet"
-""")
+""")  # noqa: E501
 
     # commands:
     parser.add_argument(
@@ -500,10 +500,10 @@ class Job:
             dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
             return resolve_dataset(dst_hostname, dst_dataset, is_src=False)
 
+        lhn = localhostname
         subjobs: Dict[str, List[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
-            lhn = localhostname
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
@@ -544,12 +544,14 @@ class Job:
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
                     f"--log-file-prefix={prog_name}{sep}{tag}{sep}",
                     f"--log-file-infix={sep}{job_id}",
-                    f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",
+                    f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",  # noqa: B023
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
                 opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
                 opts += unknown_args + ["--"]
-                opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
+                opts += flatten(
+                    dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])  # noqa: B023
+                )
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
                 subjobs[subjob_name] = [bzfs_prog_name] + opts
@@ -566,7 +568,7 @@ class Job:
                 )
                 j = 0
                 marker = "prune-dst-snapshots"
-                for dst_hostname, targets in dst_hosts.items():
+                for dst_hostname, _ in dst_hosts.items():
                     curr_retain_targets = set(retain_dst_targets[dst_hostname])
                     curr_dst_snapshot_plan = {  # only retain targets that belong to the host
                         org: {target: periods for target, periods in target_periods.items() if target in curr_retain_targets}
@@ -993,10 +995,10 @@ class Stats:
         def pct(number: int) -> str:
             return bzfs.percent(number, total=self.jobs_all)
 
-        all, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
+        al, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
         running = self.jobs_running
         t = "avg_completion_time:" + bzfs.human_readable_duration(self.sum_elapsed_nanos / max(1, completed))
-        return f"all:{all}, started:{pct(started)}, completed:{pct(completed)}, failed:{pct(failed)}, running:{running}, {t}"
+        return f"all:{al}, started:{pct(started)}, completed:{pct(completed)}, failed:{pct(failed)}, running:{running}, {t}"
 
 
 #############################################################################

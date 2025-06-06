@@ -106,7 +106,8 @@ target-version = "py38"
 line-length = 127
 
 [tool.ruff.lint]
-select = ["E9", "F63", "F7", "F82"]
+select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
+#ignore = [ "F841" ]
 
 [tool.mypy]
 python_version = "3.8"
@@ -124,13 +125,11 @@ disable_error_code = [
   "union-attr",
   "operator",
   "call-overload",
-  "annotation-unchecked",
   "no-redef",
   "type-var",
   "str-bytes-safe",
   "func-returns-value",
   "return",
-  "truthy-function",
   "exit-return",
   "index",
   "call-arg",

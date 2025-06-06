@@ -20,11 +20,12 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import List
 
-dir = "badges"
+ROOT_DIR = "badges"
 
 
-def main():
+def main() -> None:
     """Generate README.md badges for zfs/os/python version. Called by coverage.sh.
     Uses https://smarie.github.io/python-genbadge/"""
     if sys.argv[1] != "merge":
@@ -36,27 +37,27 @@ def main():
             version = subprocess.run(["uname", "-v"], stdout=subprocess.PIPE, text=True, check=True).stdout
             version = version.strip().split()[0]
 
-        touch(f"{dir}/zfs", version)
-        touch(f"{dir}/python", f"{sys.version_info.major}.{sys.version_info.minor}")
-        touch(f"{dir}/os", platform.system().split()[0])
+        touch(f"{ROOT_DIR}/zfs", version)
+        touch(f"{ROOT_DIR}/python", f"{sys.version_info.major}.{sys.version_info.minor}")
+        touch(f"{ROOT_DIR}/os", platform.system().split()[0])
     else:
         color = "#007ec6"  # "blue" # see https://github.com/badges/shields/tree/master/badge-maker#colors
-        generate_badge("zfs", merge_versions(f"{dir}/zfs", natsort=True), color)
-        generate_badge("os", merge_versions(f"{dir}/os"), color)
-        py_versions = merge_versions(f"{dir}/python")
+        generate_badge("zfs", merge_versions(f"{ROOT_DIR}/zfs", natsort=True), color)
+        generate_badge("os", merge_versions(f"{ROOT_DIR}/os"), color)
+        py_versions = merge_versions(f"{ROOT_DIR}/python")
         py_versions = " | ".join(["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"])
         generate_badge("python", py_versions, color)
         pypi_versions = ""
         generate_badge("pypi", pypi_versions, color)
 
 
-def touch(dir, path):
-    os.makedirs(dir, exist_ok=True)
-    Path(f"{dir}/{str(path)}").touch()
+def touch(output_dir: str, path: str) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    Path(f"{output_dir}/{str(path)}").touch()
 
 
-def merge_versions(dir, natsort=False):
-    versions = [str(file) for file in os.listdir(dir)]
+def merge_versions(input_dir: str, natsort: bool = False) -> str:
+    versions = [str(file) for file in os.listdir(input_dir)]
     if natsort:
         versions = sort_versions(versions)
     else:
@@ -67,7 +68,7 @@ def merge_versions(dir, natsort=False):
     return " | ".join(versions)
 
 
-def sort_versions(version_list):
+def sort_versions(version_list: List[str]) -> List[str]:
 
     def is_valid_version(version):  # is in the form x.y.z ?
         return re.match(r"^\d+(\.\d+){0,2}$", version)
@@ -80,14 +81,13 @@ def sort_versions(version_list):
     return sorted(valid_versions, key=version_key) + sorted(invalid_versions)
 
 
-def generate_badge(left_txt, right_txt, color):
+def generate_badge(left_txt: str, right_txt, color: str) -> None:
     from genbadge import Badge
 
     badge = Badge(left_txt=left_txt, right_txt=right_txt, color=color)
     print(badge)
-    output_dir = f"{dir}"
-    os.makedirs(output_dir, exist_ok=True)
-    badge.write_to(f"{output_dir}/{left_txt}-badge.svg", use_shields=True)
+    os.makedirs(ROOT_DIR, exist_ok=True)
+    badge.write_to(f"{ROOT_DIR}/{left_txt}-badge.svg", use_shields=True)
 
 
 #############################################################################

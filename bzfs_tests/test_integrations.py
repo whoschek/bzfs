@@ -235,6 +235,7 @@ class BZFSTestCase(ParametrizedTestCase):
             features = "\n".join(
                 [f"{k}: {v}" for k, v in sorted(props.items()) if k.startswith("feature@") or k == "delegation"]
             )
+            self.assertIsNotNone(features)
             # print(f"test zpool features: {features}", file=sys.stderr)
 
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/bzfs/
@@ -257,6 +258,7 @@ class BZFSTestCase(ParametrizedTestCase):
         src_foo = create_filesystem(src_root_dataset, "foo", props=dataset_props)
         src_foo_a = create_volume(src_foo, "a", size="1M") if volume else create_filesystem(src_foo, "a")
         src_foo_b = create_filesystem(src_foo, "b")
+        self.assertIsNotNone(src_foo_b)
         take_snapshot(src_root_dataset, fix("s1"))
         take_snapshot(src_root_dataset, fix("s2"))
         take_snapshot(src_root_dataset, fix("s3"))
@@ -1002,7 +1004,7 @@ class LocalTestCase(BZFSTestCase):
         q = 0
         for m in range(0, 2):
             for k in range(0, 2):
-                for j in range(0, 2):
+                for j in range(0, 2):  # noqa: B007
                     for i in range(0, 2):
                         self.tearDownAndSetup()
                         self.setup_basic()
@@ -1012,7 +1014,7 @@ class LocalTestCase(BZFSTestCase):
                         self.assertSnapshots(src_root_dataset, n, "s")
                         self.assertSnapshots(src_root_dataset + "/boo", 0)
                         self.assertSnapshots(src_root_dataset + "/foo/b", 0)
-                        for b in range(0, 3):
+                        for b in range(0, 3):  # noqa: B007
                             with stop_on_failure_subtest(i=q):
                                 q += 1
                                 self.run_bzfs(
@@ -2514,7 +2516,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t"),
         for name, value in included_props.items():
             self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
-        for name, value in excluded_props.items():
+        for name, _ in excluded_props.items():
             self.assertEqual("-", dataset_property(dst_root_dataset + "/foo", name))
 
     def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self):
@@ -2542,7 +2544,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t"),
         for name, value in included_props.items():
             self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
-        for name, value in excluded_props.items():
+        for name, _ in excluded_props.items():
             self.assertEqual("-", dataset_property(dst_root_dataset + "/foo", name))
 
     def test_preserve_recordsize(self):
@@ -3081,7 +3083,7 @@ class LocalTestCase(BZFSTestCase):
         # on src and dst, take some snapshots, which is asking for trouble again...
         src_guid = snapshot_property(take_snapshot(src_foo, fix("t7")), "guid")
         dst_guid = snapshot_property(take_snapshot(dst_foo, fix("t7")), "guid")
-        # names of t7 are the same but GUIDs are different as they are not replicas of each other - t7 is not a common snapshot.
+        # names of t7 are the same but GUIDs are different as they are not replicas of each other - t7 is not a common snap.
         self.assertNotEqual(src_guid, dst_guid)
         take_snapshot(dst_foo, fix("t8"))
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
@@ -3094,7 +3096,7 @@ class LocalTestCase(BZFSTestCase):
                     no_create_bookmark=True,
                     expected_status=die_status,
                 )
-                self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # unchanged
                 self.assertEqual(
                     dst_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                 )  # nothing has changed on dst
@@ -3112,7 +3114,7 @@ class LocalTestCase(BZFSTestCase):
                 )  # resolve conflict via dst rollback
                 self.assertSnapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                    self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # unchanged
                     self.assertEqual(
                         dst_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                     )  # nothing has changed on dst
@@ -3122,7 +3124,7 @@ class LocalTestCase(BZFSTestCase):
                         src_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                     )  # now they are true replicas
 
-        # on src delete some snapshots that are older than most recent common snapshot, which is normal and won't cause changes to dst
+        # on src delete some snapshots are older than most recent common snap, which is normal and won't cause changes to dst
         destroy(snapshots(src_foo)[0])
         destroy(snapshots(src_foo)[2])
         for i in range(0, 2):
@@ -3297,7 +3299,7 @@ class LocalTestCase(BZFSTestCase):
         # on src and dst, take some snapshots, which is asking for trouble again...
         src_guid = snapshot_property(take_snapshot(src_foo, fix("t7")), "guid")
         dst_guid = snapshot_property(take_snapshot(dst_foo, fix("t7")), "guid")
-        # names of t7 are the same but GUIDs are different as they are not replicas of each other - t7 is not a common snapshot.
+        # names of t7 are the same but GUIDs are different as they are not replicas of each other - t7 is not a common snap.
         self.assertNotEqual(src_guid, dst_guid)
         take_snapshot(dst_foo, fix("t8"))
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
@@ -3336,7 +3338,7 @@ class LocalTestCase(BZFSTestCase):
                     )  # now they are true replicas
                     self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
 
-        # on src delete some snapshots that are older than most recent common snapshot, which is normal and won't cause changes to dst
+        # on src delete some snapshots are older than most recent common snap, which is normal and won't cause changes to dst
         destroy(snapshots(src_foo)[0])
         destroy(snapshots(src_foo)[2])
         for i in range(0, 2):
@@ -3455,7 +3457,7 @@ class LocalTestCase(BZFSTestCase):
         self.create_resumable_snapshots(1, n)
         prev_token = None
         max_iters = 20
-        for i in range(0, max_iters):
+        for _ in range(0, max_iters):
             self.run_bzfs(
                 src_root_dataset,
                 dst_root_dataset,
@@ -3469,11 +3471,10 @@ class LocalTestCase(BZFSTestCase):
             self.assertIsNotNone(curr_token)  # assert clear_resumable_recv_state() didn't get called
             self.assertNotEqual(prev_token, curr_token)  # assert send/recv transfers are making progress
             prev_token = curr_token
-        print(f"iterations to fully replicate all snapshots: {i}")
+        print(f"iterations to fully replicate all snapshots: {max_iters}")
         self.assert_receive_resume_token(dst_root_dataset, exists=False)
         self.assertSnapshots(dst_root_dataset, n - 1, "s")
-        self.assertLess(i, max_iters - 1)
-        self.assertGreater(i, 2)
+        self.assertGreater(max_iters, 2)
 
     def test_send_full_no_resume_recv_with_resume_token_present(self):
         if not is_zpool_recv_resume_feature_enabled_or_active():
@@ -3909,8 +3910,10 @@ class LocalTestCase(BZFSTestCase):
     def test_delete_dst_datasets_recursive_with_non_included_dataset(self):
         dst_foo1 = create_filesystem(dst_root_dataset, "foo1")
         dst_foo1a = create_filesystem(dst_foo1, "a")
+        self.assertIsNotNone(dst_foo1a)
         dst_foo2 = create_filesystem(dst_root_dataset, "foo2")
         dst_foo2a = create_filesystem(dst_foo2, "a")
+        self.assertIsNotNone(dst_foo2a)
         self.run_bzfs(
             bzfs.dummy_dataset,
             dst_root_dataset,
@@ -5154,7 +5157,7 @@ class LocalTestCase(BZFSTestCase):
                     expected_status=bzfs.critical_status,
                 )
 
-                # monitoring says latest dst snapshot is critically too old, but we only inform about this rather than error out:
+                # monitoring says latest dst snap is critically too old, but we only inform about this rather than error out:
                 run_jobrunner(
                     "--monitor-snapshots-dont-crit",
                     "--monitor-dst-snapshots",

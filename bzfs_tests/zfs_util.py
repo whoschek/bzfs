@@ -41,7 +41,7 @@ def destroy(name: str, recursive=False, force=False) -> None:
     run_cmd(cmd)
 
 
-def destroy_snapshots(dataset: str, snapshots=[]) -> None:
+def destroy_snapshots(dataset: str, snapshots=[]) -> None:  # noqa: B006
     if len(snapshots) == 0:
         return
     if is_solaris_zfs():  # solaris-11.4 does not support passing multiple snapshots per CLI invocation
@@ -54,7 +54,13 @@ def destroy_snapshots(dataset: str, snapshots=[]) -> None:
 
 
 def create_volume(
-    dataset: str, path: str = None, mk_parents=True, size: int = None, props=[], blocksize: int = None, sparse=False
+    dataset: str,
+    path: str = None,
+    mk_parents=True,
+    size: int = None,
+    props=[],  # noqa: B006
+    blocksize: int = None,
+    sparse=False,
 ) -> str:
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"
@@ -75,7 +81,7 @@ def create_volume(
     return dataset
 
 
-def create_filesystem_simple(dataset: str, path: str = None, mk_parents=True, no_mount=True, props=[]) -> str:
+def create_filesystem_simple(dataset: str, path: str = None, mk_parents=True, no_mount=True, props=[]) -> str:  # noqa: B006
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ["zfs", "create"]
@@ -93,7 +99,7 @@ def create_filesystem_simple(dataset: str, path: str = None, mk_parents=True, no
 zfs_version_is_at_least_2_1_0 = None
 
 
-def create_filesystem(dataset: str, path: str = None, no_mount=True, props=[]):
+def create_filesystem(dataset: str, path: str = None, no_mount=True, props=[]):  # noqa: B006
     """implies mk_parents=True
     if no_mount=True:
     To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
@@ -141,7 +147,7 @@ def datasets(dataset: str) -> List[str]:
     return zfs_list([dataset], types=["filesystem", "volume"], max_depth=1)[1:]
 
 
-def take_snapshot(dataset: str, snapshot_tag: str, recursive=False, props=[]) -> str:
+def take_snapshot(dataset: str, snapshot_tag: str, recursive=False, props=[]) -> str:  # noqa: B006
     snapshot = dataset + "@" + snapshot_tag
     cmd = sudo_cmd + ["zfs", "snapshot"]
     if recursive:
@@ -187,7 +193,9 @@ def snapshot_property(snapshot: str, prop: str) -> str:
     return zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0, splitlines=False)
 
 
-def zfs_list(names=[], props=["name"], types=[], max_depth: int = None, parsable=True, sort_props=[], splitlines=True):
+def zfs_list(
+    names=[], props=["name"], types=[], max_depth: int = None, parsable=True, sort_props=[], splitlines=True  # noqa: B006
+):
     cmd = ["zfs", "list"]
     if max_depth is None:
         cmd.append("-r")
@@ -216,7 +224,16 @@ def zfs_list(names=[], props=["name"], types=[], max_depth: int = None, parsable
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_get(names=[], props=["all"], types=[], max_depth: int = None, parsable=True, fields=[], sources=[], splitlines=True):
+def zfs_get(
+    names=[],  # noqa: B006
+    props=["all"],  # noqa: B006
+    types=[],  # noqa: B006
+    max_depth: int = None,
+    parsable=True,
+    fields=[],  # noqa: B006
+    sources=[],  # noqa: B006
+    splitlines=True,
+):
     cmd = ["zfs", "get"]
     if max_depth is None:
         cmd.append("-r")
@@ -249,7 +266,7 @@ def zfs_get(names=[], props=["all"], types=[], max_depth: int = None, parsable=T
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_set(names: List[str] = [], properties: Iterable[str] = {}) -> None:
+def zfs_set(names: List[str] = [], properties: Iterable[str] = {}) -> None:  # noqa: B006
     def run_zfs_set(props):
         cmd = sudo_cmd + ["zfs", "set"]
         for prop in props:
@@ -265,7 +282,7 @@ def zfs_set(names: List[str] = [], properties: Iterable[str] = {}) -> None:
             run_zfs_set([f"{name}={value}"])
 
 
-def zfs_inherit(names: List[str] = [], propname: str = None, recursive=False, revert=False) -> None:
+def zfs_inherit(names: List[str] = [], propname: str = None, recursive=False, revert=False) -> None:  # noqa: B006
     assert propname
     cmd = sudo_cmd + ["zfs", "inherit"]
     if recursive:

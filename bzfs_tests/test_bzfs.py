@@ -39,7 +39,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
-from bzfs_main.bzfs import find_match, getenv_any, Remote, round_datetime_up_to_duration_multiple, PeriodAnchors
+from bzfs_main.bzfs import find_match, getenv_any, Remote, PeriodAnchors
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 # constants:
@@ -147,7 +147,12 @@ class TestHelperFunctions(unittest.TestCase):
         return [item for item in bzfs.Job().merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst))]
 
     def assert_merge_sorted_iterators(
-        self, expected: List[Tuple], src: List[str], dst: List[str], choice="+".join([s, d, a]), invert=True
+        self,
+        expected: List[Tuple],
+        src: List[str],
+        dst: List[str],
+        choice=f"{s}+{d}+{a}",
+        invert=True,
     ) -> None:
         s, d, a = self.s, self.d, self.a
         self.assertListEqual(expected, self.merge_sorted_iterators(src, dst, choice))
@@ -262,7 +267,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_validate_program_name_must_not_be_empty(self):
         args = argparser_parse_args(args=["src", "dst"])
-        setattr(args, "zfs_program", "")
+        args.zfs_program = ""
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
 
@@ -428,8 +433,8 @@ class TestHelperFunctions(unittest.TestCase):
             Path(stale_socket_file).touch()
             one_hundred_days_ago = time.time() - 100 * 24 * 60 * 60
             os.utime(stale_socket_file, (one_hundred_days_ago, one_hundred_days_ago))
-            dir = os.path.join(tmpdir, "s_dir")
-            os.mkdir(dir)
+            sdir = os.path.join(tmpdir, "s_dir")
+            os.mkdir(sdir)
             non_socket_file = os.path.join(tmpdir, "f")
             Path(non_socket_file).touch()
 
@@ -437,7 +442,7 @@ class TestHelperFunctions(unittest.TestCase):
 
             self.assertTrue(os.path.exists(new_socket_file))
             self.assertFalse(os.path.exists(stale_socket_file))
-            self.assertTrue(os.path.exists(dir))
+            self.assertTrue(os.path.exists(sdir))
             self.assertTrue(os.path.exists(non_socket_file))
 
     def test_delete_stale_files_ssh_alive(self):
@@ -871,7 +876,10 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(isinstance(default_opts, str) and default_opts)
         pv_fd, pv_file = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
         os.close(pv_fd)
-        cmd = f"dd if=/dev/zero bs=1k count=16 | LC_ALL=C pv {default_opts} --size 16K --name=275GiB --force 2> {pv_file} >/dev/null"
+        cmd = (
+            "dd if=/dev/zero bs=1k count=16 |"
+            f" LC_ALL=C pv {default_opts} --size 16K --name=275GiB --force 2> {pv_file} >/dev/null"
+        )
         try:
             subprocess.run(cmd, shell=True, check=True)
             num_bytes = bzfs.count_num_bytes_transferred_by_zfs_send(pv_file)
@@ -927,14 +935,14 @@ class TestHelperFunctions(unittest.TestCase):
                 self.assertEqual("[==>  ] 94% ETA 2+0:00:39 ETA 17:55:48", line_tail)
 
                 # intermediate line with duration ETA that contains other days syntax and timestamp ETA that contains days
-                line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 0:12:12 ( 185MiB/s) ( 130MiB/s) [==>  ] ETA 1:00:07:16 ETA 2025-01-23 14:06:02"
+                line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 0:12:12 ( 185MiB/s) ( 130MiB/s) [==>  ] ETA 1:00:07:16 ETA 2025-01-23 14:06:02"  # noqa: E501
                 num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(93.1 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (1 * 86400 + 7 * 60 + 16), eta_timestamp_nanos)
                 self.assertEqual("[==>  ] ETA 1:00:07:16 ETA 2025-01-23 14:06:02", line_tail)
 
                 # intermediate line with duration ETA that contains other days syntax and timestamp ETA using FIN marker
-                line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 9:0:12:12 [ 185MiB/s] [ 130MiB/s] [==>  ] ETA 1:00:07:16 FIN 2025-01-23 14:06:02"
+                line = "98 GiB/ 0 B/  98 GiB: 93.1GiB 9:0:12:12 [ 185MiB/s] [ 130MiB/s] [==>  ] ETA 1:00:07:16 FIN 2025-01-23 14:06:02"  # noqa: E501
                 num_bytes, eta_timestamp_nanos, line_tail = reporter.parse_pv_line(line + eol, curr_time_nanos)
                 self.assertEqual(round(93.1 * 1024**3), num_bytes)
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (1 * 86400 + 7 * 60 + 16), eta_timestamp_nanos)
@@ -1083,7 +1091,8 @@ class TestHelperFunctions(unittest.TestCase):
                 self.assertEqual(
                     read_lines_after_append_from_original_iterator,
                     ["line3_appended\n", "line4_appended\n"],
-                    "Exhausted iterator (on an still-open file) should yiels new lines even if the underlying file was appended to.",
+                    "Exhausted iterator (on an still-open file) should yiels new lines even if the underlying file "
+                    "was appended to.",
                 )
         finally:
             if os.path.exists(temp_file_path):
@@ -1753,12 +1762,12 @@ class TestSubprocessRun(unittest.TestCase):
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
-    def run_test(self, input, expected_user, expected_host, expected_dataset, expected_user_host, expected_error):
+    def run_test(self, input_value, expected_user, expected_host, expected_dataset, expected_user_host, expected_error):
         expected_status = 0 if not expected_error else 3
         passed = False
 
         # Run without validation
-        user, host, user_host, pool, dataset = bzfs.parse_dataset_locator(input, validate=False)
+        user, host, user_host, pool, dataset = bzfs.parse_dataset_locator(input_value, validate=False)
 
         if (
             user == expected_user
@@ -1771,7 +1780,7 @@ class TestParseDatasetLocator(unittest.TestCase):
         # Rerun with validation
         status = 0
         try:
-            bzfs.parse_dataset_locator(input, validate=True)
+            bzfs.parse_dataset_locator(input_value, validate=True)
         except (ValueError, SystemExit):
             status = 3
 
@@ -1781,7 +1790,9 @@ class TestParseDatasetLocator(unittest.TestCase):
             else:
                 print("Test failed:")
             print(
-                f"input: {input}\nuser exp: '{expected_user}' vs '{user}'\nhost exp: '{expected_host}' vs '{host}'\nuserhost exp: '{expected_user_host}' vs '{user_host}'\ndataset exp: '{expected_dataset}' vs '{dataset}'"
+                f"input: {input_value}\nuser exp: '{expected_user}' vs '{user}'\nhost exp: '{expected_host}' vs "
+                f"'{host}'\nuserhost exp: '{expected_user_host}' vs '{user_host}'\ndataset exp: '{expected_dataset}' vs "
+                f"'{dataset}'"
             )
             self.fail()
 
@@ -2153,6 +2164,13 @@ class TestCurrentDateTime(unittest.TestCase):
     def test_invalid_timezone_format_missing_sign(self):
         with self.assertRaises(ValueError):
             bzfs.current_datetime(tz_spec="0400")
+
+
+def round_datetime_up_to_duration_multiple(
+    dt: datetime, duration_amount: int, duration_unit: str, anchors: Optional[PeriodAnchors] = None
+) -> datetime:
+    anchors = PeriodAnchors() if anchors is None else anchors
+    return bzfs.round_datetime_up_to_duration_multiple(dt, duration_amount, duration_unit, anchors=anchors)
 
 
 class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
@@ -2606,7 +2624,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
 class TestFindMatch(unittest.TestCase):
 
     def test_basic(self):
-        condition = lambda arg: arg.startswith("-")
+        condition = lambda arg: arg.startswith("-")  # noqa: E731
 
         lst = ["a", "b", "-c", "d"]
         self.assert_find_match(2, lst, condition)
@@ -3061,11 +3079,15 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "1000 years ago..0secondsago"))
 
     @staticmethod
-    def filter_snapshots_by_times_and_rank1(snapshots: List[str], timerange: str, ranks: List[str] = []) -> List[str]:
+    def filter_snapshots_by_times_and_rank1(
+        snapshots: List[str], timerange: str, ranks: List[str] = []  # noqa: B006
+    ) -> List[str]:
         return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
 
 
-def filter_snapshots_by_times_and_rank(snapshots: List[str], timerange: str, ranks: List[str] = []) -> List[str]:
+def filter_snapshots_by_times_and_rank(
+    snapshots: List[str], timerange: str, ranks: List[str] = []  # noqa: B006
+) -> List[str]:
     args = argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"])
     log_params = bzfs.LogParams(args)
     try:
@@ -3731,7 +3753,7 @@ class TestConnectionPool(unittest.TestCase):
         self.assertIsNotNone(repr(pools))
         self.assertIsNotNone(str(pools))
         pools.shutdown("foo")
-        conn = pools.pool("shared").get_connection()
+        pools.pool("shared").get_connection()
         pools.shutdown("foo")
 
     def test_return_sequence(self):
@@ -3760,15 +3782,15 @@ class TestConnectionPool(unittest.TestCase):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
-                self.src.local_ssh_command = lambda: [str(next(counter1a))]
-                self.src2.local_ssh_command = lambda: [str(next(counter1b))]
+                self.src.local_ssh_command = lambda: [str(next(counter1a))]  # noqa: B023
+                self.src2.local_ssh_command = lambda: [str(next(counter1b))]  # noqa: B023
                 cpool = bzfs.ConnectionPool(self.src, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = bzfs.ConnectionPool(self.src2, maxsessions)
                 rng = random.Random(12345)
                 conns = []
                 try:
-                    for item in range(0, items):
+                    for _ in range(0, items):
                         conns.append(self.get_connection(cpool, dpool))
                     item = -1
                     for step in range(0, num_steps):
@@ -3922,7 +3944,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     # print(f"output_snapshots:" + ','.join(output_snapshots))
                     self.assertListEqual(expected_results, output_snapshots)
                     all_to_snapshots = []
-                    for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:
+                    for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
                         self.assertIn(incr_flag, ["-I", "-i"])
                         self.assertGreaterEqual(len(to_snapshots), 1)
                         all_to_snapshots += [snapshot[snapshot.find("@") + 1 :] for snapshot in to_snapshots]
@@ -3936,7 +3958,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
-        for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:
+        for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]
             end_snapshot = end_snapshot[end_snapshot.find("@") + 1 :]
             start = input_snapshots.index(start_snapshot)
@@ -4539,7 +4561,6 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        BR = bzfs.BARRIER_CHAR
         src_datasets = ["a/b/c", "a/b/c/d/e/f", "u/v/w"]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
@@ -4556,7 +4577,6 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        BR = bzfs.BARRIER_CHAR
         src_datasets = ["a/b/c", "a/b/c/d/e/f", "u/v/w"]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
@@ -4657,6 +4677,7 @@ class TestPerformance(unittest.TestCase):
                     stdout = subprocess.run(
                         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, close_fds=close_fds
                     ).stdout
+                    self.assertTrue(stdout)
                 secs = (time.time_ns() - start_time_nanos) / 1000_000_000
                 print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
 
@@ -4667,4 +4688,4 @@ def stop_on_failure_subtest(**params):
     try:
         yield
     except AssertionError:
-        raise AssertionError(f"SubTest failed with parameters: {params}")
+        raise AssertionError(f"SubTest failed with parameters: {params}") from None
