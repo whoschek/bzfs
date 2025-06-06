@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, cast
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
@@ -1212,12 +1212,12 @@ class TestHelperFunctions(unittest.TestCase):
             )
             actual = bzfs.Job().root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
             if expected is not None:
-                self.assertListEqual(expected, actual)
+                self.assertListEqual(expected, cast(List[str], actual))
             self.assertEqual(expected, actual)
             return actual
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
+        self.assertListEqual([], cast(List[str], run_filter([], basis_src_datasets)))
         self.assertListEqual(["a"], run_filter(basis_src_datasets, basis_src_datasets))
         self.assertIsNone(run_filter(["a", "a/b", "a/b/c"], basis_src_datasets))
         self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))

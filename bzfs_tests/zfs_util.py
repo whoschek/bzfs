@@ -16,7 +16,7 @@
 import platform
 import re
 import subprocess
-from typing import List, Mapping, Optional
+from typing import List, Mapping, Optional, Union
 
 sudo_cmd = []
 
@@ -57,7 +57,7 @@ def create_volume(
     dataset: str,
     path: Optional[str] = None,
     mk_parents=True,
-    size: Optional[int] = None,
+    size: Optional[Union[int, str]] = None,
     props=[],  # noqa: B006
     blocksize: Optional[int] = None,
     sparse=False,

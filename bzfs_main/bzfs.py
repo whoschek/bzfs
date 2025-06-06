@@ -80,7 +80,7 @@ from pathlib import Path
 from subprocess import CalledProcessError, DEVNULL, PIPE
 from typing import Any, Callable, Deque, Dict, FrozenSet, Iterable, Iterator, List, Literal, NamedTuple, Optional
 from typing import Sequence, Set, Tuple
-from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
+from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union, cast
 
 from bzfs_main.utils import cut
 
@@ -1622,7 +1622,7 @@ class Params:
         self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
-            zfs_recv_program_opts.append(self.validate_arg(extra_opt, allow_all=True))
+            zfs_recv_program_opts.append(cast(str, self.validate_arg(extra_opt, allow_all=True)))
         self.zfs_recv_program_opts: List[str] = self.fix_recv_opts(zfs_recv_program_opts)
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
@@ -1766,7 +1766,7 @@ class Params:
             exclude_long_opts={"--dryrun"},
             exclude_short_opts="den",
             include_arg_opts={"-X", "--exclude", "--redact"},
-            exclude_arg_opts={"-i", "-I"},
+            exclude_arg_opts=frozenset({"-i", "-I"}),
         )
 
     def program_name(self, program: str) -> str:
@@ -1830,7 +1830,7 @@ class Remote:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"]
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
-            self.ssh_extra_opts.append(p.validate_arg(extra_opt, allow_spaces=True))
+            self.ssh_extra_opts.append(cast(str, p.validate_arg(extra_opt, allow_spaces=True)))
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
@@ -2114,8 +2114,8 @@ class AlertConfig:
 @dataclass(frozen=True)
 class MonitorSnapshotAlert:
     label: SnapshotLabel
-    latest: AlertConfig
-    oldest: AlertConfig
+    latest: Optional[AlertConfig]
+    oldest: Optional[AlertConfig]
 
 
 #############################################################################
@@ -2160,7 +2160,11 @@ class MonitorSnapshotsConfig:
                             critical_millis += 0 if critical_millis <= 0 else cycles * duration_milliseconds
                             warning_millis = unixtime_infinity_secs if warning_millis <= 0 else warning_millis
                             critical_millis = unixtime_infinity_secs if critical_millis <= 0 else critical_millis
-                            alert_config = AlertConfig(sys.intern(alert_type.capitalize()), warning_millis, critical_millis)
+                            alert_config = AlertConfig(
+                                cast(Literal["Latest", "Oldest"], sys.intern(alert_type.capitalize())),
+                                warning_millis,
+                                critical_millis,
+                            )
                             if alert_type == "latest":
                                 if not self.no_latest_check:
                                     alert_latest = alert_config
@@ -2318,7 +2322,8 @@ class Job:
         def log_error_on_exit(error, status_code):
             log.error("%s%s", f"Exiting {prog_name} with status code {status_code}. Cause: ", error)
 
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         try:
             self.all_exceptions = []
             self.all_exceptions_count = 0
@@ -2387,7 +2392,7 @@ class Job:
         print("", end="", file=sys.stderr)
         sys.stderr.flush()
 
-    def append_exception(self, e: Exception, task_name: str, task_description: str) -> None:
+    def append_exception(self, e: BaseException, task_name: str, task_description: str) -> None:
         self.first_exception = self.first_exception or e
         if len(self.all_exceptions) < self.max_exceptions_to_summarize:  # cap max memory consumption
             self.all_exceptions.append(str(e))
@@ -2399,7 +2404,8 @@ class Job:
         if sleep_nanos <= 0:
             return False
         self.progress_reporter.pause()
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         config = p.create_src_snapshots_config
         curr_datetime = config.current_datetime + timedelta(microseconds=1)
         next_snapshotting_event_dt = min(
@@ -2418,7 +2424,8 @@ class Job:
         return daemon_stoptime_nanos - time.monotonic_ns() > 0
 
     def print_replication_stats(self, start_time_nanos: int):
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if self.is_program_available("pv", "local"):
@@ -2473,7 +2480,8 @@ class Job:
             validate_port(r.ssh_port, f"--ssh-{loc}-port ")
 
     def validate_task(self) -> None:
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         src, dst = p.src, p.dst
         for remote in [src, dst]:
             r = remote
@@ -2573,7 +2581,8 @@ class Job:
         def filter_src_datasets() -> List[str]:  # apply --{include|exclude}-dataset policy
             return self.filter_datasets(src, basis_src_datasets) if src_datasets is None else src_datasets
 
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         src, dst = p.src, p.dst
         max_workers = min(self.max_workers[src.location], self.max_workers[dst.location])
         recursive_sep = " " if p.recursive_flag else ""
@@ -2886,7 +2895,8 @@ class Job:
             )
 
     def monitor_snapshots(self, remote: Remote, sorted_datasets: List[str]) -> None:
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         alerts: List[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
         labels: List[SnapshotLabel] = [alert.label for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
@@ -2915,7 +2925,11 @@ class Job:
             return f"{msg} but should be at most {human_readable_duration(delta_millis, unit='ms')} old{s}"
 
         def check_alert(
-            label: SnapshotLabel, alert_cfg: AlertConfig, creation_unixtime_secs: int, dataset: str, snapshot: str
+            label: SnapshotLabel,
+            alert_cfg: Optional[AlertConfig],
+            creation_unixtime_secs: int,
+            dataset: str,
+            snapshot: str,
         ) -> None:
             if alert_cfg is None:
                 return
@@ -3003,7 +3017,8 @@ class Job:
 
     def replicate_datasets(self, src_datasets: List[str], task_description: str, max_workers: int) -> bool:
         assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         src, dst = p.src, p.dst
         self.num_snapshots_found = 0
         self.num_snapshots_replicated = 0
@@ -3117,7 +3132,8 @@ class Job:
     def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
 
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         src, dst = p.src, p.dst
         retry_count = retry.count
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
@@ -3228,7 +3244,10 @@ class Job:
 
             if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
                 # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
-                _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
+                _, latest_common_dst_snapshot = latest_common_snapshot(
+                    dst_snapshots_with_guids,
+                    {cast(str, latest_common_guid)},
+                )
                 if not (p.force_rollback_to_latest_common_snapshot or p.force):
                     die(
                         f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
@@ -3300,7 +3319,12 @@ class Job:
                             self.create_zfs_filesystem(dst_dataset_parent)
 
                 recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
-                curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
+                curr_size = self.estimate_send_size(
+                    src,
+                    dst_dataset,
+                    recv_resume_token or "",
+                    oldest_src_snapshot,
+                )
                 humansize = format_size(curr_size)
                 if recv_resume_token:
                     send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
@@ -3383,7 +3407,12 @@ class Job:
             log.log(log_trace, "steps_todo: %s", list_formatter(steps_todo, "; "))
             estimate_send_sizes = [
                 self.estimate_send_size(
-                    src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
+                    src,
+                    dst_dataset,
+                    (recv_resume_token or "") if i == 0 else "",
+                    incr_flag,
+                    from_snap,
+                    to_snap,
                 )
                 for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo)
             ]
@@ -3446,7 +3475,7 @@ class Job:
         else:  # no compression is used if source and destination do not both support compression
             _compress_cmd, _decompress_cmd = "cat", "cat"
 
-        recordsize = abs(self.src_properties[src_dataset]["recordsize"])
+        recordsize = abs(int(self.src_properties[src_dataset]["recordsize"]))
         src_buffer = self.mbuffer_cmd("src", size_estimate_bytes, recordsize)
         dst_buffer = self.mbuffer_cmd("dst", size_estimate_bytes, recordsize)
         local_buffer = self.mbuffer_cmd("local", size_estimate_bytes, recordsize)
@@ -3550,7 +3579,8 @@ class Job:
         dry_run_no_send: bool,
         error_trigger: Optional[str] = None,
     ) -> None:
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         src_pipe, local_pipe, dst_pipe = self.prepare_zfs_send_receive(
             src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human
         )
@@ -3597,7 +3627,8 @@ class Job:
             log.log(log_trace, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
             return True
 
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         # "cannot resume send: 'wb_src/tmp/src@s1' is no longer the same snapshot used in the initial send"
         # "cannot resume send: 'wb_src/tmp/src@s1' used in the initial send no longer exists"
         # "cannot resume send: incremental source 0xa000000000000000 no longer exists"
@@ -3652,7 +3683,8 @@ class Job:
 
     def _recv_resume_token(self, dst_dataset: str, retry_count: int) -> Tuple[Optional[str], List[str], List[str]]:
         """Gets recv_resume_token ZFS property from dst_dataset and returns corresponding opts to use for send+recv."""
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         if not p.resume_recv:
             return None, [], []
         warning = None
@@ -3757,7 +3789,8 @@ class Job:
         and the command to run on the given remote host ($cmd)."""
         level = level if level >= 0 else logging.INFO
         assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         quoted_cmd = [shlex.quote(arg) for arg in cmd]
         conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
         conn: Connection = conn_pool.get_connection()
@@ -3809,7 +3842,8 @@ class Job:
 
     def refresh_ssh_connection_if_necessary(self, remote: Remote, conn) -> None:
         conn: Connection = conn
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         if remote.ssh_user_host == "":
             return  # we're in local mode; no ssh required
         if not self.is_program_available("ssh", "local"):
@@ -3906,7 +3940,8 @@ class Job:
     def filter_datasets(self, remote: Remote, sorted_datasets: List[str]) -> List[str]:
         """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
         exclude regexes. Assumes the list of input datasets is sorted. The list of output datasets will be sorted too."""
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         results = []
         for i, dataset in enumerate(sorted_datasets):
             if i == 0 and p.skip_parent:
@@ -3937,7 +3972,8 @@ class Job:
 
     def filter_datasets_by_exclude_property(self, remote: Remote, sorted_datasets: List[str]) -> List[str]:
         """Excludes datasets that are marked with a ZFS user property value that, in effect, says 'skip me'."""
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         results = []
         localhostname = None
         skip_dataset = DONT_SKIP_DATASET
@@ -3991,7 +4027,8 @@ class Job:
             assert isinstance(hi, int)
             return (lo, hi) if lo <= hi else (hi, lo)
 
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         current_unixtime_in_secs: float = p.create_src_snapshots_config.current_datetime.timestamp()
         resultset = set()
         for snapshot_filter in p.snapshot_filters:
@@ -4090,15 +4127,18 @@ class Job:
             n = hi - lo
         return snapshots
 
-    def filter_properties(self, props: Dict[str, str], include_regexes, exclude_regexes) -> Dict[str, str]:
+    def filter_properties(self, props: Dict[str, Optional[str]], include_regexes, exclude_regexes) -> Dict[str, str]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
         log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
-        results = {}
+        results: Dict[str, str] = {}
         for propname, propvalue in props.items():
             if is_included(propname, include_regexes, exclude_regexes):
-                results[propname] = propvalue
-                is_debug and log.debug("Including b/c property regex: %s", propname)
+                if propvalue is not None:
+                    results[propname] = propvalue
+                    is_debug and log.debug("Including b/c property regex: %s", propname)
+                else:
+                    is_debug and log.debug("Skipping unset property: %s", propname)
             else:
                 is_debug and log.debug("Excluding b/c property regex: %s", propname)
         return results
@@ -4106,7 +4146,8 @@ class Job:
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
         if len(snapshot_tags) == 0:
             return
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         log.info(p.dry(f"Deleting {len(snapshot_tags)} snapshots within %s: %s"), dataset, snapshot_tags)
         # delete snapshots in batches without creating a command line that's too big for the OS to handle
         self.run_ssh_cmd_batched(
@@ -4141,7 +4182,8 @@ class Job:
         if len(snapshot_tags) == 0:
             return
         # Unfortunately ZFS has no syntax yet to delete multiple bookmarks in a single CLI invocation
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         log.info(
             p.dry(f"Deleting {len(snapshot_tags)} bookmarks within %s: %s"), dataset, dataset + "#" + ",".join(snapshot_tags)
         )
@@ -4159,7 +4201,8 @@ class Job:
         """Deletes the given datasets via zfs destroy -r on the given remote."""
         # Impl is batch optimized to minimize CLI + network roundtrips: only need to run zfs destroy if previously
         # destroyed dataset (within sorted datasets) is not a prefix (aka ancestor) of current dataset
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         last_deleted_dataset = DONT_SKIP_DATASET
         for dataset in sorted(datasets):
             if is_descendant(dataset, of_root_dataset=last_deleted_dataset):
@@ -4558,7 +4601,8 @@ class Job:
         An alternative, much more scalable, implementation queries the standard ZFS "snapshots_changed" dataset property
         (requires zfs >= 2.2.0), in combination with a local cache that stores this property, as well as the creation time
         of the most recent snapshot, for each SnapshotLabel and each dataset."""
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot: Dict[SnapshotLabel, List[str]] = defaultdict(list)
         is_caching = False
@@ -4628,7 +4672,7 @@ class Job:
             if is_caching and not p.dry_run:
                 set_last_modification_time_safe(
                     self.last_modified_cache_file(src, dataset),
-                    unixtime_in_secs=self.src_properties[dataset][SNAPSHOTS_CHANGED],
+                    unixtime_in_secs=int(self.src_properties[dataset][SNAPSHOTS_CHANGED]),
                     if_more_recent=True,
                 )
 
@@ -4687,7 +4731,7 @@ class Job:
                     endlen = len(end)
                     minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
                     year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
-                    for fn, is_reverse in fns:
+                    for _fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot = None
                         for j, s in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
@@ -4698,10 +4742,10 @@ class Job:
                                 and (infix or year_with_4_digits_regex.fullmatch(s[year_slice]))
                             ):
                                 k = len(snapshots) - j - 1 if is_reverse else j
-                                creation_unixtime_secs = snapshots[k][1]
-                                minmax_snapshot = s
-                                break
-                        fn(i, creation_unixtime_secs, dataset, minmax_snapshot)
+                        creation_unixtime_secs = snapshots[k][1]
+                        minmax_snapshot = s
+                        break
+                    _fn(i, creation_unixtime_secs, dataset, minmax_snapshot or "")
                 fn_on_finish_dataset(dataset)
 
         datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
@@ -4811,7 +4855,8 @@ class Job:
         (tagged with 'all'), in the form of a TSV file, along with other snapshot metadata. Implemented with a time and
         space efficient streaming algorithm; easily scales to millions of datasets and any number of snapshots.
         Assumes that both src_datasets and dst_datasets are sorted."""
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         src, dst = p.src, p.dst
         task = src.root_dataset + " vs. " + dst.root_dataset
         tsv_dir = p.log_params.log_file[0 : -len(".log")] + ".cmp"
@@ -4974,7 +5019,12 @@ class Job:
         # setup streaming pipeline
         src_snap_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
         dst_snap_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
-        merge_itr = self.merge_sorted_iterators(cmp_choices_items, p.compare_snapshot_lists, src_snap_itr, dst_snap_itr)
+        merge_itr = self.merge_sorted_iterators(
+            cmp_choices_items,
+            cast(str, p.compare_snapshot_lists),
+            src_snap_itr,
+            dst_snap_itr,
+        )
 
         rel_datasets: Dict[str, Set[str]] = defaultdict(set)
         for datasets, remote in (src_datasets, src), (dst_datasets, dst):
@@ -5026,9 +5076,9 @@ class Job:
         self,
         choices: Sequence[str],  # ["src", "dst", "all"]
         choice: str,  # Example: "src+dst+all"
-        src_itr: Generator[ComparableSnapshot, None, None],
-        dst_itr: Generator[ComparableSnapshot, None, None],
-    ) -> Generator[Tuple[str, ComparableSnapshot], None, None]:
+        src_itr: Iterator[Any],
+        dst_itr: Iterator[Any],
+    ) -> Generator[Tuple[str, Any], None, None]:
         """This is the typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
         assert len(choices) == 3
         assert choice
@@ -5096,15 +5146,16 @@ class Job:
         subtrees are available for start of processing."""
         assert not self.is_test_mode or datasets == sorted(datasets), "List is not sorted"
         assert not self.is_test_mode or not has_duplicates(datasets), "List contains duplicates"
-        assert isinstance(process_dataset, Callable)
-        assert isinstance(skip_tree_on_error, Callable)
+        assert callable(process_dataset)
+        assert callable(skip_tree_on_error)
         assert max_workers > 0
-        assert isinstance(interval_nanos, Callable)
+        assert callable(interval_nanos)
         assert "%" not in task_name
         has_barrier = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
         assert (enable_barriers is not False) or not has_barrier
         enable_barriers: bool = has_barrier or enable_barriers
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
 
         def _process_dataset(dataset: str, tid: str):
             start_time_nanos = time.monotonic_ns()
@@ -5403,7 +5454,8 @@ class Job:
         return "; ".join(cmds)
 
     def detect_available_programs_remote(self, remote: Remote, available_programs: Dict, ssh_user_host: str) -> None:
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         location = remote.location
         available_programs_minimum = {"zpool": None, "sudo": None}
         available_programs[location] = {}
@@ -5517,7 +5569,8 @@ class Job:
         the same destination dataset. However, it's actually safe to run an incremental 'zfs receive' into a dataset
         in parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where
         A replicates to B, and B replicates to C."""
-        p, log = self.params, self.params.log
+        p = self.params
+        log = cast(Logger, self.params.log)
         if not self.is_program_available("ps", remote.location):
             return True
         cmd = p.split_args(f"{p.ps_program} -Ao args")
@@ -5621,7 +5674,7 @@ class Job:
             if ordered:
                 while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
                     curr_future: Future = fifo_buffer.popleft()
-                    next_future: Future = next(iterator, None)  # causes the next CLI call to be submitted
+                    next_future: Optional[Future] = next(iterator, None)  # causes the next CLI call to be submitted
                     if next_future is not None:
                         fifo_buffer.append(next_future)
                     yield curr_future.result()  # blocks until CLI returns
@@ -5631,7 +5684,7 @@ class Job:
                 while todo_futures:
                     done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                     for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
-                        next_future: Future = next(iterator, None)  # causes the next CLI call to be submitted
+                        next_future: Optional[Future] = next(iterator, None)  # causes the next CLI call to be submitted
                         if next_future is not None:
                             todo_futures.add(next_future)
                         yield done_future.result()  # does not block as processing has already completed
@@ -6923,7 +6976,7 @@ def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = ""
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
-def validate_port(port: Union[str, int], message: str) -> None:
+def validate_port(port: Optional[Union[str, int]], message: str) -> None:
     if isinstance(port, int):
         port = str(port)
     if port and not port.isdigit():
@@ -7016,7 +7069,11 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     if address:  # optionally, also log to local or remote syslog
         address, socktype = get_syslog_address(address, args.log_syslog_socktype)
         log_syslog_prefix = str(args.log_syslog_prefix).strip().replace("%", "")  # sanitize
-        handler = logging.handlers.SysLogHandler(address=address, facility=args.log_syslog_facility, socktype=socktype)
+        handler = logging.handlers.SysLogHandler(
+            address=address,
+            facility=args.log_syslog_facility,
+            socktype=cast(Optional[socket.SocketKind], socktype),
+        )
         handler.setFormatter(get_default_log_formatter(prefix=log_syslog_prefix + " "))
         handler.setLevel(args.log_syslog_level)
         log.addHandler(handler)
@@ -7867,7 +7924,7 @@ class SynchronizedDict(Generic[K, V]):
         with self._lock:
             return self._dict.get(key, default)
 
-    def pop(self, key: K, default: Optional[V] = None) -> V:
+    def pop(self, key: K, default: Optional[V] = None) -> Optional[V]:
         with self._lock:
             return self._dict.pop(key, default)
 

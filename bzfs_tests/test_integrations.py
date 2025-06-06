@@ -512,8 +512,10 @@ class BZFSTestCase(ParametrizedTestCase):
         returncode = 0
         try:
             if use_jobrunner:
+                assert isinstance(job, bzfs_jobrunner.Job)
                 job.run_main([bzfs_jobrunner.prog_name] + args)
             else:
+                assert isinstance(job, bzfs.Job)
                 job.run_main(bzfs.argument_parser().parse_args(args), args)
         except subprocess.CalledProcessError as e:
             returncode = e.returncode

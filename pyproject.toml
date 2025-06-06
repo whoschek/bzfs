@@ -113,7 +113,6 @@ select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
 python_version = "3.8"
 disable_error_code = [
   "misc",
-  "arg-type",
   "var-annotated",
   "union-attr",
   "operator",
