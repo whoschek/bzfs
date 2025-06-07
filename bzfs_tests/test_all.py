@@ -24,7 +24,7 @@ from bzfs_tests.test_integrations import suite as test_integrations_suite
 from bzfs_main.bzfs import getenv_any
 
 
-def main():
+def main() -> None:
     suite = unittest.TestSuite()
     suite.addTests(test_utils_suite())
     suite.addTests(test_bzfs_suite())
