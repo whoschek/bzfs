@@ -438,7 +438,7 @@ class BZFSTestCase(ParametrizedTestCase):
         args = args + ["--exclude-envvar-regex=EDITOR"]
         args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
-        job: Any
+        job: Union[bzfs.Job, bzfs_jobrunner.Job]
         if use_jobrunner:
             job = bzfs_jobrunner.Job()
             job.is_test_mode = True
@@ -448,28 +448,28 @@ class BZFSTestCase(ParametrizedTestCase):
             job = bzfs.Job()
             job.is_test_mode = True
 
-        if error_injection_triggers is not None:
+        if error_injection_triggers is not None and isinstance(job, bzfs.Job):
             job.error_injection_triggers = error_injection_triggers
             args = args + ["--threads=1"]
 
-        if delete_injection_triggers is not None:
+        if delete_injection_triggers is not None and isinstance(job, bzfs.Job):
             job.delete_injection_triggers = delete_injection_triggers
             args = args + ["--threads=1"]
 
-        if param_injection_triggers is not None:
+        if param_injection_triggers is not None and isinstance(job, bzfs.Job):
             job.param_injection_triggers = param_injection_triggers
             args = args + ["--threads=1"]
 
-        if inject_params is not None:
+        if inject_params is not None and isinstance(job, bzfs.Job):
             job.inject_params = inject_params
 
-        if max_command_line_bytes is not None:
+        if max_command_line_bytes is not None and isinstance(job, bzfs.Job):
             job.max_command_line_bytes = max_command_line_bytes
 
-        if creation_prefix is not None:
+        if creation_prefix is not None and isinstance(job, bzfs.Job):
             job.creation_prefix = creation_prefix
 
-        if max_exceptions_to_summarize is not None:
+        if max_exceptions_to_summarize is not None and isinstance(job, bzfs.Job):
             job.max_exceptions_to_summarize = max_exceptions_to_summarize
 
         old_max_datasets_per_minibatch_on_list_snaps = os.environ.get(
@@ -497,16 +497,16 @@ class BZFSTestCase(ParametrizedTestCase):
                 include_snapshot_plan_excludes_outdated_snapshots
             )
 
-        if control_persist_margin_secs is not None:
+        if control_persist_margin_secs is not None and isinstance(job, bzfs.Job):
             job.control_persist_margin_secs = control_persist_margin_secs
 
-        if isatty is not None:
+        if isatty is not None and isinstance(job, bzfs.Job):
             job.isatty = isatty
 
-        if use_select is not None:
+        if use_select is not None and isinstance(job, bzfs.Job):
             job.use_select = use_select
 
-        if progress_update_intervals is not None:
+        if progress_update_intervals is not None and isinstance(job, bzfs.Job):
             job.progress_update_intervals = progress_update_intervals
 
         returncode = 0
