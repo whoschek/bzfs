@@ -169,7 +169,7 @@ def take_snapshot(dataset: str, snapshot_tag: str, recursive=False, props=[]) ->
     return snapshot
 
 
-def snapshots(dataset: str, max_depth: int = 1) -> List[str]:
+def snapshots(dataset: str, max_depth: Optional[int] = 1) -> List[str]:
     return zfs_list([dataset], types=["snapshot"], max_depth=max_depth)
 
 
