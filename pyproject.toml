@@ -111,7 +111,7 @@ select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
 
 [tool.mypy]
 python_version = "3.8"
-#check_untyped_defs = true
+check_untyped_defs = true
 disable_error_code = [
 #  "assignment",
 #  "attr-defined",
