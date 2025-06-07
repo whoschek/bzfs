@@ -21,7 +21,7 @@ import time
 from collections import defaultdict
 
 
-def main():
+def main() -> None:
     # fmt: off
     parser = argparse.ArgumentParser(
         description="Example ZFS bookmark pruning script that deletes the oldest bookmarks older than X days in a "

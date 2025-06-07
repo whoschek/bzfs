@@ -18,7 +18,7 @@ import unittest
 from bzfs_main import utils
 
 
-def suite():
+def suite() -> unittest.TestSuite:
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBzfsUtils))
     return suite
@@ -27,25 +27,25 @@ def suite():
 #############################################################################
 class TestBzfsUtils(unittest.TestCase):
 
-    def test_cut_field1(self):
+    def test_cut_field1(self) -> None:
         lines = ["a\tb\tc", "d\te\tf"]
         expected = ["a", "d"]
         self.assertEqual(utils.cut(field=1, lines=lines), expected)
 
-    def test_cut_field2(self):
+    def test_cut_field2(self) -> None:
         lines = ["a\tb\tc", "d\te\tf"]
         expected = ["b\tc", "e\tf"]
         self.assertEqual(utils.cut(field=2, lines=lines), expected)
 
-    def test_cut_invalid_field(self):
+    def test_cut_invalid_field(self) -> None:
         lines = ["a\tb\tc"]
         with self.assertRaises(ValueError):
             utils.cut(field=3, lines=lines)
 
-    def test_cut_empty_lines(self):
+    def test_cut_empty_lines(self) -> None:
         self.assertEqual(utils.cut(field=1, lines=[]), [])
 
-    def test_cut_different_separator(self):
+    def test_cut_different_separator(self) -> None:
         lines = ["a,b,c", "d,e,f"]
         expected = ["a", "d"]
         self.assertEqual(utils.cut(field=1, separator=",", lines=lines), expected)

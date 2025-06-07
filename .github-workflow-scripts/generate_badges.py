@@ -20,7 +20,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 ROOT_DIR = "badges"
 
@@ -73,10 +73,10 @@ def merge_versions(input_dir: str, natsort: bool = False) -> str:
 
 def sort_versions(version_list: List[str]) -> List[str]:
 
-    def is_valid_version(version):  # is in the form x.y.z ?
+    def is_valid_version(version: str) -> Optional[re.Match[str]]:  # is in the form x.y.z ?
         return re.match(r"^\d+(\.\d+){0,2}$", version)
 
-    def version_key(version):  # Split version into components and convert to integers
+    def version_key(version: str) -> List[int]:  # Split version into components and convert to integers
         return [int(part) for part in version.split(".")]
 
     valid_versions = [v for v in version_list if is_valid_version(v)]
@@ -84,7 +84,7 @@ def sort_versions(version_list: List[str]) -> List[str]:
     return sorted(valid_versions, key=version_key) + sorted(invalid_versions)
 
 
-def generate_badge(left_txt: str, right_txt, color: str) -> None:
+def generate_badge(left_txt: str, right_txt: str, color: str) -> None:
     from genbadge import Badge
 
     badge = Badge(left_txt=left_txt, right_txt=right_txt, color=color)
