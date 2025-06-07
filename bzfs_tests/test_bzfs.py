@@ -158,8 +158,8 @@ class TestHelperFunctions(unittest.TestCase):
         expected: List[Tuple[Any, ...]],
         src: Sequence[Any],
         dst: Sequence[Any],
-        choice=f"{s}+{d}+{a}",
-        invert=True,
+        choice: str = f"{s}+{d}+{a}",
+        invert: bool = True,
     ) -> None:
         s, d, a = self.s, self.d, self.a
         self.assertListEqual(expected, self.merge_sorted_iterators(src, dst, choice))
@@ -3653,7 +3653,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 6))
-    def test_version_below_3_8(self, mock_exit) -> None:
+    def test_version_below_3_8(self, mock_exit: MagicMock) -> None:
         with patch("sys.stderr"):
             import importlib
             from bzfs_main import bzfs
@@ -3663,7 +3663,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 8))
-    def test_version_3_8_or_higher(self, mock_exit) -> None:
+    def test_version_3_8_or_higher(self, mock_exit: MagicMock) -> None:
         import importlib
         from bzfs_main import bzfs
 
