@@ -25,7 +25,7 @@ from bzfs_main import bzfs_jobrunner
 from bzfs_main.bzfs import find_match
 
 
-def main():
+def main() -> None:
     """
     Run this script to update README.md from the help info contained in bzfs.py.
     Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main/bzfs.py README.md
@@ -133,12 +133,12 @@ def main():
         raises=f"{end_help_overview_tag} not found in {readme_file}",
     )
     os.environ["COLUMNS"] = "72"
-    help_msg = (
+    help_msg_str = (
         bzfs.argument_parser().format_usage()
         if "_jobrunner" not in bzfs_module
         else bzfs_jobrunner.argument_parser().format_usage()
     )
-    help_msg = ["```\n"] + help_msg.splitlines(keepends=True) + ["```\n"]
+    help_msg = ["```\n"] + help_msg_str.splitlines(keepends=True) + ["```\n"]
     readme = readme[: begin_help_overview_idx + 1] + help_msg + readme[end_help_overview_idx:]
 
     # Step 6: Replace Usage Details Section
