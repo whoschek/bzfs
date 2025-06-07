@@ -2382,7 +2382,7 @@ class Job:
             log_error_on_exit(e, die_status)
             raise SystemExit(die_status) from e
         except re.error as e:
-            log_error_on_exit(f"{e} within regex '{e.pattern}'", die_status)
+            log_error_on_exit(f"{e} within regex {e.pattern!r}", die_status)
             raise SystemExit(die_status) from e
         finally:
             log.info("%s", f"Log file was: {p.log_params.log_file}")

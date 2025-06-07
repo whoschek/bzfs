@@ -119,7 +119,4 @@ disable_error_code = [
   "call-overload",
   "no-redef",
   "type-var",
-  "str-bytes-safe",
-  "index",
-  "call-arg",
 ]
