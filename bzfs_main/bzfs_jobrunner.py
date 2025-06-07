@@ -396,6 +396,8 @@ class Job:
         self.cache_known_dst_pools: Set[str] = set()
 
         self.is_test_mode: bool = False  # for testing only
+        self.num_cache_hits: int = 0
+        self.num_cache_misses: int = 0
 
     def run_main(self, sys_argv: List[str]) -> None:
         self.first_exception = None
