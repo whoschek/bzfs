@@ -39,10 +39,12 @@ from ast import literal_eval
 from logging import Logger
 from bzfs_main.bzfs import log_trace
 from subprocess import DEVNULL, PIPE
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, TypeVar, Union
 
 from bzfs_main import bzfs
 from bzfs_main.bzfs import die_status, prog_name as bzfs_prog_name
+
+V = TypeVar("V")
 
 # constants:
 prog_name = "bzfs_jobrunner"
@@ -883,14 +885,14 @@ class Job:
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         return proc.returncode
 
-    def validate_src_hosts(self, src_hosts: List) -> List[str]:
+    def validate_src_hosts(self, src_hosts: List[str]) -> List[str]:
         context = "--src-hosts"
         self.validate_type(src_hosts, list, context)
         for src_hostname in src_hosts:
             self.validate_host_name(src_hostname, context)
         return src_hosts
 
-    def validate_dst_hosts(self, dst_hosts: Dict) -> Dict[str, List[str]]:
+    def validate_dst_hosts(self, dst_hosts: Dict[str, List[str]]) -> Dict[str, List[str]]:
         context = "--dst-hosts"
         self.validate_type(dst_hosts, dict, context)
         for dst_hostname, targets in dst_hosts.items():
@@ -900,7 +902,7 @@ class Job:
                 self.validate_type(target, str, f"{context} target")
         return dst_hosts
 
-    def validate_dst_root_datasets(self, dst_root_datasets: Dict) -> Dict[str, str]:
+    def validate_dst_root_datasets(self, dst_root_datasets: Dict[str, str]) -> Dict[str, str]:
         context = "--dst-root-datasets"
         self.validate_type(dst_root_datasets, dict, context)
         for dst_hostname, dst_root_dataset in dst_root_datasets.items():
@@ -908,7 +910,9 @@ class Job:
             self.validate_type(dst_root_dataset, str, f"{context} root dataset")
         return dst_root_datasets
 
-    def validate_snapshot_plan(self, snapshot_plan: Dict, context: str) -> Dict[str, Dict[str, Dict[str, int]]]:
+    def validate_snapshot_plan(
+        self, snapshot_plan: Dict[str, Dict[str, Dict[str, int]]], context: str
+    ) -> Dict[str, Dict[str, Dict[str, int]]]:
         self.validate_type(snapshot_plan, dict, context)
         for org, target_periods in snapshot_plan.items():
             self.validate_type(org, str, f"{context} org")
@@ -921,7 +925,10 @@ class Job:
                     self.validate_non_negative_int(period_amount, f"{context} org/target/period_amount")
         return snapshot_plan
 
-    def validate_monitor_snapshot_plan(self, monitor_snapshot_plan) -> Dict[str, Dict[str, Dict[str, Union[str, int]]]]:
+    def validate_monitor_snapshot_plan(
+        self,
+        monitor_snapshot_plan: Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]],
+    ) -> Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]]:
         context = "--monitor-snapshot-plan"
         self.validate_type(monitor_snapshot_plan, dict, context)
         for org, target_periods in monitor_snapshot_plan.items():
@@ -965,7 +972,7 @@ class Job:
         if not bool(expr):
             self.die(msg)
 
-    def validate_type(self, value, expected_type, name: str) -> None:
+    def validate_type(self, value: Any, expected_type: Any, name: str) -> None:
         if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10
             union_types = expected_type.__args__
             for t in union_types:
@@ -1012,13 +1019,13 @@ def flatten(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
     return [item for pair in root_dataset_pairs for item in pair]
 
 
-def shuffle_dict(dictionary: Dict) -> Dict:
+def shuffle_dict(dictionary: Dict[str, V]) -> Dict[str, V]:
     items = list(dictionary.items())
     random.shuffle(items)
     return dict(items)
 
 
-def sorted_dict(dictionary: Dict) -> Dict:
+def sorted_dict(dictionary: Dict[str, V]) -> Dict[str, V]:
     return dict(sorted(dictionary.items()))
 
 
@@ -1033,11 +1040,11 @@ def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     return f"{sep}{sanitize(localhostname)}{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
 
 
-def format_dict(dictionary: Dict) -> str:
+def format_dict(dictionary: Dict[str, Any]) -> str:
     return bzfs.format_dict(dictionary)
 
 
-def pretty_print_formatter(dictionary: Dict) -> Any:  # For lazy/noop evaluation in disabled log levels
+def pretty_print_formatter(dictionary: Dict[str, Any]) -> Any:  # For lazy/noop evaluation in disabled log levels
     class PrettyPrintFormatter:
         def __str__(self) -> str:
             import json
