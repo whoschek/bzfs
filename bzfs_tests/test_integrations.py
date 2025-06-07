@@ -33,7 +33,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from unittest.mock import patch
 
 from bzfs_main import bzfs, bzfs_jobrunner
@@ -70,7 +70,7 @@ dst_pool_name = "wb_dest"
 pool_size_bytes_default = 100 * 1024 * 1024
 encryption_algo = "aes-256-gcm"
 afix = ""
-zpool_features = None
+zpool_features: Optional[Dict[str, Dict[str, str]]] = None
 creation_prefix = "bzfs_test:"
 
 # Global variables populated during setup
@@ -438,7 +438,7 @@ class BZFSTestCase(ParametrizedTestCase):
         args = args + ["--exclude-envvar-regex=EDITOR"]
         args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
-        job: Union[bzfs.Job, bzfs_jobrunner.Job]
+        job: Any
         if use_jobrunner:
             job = bzfs_jobrunner.Job()
             job.is_test_mode = True
@@ -5608,6 +5608,9 @@ def create_volumes(path: str, props: Optional[List[str]] = None) -> str:
 
 
 def detect_zpool_features(location: str, pool: str) -> None:
+    global zpool_features
+    if zpool_features is None:
+        zpool_features = {}
     cmd = "zpool get -Hp -o property,value all".split(" ") + [pool]
     lines = run_cmd(cmd)
     props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
@@ -5616,7 +5619,9 @@ def detect_zpool_features(location: str, pool: str) -> None:
 
 
 def is_zpool_feature_enabled_or_active(location: str, feature: str) -> bool:
-    return zpool_features[location].get(feature) in ("active", "enabled")
+    assert zpool_features is not None
+    val = zpool_features[location].get(feature)
+    return val in ("active", "enabled") if val is not None else False
 
 
 def are_bookmarks_enabled(location: str) -> bool:

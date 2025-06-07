@@ -23,7 +23,7 @@ or     python3 -m bash_completion_d.shell-completion-generator > ~/.bash_complet
 import argparse
 import importlib
 from pathlib import Path
-from typing import Set, Dict
+from typing import Set, Dict, List
 
 programs = ("bzfs", "bzfs_jobrunner")
 
@@ -48,7 +48,7 @@ def harvest(module: str):
             continue
         flags.update(act.option_strings)
         if act.nargs != 0:  # option consumes a value
-            tokens = []
+            tokens: List[str] = []
             if act.choices:
                 seq = act.choices.keys() if isinstance(act.choices, dict) else act.choices
                 tokens.extend(map(str, seq))

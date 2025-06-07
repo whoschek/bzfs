@@ -79,7 +79,7 @@ from os.path import exists as os_path_exists, join as os_path_join
 from pathlib import Path
 from subprocess import CalledProcessError, DEVNULL, PIPE
 from typing import Any, Callable, Deque, Dict, FrozenSet, Iterable, Iterator, List, Literal, NamedTuple, Optional
-from typing import Sequence, Set, Tuple
+from typing import DefaultDict, Sequence, Set, Tuple
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
 from typing import cast
 
@@ -1729,7 +1729,7 @@ class Params:
         self.zfs_recv_ox_names: Set[str] = set()
         self.available_programs: Dict[str, Dict[str, str]] = {}
         self.zpool_features: Dict[str, Dict[str, str]] = {}
-        self.connection_pools = {}
+        self.connection_pools: Dict[str, "ConnectionPools"] = {}
 
     def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
         """Splits option string on runs of one or more whitespace into an option list."""
@@ -1827,7 +1827,9 @@ class Remote:
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         self.ssh_cipher: Optional[str] = p.validate_arg(args.ssh_cipher)
-        self.ssh_private_key_files: List[str] = [p.validate_arg(key) for key in getattr(args, f"ssh_{loc}_private_key")]
+        self.ssh_private_key_files: List[str] = [
+            cast(str, p.validate_arg(key)) for key in getattr(args, f"ssh_{loc}_private_key")
+        ]
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"]
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
@@ -2191,7 +2193,7 @@ class MonitorSnapshotsConfig:
 #############################################################################
 @dataclass(frozen=True)
 class RemoteConfCacheItem:
-    connection_pools: Any  # ConnectionPools
+    connection_pools: "ConnectionPools"
     available_programs: Dict[str, str]
     zpool_features: Dict[str, str]
 
@@ -2331,12 +2333,13 @@ class Job:
             self.isatty = self.isatty if self.isatty is not None else p.isatty
             self.validate_once()
             self.replication_start_time_nanos = time.monotonic_ns()
-            self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
-            with xfinally(lambda: self.progress_reporter.stop()):
+            progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
+            self.progress_reporter = progress_reporter
+            with xfinally(lambda: progress_reporter.stop()):
                 daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
                 while True:  # loop for daemon mode
                     self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
-                    self.progress_reporter.reset()
+                    progress_reporter.reset()
                     src, dst = p.src, p.dst
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                         src.root_dataset = src.basis_root_dataset = src_root_dataset
@@ -2355,7 +2358,10 @@ class Job:
                                 self.validate_task()
                                 self.run_task()
                             except RetryableError as retryable_error:
-                                raise retryable_error.__cause__ from None
+                                cause = retryable_error.__cause__
+                                if cause is not None:
+                                    raise cause from None
+                                raise retryable_error
                         except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                             if p.skip_on_error == "fail" or (
                                 isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
@@ -2371,7 +2377,8 @@ class Job:
             if error_count > 0 and p.daemon_lifetime_nanos == 0:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
-                raise self.first_exception  # reraise first swallowed exception
+                if self.first_exception is not None:
+                    raise self.first_exception
         except subprocess.CalledProcessError as e:
             log_error_on_exit(e, e.returncode)
             raise
@@ -2382,7 +2389,7 @@ class Job:
             log_error_on_exit(e, die_status)
             raise SystemExit(die_status) from e
         except re.error as e:
-            log_error_on_exit(f"{e} within regex '{e.pattern}'", die_status)
+            log_error_on_exit(f"{e} within regex {e.pattern!r}", die_status)
             raise SystemExit(die_status) from e
         finally:
             log.info("%s", f"Log file was: {p.log_params.log_file}")
@@ -2402,7 +2409,9 @@ class Job:
         sleep_nanos = daemon_stoptime_nanos - time.monotonic_ns()
         if sleep_nanos <= 0:
             return False
-        self.progress_reporter.pause()
+        progress_reporter = self.progress_reporter
+        if progress_reporter is not None:
+            progress_reporter.pause()
         p, log = self.params, self.params.log
         config = p.create_src_snapshots_config
         curr_datetime = config.current_datetime + timedelta(microseconds=1)
@@ -2448,7 +2457,8 @@ class Job:
 
         # relative datasets need not be compiled more than once as they don't change between tasks
         def separate_abs_vs_rel_datasets(datasets: List[str]) -> Tuple[List[str], List[str]]:
-            abs_datasets, rel_datasets = [], []
+            abs_datasets: List[str] = []
+            rel_datasets: List[str] = []
             for dataset in datasets:
                 (abs_datasets if dataset.startswith("/") else rel_datasets).append(dataset)
             return abs_datasets, rel_datasets
@@ -2897,7 +2907,9 @@ class Job:
         is_debug: bool = log.isEnabledFor(log_debug)
         if self.is_caching_snapshots(remote):
             props = self.dst_properties if remote is p.dst else self.src_properties
-            snapshots_changed_dict: Dict[str, int] = {dataset: vals[SNAPSHOTS_CHANGED] for dataset, vals in props.items()}
+            snapshots_changed_dict: Dict[str, int] = {
+                dataset: int(vals[SNAPSHOTS_CHANGED]) for dataset, vals in props.items()
+            }
             hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
         is_caching = False
 
@@ -3747,9 +3759,10 @@ class Job:
                     pv_log_file += pv_file_thread_separator + f"{worker:04}"
             if self.is_first_replication_task.get_and_set(False):
                 if self.isatty and not p.quiet:
+                    assert self.progress_reporter is not None
                     self.progress_reporter.start()
                 self.replication_start_time_nanos = time.monotonic_ns()
-            if self.isatty and not p.quiet:
+            if self.isatty and not p.quiet and self.progress_reporter is not None:
                 self.progress_reporter.enqueue_pv_log_file(pv_log_file)
             pv_program_opts = p.pv_program_opts
             if self.progress_update_intervals is not None:  # for testing
@@ -3861,7 +3874,9 @@ class Job:
             return None  # never raise a timeout
         delta_nanos = timeout_nanos - time.monotonic_ns()
         if delta_nanos <= 0:
-            raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=self.params.timeout_nanos / 1_000_000_000)
+            timeout = self.params.timeout_nanos
+            assert timeout is not None
+            raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=timeout / 1_000_000_000)
         return delta_nanos / 1_000_000_000  # seconds
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
@@ -3931,8 +3946,9 @@ class Job:
         if p.exclude_dataset_property:
             results = self.filter_datasets_by_exclude_property(remote, results)
         is_debug = p.log.isEnabledFor(log_debug)
-        for dataset in results:
-            is_debug and log.debug(f"Finally included {remote.location} dataset: %s", dataset)
+        if is_debug:
+            for dataset in results:
+                log.debug("Finally included %s dataset: %s", remote.location, dataset)
         if self.is_test_mode:
             # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
             # decision is never reconsidered even for the descendants because exclude takes precedence over include.
@@ -4021,8 +4037,9 @@ class Job:
             resultset.update(snapshots)  # union
         snapshots = [line for line in basis_snapshots if "#" in line or ((line in resultset) != all_except)]
         is_debug = log.isEnabledFor(log_debug)
-        for snapshot in snapshots:
-            is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
+        if is_debug:
+            for snapshot in snapshots:
+                log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return snapshots
 
     def filter_snapshots_by_regex(self, snapshots: List[str], regexes: Tuple[RegexList, RegexList]) -> List[str]:
@@ -4037,24 +4054,36 @@ class Job:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             elif is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
-                is_debug and log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
             else:
-                is_debug and log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_creation_time(self, snapshots: List[str], include_snapshot_times: UnixTimeRange) -> List[str]:
         log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
+        if isinstance(lo_snaptime, timedelta):
+            lo_val = int(lo_snaptime.total_seconds())
+        else:
+            lo_val = int(lo_snaptime)
+        if isinstance(hi_snaptime, timedelta):
+            hi_val = int(hi_snaptime.total_seconds())
+        else:
+            hi_val = int(hi_snaptime)
         results = []
         for snapshot in snapshots:
             if "@" not in snapshot:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
-            elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
+            elif lo_val <= int(snapshot[0 : snapshot.index("\t")]) < hi_val:
                 results.append(snapshot)
-                is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
             else:
-                is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_creation_time_and_rank(
@@ -4072,6 +4101,14 @@ class Job:
         log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
+        if isinstance(lo_time, timedelta):
+            lo_val = int(lo_time.total_seconds())
+        else:
+            lo_val = int(lo_time)
+        if isinstance(hi_time, timedelta):
+            hi_val = int(hi_time.total_seconds())
+        else:
+            hi_val = int(hi_time)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
         for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
@@ -4087,13 +4124,14 @@ class Job:
                     msg = None
                     if lo <= i < hi:
                         msg = "Including b/c snapshot rank: %s"
-                    elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
+                    elif lo_val <= int(snapshot[0 : snapshot.index("\t")]) < hi_val:
                         msg = "Including b/c creation time: %s"
                     if msg:
                         results.append(snapshot)
                     else:
                         msg = "Excluding b/c snapshot rank: %s"
-                    is_debug and log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
+                    if is_debug:
+                        log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
                     i += 1
             snapshots = results
             n = hi - lo
@@ -4109,9 +4147,11 @@ class Job:
         for propname, propvalue in props.items():
             if is_included(propname, include_regexes, exclude_regexes):
                 results[propname] = propvalue
-                is_debug and log.debug("Including b/c property regex: %s", propname)
+                if is_debug:
+                    log.debug("Including b/c property regex: %s", propname)
             else:
-                is_debug and log.debug("Excluding b/c property regex: %s", propname)
+                if is_debug:
+                    log.debug("Excluding b/c property regex: %s", propname)
         return results
 
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
@@ -4251,7 +4291,7 @@ class Job:
         except RetryableError as retryable_error:
             if recv_resume_token:
                 e = retryable_error.__cause__
-                stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+                stderr = stderr_to_str(e.stderr) if isinstance(e, subprocess.CalledProcessError) else ""
                 retryable_error.no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
             raise retryable_error
@@ -4314,7 +4354,10 @@ class Job:
                             f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )
-                    raise retryable_error.__cause__ from None
+                    cause = retryable_error.__cause__
+                    if cause is not None:
+                        raise cause from None
+                    raise retryable_error
 
     def incremental_send_steps_wrapper(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
@@ -4900,7 +4943,7 @@ class Job:
                 oldest_snapshot_creation: Optional[str] = field(default=None)
 
             # print metadata of snapshots of current dataset to TSV file; custom stats can later be computed from there
-            stats = defaultdict(SnapshotStats)
+            stats: DefaultDict[str, SnapshotStats] = defaultdict(SnapshotStats)
             header = "location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
             nonlocal is_first_row
             if is_first_row:
@@ -4974,7 +5017,7 @@ class Job:
                 for label, s_creation in latest, oldest:
                     if loc != "all":
                         hd = "n/a"
-                        if s_creation and k >= 0:
+                        if s_creation and all_creation is not None and k >= 0:
                             hd = human_readable_duration(int(all_creation) - int(s_creation), unit="s")
                         msgs.append(f"{prefix} Time diff between {latcom} and {label} snapshot only in {loc}: {hd}")
                 for label, s_creation in latest, oldest:
@@ -5039,7 +5082,7 @@ class Job:
         choice: str,  # Example: "src+dst+all"
         src_itr: Iterator,
         dst_itr: Iterator,
-    ) -> Generator[Tuple[str, Any], None, None]:
+    ) -> Generator[Tuple[Any, ...], None, None]:
         """This is the typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
         assert len(choices) == 3
         assert choice
@@ -5137,7 +5180,7 @@ class Job:
             # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
             dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
             children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-            parent: "TreeNode"
+            parent: Any
             mut: TreeNodeMutableAttributes
 
             def __repr__(self) -> str:
@@ -5543,6 +5586,7 @@ class Job:
         except SystemExit as e:
             log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
+        return False
 
     zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
     zfs_dataset_busy_if_mods = re.compile((zfs_dataset_busy_prefix + ") .*").replace("(", "(?:"))
@@ -5618,16 +5662,25 @@ class Job:
         """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
         max_workers = self.max_workers[r.location]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            iterators = [
-                self.itr_ssh_cmd_batched(
-                    r, cmd, cmd_args, lambda batch, cmd=cmd: executor.submit(fn, cmd, batch), max_batch_items=max_batch_items
+            iterators = []
+            for cmd, cmd_args in cmd_args_list:
+
+                def submit_batch(batch, cmd=cmd):
+                    return executor.submit(fn, cmd, batch)
+
+                iterators.append(
+                    self.itr_ssh_cmd_batched(
+                        r,
+                        cmd,
+                        cmd_args,
+                        submit_batch,
+                        max_batch_items=max_batch_items,
+                    )
                 )
-                for cmd, cmd_args in cmd_args_list
-            ]
             iterator = itertools.chain(*iterators)
             iterators.clear()  # help gc
             # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
-            fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))
+            fifo_buffer: Deque[Future] = deque(itertools.islice(iterator, max_workers))
 
             if ordered:
                 while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
@@ -5737,9 +5790,8 @@ class Connection:
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
             is_trace = p.log.isEnabledFor(log_trace)
-            is_trace and p.log.log(
-                log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd])
-            )
+            if is_trace:
+                p.log.log(log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
                 p.log.log(log_trace, "%s", process.stderr.rstrip())
@@ -6404,13 +6456,15 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
         "years": 365 * 86400 * 1000,
     }
     match = re.fullmatch(
-        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
+        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix,
+        duration,
     )
-    if not match:
+    if match is None:
         if context:
             die(f"Invalid duration format: {duration} within {context}")
         else:
             raise ValueError(f"Invalid duration format: {duration}")
+    assert match is not None
     quantity = int(match.group(1))
     unit = match.group(2)
     return quantity * unit_milliseconds[unit]
@@ -7092,7 +7146,7 @@ def get_default_log_formatter(prefix: str = "", log_params: Optional[LogParams] 
             # lock-free yet thread-safe late configuration-based init for prettier ProgressReporter output
             # log_params.params and available_programs are not fully initialized yet before detect_available_programs() ends
             cols = 0
-            p = log_params.params
+            p = log_params.params if log_params is not None else None
             if p is not None and "local" in p.available_programs:
                 if "pv" in p.available_programs["local"]:
                     cols = p.terminal_columns
@@ -7136,9 +7190,10 @@ def get_syslog_address(
     address: str, log_syslog_socktype: str
 ) -> Tuple[Union[str, Tuple[str, int]], Optional[socket.SocketKind]]:
     socktype: Optional[socket.SocketKind] = None
-    addr: Union[str, Tuple[str, int]] = address.strip()
-    if ":" in addr:
-        host, port_str = addr.rsplit(":", 1)
+    addr_str = address.strip()
+    addr: Union[str, Tuple[str, int]] = addr_str
+    if ":" in addr_str:
+        host, port_str = addr_str.rsplit(":", 1)
         addr = (host.strip(), int(port_str.strip()))
         socktype = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM  # for TCP
     return addr, socktype
@@ -7901,7 +7956,7 @@ class _XFinally(contextlib.AbstractContextManager):
 
     def __exit__(
         self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[types.TracebackType]
-    ) -> bool:
+    ) -> Literal[False]:
         try:
             self._cleanup()
         except BaseException as cleanup_exc:
