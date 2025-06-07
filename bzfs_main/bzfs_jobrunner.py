@@ -847,7 +847,8 @@ class Job:
         except subprocess.CalledProcessError as e:
             return e.returncode
         except SystemExit as e:
-            return e.code if isinstance(e.code, int) else None
+            assert e.code is None or isinstance(e.code, int)
+            return e.code
         except BaseException as e:
             log.error("Worker job failed with unexpected exception for command: %s", " ".join(cmd), exc_info=e)
             return die_status

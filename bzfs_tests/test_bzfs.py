@@ -4687,5 +4687,5 @@ def stop_on_failure_subtest(**params):
     """Context manager to mimic UnitTest.subTest() but stop on first failure"""
     try:
         yield
-    except AssertionError:
-        raise AssertionError(f"SubTest failed with parameters: {params}") from None
+    except AssertionError as e:
+        raise AssertionError(f"SubTest failed with parameters: {params}") from e

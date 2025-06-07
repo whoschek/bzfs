@@ -6998,11 +6998,11 @@ def get_logger(log_params: LogParams, args: argparse.Namespace, log: Optional[Lo
         assert isinstance(log, Logger)
         return log  # use third party provided logger object
 
-    if args.log_config_file:
-        return get_dict_config_logger(log_params, args)
-
+    elif args.log_config_file:
+        clog = get_dict_config_logger(log_params, args)  # use logger defined in config file, and afterwards ...
     # ... add our own handlers unless matching handlers are already present
-    return get_default_logger(log_params, args)
+    default_log = get_default_logger(log_params, args)
+    return clog if args.log_config_file else default_log
 
 
 def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
