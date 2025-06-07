@@ -23,7 +23,7 @@ or     python3 -m bash_completion_d.shell-completion-generator > ~/.bash_complet
 import argparse
 import importlib
 from pathlib import Path
-from typing import Set, Dict, List
+from typing import Dict, List, Set, Tuple
 
 programs = ("bzfs", "bzfs_jobrunner")
 
@@ -37,7 +37,7 @@ def version_line() -> str:
     raise RuntimeError("Version not found in bzfs argument parser.")
 
 
-def harvest(module: str):
+def harvest(module: str) -> Tuple[str, Set[str], Dict[str, str]]:
     """Returns (safe_name, flag_set, value_tokens_map) for a program based on its argument_parser() specs."""
     parser = importlib.import_module("bzfs_main." + module).argument_parser()
     safe = module.replace("-", "_")

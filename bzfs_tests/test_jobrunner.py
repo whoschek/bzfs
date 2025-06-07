@@ -19,7 +19,8 @@ import signal
 import subprocess
 import unittest
 from subprocess import DEVNULL, PIPE
-from typing import Union
+from typing import Any, Dict, Union, cast
+from logging import Logger
 from unittest.mock import patch, MagicMock
 
 from bzfs_main import bzfs_jobrunner
@@ -132,19 +133,19 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(0, e.exception.code)
 
     def test_sorted_dict_empty_dictionary_returns_empty(self):
-        result = bzfs_jobrunner.sorted_dict({})
+        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({})
         self.assertEqual(result, {})
 
     def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self):
-        result = bzfs_jobrunner.sorted_dict({"a": 1})
+        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({"a": 1})
         self.assertEqual(result, {"a": 1})
 
     def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self):
-        result = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
+        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
         self.assertEqual(result, {"a": 1, "b": 2, "c": 3})
 
     def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self):
-        result = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
+        result: Dict[int, str] = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
         self.assertEqual(result, {1: "one", 2: "two", 3: "three"})
 
     def test_sorted_dict_with_mixed_key_types_raises_error(self):
@@ -156,7 +157,7 @@ class TestHelperFunctions(unittest.TestCase):
 class TestValidation(unittest.TestCase):
     def test_multisource_substitution_token_validation_with_empty_target(self):
         job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
+        job.log = cast(Any, MagicMock())
         job.is_test_mode = True
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
@@ -190,7 +191,7 @@ class TestValidation(unittest.TestCase):
 
         # Scenario 3: Run for both (no --src-host filter), should fail.
         job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
+        job.log = cast(Any, MagicMock())
         with patch("sys.argv", base_argv):  # No --src-host filter
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(base_argv)
@@ -199,7 +200,7 @@ class TestValidation(unittest.TestCase):
 
     def test_multisource_substitution_token_validation_passes_safe_config(self):
         job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
+        job.log = cast(Any, MagicMock())
         job.is_test_mode = True
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITH ^SRC_HOST
@@ -226,7 +227,7 @@ class TestValidation(unittest.TestCase):
 
             mock_run_subjobs.reset_mock()
             job = bzfs_jobrunner.Job()
-            job.log = MagicMock()
+            job.log = cast(Any, MagicMock())
             job.is_test_mode = True
             with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs_2:
                 # Scenario 2: Run for both. Should pass validation.
@@ -236,7 +237,7 @@ class TestValidation(unittest.TestCase):
 
     def test_multisource_substitution_token_validation_rejects_unsafe_config(self):
         job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
+        job.log = cast(Any, MagicMock())
         job.is_test_mode = True
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
@@ -272,7 +273,7 @@ class TestValidation(unittest.TestCase):
 
         # Scenario 3: Run for both (no --src-host filter), should fail.
         job = bzfs_jobrunner.Job()
-        job.log = MagicMock()
+        job.log = cast(Any, MagicMock())
         with patch("sys.argv", base_argv):  # No --src-host filter
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(base_argv)
@@ -284,7 +285,8 @@ class TestValidation(unittest.TestCase):
 class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
     def setUp(self):
         self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
+        self.log_mock = MagicMock()
+        self.job.log = cast(Logger, self.log_mock)
 
     def test_empty_input_raises(self):
         with self.assertRaises(AssertionError):
@@ -309,7 +311,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertListEqual([], result)
         self.assertSetEqual(set(), self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool2"}, self.job.cache_known_dst_pools)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"
         )
 
@@ -325,7 +327,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertListEqual([("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool3/src3", "-:dstpool1/dst3")], result)
         self.assertSetEqual({"-:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool1", "-:dstpool2"}, self.job.cache_known_dst_pools)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"
         )
 
@@ -337,7 +339,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual([("srcpool1/src1", "-:dstpool1/dst1")], result)
         mock_run.assert_not_called()
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"
         )
 
@@ -383,7 +385,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
             unittest.mock.call("Skipping dst dataset for which local dst pool does not exist: %s", "-:srcpool1/dst1"),
             unittest.mock.call("Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"),
         ]
-        self.assertEqual(expected_calls, self.job.log.warning.mock_calls)
+        self.assertEqual(expected_calls, self.log_mock.warning.mock_calls)
 
     @patch("subprocess.run")
     def test_duplicate_pool_input(self, mock_run):
@@ -414,7 +416,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertListEqual([], result)
         self.assertSetEqual(set(), self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool2"}, self.job.cache_known_dst_pools)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2"
         )
 
@@ -427,7 +429,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertListEqual(pairs, result)
         self.assertSetEqual({"127.0.0.1:dstpool2"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"127.0.0.1:dstpool2"}, self.job.cache_known_dst_pools)
-        self.assertEqual([], self.job.log.warning.mock_calls)
+        self.assertEqual([], self.log_mock.warning.mock_calls)
 
     @patch("subprocess.run")
     def test_mixed_local_existing_and_remote(self, mock_run):
@@ -442,7 +444,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local1"]
         mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
-        self.job.log.warning.assert_not_called()
+        self.log_mock.warning.assert_not_called()
 
     @patch("subprocess.run")
     def test_mixed_local_nonexisting_and_remote(self, mock_run):
@@ -459,7 +461,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertSetEqual({"-:local2", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local2"]
         mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:local2/src1"
         )
 
@@ -489,7 +491,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertEqual(called_cmd[: len(expected_cmd_parts)], expected_cmd_parts)
         self.assertCountEqual(sorted(["local1", "local2"]), sorted(called_cmd[len(expected_cmd_parts) :]))
 
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:local2/data3"
         )
 
@@ -504,7 +506,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertSetEqual({"remote1:pool1", "remote2:pool2"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"remote1:pool1", "remote2:pool2"}, self.job.cache_known_dst_pools)
         mock_run.assert_not_called()  # No local pools to check
-        self.job.log.warning.assert_not_called()
+        self.log_mock.warning.assert_not_called()
 
     @patch("subprocess.run")
     def unexpected_error_on_local_dst_pool_check_raises_exception(self, mock_subprocess_run):
@@ -529,7 +531,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         )
         result = self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:nonexistent_pool/dataset")])
         self.assertEqual([], result)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: -:nonexistent_pool/dataset"
         )
 
