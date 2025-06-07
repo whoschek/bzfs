@@ -82,8 +82,10 @@ from typing import Any, Callable, Deque, Dict, FrozenSet, Iterable, Iterator, Li
 from typing import DefaultDict, Sequence, Set, Tuple
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union, Protocol
 from typing import cast
-
 from bzfs_main.utils import cut
+
+TA = TypeVar("TA")
+TRun = TypeVar("TRun")
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -1730,7 +1732,7 @@ class Params:
         self.zpool_features: Dict[str, Dict[str, str]] = {}
         self.connection_pools: Dict[str, "ConnectionPools"] = {}
 
-    def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
+    def split_args(self, text: str, *items: Union[str, Iterable[str]], allow_all: bool = False) -> List[str]:
         """Splits option string on runs of one or more whitespace into an option list."""
         text = text.strip()
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
@@ -3900,26 +3902,29 @@ class Job:
             raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=self.params.timeout_nanos / 1_000_000_000)
         return delta_nanos / 1_000_000_000  # seconds
 
-    def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
+    def maybe_inject_error(self, cmd: Optional[List[str]] = None, error_trigger: Optional[str] = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
         if error_trigger:
             counter = self.error_injection_triggers.get("before")
             if counter and self.decrement_injection_counter(counter, error_trigger):
                 try:
-                    raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
+                    cmd_str = " ".join(cmd or [])
+                    raise CalledProcessError(returncode=1, cmd=cmd_str, stderr=error_trigger + ":dataset is busy")
                 except subprocess.CalledProcessError as e:
                     if error_trigger.startswith("retryable_"):
                         raise RetryableError("Subprocess failed") from e
                     else:
                         raise
 
-    def maybe_inject_delete(self, remote: Remote, dataset=None, delete_trigger=None) -> None:
+    def maybe_inject_delete(
+        self, remote: Remote, dataset: Optional[str] = None, delete_trigger: Optional[str] = None
+    ) -> None:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
         assert delete_trigger
         counter = self.delete_injection_triggers.get("before")
         if counter and self.decrement_injection_counter(counter, delete_trigger):
             p = self.params
-            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
+            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset or "")
             self.run_ssh_command(remote, log_debug, print_stdout=True, cmd=cmd)
 
     def maybe_inject_params(self, error_trigger: str) -> None:
@@ -4147,7 +4152,7 @@ class Job:
         return snapshots
 
     def filter_properties(
-        self, props: Dict[str, Optional[str]], include_regexes, exclude_regexes
+        self, props: Dict[str, Optional[str]], include_regexes: RegexList, exclude_regexes: RegexList
     ) -> Dict[str, Optional[str]]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
         log = self.params.log
@@ -4284,7 +4289,7 @@ class Job:
                 remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
             )
 
-    def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: Optional[str], *items) -> int:
+    def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: Optional[str], *items: str) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
         p = self.params
         if p.no_estimate_send_size or self.is_solaris_zfs(remote):
@@ -4335,7 +4340,7 @@ class Job:
             results.append(regex)
         return results
 
-    def run_with_retries(self, policy: RetryPolicy, fn: Callable, *args, **kwargs) -> Any:
+    def run_with_retries(self, policy: RetryPolicy, fn: Callable[..., TRun], *args: Any, **kwargs: Any) -> TRun:
         """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
         log = self.params.log
         max_sleep_mark = policy.min_sleep_nanos
@@ -6198,7 +6203,7 @@ def delete_stale_files(
             pass  # harmless
 
 
-def die(msg: str, exit_code=die_status) -> None:
+def die(msg: str, exit_code: int = die_status) -> None:
     ex = SystemExit(msg)
     ex.code = exit_code
     raise ex
@@ -6319,13 +6324,13 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     return regex
 
 
-def getenv_any(key: str, default=None) -> str:
+def getenv_any(key: str, default: Optional[str] = None) -> str:
     """All shell environment variable names used for configuration start with this prefix."""
-    return os.getenv(env_var_prefix + key, default)
+    return cast(str, os.getenv(env_var_prefix + key, default))
 
 
 def getenv_int(key: str, default: int) -> int:
-    return int(getenv_any(key, default))
+    return int(getenv_any(key, str(default)))
 
 
 def getenv_bool(key: str, default: bool = False) -> bool:
@@ -6376,19 +6381,19 @@ def find_match(
     raise ValueError(raises)
 
 
-def xappend(lst, *items) -> List[str]:
+def xappend(lst: List[TA], *items: Union[TA, Iterable[TA]]) -> List[TA]:
     """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
     If an item is an iterable does so recursively, flattening the output."""
     for item in items:
         if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
             if item:
-                lst.append(item)
+                lst.append(cast(TA, item))
         else:
             xappend(lst, *item)
     return lst
 
 
-def human_readable_bytes(num_bytes: float, separator=" ", precision=None, long=False) -> str:
+def human_readable_bytes(num_bytes: float, separator: str = " ", precision: Optional[int] = None, long: bool = False) -> str:
     sign = "-" if num_bytes < 0 else ""
     s = abs(num_bytes)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
@@ -6402,7 +6407,9 @@ def human_readable_bytes(num_bytes: float, separator=" ", precision=None, long=F
     return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
 
 
-def human_readable_duration(duration: float, unit="ns", separator="", precision=None, long=False) -> str:
+def human_readable_duration(
+    duration: float, unit: str = "ns", separator: str = "", precision: Optional[int] = None, long: bool = False
+) -> str:
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
@@ -6504,9 +6511,6 @@ def tail(file: str, n: int, errors: Optional[str] = None) -> Sequence[str]:
         return deque(fd, maxlen=n)
 
 
-TA = TypeVar("TA")
-
-
 def append_if_absent(lst: List[TA], *items: TA) -> List[TA]:
     for item in items:
         if item not in lst:
@@ -6555,7 +6559,7 @@ def set_last_modification_time(
     os_utime(path, times=unixtime_in_secs)
 
 
-def drain(iterable: Iterable) -> None:
+def drain(iterable: Iterable[Any]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     deque(iterable, maxlen=0)
 
@@ -6572,7 +6576,7 @@ def nsuffix(s: str) -> str:
     return sys.intern("_" + s) if s else ""
 
 
-def format_dict(dictionary: Dict) -> str:
+def format_dict(dictionary: Dict[Any, Any]) -> str:
     return f'"{dictionary}"'
 
 
@@ -6805,7 +6809,7 @@ def round_datetime_up_to_duration_multiple(
         raise ValueError(f"Unsupported duration unit: {duration_unit}")
 
 
-def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
+def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
     """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
     input_value = kwargs.pop("input", None)
     timeout = kwargs.pop("timeout", None)
