@@ -193,12 +193,12 @@ def suite() -> unittest.TestSuite:
 #############################################################################
 class ParametrizedTestCase(unittest.TestCase):
 
-    def __init__(self, methodName="runTest", param=None):
+    def __init__(self, methodName: str = "runTest", param: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(methodName)
         self.param = param
 
     @staticmethod
-    def parametrize(testcase_klass, param=None):
+    def parametrize(testcase_klass: type, param: Optional[Dict[str, Any]] = None) -> unittest.TestSuite:
         testloader = unittest.TestLoader()
         testnames = testloader.getTestCaseNames(testcase_klass)
         suite = unittest.TestSuite()
@@ -210,7 +210,7 @@ class ParametrizedTestCase(unittest.TestCase):
 #############################################################################
 class BZFSTestCase(ParametrizedTestCase):
 
-    def setUp(self, pool_size_bytes: int = pool_size_bytes_default):
+    def setUp(self, pool_size_bytes: int = pool_size_bytes_default) -> None:
         global src_pool, dst_pool
         global src_root_dataset, dst_root_dataset
         global afix
@@ -245,14 +245,14 @@ class BZFSTestCase(ParametrizedTestCase):
             # print(f"test zpool features: {features}", file=sys.stderr)
 
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/bzfs/
-    def tearDown(self):
+    def tearDown(self) -> None:
         pass  # tear down is deferred to next setup for easier debugging
 
-    def tearDownAndSetup(self):
+    def tearDownAndSetup(self) -> None:
         self.tearDown()
         self.setUp()
 
-    def setup_basic(self, volume=False) -> None:
+    def setup_basic(self, volume: bool = False) -> None:
         compression_props = ["-o", "compression=on"]
         encryption_props = ["-o", f"encryption={encryption_algo}"]
         if is_solaris_zfs():
@@ -275,7 +275,7 @@ class BZFSTestCase(ParametrizedTestCase):
         take_snapshot(src_foo_a, fix("u2"))
         take_snapshot(src_foo_a, fix("u3"))
 
-    def setup_basic_woo(self, w=1, q=0) -> None:
+    def setup_basic_woo(self, w: int = 1, q: int = 0) -> None:
         for i in range(w):
             src_woo = create_filesystem(src_root_dataset, f"woo{i}")
             take_snapshot(src_woo, fix("w1"))
@@ -596,10 +596,10 @@ class BZFSTestCase(ParametrizedTestCase):
         self.assertListEqual(expected_names, snap_names)
 
     def is_no_privilege_elevation(self) -> bool:
-        return self.param and self.param.get("no_privilege_elevation", False)
+        return bool(self.param and self.param.get("no_privilege_elevation", False))
 
     def is_encryption_mode(self) -> bool:
-        return self.param and self.param.get("encrypted_dataset", False)
+        return bool(self.param and self.param.get("encrypted_dataset", False))
 
     @staticmethod
     def properties_with_special_characters() -> Dict[str, str]:

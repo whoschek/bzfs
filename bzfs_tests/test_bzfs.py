@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Any, Container, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple, Union, cast, Iterator
+from typing import Any, Callable, Container, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple, Union, cast, Iterator
 
 if sys.version_info < (3, 11):
 
@@ -304,17 +304,17 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
     def test_compile_regexes(self) -> None:
-        def _assertFullMatch(text: str, regex: str, re_suffix="", expected=True):
+        def _assertFullMatch(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
             match = bzfs.compile_regexes([regex], suffix=re_suffix)[0][0].fullmatch(text)
             if expected:
                 self.assertTrue(match)
             else:
                 self.assertFalse(match)
 
-        def assertFullMatch(text: str, regex: str, re_suffix=""):
+        def assertFullMatch(text: str, regex: str, re_suffix: str = "") -> None:
             _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=True)
 
-        def assertNotFullMatch(text: str, regex: str, re_suffix=""):
+        def assertNotFullMatch(text: str, regex: str, re_suffix: str = "") -> None:
             _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=False)
 
         re_suffix = bzfs.Job().re_suffix
@@ -694,7 +694,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.reset_logger()
 
     def test_is_zfs_dataset_busy_match(self) -> None:
-        def is_busy(proc, dataset, busy_if_send: bool = True):
+        def is_busy(proc: str, dataset: str, busy_if_send: bool = True) -> bool:
             return bzfs.Job().is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
 
         ds = "tank/foo/bar"
@@ -717,7 +717,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(is_busy("zfs send " + ds + "@snap", ds, busy_if_send=False))
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
-    def assert_human_readable_float(self, actual, expected):
+    def assert_human_readable_float(self, actual: float, expected: str) -> None:
         self.assertEqual(bzfs.human_readable_float(actual), expected)
         self.assertEqual(bzfs.human_readable_float(-actual), "-" + expected)
 
@@ -1167,7 +1167,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertSetEqual(set(), reporter.file_name_set)
         self.assertSetEqual({pv_log_file}, reporter.file_name_queue)
 
-        def mock_open(*args, **kwargs):
+        def mock_open(*args: Any, **kwargs: Any) -> Any:
             if args[0] == pv_log_file:
                 raise FileNotFoundError(f"File {pv_log_file} disappeared before opening.")
             return open(*args, **kwargs)
@@ -1525,7 +1525,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
 
     def test_MonitorSnapshotsConfig(self) -> None:
-        def plan(alerts) -> str:
+        def plan(alerts: Dict[str, Any]) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
@@ -1669,7 +1669,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(config.dont_crit)
 
     @patch("bzfs_main.bzfs.Job.itr_ssh_cmd_parallel")
-    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel) -> None:
+    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
         job = bzfs.Job()
         job.params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.mock_remote = MagicMock(spec=bzfs.Remote)  # spec helps catch calls to non-existent attrs
@@ -1785,7 +1785,7 @@ class TestSubprocessRun(unittest.TestCase):
         old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)  # install a handler that ignores SIGINT
         try:
 
-            def send_sigint_to_sleep_cli():
+            def send_sigint_to_sleep_cli() -> None:
                 time.sleep(0.1)  # ensure sleep CLI has started before we kill it
                 os.kill(os.getpid(), signal.SIGINT)  # send SIGINT to all members of the process group, including `sleep` CLI
 
@@ -1800,7 +1800,15 @@ class TestSubprocessRun(unittest.TestCase):
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
-    def run_test(self, input_value, expected_user, expected_host, expected_dataset, expected_user_host, expected_error):
+    def run_test(
+        self,
+        input_value: str,
+        expected_user: str,
+        expected_host: str,
+        expected_dataset: str,
+        expected_user_host: str,
+        expected_error: bool,
+    ) -> None:
         expected_status = 0 if not expected_error else 3
         passed = False
 
@@ -2789,9 +2797,18 @@ class TestFindMatch(unittest.TestCase):
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=False))
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=True))
 
-    def assert_find_match(self, expected, lst, condition, start=None, end=None, raises=False):
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raises))
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True, raises=raises))
+    def assert_find_match(
+        self,
+        expected: int,
+        lst: Sequence[str],
+        condition: Callable[[str], bool],
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        raises: Optional[Union[bool, str, Callable[[], str]]] = False,
+    ) -> None:
+        raise_arg = cast(Union[bool, str, Callable[[], str]], raises)
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raise_arg))
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True, raises=raise_arg))
 
 
 #############################################################################
@@ -3327,7 +3344,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
 
     @staticmethod
-    def get_snapshot_filters(cli):
+    def get_snapshot_filters(cli: Sequence[str]) -> Any:
         args = argparser_parse_args(args=["src", "dst", *cli])
         return bzfs.Params(args).snapshot_filters[0]
 
@@ -3665,21 +3682,29 @@ class TestConnectionPool(unittest.TestCase):
         self.remote = bzfs.Remote("src", args, p)
         self.src2 = bzfs.Remote("src", args, p)
 
-    def assert_priority_queue(self, cpool, queuelen):
+    def assert_priority_queue(self, cpool: bzfs.ConnectionPool, queuelen: int) -> None:
         self.assertEqual(len(cpool.priority_queue), queuelen)
 
-    def assert_equal_connections(self, conn, donn):
+    def assert_equal_connections(self, conn: bzfs.Connection, donn: bzfs.Connection) -> None:
         self.assertTupleEqual((conn.cid, conn.ssh_cmd), (donn.cid, donn.ssh_cmd))
         self.assertEqual(conn.free, donn.free)
         self.assertEqual(conn.last_modified, donn.last_modified)
 
-    def get_connection(self, cpool, dpool):
+    def get_connection(
+        self, cpool: bzfs.ConnectionPool, dpool: "SlowButCorrectConnectionPool"
+    ) -> Tuple[bzfs.Connection, bzfs.Connection]:
         conn = cpool.get_connection()
         donn = dpool.get_connection()
         self.assert_equal_connections(conn, donn)
         return conn, donn
 
-    def return_connection(self, cpool, conn, dpool, donn):
+    def return_connection(
+        self,
+        cpool: bzfs.ConnectionPool,
+        conn: bzfs.Connection,
+        dpool: "SlowButCorrectConnectionPool",
+        donn: bzfs.Connection,
+    ) -> None:
         self.assertTupleEqual((conn.cid, conn.ssh_cmd), (donn.cid, donn.ssh_cmd))
         cpool.return_connection(conn)
         dpool.return_connection(donn)
@@ -3891,7 +3916,7 @@ class TestConnectionPool(unittest.TestCase):
 #############################################################################
 class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better implementation against this baseline
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
         super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection)
         self.priority_queue: List[bzfs.Connection] = []  # type: ignore
 
@@ -4033,7 +4058,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
         return output_snapshots
 
     def incremental_send_steps1(
-        self, input_snapshots: List[str], src_dataset: str, is_resume=False, force_convert_I_to_i=False
+        self,
+        input_snapshots: List[str],
+        src_dataset: str,
+        is_resume: bool = False,
+        force_convert_I_to_i: bool = False,
     ) -> List[Tuple]:
         origin_src_snapshots_with_guids = []
         guid = 1
@@ -4045,7 +4074,10 @@ class TestIncrementalSendSteps(unittest.TestCase):
         )
 
     def incremental_send_steps2(
-        self, origin_src_snapshots_with_guids: List[str], is_resume=False, force_convert_I_to_i=False
+        self,
+        origin_src_snapshots_with_guids: List[str],
+        is_resume: bool = False,
+        force_convert_I_to_i: bool = False,
     ) -> List[Tuple]:
         guids = []
         input_snapshots = []
@@ -4468,7 +4500,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.lock = threading.Lock()
         self.submitted: List[str] = []
 
-    def append_submission(self, dataset):
+    def append_submission(self, dataset: str) -> None:
         with self.lock:
             self.submitted.append(dataset)
 
