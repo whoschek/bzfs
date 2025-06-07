@@ -3752,9 +3752,11 @@ class Job:
         else:
             return "cat"
 
-    worker_thread_number_regex: re.Pattern = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
+    worker_thread_number_regex: re.Pattern[str] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
 
-    def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
+    def pv_cmd(
+        self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar: bool = False
+    ) -> str:
         """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
         p = self.params
@@ -5618,12 +5620,24 @@ class Job:
         return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)
 
     def run_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29, sep=" "
+        self,
+        r: Remote,
+        cmd: List[str],
+        cmd_args: List[str],
+        fn: Callable[[List[str]], Any],
+        max_batch_items: int = 2**29,
+        sep: str = " ",
     ) -> None:
         drain(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items, sep=sep))
 
     def itr_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29, sep=" "
+        self,
+        r: Remote,
+        cmd: List[str],
+        cmd_args: List[str],
+        fn: Callable[[List[str]], Any],
+        max_batch_items: int = 2**29,
+        sep: str = " ",
     ) -> Generator[Any, None, None]:
         """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
