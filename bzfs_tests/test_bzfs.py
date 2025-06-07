@@ -35,7 +35,14 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Any, Container, DefaultDict, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Container, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
+
+if sys.version_info < (3, 11):
+
+    class ExceptionGroup(Exception):
+        pass
+
+
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
@@ -142,15 +149,15 @@ class TestHelperFunctions(unittest.TestCase):
     d = "d"
     a = "a"
 
-    def merge_sorted_iterators(self, src: List[str], dst: List[str], choice: str) -> List[Tuple]:
+    def merge_sorted_iterators(self, src: Sequence[Any], dst: Sequence[Any], choice: str) -> List[Tuple[Any, ...]]:
         s, d, a = self.s, self.d, self.a
         return [item for item in bzfs.Job().merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst))]
 
     def assert_merge_sorted_iterators(
         self,
-        expected: List[Tuple],
-        src: List[str],
-        dst: List[str],
+        expected: List[Tuple[Any, ...]],
+        src: Sequence[Any],
+        dst: Sequence[Any],
         choice=f"{s}+{d}+{a}",
         invert=True,
     ) -> None:
@@ -570,7 +577,7 @@ class TestHelperFunctions(unittest.TestCase):
         prefix = "test_get_logger:"
         args = argparser_parse_args(args=["src", "dst"])
         root_logger = logging.getLogger()
-        log_params = None
+        log_params = bzfs.LogParams(args)
         log = bzfs.get_logger(log_params, args, root_logger)
         self.assertTrue(log is root_logger)
         log.info(prefix + "aaa1")
@@ -1218,71 +1225,77 @@ class TestHelperFunctions(unittest.TestCase):
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d"]
         self.assertListEqual([], cast(List[str], run_filter([], basis_src_datasets)))
-        self.assertListEqual(["a"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertListEqual(["a"], cast(List[str], run_filter(basis_src_datasets, basis_src_datasets)))
         self.assertIsNone(run_filter(["a", "a/b", "a/b/c"], basis_src_datasets))
         self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
-        self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
-        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
-        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
-        self.assertListEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
+        self.assertListEqual(["a/b"], cast(List[str], run_filter(["a/b", "a/b/c"], basis_src_datasets)))
+        self.assertListEqual(["a/b", "a/d"], cast(List[str], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets)))
+        self.assertListEqual(["a/b", "a/d"], cast(List[str], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets)))
+        self.assertListEqual(["a/d"], cast(List[str], run_filter(["a/d"], basis_src_datasets)))
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d", "e", "e/f"]
-        self.assertListEqual(["a", "e"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertListEqual(["a", "e"], cast(List[str], run_filter(basis_src_datasets, basis_src_datasets)))
         self.assertIsNone(run_filter(["e"], basis_src_datasets))
-        self.assertListEqual(["e/f"], run_filter(["e/f"], basis_src_datasets))
-        self.assertListEqual(["a", "e/f"], run_filter(["a", "a/b", "a/b/c", "a/d", "e/f"], basis_src_datasets))
-        self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
-        self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
-        self.assertListEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
+        self.assertListEqual(["e/f"], cast(List[str], run_filter(["e/f"], basis_src_datasets)))
+        self.assertListEqual(
+            ["a", "e/f"], cast(List[str], run_filter(["a", "a/b", "a/b/c", "a/d", "e/f"], basis_src_datasets))
+        )
+        self.assertListEqual(["a/b"], cast(List[str], run_filter(["a/b", "a/b/c"], basis_src_datasets)))
+        self.assertListEqual(["a/b", "a/d"], cast(List[str], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets)))
+        self.assertListEqual(["a/d"], cast(List[str], run_filter(["a/d"], basis_src_datasets)))
         self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
         self.assertIsNone(run_filter(["a", "a/b", "a/d"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "h"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
-        self.assertListEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
-        self.assertListEqual(["a", "e"], run_filter(["a", "e"], basis_src_datasets))
-        self.assertListEqual(["e", "h"], run_filter(["e", "h"], basis_src_datasets))
-        self.assertListEqual(["a", "h"], run_filter(["a", "h"], basis_src_datasets))
-        self.assertListEqual(["a"], run_filter(["a"], basis_src_datasets))
-        self.assertListEqual(["e"], run_filter(["e"], basis_src_datasets))
-        self.assertListEqual(["h"], run_filter(["h"], basis_src_datasets))
+        self.assertListEqual([], cast(List[str], run_filter([], basis_src_datasets)))
+        self.assertListEqual(["a", "e", "h"], cast(List[str], run_filter(basis_src_datasets, basis_src_datasets)))
+        self.assertListEqual(["a", "e"], cast(List[str], run_filter(["a", "e"], basis_src_datasets)))
+        self.assertListEqual(["e", "h"], cast(List[str], run_filter(["e", "h"], basis_src_datasets)))
+        self.assertListEqual(["a", "h"], cast(List[str], run_filter(["a", "h"], basis_src_datasets)))
+        self.assertListEqual(["a"], cast(List[str], run_filter(["a"], basis_src_datasets)))
+        self.assertListEqual(["e"], cast(List[str], run_filter(["e"], basis_src_datasets)))
+        self.assertListEqual(["h"], cast(List[str], run_filter(["h"], basis_src_datasets)))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
-        self.assertListEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertListEqual([], cast(List[str], run_filter([], basis_src_datasets)))
+        self.assertListEqual(["a", "e", "h"], cast(List[str], run_filter(basis_src_datasets, basis_src_datasets)))
 
         self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
-        self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
+        self.assertListEqual(["a", "h/g"], cast(List[str], run_filter(["a", "h/g"], basis_src_datasets)))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "k", "k/l"]
-        self.assertListEqual([], run_filter([], basis_src_datasets))
-        self.assertListEqual(["a", "e", "h", "k"], run_filter(basis_src_datasets, basis_src_datasets))
+        self.assertListEqual([], cast(List[str], run_filter([], basis_src_datasets)))
+        self.assertListEqual(["a", "e", "h", "k"], cast(List[str], run_filter(basis_src_datasets, basis_src_datasets)))
 
         self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
-        self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
+        self.assertListEqual(["a", "h/g"], cast(List[str], run_filter(["a", "h/g"], basis_src_datasets)))
         self.assertIsNone(run_filter(["a", "k"], basis_src_datasets))
-        self.assertListEqual(["a", "k/l"], run_filter(["a", "k/l"], basis_src_datasets))
+        self.assertListEqual(["a", "k/l"], cast(List[str], run_filter(["a", "k/l"], basis_src_datasets)))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "k", "kk", "k/l", "kk/l"]
         self.assertIsNone(run_filter(["a", "hh"], basis_src_datasets))
-        self.assertListEqual(["a", "hh/g"], run_filter(["a", "hh/g"], basis_src_datasets))
+        self.assertListEqual(["a", "hh/g"], cast(List[str], run_filter(["a", "hh/g"], basis_src_datasets)))
         self.assertIsNone(run_filter(["kk"], basis_src_datasets))
-        self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
+        self.assertListEqual(["kk/l"], cast(List[str], run_filter(["kk/l"], basis_src_datasets)))
         self.assertIsNone(run_filter(["k"], basis_src_datasets))
-        self.assertListEqual(["k/l"], run_filter(["k/l"], basis_src_datasets))
+        self.assertListEqual(["k/l"], cast(List[str], run_filter(["k/l"], basis_src_datasets)))
         self.assertIsNone(run_filter(["h"], basis_src_datasets))
-        self.assertListEqual(["h/g"], run_filter(["h/g"], basis_src_datasets))
+        self.assertListEqual(["h/g"], cast(List[str], run_filter(["h/g"], basis_src_datasets)))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "kk", "kk/l"]
         self.assertIsNone(run_filter(["kk"], basis_src_datasets))
-        self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
+        self.assertListEqual(["kk/l"], cast(List[str], run_filter(["kk/l"], basis_src_datasets)))
         self.assertIsNone(run_filter(["hh"], basis_src_datasets))
 
         # sorted()
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/B", "a/B/c", "a/D", "a/X", "a/X/c"]
-        self.assertListEqual(["a/D", "a/b"], run_filter(["a/b", "a/b/c", "a/D"], basis_src_datasets))
-        self.assertListEqual(["a/B", "a/D", "a/b"], run_filter(["a/B", "a/B/c", "a/b", "a/b/c", "a/D"], basis_src_datasets))
-        self.assertListEqual(["a/B", "a/D", "a/X"], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
+        self.assertListEqual(["a/D", "a/b"], cast(List[str], run_filter(["a/b", "a/b/c", "a/D"], basis_src_datasets)))
+        self.assertListEqual(
+            ["a/B", "a/D", "a/b"], cast(List[str], run_filter(["a/B", "a/B/c", "a/b", "a/b/c", "a/D"], basis_src_datasets))
+        )
+        self.assertListEqual(
+            ["a/B", "a/D", "a/X"], cast(List[str], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
+        )
 
     def test_validate_snapshot_name(self):
         bzfs.SnapshotLabel("foo_", "", "", "").validate_label("")
@@ -1522,7 +1535,14 @@ class TestHelperFunctions(unittest.TestCase):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(100 + 1, 100 + 2)], [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts]
+            [(100 + 1, 100 + 2)],
+            [
+                (
+                    cast(bzfs.AlertConfig, alert.latest).warning_millis,
+                    cast(bzfs.AlertConfig, alert.latest).critical_millis,
+                )
+                for alert in config.alerts
+            ],
         )
         self.assertListEqual([None], [alert.oldest for alert in config.alerts])
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -1542,7 +1562,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual([None], [alert.latest for alert in config.alerts])
         self.assertListEqual(
             [(3 * 100 + 1, 3 * 100 + 2)],
-            [(alert.oldest.warning_millis, alert.oldest.critical_millis) for alert in config.alerts],
+            [
+                (
+                    cast(bzfs.AlertConfig, alert.oldest).warning_millis,
+                    cast(bzfs.AlertConfig, alert.oldest).critical_millis,
+                )
+                for alert in config.alerts
+            ],
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
         self.assertTrue(config.enable_monitor_snapshots)
@@ -1556,7 +1582,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(str(config))
         self.assertListEqual(
             [(100 + 2, bzfs.unixtime_infinity_secs)],
-            [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],
+            [
+                (
+                    cast(bzfs.AlertConfig, alert.latest).warning_millis,
+                    cast(bzfs.AlertConfig, alert.latest).critical_millis,
+                )
+                for alert in config.alerts
+            ],
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
 
@@ -1567,7 +1599,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(str(config))
         self.assertListEqual(
             [(bzfs.unixtime_infinity_secs, 100 + 2)],
-            [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],
+            [
+                (
+                    cast(bzfs.AlertConfig, alert.latest).warning_millis,
+                    cast(bzfs.AlertConfig, alert.latest).critical_millis,
+                )
+                for alert in config.alerts
+            ],
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
 
@@ -1964,7 +2002,7 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
 #############################################################################
 class TestBuildTree(unittest.TestCase):
-    def assert_keys_sorted(self, tree: Dict[str, Optional[Dict]]):
+    def assert_keys_sorted(self, tree: Dict[str, Any]) -> None:
         keys = list(tree.keys())
         self.assertEqual(keys, sorted(keys), f"Keys are not sorted: {keys}")
         for value in tree.values():
@@ -1979,96 +2017,96 @@ class TestBuildTree(unittest.TestCase):
         self.assert_keys_sorted(tree)
 
     def test_empty_input(self):
-        datasets = []
-        expected_tree = {}
+        datasets: List[str] = []
+        expected_tree: bzfs.Tree = {}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
 
     def test_single_root(self):
-        datasets = ["pool"]
-        expected_tree = {"pool": {}}
+        datasets: List[str] = ["pool"]
+        expected_tree: bzfs.Tree = {"pool": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_single_branch(self):
-        datasets = ["pool/dataset/sub/child"]
-        expected_tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
+        datasets: List[str] = ["pool/dataset/sub/child"]
+        expected_tree: bzfs.Tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots(self):
-        datasets = ["pool", "otherpool", "anotherpool"]
-        expected_tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
+        datasets: List[str] = ["pool", "otherpool", "anotherpool"]
+        expected_tree: bzfs.Tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_large_dataset(self):
-        datasets = [f"pool/dataset{i}" for i in range(100)]
+        datasets: List[str] = [f"pool/dataset{i}" for i in range(100)]
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(len(tree["pool"]), 100)
         self.assert_keys_sorted(tree)
 
     def test_nested_structure(self):
-        datasets = [
+        datasets: List[str] = [
             "pool/parent",
             "pool/parent/child1",
             "pool/parent/child2",
             "pool/parent/child2/grandchild",
             "pool/parent/child3",
         ]
-        expected_tree = {"pool": {"parent": {"child1": {}, "child2": {"grandchild": {}}, "child3": {}}}}
+        expected_tree: bzfs.Tree = {"pool": {"parent": {"child1": {}, "child2": {"grandchild": {}}, "child3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_no_children(self):
-        datasets = ["pool", "otherpool"]
-        expected_tree = {"otherpool": {}, "pool": {}}
+        datasets: List[str] = ["pool", "otherpool"]
+        expected_tree: bzfs.Tree = {"otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_single_level(self):
-        datasets = ["pool", "pool1", "pool2", "pool3"]
-        expected_tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
+        datasets: List[str] = ["pool", "pool1", "pool2", "pool3"]
+        expected_tree: bzfs.Tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_with_hierarchy(self):
-        datasets = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
-        expected_tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
+        datasets: List[str] = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
+        expected_tree: bzfs.Tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_flat(self):
-        datasets = ["root1", "root2", "root3", "root4"]
-        expected_tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
+        datasets: List[str] = ["root1", "root2", "root3", "root4"]
+        expected_tree: bzfs.Tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_mixed_depth(self):
-        datasets = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
-        expected_tree: Dict[str, Dict[str, Any]] = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
+        datasets: List[str] = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
+        expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_tree_with_missing_intermediate_nodes(self):
-        datasets = ["a", "a/b/c", "z/2/3"]
-        expected_tree: Dict[str, Dict[str, Any]] = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
+        datasets: List[str] = ["a", "a/b/c", "z/2/3"]
+        expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_tree_with_barriers(self):
         BR = bzfs.BARRIER_CHAR
-        datasets = [
+        datasets: List[str] = [
             "a/b/c",
             "a/b/c/0d",
             "a/b/c/1d",
@@ -2076,7 +2114,7 @@ class TestBuildTree(unittest.TestCase):
             f"a/b/c/{BR}/prune/monitor",
             f"a/b/c/{BR}/{BR}/done",
         ]
-        expected_tree: Dict[str, Dict[str, Any]] = {
+        expected_tree: bzfs.Tree = {
             "a": {"b": {"c": {"0d": {}, "1d": {}, BR: {"prune": {"monitor": {}}, BR: {"done": {}}}}}}
         }
         tree = bzfs.Job().build_dataset_tree(datasets)
@@ -2100,7 +2138,11 @@ class TestCurrentDateTime(unittest.TestCase):
 
     def test_local_timezone(self):
         expected = self.fixed_datetime.astimezone(tz=None)
-        actual = bzfs.current_datetime(tz_spec=None, now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(tz: Optional[tzinfo]) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec=None, now_fn=now_fn)
         self.assertEqual(expected, actual)
 
         # For the strftime format, see https://docs.python.org/3.12/library/datetime.html#strftime-strptime-behavior.
