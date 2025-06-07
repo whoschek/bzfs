@@ -6638,7 +6638,7 @@ def get_timezone(tz_spec: Optional[str] = None) -> Optional[tzinfo]:
             offset = -offset if sign == "-" else offset
             tz = timezone(timedelta(minutes=offset))
         elif "/" in tz_spec and sys.version_info >= (3, 9):
-            from zoneinfo import ZoneInfo  # type: ignore[import-not-found]
+            from zoneinfo import ZoneInfo
 
             tz = ZoneInfo(tz_spec)  # Standard IANA timezone. Example: "Europe/Vienna"
         else:
