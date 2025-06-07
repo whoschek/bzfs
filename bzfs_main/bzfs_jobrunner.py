@@ -371,13 +371,13 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
 
 #############################################################################
-def main():
+def main() -> None:
     Job().run_main(sys.argv)
 
 
 #############################################################################
 class Job:
-    def __init__(self, log: Optional[Logger] = None):
+    def __init__(self, log: Optional[Logger] = None) -> None:
         # immutable variables:
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
@@ -983,7 +983,7 @@ class Job:
 
 #############################################################################
 class Stats:
-    def __init__(self):
+    def __init__(self) -> None:
         self.lock: threading.Lock = threading.Lock()
         self.jobs_all: int = 0
         self.jobs_started: int = 0
@@ -1037,9 +1037,9 @@ def format_dict(dictionary: Dict) -> str:
     return bzfs.format_dict(dictionary)
 
 
-def pretty_print_formatter(dictionary):  # For lazy/noop evaluation in disabled log levels
+def pretty_print_formatter(dictionary: Dict) -> Any:  # For lazy/noop evaluation in disabled log levels
     class PrettyPrintFormatter:
-        def __str__(self):
+        def __str__(self) -> str:
             import json
 
             return json.dumps(dictionary, indent=4, sort_keys=True)
