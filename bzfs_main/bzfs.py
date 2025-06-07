@@ -3931,8 +3931,9 @@ class Job:
         if p.exclude_dataset_property:
             results = self.filter_datasets_by_exclude_property(remote, results)
         is_debug = p.log.isEnabledFor(log_debug)
-        for dataset in results:
-            is_debug and log.debug(f"Finally included {remote.location} dataset: %s", dataset)
+        if is_debug:
+            for dataset in results:
+                log.debug("Finally included %s dataset: %s", remote.location, dataset)
         if self.is_test_mode:
             # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
             # decision is never reconsidered even for the descendants because exclude takes precedence over include.
@@ -4021,8 +4022,9 @@ class Job:
             resultset.update(snapshots)  # union
         snapshots = [line for line in basis_snapshots if "#" in line or ((line in resultset) != all_except)]
         is_debug = log.isEnabledFor(log_debug)
-        for snapshot in snapshots:
-            is_debug and log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
+        if is_debug:
+            for snapshot in snapshots:
+                log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return snapshots
 
     def filter_snapshots_by_regex(self, snapshots: List[str], regexes: Tuple[RegexList, RegexList]) -> List[str]:
@@ -4037,9 +4039,11 @@ class Job:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             elif is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
                 results.append(snapshot)
-                is_debug and log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
             else:
-                is_debug and log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_creation_time(self, snapshots: List[str], include_snapshot_times: UnixTimeRange) -> List[str]:
@@ -4052,9 +4056,11 @@ class Job:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
                 results.append(snapshot)
-                is_debug and log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
             else:
-                is_debug and log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
+                if is_debug:
+                    log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return results
 
     def filter_snapshots_by_creation_time_and_rank(
@@ -4093,7 +4099,8 @@ class Job:
                         results.append(snapshot)
                     else:
                         msg = "Excluding b/c snapshot rank: %s"
-                    is_debug and log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
+                    if is_debug:
+                        log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
                     i += 1
             snapshots = results
             n = hi - lo
@@ -4109,9 +4116,11 @@ class Job:
         for propname, propvalue in props.items():
             if is_included(propname, include_regexes, exclude_regexes):
                 results[propname] = propvalue
-                is_debug and log.debug("Including b/c property regex: %s", propname)
+                if is_debug:
+                    log.debug("Including b/c property regex: %s", propname)
             else:
-                is_debug and log.debug("Excluding b/c property regex: %s", propname)
+                if is_debug:
+                    log.debug("Excluding b/c property regex: %s", propname)
         return results
 
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: List[str]) -> None:
@@ -5543,6 +5552,7 @@ class Job:
         except SystemExit as e:
             log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
+        return False
 
     zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
     zfs_dataset_busy_if_mods = re.compile((zfs_dataset_busy_prefix + ") .*").replace("(", "(?:"))
@@ -5737,9 +5747,8 @@ class Connection:
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
             is_trace = p.log.isEnabledFor(log_trace)
-            is_trace and p.log.log(
-                log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd])
-            )
+            if is_trace:
+                p.log.log(log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
                 p.log.log(log_trace, "%s", process.stderr.rstrip())
@@ -7901,7 +7910,7 @@ class _XFinally(contextlib.AbstractContextManager):
 
     def __exit__(
         self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[types.TracebackType]
-    ) -> bool:
+    ) -> Literal[False]:
         try:
             self._cleanup()
         except BaseException as cleanup_exc:

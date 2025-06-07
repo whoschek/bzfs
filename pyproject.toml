@@ -120,9 +120,6 @@ disable_error_code = [
   "no-redef",
   "type-var",
   "str-bytes-safe",
-  "func-returns-value",
-  "return",
-  "exit-return",
   "index",
   "call-arg",
 ]
