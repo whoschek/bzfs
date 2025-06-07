@@ -38,7 +38,7 @@ def main() -> None:
                 version = subprocess.run(["uname", "-v"], stdout=subprocess.PIPE, text=True, check=True).stdout
                 version = version.strip().split()[0]
             except subprocess.CalledProcessError:
-                version = "2.3.2"
+                version = "2.3.0"
 
         touch(f"{ROOT_DIR}/zfs", version)
         touch(f"{ROOT_DIR}/python", f"{sys.version_info.major}.{sys.version_info.minor}")

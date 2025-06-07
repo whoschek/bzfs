@@ -1623,8 +1623,7 @@ class Params:
         self.zfs_send_program_opts: List[str] = self.fix_send_opts(self.split_args(args.zfs_send_program_opts))
         zfs_recv_program_opts: List[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
-            self.validate_arg(extra_opt, allow_all=True)
-            zfs_recv_program_opts.append(extra_opt)
+            zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
         self.zfs_recv_program_opts: List[str] = self.fix_recv_opts(zfs_recv_program_opts)
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
@@ -1638,7 +1637,8 @@ class Params:
         self.force: SynchronizedBool = SynchronizedBool(args.force)
         self.force_once: bool = args.force_once
         self.force_unmount: str = "-f" if args.force_unmount else ""
-        self.force_hard: str = "-R" if args.force_destroy_dependents or args.force_hard else ""
+        force_hard: str = "-R" if args.force_destroy_dependents else ""
+        self.force_hard: str = "-R" if args.force_hard else force_hard  # --force-hard is deprecated
 
         self.skip_parent: bool = args.skip_parent
         self.skip_missing_snapshots: str = args.skip_missing_snapshots
@@ -1680,7 +1680,7 @@ class Params:
         self.pv_program_opts: List[str] = self.split_args(args.pv_program_opts)
         self.isatty: bool = getenv_bool("isatty", True)
         if args.bwlimit:
-            self.pv_program_opts += [f"--rate-limit={self.validate_arg(args.bwlimit)}"]
+            self.pv_program_opts += [f"--rate-limit={self.validate_arg_str(args.bwlimit)}"]
         self.shell_program_local: str = "sh"
         self.shell_program: str = self.program_name(args.shell_program)
         self.ssh_program: str = self.program_name(args.ssh_program)
@@ -1746,6 +1746,12 @@ class Params:
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
             die(f"Option must not contain a whitespace character{' other than space' if allow_spaces else ''}: {opt}")
         self.validate_quoting([opt])
+        return opt
+
+    def validate_arg_str(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str:
+        if opt is None:
+            die("Option must not be missing")
+        self.validate_arg(opt, allow_spaces=allow_spaces, allow_all=allow_all)
         return opt
 
     @staticmethod
@@ -1826,15 +1832,12 @@ class Remote:
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         self.ssh_cipher: Optional[str] = p.validate_arg(args.ssh_cipher)
-        self.ssh_private_key_files: List[str] = [
-            cast(str, p.validate_arg(key)) for key in getattr(args, f"ssh_{loc}_private_key")
-        ]
+        self.ssh_private_key_files: List[str] = [p.validate_arg_str(key) for key in getattr(args, f"ssh_{loc}_private_key")]
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"]
         self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
         for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
-            p.validate_arg(extra_opt, allow_spaces=True)
-            self.ssh_extra_opts.append(extra_opt)
+            self.ssh_extra_opts.append(p.validate_arg_str(extra_opt, allow_spaces=True))
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
@@ -1910,9 +1913,9 @@ class CopyPropertiesConfig:
         grup = group
         self.group: str = group
         self.flag: str = flag  # one of -o or -x
-        sources: str = p.validate_arg(getattr(args, f"{grup}_sources")) or ""
+        sources: str = p.validate_arg_str(getattr(args, f"{grup}_sources"))
         self.sources: str = ",".join(sorted([s.strip() for s in sources.strip().split(",")]))  # canonicalize
-        self.targets: str = p.validate_arg(getattr(args, f"{grup}_targets")) or ""
+        self.targets: str = p.validate_arg_str(getattr(args, f"{grup}_targets"))
         self.include_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_include_regex"))
         self.exclude_regexes: RegexList = compile_regexes(getattr(args, f"{grup}_exclude_regex"))
 
@@ -2235,7 +2238,7 @@ class Job:
         self.num_snapshots_replicated: int = 0
         self.control_persist_secs: int = 90
         self.control_persist_margin_secs: int = 2
-        self.progress_reporter: Optional[ProgressReporter] = None
+        self.progress_reporter: ProgressReporter = cast(ProgressReporter, None)
         self.is_first_replication_task: SynchronizedBool = SynchronizedBool(True)
         self.replication_start_time_nanos: int = time.monotonic_ns()
         self.timeout_nanos: Optional[int] = None
@@ -2291,9 +2294,7 @@ class Job:
                 raise
             log_params.params = p
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
-                with contextlib.redirect_stderr(
-                    cast(TextIO, Tee(log_file_fd, sys.stderr))
-                ):  # send stderr to both logfile and stderr
+                with contextlib.redirect_stderr(cast(TextIO, Tee(log_file_fd, sys.stderr))):  # send stderr to logfile+stderr
                     lock_file = p.lock_file_name()
                     with open(lock_file, "w") as lock_fd:
                         try:
@@ -2334,13 +2335,12 @@ class Job:
             self.isatty = self.isatty if self.isatty is not None else p.isatty
             self.validate_once()
             self.replication_start_time_nanos = time.monotonic_ns()
-            progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
-            self.progress_reporter = progress_reporter
-            with xfinally(lambda: progress_reporter.stop()):
+            self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
+            with xfinally(lambda: self.progress_reporter.stop()):
                 daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
                 while True:  # loop for daemon mode
                     self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
-                    progress_reporter.reset()
+                    self.progress_reporter.reset()
                     src, dst = p.src, p.dst
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
                         src.root_dataset = src.basis_root_dataset = src_root_dataset
@@ -2359,10 +2359,12 @@ class Job:
                                 self.validate_task()
                                 self.run_task()
                             except RetryableError as retryable_error:
-                                cause = retryable_error.__cause__
-                                if cause is not None:
-                                    raise cause from None
-                                raise retryable_error
+                                assert retryable_error.__cause__ is not None
+                                raise retryable_error.__cause__ from None
+                                # cause = retryable_error.__cause__
+                                # if cause is not None:
+                                #     raise cause from None
+                                # raise retryable_error
                         except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
                             if p.skip_on_error == "fail" or (
                                 isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
@@ -2378,8 +2380,8 @@ class Job:
             if error_count > 0 and p.daemon_lifetime_nanos == 0:
                 msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
                 log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
-                if self.first_exception is not None:
-                    raise self.first_exception
+                assert self.first_exception is not None
+                raise self.first_exception
         except subprocess.CalledProcessError as e:
             log_error_on_exit(e, e.returncode)
             raise
@@ -2410,9 +2412,7 @@ class Job:
         sleep_nanos = daemon_stoptime_nanos - time.monotonic_ns()
         if sleep_nanos <= 0:
             return False
-        progress_reporter = self.progress_reporter
-        if progress_reporter is not None:
-            progress_reporter.pause()
+        self.progress_reporter.pause()
         p, log = self.params, self.params.log
         config = p.create_src_snapshots_config
         curr_datetime = config.current_datetime + timedelta(microseconds=1)
@@ -3760,10 +3760,9 @@ class Job:
                     pv_log_file += pv_file_thread_separator + f"{worker:04}"
             if self.is_first_replication_task.get_and_set(False):
                 if self.isatty and not p.quiet:
-                    assert self.progress_reporter is not None
                     self.progress_reporter.start()
                 self.replication_start_time_nanos = time.monotonic_ns()
-            if self.isatty and not p.quiet and self.progress_reporter is not None:
+            if self.isatty and not p.quiet:
                 self.progress_reporter.enqueue_pv_log_file(pv_log_file)
             pv_program_opts = p.pv_program_opts
             if self.progress_update_intervals is not None:  # for testing
@@ -3874,9 +3873,8 @@ class Job:
             return None  # never raise a timeout
         delta_nanos = timeout_nanos - time.monotonic_ns()
         if delta_nanos <= 0:
-            timeout = self.params.timeout_nanos
-            assert timeout is not None
-            raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=timeout / 1_000_000_000)
+            assert self.params.timeout_nanos is not None
+            raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=self.params.timeout_nanos / 1_000_000_000)
         return delta_nanos / 1_000_000_000  # seconds
 
     def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
@@ -3946,8 +3944,8 @@ class Job:
         if p.exclude_dataset_property:
             results = self.filter_datasets_by_exclude_property(remote, results)
         is_debug = p.log.isEnabledFor(log_debug)
-        if is_debug:
-            for dataset in results:
+        for dataset in results:
+            if is_debug:
                 log.debug("Finally included %s dataset: %s", remote.location, dataset)
         if self.is_test_mode:
             # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
@@ -4037,8 +4035,8 @@ class Job:
             resultset.update(snapshots)  # union
         snapshots = [line for line in basis_snapshots if "#" in line or ((line in resultset) != all_except)]
         is_debug = log.isEnabledFor(log_debug)
-        if is_debug:
-            for snapshot in snapshots:
+        for snapshot in snapshots:
+            if is_debug:
                 log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
         return snapshots
 
@@ -4065,19 +4063,13 @@ class Job:
         log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
-        if isinstance(lo_snaptime, timedelta):
-            lo_val = int(lo_snaptime.total_seconds())
-        else:
-            lo_val = int(lo_snaptime)
-        if isinstance(hi_snaptime, timedelta):
-            hi_val = int(hi_snaptime.total_seconds())
-        else:
-            hi_val = int(hi_snaptime)
+        assert isinstance(lo_snaptime, int)
+        assert isinstance(hi_snaptime, int)
         results = []
         for snapshot in snapshots:
             if "@" not in snapshot:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
-            elif lo_val <= int(snapshot[0 : snapshot.index("\t")]) < hi_val:
+            elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
                 results.append(snapshot)
                 if is_debug:
                     log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -4101,14 +4093,8 @@ class Job:
         log = self.params.log
         is_debug = log.isEnabledFor(log_debug)
         lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
-        if isinstance(lo_time, timedelta):
-            lo_val = int(lo_time.total_seconds())
-        else:
-            lo_val = int(lo_time)
-        if isinstance(hi_time, timedelta):
-            hi_val = int(hi_time.total_seconds())
-        else:
-            hi_val = int(hi_time)
+        assert isinstance(lo_time, int)
+        assert isinstance(hi_time, int)
         n = sum(1 for snapshot in snapshots if "@" in snapshot)
         for rank_range in include_snapshot_ranks:
             lo_rank, hi_rank = rank_range
@@ -4124,7 +4110,7 @@ class Job:
                     msg = None
                     if lo <= i < hi:
                         msg = "Including b/c snapshot rank: %s"
-                    elif lo_val <= int(snapshot[0 : snapshot.index("\t")]) < hi_val:
+                    elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
                         msg = "Including b/c creation time: %s"
                     if msg:
                         results.append(snapshot)
@@ -4289,9 +4275,10 @@ class Job:
         try:
             lines = self.try_ssh_command(remote, log_trace, cmd=cmd)
         except RetryableError as retryable_error:
+            assert retryable_error.__cause__ is not None
             if recv_resume_token:
                 e = retryable_error.__cause__
-                stderr = stderr_to_str(e.stderr) if isinstance(e, subprocess.CalledProcessError) else ""
+                stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
                 retryable_error.no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
             raise retryable_error
@@ -4354,10 +4341,12 @@ class Job:
                             f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
                             "seconds for the current request failed!"
                         )
-                    cause = retryable_error.__cause__
-                    if cause is not None:
-                        raise cause from None
-                    raise retryable_error
+                    assert retryable_error.__cause__ is not None
+                    raise retryable_error.__cause__ from None
+                    # cause = retryable_error.__cause__
+                    # if cause is not None:
+                    #     raise cause from None
+                    # raise retryable_error
 
     def incremental_send_steps_wrapper(
         self, src_snapshots: List[str], src_guids: List[str], included_guids: Set[str], is_resume: bool
@@ -5017,7 +5006,8 @@ class Job:
                 for label, s_creation in latest, oldest:
                     if loc != "all":
                         hd = "n/a"
-                        if s_creation and all_creation is not None and k >= 0:
+                        if s_creation and k >= 0:
+                            assert all_creation is not None
                             hd = human_readable_duration(int(all_creation) - int(s_creation), unit="s")
                         msgs.append(f"{prefix} Time diff between {latcom} and {label} snapshot only in {loc}: {hd}")
                 for label, s_creation in latest, oldest:
@@ -5180,7 +5170,7 @@ class Job:
             # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
             dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
             children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-            parent: Any
+            parent: Any  # aka TreeNode
             mut: TreeNodeMutableAttributes
 
             def __repr__(self) -> str:
@@ -5583,10 +5573,10 @@ class Job:
         op = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
+            return False  # make mypy happy
         except SystemExit as e:
             log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
-        return False
 
     zfs_dataset_busy_prefix = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
     zfs_dataset_busy_if_mods = re.compile((zfs_dataset_busy_prefix + ") .*").replace("(", "(?:"))
@@ -5662,30 +5652,22 @@ class Job:
         """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
         max_workers = self.max_workers[r.location]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            iterators = []
-            for cmd, cmd_args in cmd_args_list:
-
-                def submit_batch(batch, cmd=cmd):
-                    return executor.submit(fn, cmd, batch)
-
-                iterators.append(
-                    self.itr_ssh_cmd_batched(
-                        r,
-                        cmd,
-                        cmd_args,
-                        submit_batch,
-                        max_batch_items=max_batch_items,
-                    )
+            iterators = [
+                self.itr_ssh_cmd_batched(
+                    r, cmd, cmd_args, lambda batch, cmd=cmd: executor.submit(fn, cmd, batch), max_batch_items=max_batch_items  # type: ignore[misc]
                 )
+                for cmd, cmd_args in cmd_args_list
+            ]
             iterator = itertools.chain(*iterators)
             iterators.clear()  # help gc
             # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
             fifo_buffer: Deque[Future] = deque(itertools.islice(iterator, max_workers))
+            next_future: Optional[Future]
 
             if ordered:
                 while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
                     curr_future: Future = fifo_buffer.popleft()
-                    next_future: Optional[Future] = next(iterator, None)  # causes the next CLI call to be submitted
+                    next_future = next(iterator, None)  # causes the next CLI call to be submitted
                     if next_future is not None:
                         fifo_buffer.append(next_future)
                     yield curr_future.result()  # blocks until CLI returns
@@ -5695,9 +5677,9 @@ class Job:
                 while todo_futures:
                     done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                     for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
-                        fut: Optional[Future] = next(iterator, None)  # causes the next CLI call to be submitted
-                        if fut is not None:
-                            todo_futures.add(fut)
+                        next_future = next(iterator, None)  # causes the next CLI call to be submitted
+                        if next_future is not None:
+                            todo_futures.add(next_future)
                         yield done_future.result()  # does not block as processing has already completed
             assert next(iterator, None) is None
 
@@ -5789,9 +5771,7 @@ class Connection:
         ssh_cmd = self.ssh_cmd
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
-            is_trace = p.log.isEnabledFor(log_trace)
-            if is_trace:
-                p.log.log(log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
+            p.log.log(log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
                 p.log.log(log_trace, "%s", process.stderr.rstrip())
@@ -6456,15 +6436,14 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
         "years": 365 * 86400 * 1000,
     }
     match = re.fullmatch(
-        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix,
-        duration,
+        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
     )
-    if match is None:
+    if not match:
         if context:
             die(f"Invalid duration format: {duration} within {context}")
         else:
             raise ValueError(f"Invalid duration format: {duration}")
-    assert match is not None
+    assert match
     quantity = int(match.group(1))
     unit = match.group(2)
     return quantity * unit_milliseconds[unit]
@@ -6500,9 +6479,9 @@ def append_if_absent(lst: List, *items) -> List:
     return lst
 
 
-def stderr_to_str(stderr) -> str:
+def stderr_to_str(stderr: Any) -> str:
     """Workaround for https://github.com/python/cpython/issues/87597"""
-    return stderr if not isinstance(stderr, bytes) else stderr.decode("utf-8")
+    return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
 def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> None:
@@ -6804,7 +6783,8 @@ def subprocess_run(*args, **kwargs):
                 proc.kill()
                 raise e
         else:
-            exitcode = proc.poll()
+            exitcode: Optional[int] = proc.poll()
+            assert exitcode is not None
             if check and exitcode:
                 raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
     return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
@@ -7146,7 +7126,8 @@ def get_default_log_formatter(prefix: str = "", log_params: Optional[LogParams] 
             # lock-free yet thread-safe late configuration-based init for prettier ProgressReporter output
             # log_params.params and available_programs are not fully initialized yet before detect_available_programs() ends
             cols = 0
-            p = log_params.params if log_params is not None else None
+            assert log_params is not None
+            p = log_params.params
             if p is not None and "local" in p.available_programs:
                 if "pv" in p.available_programs["local"]:
                     cols = p.terminal_columns
@@ -7178,25 +7159,20 @@ def get_simple_logger(program: str) -> Logger:
 
 
 def add_trace_loglevel():
-    _log_trace = log_trace
-    if not hasattr(logging.Logger, "trace"):  # add convenience function for custom log level to the logger
-        logging.Logger.trace = lambda self, msg, *arguments: (
-            self._log(_log_trace, msg, arguments) if self.isEnabledFor(_log_trace) else None
-        )
     logging.addLevelName(log_trace, "TRACE")
 
 
 def get_syslog_address(
     address: str, log_syslog_socktype: str
 ) -> Tuple[Union[str, Tuple[str, int]], Optional[socket.SocketKind]]:
+    address = address.strip()
     socktype: Optional[socket.SocketKind] = None
-    addr_str = address.strip()
-    addr: Union[str, Tuple[str, int]] = addr_str
-    if ":" in addr_str:
-        host, port_str = addr_str.rsplit(":", 1)
+    if ":" in address:
+        host, port_str = address.rsplit(":", 1)
         addr = (host.strip(), int(port_str.strip()))
         socktype = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM  # for TCP
-    return addr, socktype
+        return addr, socktype
+    return address, socktype
 
 
 def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
@@ -7513,6 +7489,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             spec = spec.strip()
             if not (match := re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)):
                 parser.error(f"{option_string}: Invalid rank format: {spec}")
+            assert match
             is_except = bool(match.group(1))
             kind = match.group(2)
             num = int(match.group(3))
@@ -7795,8 +7772,6 @@ class CheckPercentRange(CheckRange):
 
 
 #############################################################################
-
-
 class Comparable(Protocol):
     def __lt__(self, other: Any) -> bool:  # pragma: no cover - behavior defined by implementor
         ...

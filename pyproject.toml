@@ -111,3 +111,24 @@ select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
 
 [tool.mypy]
 python_version = "3.8"
+#check_untyped_defs = true
+disable_error_code = [
+#  "assignment",
+#  "attr-defined",
+#  "name-defined",
+#  "misc",
+#  "arg-type",
+#  "return-value",
+#  "var-annotated",
+#  "union-attr",
+#  "operator",
+#  "call-overload",
+#  "no-redef",
+#  "type-var",
+#  "str-bytes-safe",
+#  "func-returns-value",
+#  "return",
+#  "exit-return",
+#  "index",
+#  "call-arg",
+]

@@ -39,7 +39,7 @@ from typing import DefaultDict, Dict, List, Optional, Set, Tuple, cast
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
-from bzfs_main.bzfs import find_match, getenv_any, Remote, PeriodAnchors
+from bzfs_main.bzfs import find_match, getenv_any, log_trace, Remote, PeriodAnchors
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 # constants:
@@ -585,9 +585,9 @@ class TestHelperFunctions(unittest.TestCase):
         log.log(bzfs.log_stderr, "%s", prefix + "bbbe2")
         log.log(bzfs.log_stdout, "%s", prefix + "bbbo2")
         log.info("%s", prefix + "bbb4")
-        log.trace("%s", prefix + "bbb5")
-        log.setLevel(bzfs.log_trace)
-        log.trace("%s", prefix + "bbb6")
+        log.log(log_trace, "%s", prefix + "bbb5")
+        log.setLevel(log_trace)
+        log.log(log_trace, "%s", prefix + "bbb6")
         files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
@@ -3773,7 +3773,7 @@ class TestConnectionPool(unittest.TestCase):
     def test_long_random_walk(self):
         log = logging.getLogger(bzfs.__name__)
         # loglevel = logging.DEBUG
-        loglevel = bzfs.log_trace
+        loglevel = log_trace
         is_logging = log.isEnabledFor(loglevel)
         num_steps = 75 if is_unit_test or is_smoke_test or is_functional_test or is_adhoc_test else 1000
         log.info(f"num_random_steps: {num_steps}")
