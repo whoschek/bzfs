@@ -45,6 +45,7 @@ from bzfs_main import bzfs
 from bzfs_main.bzfs import die_status, prog_name as bzfs_prog_name
 
 V = TypeVar("V")
+KT = TypeVar("KT")
 
 # constants:
 prog_name = "bzfs_jobrunner"
@@ -1025,7 +1026,7 @@ def shuffle_dict(dictionary: Dict[str, V]) -> Dict[str, V]:
     return dict(items)
 
 
-def sorted_dict(dictionary: Dict[str, V]) -> Dict[str, V]:
+def sorted_dict(dictionary: Dict[KT, V]) -> Dict[KT, V]:
     return dict(sorted(dictionary.items()))
 
 
