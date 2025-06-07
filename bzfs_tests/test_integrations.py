@@ -33,7 +33,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Sequence, Union, cast
 from unittest.mock import patch
 
 from bzfs_main import bzfs, bzfs_jobrunner
@@ -865,11 +865,9 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
 #############################################################################
 class TestSSHLatency(BZFSTestCase):
 
-    def run_latency_cmd(self, *params, close_fds=True):
+    def run_latency_cmd(self, cmd: Sequence[str], *, close_fds: bool = True) -> Tuple[str, str]:
         PIPE, DEVNULL = subprocess.PIPE, subprocess.DEVNULL
-        process = subprocess.run(
-            *params, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, close_fds=close_fds
-        )
+        process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, close_fds=close_fds)
         return process.stdout[0:-1], process.stderr[0:-1]  # omit trailing newline char
 
     def test_ssh_loopback_latency(self):
@@ -877,19 +875,19 @@ class TestSSHLatency(BZFSTestCase):
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
         p = bzfs.Params(args, log_params=bzfs.LogParams(args))
 
-        ssh_opts = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
-        ssh_opts += ["-S", os.path.join(p.src.ssh_socket_dir, "bzfs_test_ssh_socket")]
-        ssh_opts += ["-p", getenv_any("test_ssh_port", "22")]
+        ssh_opts_list = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
+        ssh_opts_list += ["-S", os.path.join(p.src.ssh_socket_dir, "bzfs_test_ssh_socket")]
+        ssh_opts_list += ["-p", getenv_any("test_ssh_port", "22")]
 
         private_key_file2 = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/testid_rsa"
         src_private_key2 = ["-i", private_key_file2]
         private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
         src_private_key = ["-i", private_key_file]
         if platform.system() == "Linux":
-            ssh_opts += src_private_key
+            ssh_opts_list += src_private_key
         else:
-            ssh_opts += src_private_key2
-        ssh_opts = " ".join(ssh_opts)
+            ssh_opts_list += src_private_key2
+        ssh_opts = " ".join(ssh_opts_list)
 
         for mode in range(0, 2):
             with stop_on_failure_subtest(i=mode):
@@ -914,17 +912,17 @@ class TestSSHLatency(BZFSTestCase):
                             self.assertIn("Master running", stderr)
                         log.info("now waiting for expiration of master ...")
                         time.sleep(control_persist + 1)
-                        with self.assertRaises(subprocess.CalledProcessError) as e:
+                        with self.assertRaises(subprocess.CalledProcessError) as cm:
                             self.run_latency_cmd(check_cmd)
-                        e = e.exception
-                        log.info(f"check result after expiration: {(e.stdout, e.stderr)}")
-                        self.assertNotIn("Master running", e.stderr)
-                        self.assertIn("Control socket connect", e.stderr)
-                        self.assertIn("No such file or directory", e.stderr)
+                        exc = cm.exception
+                        log.info(f"check result after expiration: {(exc.stdout, exc.stderr)}")
+                        self.assertNotIn("Master running", exc.stderr)
+                        self.assertIn("Control socket connect", exc.stderr)
+                        self.assertIn("No such file or directory", exc.stderr)
                         master_is_running = False
                     elif mode == 1:  # benchmark latency
-                        for cmd in [echo_cmd, list_cmd]:
-                            cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {cmd}")
+                        for base_cmd in [echo_cmd, list_cmd]:
+                            cmd = p.split_args(f"{ssh_program} {ssh_opts} 127.0.0.1 {base_cmd}")
                             for check in [False, True]:
                                 # for close_fds in [True]:
                                 for close_fds in [False, True]:
@@ -1543,9 +1541,9 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 if i <= 1:
-                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
+                    job = cast(bzfs.Job, self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0)))
                 else:
-                    job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--quiet", dry_run=(i == 0))
+                    job = cast(bzfs.Job, self.run_bzfs(src_root_dataset, dst_root_dataset, "--quiet", dry_run=(i == 0)))
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 if i == 0:
                     self.assertSnapshots(dst_root_dataset, 0)

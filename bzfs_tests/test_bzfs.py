@@ -31,11 +31,11 @@ import time
 import unittest
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import DefaultDict, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Container, DefaultDict, Dict, List, Optional, Set, Tuple, Union, cast
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
@@ -2054,14 +2054,14 @@ class TestBuildTree(unittest.TestCase):
 
     def test_multiple_roots_mixed_depth(self):
         datasets = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
-        expected_tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
+        expected_tree: Dict[str, Dict[str, Any]] = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_tree_with_missing_intermediate_nodes(self):
         datasets = ["a", "a/b/c", "z/2/3"]
-        expected_tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
+        expected_tree: Dict[str, Dict[str, Any]] = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
@@ -2076,7 +2076,9 @@ class TestBuildTree(unittest.TestCase):
             f"a/b/c/{BR}/prune/monitor",
             f"a/b/c/{BR}/{BR}/done",
         ]
-        expected_tree = {"a": {"b": {"c": {"0d": {}, "1d": {}, BR: {"prune": {"monitor": {}}, BR: {"done": {}}}}}}}
+        expected_tree: Dict[str, Dict[str, Any]] = {
+            "a": {"b": {"c": {"0d": {}, "1d": {}, BR: {"prune": {"monitor": {}}, BR: {"done": {}}}}}}
+        }
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
@@ -2121,21 +2123,33 @@ class TestCurrentDateTime(unittest.TestCase):
 
     def test_utc_timezone(self):
         expected = self.fixed_datetime.astimezone(tz=timezone.utc)
-        actual = bzfs.current_datetime(tz_spec="UTC", now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(tz: Optional[tzinfo] = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec="UTC", now_fn=now_fn)
         self.assertEqual(expected, actual)
 
     def test_tzoffset_positive(self):
         tz_spec = "+0530"
         tz = timezone(timedelta(hours=5, minutes=30))
         expected = self.fixed_datetime.astimezone(tz=tz)
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(_: Optional[tzinfo] = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
         self.assertEqual(expected, actual)
 
     def test_tzoffset_negative(self):
         tz_spec = "-0430"
         tz = timezone(timedelta(hours=-4, minutes=-30))
         expected = self.fixed_datetime.astimezone(tz=tz)
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(_: Optional[tzinfo] = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
         self.assertEqual(expected, actual)
 
     def test_iana_timezone(self):
@@ -3039,32 +3053,38 @@ class TestTimeRangeAction(unittest.TestCase):
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
+        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        self.assertEqual((1700000000, 1700000001), timerange)
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
         p = bzfs.Params(args)
-        self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
+        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        self.assertEqual((1700000000, 1700000001), timerange)
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertEqual(timedelta(seconds=0), p.snapshot_filters[0][0].timerange[0])
-        self.assertEqual(timedelta(seconds=60), p.snapshot_filters[0][0].timerange[1])
+        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        self.assertEqual(timedelta(seconds=0), timerange[0])
+        self.assertEqual(timedelta(seconds=60), timerange[1])
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertEqual(timedelta(seconds=1), p.snapshot_filters[0][0].timerange[0])
-        self.assertEqual(timedelta(seconds=60), p.snapshot_filters[0][0].timerange[1])
+        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        self.assertEqual(timedelta(seconds=1), timerange[0])
+        self.assertEqual(timedelta(seconds=60), timerange[1])
 
         for wildcard in wildcards:
             args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
             p = bzfs.Params(args)
-            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0][0].timerange[0])
-            self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0][0].timerange[1])
+            timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), timerange[0])
+            self.assertLess(int(time.time() + 86400 * 365 * 1000), cast(int, timerange[1]))
 
             args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + wildcard + "..2024-01-01"])
             p = bzfs.Params(args)
-            self.assertEqual(0, p.snapshot_filters[0][0].timerange[0])
-            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0][0].timerange[1])
+            timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+            self.assertEqual(0, timerange[0])
+            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), cast(int, timerange[1]))
 
     def test_filter_snapshots_by_times(self):
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
@@ -3626,8 +3646,8 @@ class TestConnectionPool(unittest.TestCase):
         counter1a = itertools.count()
         counter2a = itertools.count()
         counter1b = itertools.count()
-        self.src.local_ssh_command = lambda: [str(next(counter1a))]
-        self.src2.local_ssh_command = lambda: [str(next(counter1b))]
+        self.src.local_ssh_command = cast(Any, lambda counter=counter1a: [str(next(counter))])  # type: ignore[method-assign]
+        self.src2.local_ssh_command = cast(Any, lambda counter=counter1b: [str(next(counter))])  # type: ignore[method-assign]
 
         with self.assertRaises(AssertionError):
             bzfs.ConnectionPool(self.src, 0)
@@ -3668,7 +3688,7 @@ class TestConnectionPool(unittest.TestCase):
         self.assert_priority_queue(cpool, 1)
 
         with self.assertRaises(AssertionError):
-            cpool.return_connection(None)
+            cpool.return_connection(cast(Any, None))
         with self.assertRaises(AssertionError):
             cpool.return_connection(conn3)
         cpool.shutdown("bar")
@@ -3782,8 +3802,8 @@ class TestConnectionPool(unittest.TestCase):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
-                self.src.local_ssh_command = lambda: [str(next(counter1a))]  # noqa: B023
-                self.src2.local_ssh_command = lambda: [str(next(counter1b))]  # noqa: B023
+                self.src.local_ssh_command = cast(Any, lambda counter=counter1a: [str(next(counter))])  # type: ignore[method-assign]
+                self.src2.local_ssh_command = cast(Any, lambda counter=counter1b: [str(next(counter))])  # type: ignore[method-assign]
                 cpool = bzfs.ConnectionPool(self.src, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = bzfs.ConnectionPool(self.src2, maxsessions)
@@ -3873,18 +3893,18 @@ class TestIncrementalSendSteps(unittest.TestCase):
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic3(self):
-        input_snapshots = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
-        expected_results = ["d1", "d2", "d3", "d4"]
+        input_snapshots: List[str] = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
+        expected_results: List[str] = ["d1", "d2", "d3", "d4"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic4(self):
-        input_snapshots = ["d1"]
-        expected_results = ["d1"]
+        input_snapshots: List[str] = ["d1"]
+        expected_results: List[str] = ["d1"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic5(self):
-        input_snapshots = []
-        expected_results = []
+        input_snapshots: List[str] = []
+        expected_results: List[str] = []
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_validate_snapshot_series_excluding_hourlies_with_permutations(self):
@@ -4008,8 +4028,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
 #############################################################################
 class TestSmallPriorityQueue(unittest.TestCase):
     def setUp(self):
-        self.pq = bzfs.SmallPriorityQueue()
-        self.pq_reverse = bzfs.SmallPriorityQueue(reverse=True)
+        self.pq: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue()
+        self.pq_reverse: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue(reverse=True)
 
     def test_basic(self):
         self.assertEqual(0, len(self.pq))
@@ -4143,7 +4163,7 @@ class TestSynchronizedBool(unittest.TestCase):
         self.assertFalse(b.value)
 
         with self.assertRaises(AssertionError):
-            bzfs.SynchronizedBool("not_a_bool")
+            bzfs.SynchronizedBool(cast(Any, "not_a_bool"))
 
     def test_value_property(self):
         b = bzfs.SynchronizedBool(True)
@@ -4204,7 +4224,7 @@ class TestSynchronizedDict(unittest.TestCase):
 
     def test_delitem(self):
         del self.sync_dict["a"]
-        self.assertNotIn("a", self.sync_dict)
+        self.assertNotIn("a", cast(Container[str], self.sync_dict))
 
     def test_contains(self):
         self.assertTrue("a" in self.sync_dict)
@@ -4228,7 +4248,7 @@ class TestSynchronizedDict(unittest.TestCase):
     def test_pop(self):
         value = self.sync_dict.pop("b")
         self.assertEqual(value, 2)
-        self.assertNotIn("b", self.sync_dict)
+        self.assertNotIn("b", cast(Container[str], self.sync_dict))
 
     def test_clear(self):
         self.sync_dict.clear()
@@ -4240,7 +4260,7 @@ class TestSynchronizedDict(unittest.TestCase):
 
     def test_loop(self):
         self.sync_dict["key"] = 1
-        self.assertIn("key", self.sync_dict)
+        self.assertIn("key", cast(Container[str], self.sync_dict))
 
 
 #############################################################################
@@ -4277,7 +4297,7 @@ class TestItrSSHCmdParallel(unittest.TestCase):
     def setUp(self):
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
-        job = bzfs.Job()
+        job = cast(Any, bzfs.Job())
         job.params = p
         job.src = bzfs.Remote("src", args, p)
         job.params.connection_pools["src"] = bzfs.ConnectionPools(
@@ -4455,7 +4475,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        src_datasets = []
+        src_datasets: List[str] = []
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
             process_dataset=submit_no_skiptree,  # lambda
