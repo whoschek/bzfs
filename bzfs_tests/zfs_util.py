@@ -26,12 +26,12 @@ def set_sudo_cmd(sudo: List[str]) -> None:
     sudo_cmd = sudo
 
 
-def destroy_pool(pool_name: str, force=False) -> None:
-    force = ["-f"] if force else []
-    run_cmd(sudo_cmd + ["zpool", "destroy"] + force + [pool_name])
+def destroy_pool(pool_name: str, force: bool = False) -> None:
+    force_flag = ["-f"] if force else []
+    run_cmd(sudo_cmd + ["zpool", "destroy"] + force_flag + [pool_name])
 
 
-def destroy(name: str, recursive=False, force=False) -> None:
+def destroy(name: str, recursive: bool = False, force: bool = False) -> None:
     cmd = sudo_cmd + ["zfs", "destroy"]
     if recursive:
         cmd.append("-r")
@@ -41,7 +41,7 @@ def destroy(name: str, recursive=False, force=False) -> None:
     run_cmd(cmd)
 
 
-def destroy_snapshots(dataset: str, snapshots=[]) -> None:  # noqa: B006
+def destroy_snapshots(dataset: str, snapshots: Sequence[str] = ()) -> None:
     if len(snapshots) == 0:
         return
     if is_solaris_zfs():  # solaris-11.4 does not support passing multiple snapshots per CLI invocation
@@ -56,12 +56,14 @@ def destroy_snapshots(dataset: str, snapshots=[]) -> None:  # noqa: B006
 def create_volume(
     dataset: str,
     path: Optional[str] = None,
-    mk_parents=True,
+    mk_parents: bool = True,
     size: Optional[Union[int, str]] = None,
-    props=[],  # noqa: B006
+    props: Optional[List[str]] = None,
     blocksize: Optional[int] = None,
-    sparse=False,
+    sparse: bool = False,
 ) -> str:
+    if props is None:
+        props = []
     path = "" if path is None else "/" + path
     dataset = f"{dataset}{path}"
     cmd = sudo_cmd + ["zfs", "create"]
@@ -84,8 +86,8 @@ def create_volume(
 def create_filesystem_simple(
     dataset: str,
     path: Optional[str] = None,
-    mk_parents=True,
-    no_mount=True,
+    mk_parents: bool = True,
+    no_mount: bool = True,
     props: Optional[List[str]] = None,
 ) -> str:
     if props is None:
@@ -107,7 +109,12 @@ def create_filesystem_simple(
 zfs_version_is_at_least_2_1_0 = None
 
 
-def create_filesystem(dataset: str, path: Optional[str] = None, no_mount=True, props: Optional[List[str]] = None):
+def create_filesystem(
+    dataset: str,
+    path: Optional[str] = None,
+    no_mount: bool = True,
+    props: Optional[List[str]] = None,
+) -> str:
     """implies mk_parents=True
     if no_mount=True:
     To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
@@ -157,7 +164,14 @@ def datasets(dataset: str) -> List[str]:
     return zfs_list([dataset], types=["filesystem", "volume"], max_depth=1)[1:]
 
 
-def take_snapshot(dataset: str, snapshot_tag: str, recursive=False, props=[]) -> str:  # noqa: B006
+def take_snapshot(
+    dataset: str,
+    snapshot_tag: str,
+    recursive: bool = False,
+    props: Optional[List[str]] = None,
+) -> str:
+    if props is None:
+        props = []
     snapshot = dataset + "@" + snapshot_tag
     cmd = sudo_cmd + ["zfs", "snapshot"]
     if recursive:
@@ -208,9 +222,9 @@ def zfs_list(
     props: Optional[List[str]] = None,
     types: Optional[List[str]] = None,
     max_depth: Optional[int] = None,
-    parsable=True,
+    parsable: bool = True,
     sort_props: Optional[List[str]] = None,
-    splitlines=True,
+    splitlines: bool = True,
 ):
     cmd = ["zfs", "list"]
     if names is None:
@@ -253,10 +267,10 @@ def zfs_get(
     props: Optional[List[str]] = None,
     types: Optional[List[str]] = None,
     max_depth: Optional[int] = None,
-    parsable=True,
+    parsable: bool = True,
     fields: Optional[List[str]] = None,
     sources: Optional[List[str]] = None,
-    splitlines=True,
+    splitlines: bool = True,
 ):
     cmd = ["zfs", "get"]
     if names is None:
@@ -300,8 +314,13 @@ def zfs_get(
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_set(names: List[str] = [], properties: Mapping[str, str] = {}) -> None:  # noqa: B006
-    def run_zfs_set(props):
+def zfs_set(names: Optional[List[str]] = None, properties: Optional[Mapping[str, str]] = None) -> None:
+    if names is None:
+        names = []
+    if properties is None:
+        properties = {}
+
+    def run_zfs_set(props: Sequence[str]) -> None:
         cmd = sudo_cmd + ["zfs", "set"]
         for prop in props:
             cmd.append(prop)
@@ -319,8 +338,8 @@ def zfs_set(names: List[str] = [], properties: Mapping[str, str] = {}) -> None: 
 def zfs_inherit(
     names: Optional[List[str]] = None,
     propname: Optional[str] = None,
-    recursive=False,
-    revert=False,
+    recursive: bool = False,
+    revert: bool = False,
 ) -> None:
     if names is None:
         names = []
@@ -345,7 +364,7 @@ def dataset_exists(dataset: str) -> bool:
         return False
 
 
-def build(name: str, check=True) -> str:
+def build(name: str, check: bool = True) -> str:
     if check:
         if "@" in name:
             types = ["snapshot"]

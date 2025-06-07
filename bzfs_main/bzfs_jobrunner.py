@@ -668,7 +668,15 @@ class Job:
         log.info("Succeeded. Bye!")
 
     def replication_opts(
-        self, dst_snapshot_plan, targets, lhn: str, src_hostname: str, dst_hostname: str, tag: str, job_id: str, job_run: str
+        self,
+        dst_snapshot_plan: Dict[str, Dict[str, Dict[str, int]]],
+        targets: Set[str],
+        lhn: str,
+        src_hostname: str,
+        dst_hostname: str,
+        tag: str,
+        job_id: str,
+        job_run: str,
     ) -> List[str]:
         log = self.log
         log.debug("%s", f"Replicating targets {sorted(targets)} from {src_hostname} to {dst_hostname} ...")

@@ -57,7 +57,7 @@ is_functional_test = test_mode == "functional"  # run most tests but only in a s
 is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
 
 
-def suite():
+def suite() -> unittest.TestSuite:
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestXFinally))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
@@ -98,20 +98,20 @@ def argparser_parse_args(args: List[str]) -> argparse.Namespace:
 #############################################################################
 class TestXFinally(unittest.TestCase):
 
-    def test_xfinally_executes_cleanup_on_success(self):
+    def test_xfinally_executes_cleanup_on_success(self) -> None:
         cleanup = MagicMock()
         with bzfs.xfinally(cleanup):
             pass
         cleanup.assert_called_once()
 
-    def test_xfinally_executes_cleanup_on_exception(self):
+    def test_xfinally_executes_cleanup_on_exception(self) -> None:
         cleanup = MagicMock()
         with self.assertRaises(ValueError):
             with bzfs.xfinally(cleanup):
                 raise ValueError("Body error")
         cleanup.assert_called_once()
 
-    def test_xfinally_propagates_cleanup_exception(self):
+    def test_xfinally_propagates_cleanup_exception(self) -> None:
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
         with self.assertRaises(RuntimeError) as cm:
             with bzfs.xfinally(cleanup):
@@ -121,7 +121,7 @@ class TestXFinally(unittest.TestCase):
 
     # @unittest.skipIf(sys.version_info != (3, 10), "Requires Python <= 3.10")
     @unittest.skipIf(sys.version_info < (3, 10), "Requires Python >= 3.10")
-    def test_xfinally_handles_cleanup_exception_python_3_10_or_lower(self):
+    def test_xfinally_handles_cleanup_exception_python_3_10_or_lower(self) -> None:
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
         with self.assertRaises(ValueError) as cm:
             with bzfs.xfinally(cleanup):
@@ -131,7 +131,7 @@ class TestXFinally(unittest.TestCase):
         cleanup.assert_called_once()
 
     @unittest.skipIf(not sys.version_info >= (3, 11), "Requires Python >= 3.11")
-    def test_xfinally_handles_cleanup_exception_python_3_11_or_higher(self):
+    def test_xfinally_handles_cleanup_exception_python_3_11_or_higher(self) -> None:
         self.skipTest("disabled until python 3.11 is the minimum supported")
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
         with self.assertRaises(ExceptionGroup) as cm:  # noqa: F821  # type: ignore
@@ -167,7 +167,7 @@ class TestHelperFunctions(unittest.TestCase):
             inverted = [(s if item[0] == d else d if item[0] == s else a,) + item[1:] for item in expected]
             self.assertListEqual(inverted, self.merge_sorted_iterators(dst, src, choice))
 
-    def test_merge_sorted_iterators(self):
+    def test_merge_sorted_iterators(self) -> None:
         s, d, a = self.s, self.d, self.a
         self.assert_merge_sorted_iterators([], [], [])
         self.assert_merge_sorted_iterators([(s, "x")], ["x"], [])
@@ -184,12 +184,12 @@ class TestHelperFunctions(unittest.TestCase):
         self.assert_merge_sorted_iterators([], ["x"], ["x", "z"], s, invert=False)
         self.assert_merge_sorted_iterators([], ["y"], ["x", "z"], a)
 
-    def test_append_if_absent(self):
+    def test_append_if_absent(self) -> None:
         self.assertListEqual([], bzfs.append_if_absent([]))
         self.assertListEqual(["a"], bzfs.append_if_absent([], "a"))
         self.assertListEqual(["a"], bzfs.append_if_absent([], "a", "a"))
 
-    def test_cut(self):
+    def test_cut(self) -> None:
         lines = ["34\td1@s1", "56\td2@s2"]
         self.assertListEqual(["34", "56"], bzfs.cut(1, lines=lines))
         self.assertListEqual(["d1@s1", "d2@s2"], bzfs.cut(2, lines=lines))
@@ -198,7 +198,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(ValueError):
             bzfs.cut(0, lines=lines)
 
-    def test_get_home_directory(self):
+    def test_get_home_directory(self) -> None:
         old_home = os.environ.get("HOME")
         if old_home is not None:
             self.assertEqual(old_home, bzfs.get_home_directory())
@@ -208,7 +208,7 @@ class TestHelperFunctions(unittest.TestCase):
             finally:
                 os.environ["HOME"] = old_home
 
-    def test_tail(self):
+    def test_tail(self) -> None:
         fd, file = tempfile.mkstemp(prefix="test_bzfs.tail_")
         os.write(fd, "line1\nline2\n".encode())
         os.close(fd)
@@ -219,7 +219,7 @@ class TestHelperFunctions(unittest.TestCase):
         os.remove(file)
         self.assertEqual([], list(bzfs.tail(file, n=2)))
 
-    def test_validate_port(self):
+    def test_validate_port(self) -> None:
         bzfs.validate_port(47, "msg")
         bzfs.validate_port("47", "msg")
         bzfs.validate_port(0, "msg")
@@ -227,7 +227,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.validate_port("xxx47", "msg")
 
-    def test_validate_quoting(self):
+    def test_validate_quoting(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         params.validate_quoting([""])
         params.validate_quoting(["foo"])
@@ -238,7 +238,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             params.validate_quoting(["foo`"])
 
-    def test_validate_arg(self):
+    def test_validate_arg(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         params.validate_arg("")
         params.validate_arg("foo")
@@ -272,13 +272,13 @@ class TestHelperFunctions(unittest.TestCase):
         params.validate_arg("foo\rbar", allow_all=True)
         params.validate_arg(" foo  bar ", allow_all=True)
 
-    def test_validate_program_name_must_not_be_empty(self):
+    def test_validate_program_name_must_not_be_empty(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         args.zfs_program = ""
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
 
-    def test_split_args(self):
+    def test_split_args(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.split_args(""))
         self.assertEqual([], params.split_args("  "))
@@ -303,7 +303,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
-    def test_compile_regexes(self):
+    def test_compile_regexes(self) -> None:
         def _assertFullMatch(text: str, regex: str, re_suffix="", expected=True):
             match = bzfs.compile_regexes([regex], suffix=re_suffix)[0][0].fullmatch(text)
             if expected:
@@ -337,7 +337,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(re.error):
             bzfs.compile_regexes(["fo$o"], re_suffix)
 
-    def test_filter_lines(self):
+    def test_filter_lines(self) -> None:
         input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
 
         # Empty input_set
@@ -355,7 +355,7 @@ class TestHelperFunctions(unittest.TestCase):
         # input_set with all elements matching
         self.assertListEqual(input_list, bzfs.filter_lines(input_list, {"apple", "banana", "cherry", "date"}))
 
-    def test_filter_lines_except(self):
+    def test_filter_lines_except(self) -> None:
         input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
 
         # Empty input_set
@@ -373,7 +373,7 @@ class TestHelperFunctions(unittest.TestCase):
         # input_set with all elements from input_list (exclude all)
         self.assertListEqual([], bzfs.filter_lines_except(input_list, {"apple", "banana", "cherry", "date"}))
 
-    def test_fix_send_recv_opts(self):
+    def test_fix_send_recv_opts(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.fix_recv_opts(["-n"]))
         self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"]))
@@ -400,7 +400,7 @@ class TestHelperFunctions(unittest.TestCase):
             ["--exclude", "d1,d2", "--redact", "b1"], params.fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
         )
 
-    def test_xprint(self):
+    def test_xprint(self) -> None:
         log = logging.getLogger()
         bzfs.xprint(log, "foo")
         bzfs.xprint(log, "foo", run=True)
@@ -411,7 +411,7 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.xprint(log, "", run=False)
         bzfs.xprint(log, None)
 
-    def test_pid_exists(self):
+    def test_pid_exists(self) -> None:
         self.assertTrue(bzfs.pid_exists(os.getpid()))
         self.assertFalse(bzfs.pid_exists(-1))
         self.assertFalse(bzfs.pid_exists(0))
@@ -425,7 +425,7 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertTrue(bzfs.pid_exists(1))
 
     @patch("os.kill")
-    def test_pid_exists_with_unexpected_oserror_returns_none(self, mock_kill):
+    def test_pid_exists_with_unexpected_oserror_returns_none(self, mock_kill: MagicMock) -> None:
         # Simulate an unexpected OSError (e.g., EINVAL) and verify that pid_exists returns None.
         err = OSError()
         err.errno = errno.EINVAL
