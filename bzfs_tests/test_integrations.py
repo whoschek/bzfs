@@ -307,7 +307,7 @@ class BZFSTestCase(ParametrizedTestCase):
         no_use_bookmark: bool = False,
         skip_on_error: str = "fail",
         retries: int = 0,
-        expected_status: int = 0,
+        expected_status: Union[int, List[int]] = 0,
         error_injection_triggers: Optional[Dict[str, Counter]] = None,
         delete_injection_triggers: Optional[Dict[str, Counter]] = None,
         param_injection_triggers: Optional[Dict[str, Dict[str, bool]]] = None,
@@ -615,7 +615,7 @@ class BZFSTestCase(ParametrizedTestCase):
             "bzfs:prop7": "/tmp/foo\\bar",
         }
 
-    def generate_recv_resume_token(self, from_snapshot: str, to_snapshot: str, dst_dataset: str) -> None:
+    def generate_recv_resume_token(self, from_snapshot: Optional[str], to_snapshot: str, dst_dataset: str) -> None:
         snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
         send = f"sudo -n zfs send --props --raw --compressed -v {snapshot_opts}"
         c = bzfs.inject_dst_pipe_fail_kbytes
@@ -2572,7 +2572,7 @@ class LocalTestCase(BZFSTestCase):
                 old_recordsize = int(dataset_property(dst_root_dataset, "recordsize"))
                 new_recordsize = 8 * 1024
                 assert old_recordsize != new_recordsize
-                zfs_set([src_root_dataset + "/foo"], {"recordsize": new_recordsize})
+                zfs_set([src_root_dataset + "/foo"], {"recordsize": str(new_recordsize)})
                 preserve = ["--zfs-recv-o-include-regex", "recordsize", "volblocksize"] if i > 0 else []
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3677,7 +3677,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertEqual(0, n_all)
 
                     self.setup_basic()
-                    cmp_choices = []
+                    cmp_choices: List[str] = []
                     for w in range(0, len(bzfs.cmp_choices_items)):
                         cmp_choices += map(lambda c: "+".join(c), itertools.combinations(bzfs.cmp_choices_items, w + 1))
                     for cmp in cmp_choices:
@@ -4236,16 +4236,14 @@ class LocalTestCase(BZFSTestCase):
                 destroy(snapshots(src_foo)[1])
                 src_foo_a = build(src_root_dataset + "/foo/a")
                 destroy(snapshots(src_foo_a)[2])
-                kwargs = {}
-                if i != 0:
-                    kwargs["max_command_line_bytes"] = 1
+                max_bytes = 1 if i != 0 else None
                 self.run_bzfs(
                     src_root_dataset,
                     dst_root_dataset,
                     "--skip-replication",
                     "--delete-dst-snapshots",
                     "--delete-dst-snapshots-no-crosscheck",
-                    **kwargs,
+                    max_command_line_bytes=max_bytes,
                 )
                 self.assertSnapshotNames(dst_root_dataset, ["s2"])
                 self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
@@ -4554,7 +4552,6 @@ class LocalTestCase(BZFSTestCase):
         destroy(snapshots(src_foo)[1])
         src_foo_a = build(src_root_dataset + "/foo/a")
         destroy(snapshots(src_foo_a)[2])
-        kwargs = {}
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
@@ -4562,7 +4559,6 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
             "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
-            **kwargs,
         )
         self.assertSnapshots(dst_root_dataset, 3, "s")
         self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
