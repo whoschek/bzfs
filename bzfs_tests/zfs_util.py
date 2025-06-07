@@ -16,7 +16,7 @@
 import platform
 import re
 import subprocess
-from typing import List, Mapping, Optional, Sequence, Union
+from typing import List, Mapping, Optional, Sequence, Union, cast
 
 sudo_cmd = []
 
@@ -161,7 +161,7 @@ def create_filesystem(
 
 
 def datasets(dataset: str) -> List[str]:
-    return zfs_list([dataset], types=["filesystem", "volume"], max_depth=1)[1:]
+    return cast(List[str], zfs_list([dataset], types=["filesystem", "volume"], max_depth=1))[1:]
 
 
 def take_snapshot(
@@ -184,7 +184,7 @@ def take_snapshot(
 
 
 def snapshots(dataset: str, max_depth: Optional[int] = 1) -> List[str]:
-    return zfs_list([dataset], types=["snapshot"], max_depth=max_depth)
+    return cast(List[str], zfs_list([dataset], types=["snapshot"], max_depth=max_depth))
 
 
 def create_bookmark(dataset: str, snapshot_tag: str, bookmark_tag: str) -> str:
@@ -195,7 +195,7 @@ def create_bookmark(dataset: str, snapshot_tag: str, bookmark_tag: str) -> str:
 
 
 def bookmarks(dataset: str, max_depth: int = 1) -> List[str]:
-    return zfs_list([dataset], types=["bookmark"], max_depth=max_depth)
+    return cast(List[str], zfs_list([dataset], types=["bookmark"], max_depth=max_depth))
 
 
 def snapshot_name(snapshot: str) -> str:
@@ -207,14 +207,14 @@ def bookmark_name(bookmark: str) -> str:
 
 
 def dataset_property(dataset: str, prop: str) -> str:
-    return zfs_list([dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, splitlines=False)
+    return cast(str, zfs_list([dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, splitlines=False))
     # return zfs_get(
     #     [dataset], props=[prop], types=["filesystem", "volume"], max_depth=0, fields=["value"], splitlines=False
     # )
 
 
 def snapshot_property(snapshot: str, prop: str) -> str:
-    return zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0, splitlines=False)
+    return cast(str, zfs_list([snapshot], props=[prop], types=["snapshot"], max_depth=0, splitlines=False))
 
 
 def zfs_list(
@@ -225,7 +225,7 @@ def zfs_list(
     parsable: bool = True,
     sort_props: Optional[List[str]] = None,
     splitlines: bool = True,
-):
+) -> Union[List[str], str]:
     cmd = ["zfs", "list"]
     if names is None:
         names = []
@@ -271,7 +271,7 @@ def zfs_get(
     fields: Optional[List[str]] = None,
     sources: Optional[List[str]] = None,
     splitlines: bool = True,
-):
+) -> Union[List[str], str]:
     cmd = ["zfs", "get"]
     if names is None:
         names = []

@@ -35,7 +35,7 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Any, Container, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import Any, Container, DefaultDict, Dict, List, Optional, Sequence, Set, Tuple, Union, cast, Iterator
 
 if sys.version_info < (3, 11):
 
@@ -1718,10 +1718,10 @@ class TestHelperFunctions(unittest.TestCase):
 
 #############################################################################
 class TestTerminateProcessSubtree(unittest.TestCase):
-    def setUp(self):
-        self.children = []
+    def setUp(self) -> None:
+        self.children: List[subprocess.Popen[Any]] = []
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         for child in self.children:
             try:
                 child.kill()
@@ -2125,7 +2125,7 @@ class TestBuildTree(unittest.TestCase):
 #############################################################################
 class TestCurrentDateTime(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)  # in no timezone
 
     def test_now(self):
@@ -2230,7 +2230,7 @@ def round_datetime_up_to_duration_multiple(
 
 
 class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         # Use a fixed timezone (e.g. Eastern Standard Time, UTC-5) for all tests.
         self.tz = timezone(timedelta(hours=-5))
 
@@ -2833,7 +2833,7 @@ class TestArgumentParser(unittest.TestCase):
 #############################################################################
 class TestDatasetPairsAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--input", nargs="+", action=bzfs.DatasetPairsAction)
 
@@ -2896,7 +2896,7 @@ class TestDatasetPairsAction(unittest.TestCase):
 #############################################################################
 class TestFileOrLiteralAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--input", nargs="+", action=bzfs.FileOrLiteralAction)
 
@@ -2932,7 +2932,7 @@ class TestFileOrLiteralAction(unittest.TestCase):
 #############################################################################
 class TestNewSnapshotFilterGroupAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--new-snapshot-filter-group", action=bzfs.NewSnapshotFilterGroupAction, nargs=0)
 
@@ -2947,14 +2947,14 @@ class TestNewSnapshotFilterGroupAction(unittest.TestCase):
 
 #############################################################################
 class TestTimeRangeAction(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--time-n-ranks", action=bzfs.TimeRangeAndRankRangeAction, nargs="+")
 
-    def parse_duration(self, arg):
+    def parse_duration(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--time-n-ranks", arg + " ago..anytime"])
 
-    def parse_timestamp(self, arg):
+    def parse_timestamp(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--time-n-ranks", arg + "..anytime"])
 
     def test_parse_unix_time(self):  # Test Unix time in integer seconds
@@ -3166,11 +3166,11 @@ def filter_snapshots_by_times_and_rank(
 #############################################################################
 class TestRankRangeAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--ranks", nargs="+", action=bzfs.TimeRangeAndRankRangeAction)
 
-    def parse_args(self, arg):
+    def parse_args(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--ranks", "0..0", arg])
 
     def test_valid_ranks(self):
@@ -3421,7 +3421,7 @@ class TestRankRangeAction(unittest.TestCase):
 #############################################################################
 class TestLogConfigVariablesAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--log-config-var", nargs="+", action=bzfs.LogConfigVariablesAction)
 
@@ -3437,7 +3437,7 @@ class TestLogConfigVariablesAction(unittest.TestCase):
 #############################################################################
 class TestSafeFileNameAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("filename", action=bzfs.SafeFileNameAction)
 
@@ -3656,7 +3656,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
 #############################################################################
 class TestConnectionPool(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         args = argparser_parse_args(args=["src", "dst", "-v"])
         p = bzfs.Params(args, log=bzfs.get_logger(bzfs.LogParams(args), args))
         self.src = p.src
@@ -4069,7 +4069,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
 
 #############################################################################
 class TestSmallPriorityQueue(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.pq: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue()
         self.pq_reverse: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue(reverse=True)
 
@@ -4253,7 +4253,7 @@ class TestSynchronizedBool(unittest.TestCase):
 
 #############################################################################
 class TestSynchronizedDict(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.sync_dict = bzfs.SynchronizedDict({"a": 1, "b": 2, "c": 3})
 
     def test_getitem(self):
@@ -4307,11 +4307,11 @@ class TestSynchronizedDict(unittest.TestCase):
 
 #############################################################################
 # class TestItrSSHCmdParallel(unittest.TestCase)
-def dummy_fn_ordered(cmd, batch):
+def dummy_fn_ordered(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     return cmd, batch
 
 
-def dummy_fn_unordered(cmd, batch):
+def dummy_fn_unordered(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     if cmd[0] == "zfslist1":
         time.sleep(0.2)
     elif cmd[0] == "zfslist2":
@@ -4319,13 +4319,13 @@ def dummy_fn_unordered(cmd, batch):
     return cmd, batch
 
 
-def dummy_fn_raise(cmd, batch):
+def dummy_fn_raise(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     if cmd[0] == "fail":
         raise ValueError("Intentional failure")
     return cmd, batch
 
 
-def dummy_fn_race(cmd, batch):
+def dummy_fn_race(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     if cmd[0] == "zfslist1":
         time.sleep(0.3)
     elif cmd[0] == "zfslist2":
@@ -4336,7 +4336,7 @@ def dummy_fn_race(cmd, batch):
 
 
 class TestItrSSHCmdParallel(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         job = cast(Any, bzfs.Job())
@@ -4368,7 +4368,7 @@ class TestItrSSHCmdParallel(unittest.TestCase):
             (["zfslist2"], ["b4", "b5"]),
         ]
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         bzfs.reset_logger()
 
     def test_ordered_with_max_batch_items_2(self):
@@ -4460,13 +4460,13 @@ class TestItrSSHCmdParallel(unittest.TestCase):
 
 #############################################################################
 class TestProcessDatasetsInParallel(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args, log=bzfs.get_simple_logger("myprogram"))
         self.job = bzfs.Job()
         self.job.params = p
         self.lock = threading.Lock()
-        self.submitted = []
+        self.submitted: List[str] = []
 
     def append_submission(self, dataset):
         with self.lock:
@@ -4745,7 +4745,7 @@ class TestPerformance(unittest.TestCase):
 
 
 @contextmanager
-def stop_on_failure_subtest(**params):
+def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
     """Context manager to mimic UnitTest.subTest() but stop on first failure"""
     try:
         yield

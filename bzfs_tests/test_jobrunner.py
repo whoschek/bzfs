@@ -40,7 +40,7 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
 
     def test_validate_type(self) -> None:
@@ -88,7 +88,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3"], "foo", "x", "y")
 
-    def _make_mock_socket(self, bind_side_effect=None) -> MagicMock:
+    def _make_mock_socket(self, bind_side_effect: Optional[Exception] = None) -> MagicMock:
         sock = MagicMock()
         sock.bind.side_effect = bind_side_effect
         sock.__enter__.return_value = sock
@@ -283,7 +283,7 @@ class TestValidation(unittest.TestCase):
 
 #############################################################################
 class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
         self.log_mock = MagicMock()
         self.job.log = cast(Logger, self.log_mock)

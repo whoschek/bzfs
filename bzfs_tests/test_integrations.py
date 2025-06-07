@@ -33,7 +33,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Sequence, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Sequence, Union, Iterable, Callable, cast
 from unittest.mock import patch
 
 from bzfs_main import bzfs, bzfs_jobrunner
@@ -101,7 +101,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
 
 
-def suite():
+def suite() -> unittest.TestSuite:
     is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
@@ -5648,7 +5648,11 @@ def fix(s: str) -> str:
     return afix + s + afix
 
 
-def natsorted(iterable, key=None, reverse=False) -> List:
+def natsorted(
+    iterable: Iterable[str],
+    key: Optional[Callable[[str], str]] = None,
+    reverse: bool = False,
+) -> List[str]:
     """
     Returns a new list containing all items from the iterable in ascending order.
     If `key` is specified, it will be used to extract a comparison key from each list element.
@@ -5659,7 +5663,7 @@ def natsorted(iterable, key=None, reverse=False) -> List:
         return sorted(iterable, key=lambda x: natsort_key(key(x)), reverse=reverse)
 
 
-def natsort_key(s: str):
+def natsort_key(s: str) -> Tuple[str, int, str]:
     """Sorts strings that may contain non-negative integers according to numerical value if any two strings
     have the same non-numeric prefix. Example: s1 < s3 < s10 < s10a < s10b"""
     match = re.fullmatch(r"(\D*)(\d*)(.*)", s)
@@ -5667,7 +5671,7 @@ def natsort_key(s: str):
         prefix, num, suffix = match.groups()
         num = int(num) if num else 0
         return prefix, num, suffix
-    return s, 0
+    return s, 0, ""
 
 
 def is_solaris_zfs_at_least_11_4_42() -> bool:
