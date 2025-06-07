@@ -82,8 +82,10 @@ from typing import Any, Callable, Deque, Dict, FrozenSet, Iterable, Iterator, Li
 from typing import DefaultDict, Sequence, Set, Tuple
 from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union, Protocol
 from typing import cast
-
 from bzfs_main.utils import cut
+
+TA = TypeVar("TA")
+TRun = TypeVar("TRun")
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -1524,7 +1526,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 
 #############################################################################
 class LogParams:
-    def __init__(self, args: argparse.Namespace):
+    def __init__(self, args: argparse.Namespace) -> None:
         """Option values for logging; reads from ArgumentParser via args."""
         # immutable variables:
         if args.quiet:
@@ -1580,7 +1582,7 @@ class LogParams:
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
 RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
-Tree = Dict[str, Dict]  # Type alias
+Tree = Dict[str, Dict[str, Any]]  # Type alias
 
 
 #############################################################################
@@ -1592,7 +1594,7 @@ class Params:
         log_params: Optional[LogParams] = None,
         log: Optional[Logger] = None,
         inject_params: Optional[Dict[str, bool]] = None,
-    ):
+    ) -> None:
         """Option values for all aspects; reads from ArgumentParser via args."""
         # immutable variables:
         assert args is not None
@@ -1730,7 +1732,7 @@ class Params:
         self.zpool_features: Dict[str, Dict[str, str]] = {}
         self.connection_pools: Dict[str, "ConnectionPools"] = {}
 
-    def split_args(self, text: str, *items, allow_all: bool = False) -> List[str]:
+    def split_args(self, text: str, *items: Union[str, Iterable[str]], allow_all: bool = False) -> List[str]:
         """Splits option string on runs of one or more whitespace into an option list."""
         text = text.strip()
         opts = self.one_or_more_whitespace_regex.split(text) if text else []
@@ -1821,7 +1823,7 @@ class Params:
 
 #############################################################################
 class Remote:
-    def __init__(self, loc: str, args: argparse.Namespace, p: Params):
+    def __init__(self, loc: str, args: argparse.Namespace, p: Params) -> None:
         """Option values for either location=='src' or location=='dst'; reads from ArgumentParser via args."""
         # immutable variables:
         assert loc == "src" or loc == "dst"
@@ -1907,7 +1909,7 @@ class Remote:
 
 #############################################################################
 class CopyPropertiesConfig:
-    def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params):
+    def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params) -> None:
         """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; reads from ArgumentParser via args."""
         # immutable variables:
         grup = group
@@ -1925,7 +1927,7 @@ class CopyPropertiesConfig:
 
 #############################################################################
 class RetryPolicy:
-    def __init__(self, args: argparse.Namespace, p: Params):
+    def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Option values for retries; reads from ArgumentParser via args."""
         # immutable variables:
         self.retries: int = args.retries
@@ -1989,7 +1991,7 @@ class SnapshotLabel(NamedTuple):
 
 #############################################################################
 class SnapshotPeriods:  # thread-safe
-    def __init__(self):
+    def __init__(self) -> None:
         # immutable variables:
         self.suffix_milliseconds: Final = {
             "yearly": 365 * 86400 * 1000,
@@ -2040,7 +2042,7 @@ class SnapshotPeriods:  # thread-safe
 
 #############################################################################
 class CreateSrcSnapshotConfig:
-    def __init__(self, args: argparse.Namespace, p: Params):
+    def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Option values for --create-src-snapshots*; reads from ArgumentParser via args."""
         # immutable variables:
         self.skip_create_src_snapshots: bool = not args.create_src_snapshots
@@ -2074,7 +2076,7 @@ class CreateSrcSnapshotConfig:
             labels = []
         suffix_durations = {suffix: xperiods.suffix_to_duration1(suffix) for suffix in suffixes}
 
-        def suffix_key(suffix: str):
+        def suffix_key(suffix: str) -> Tuple[int, str]:
             duration_amount, duration_unit = suffix_durations[suffix]
             duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
             if suffix.endswith("hourly") or suffix.endswith("minutely") or suffix.endswith("secondly"):
@@ -2127,7 +2129,7 @@ class MonitorSnapshotAlert:
 
 #############################################################################
 class MonitorSnapshotsConfig:
-    def __init__(self, args: argparse.Namespace, p: Params):
+    def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Option values for --monitor-snapshots*; reads from ArgumentParser via args."""
         # immutable variables:
         self.monitor_snapshots: Dict = ast.literal_eval(args.monitor_snapshots)
@@ -2179,7 +2181,7 @@ class MonitorSnapshotsConfig:
                     if alert_latest is not None or alert_oldest is not None:
                         alerts.append(MonitorSnapshotAlert(label, alert_latest, alert_oldest))
 
-        def alert_sort_key(alert: MonitorSnapshotAlert):
+        def alert_sort_key(alert: MonitorSnapshotAlert) -> Tuple[int, SnapshotLabel]:
             duration_amount, duration_unit = xperiods.suffix_to_duration1(alert.label.suffix)
             duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
             return duration_milliseconds, alert.label
@@ -2216,7 +2218,7 @@ def run_main(args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log
 
 #############################################################################
 class Job:
-    def __init__(self):
+    def __init__(self) -> None:
         self.params: Params
         self.all_dst_dataset_exists: Dict[str, Dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
@@ -2255,21 +2257,30 @@ class Job:
         self.injection_lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: Optional[int] = None  # for testing only
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """Exit any multiplexed ssh sessions that may be leftover."""
         cache_items = self.remote_conf_cache.values()
         for i, cache_item in enumerate(cache_items):
             cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
-    def terminate(self, old_term_handler, except_current_process=False):
-        def post_shutdown():
+    def terminate(
+        self,
+        old_term_handler: Any,
+        except_current_process: bool = False,
+    ) -> None:
+        def post_shutdown() -> None:
             signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
             terminate_process_subtree(except_current_process=except_current_process)
 
         with xfinally(post_shutdown):
             self.shutdown()
 
-    def run_main(self, args: argparse.Namespace, sys_argv: Optional[List[str]] = None, log: Optional[Logger] = None):
+    def run_main(
+        self,
+        args: argparse.Namespace,
+        sys_argv: Optional[List[str]] = None,
+        log: Optional[Logger] = None,
+    ) -> None:
         assert isinstance(self.error_injection_triggers, dict)
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
@@ -2323,7 +2334,7 @@ class Job:
                                 self.shutdown()
 
     def run_tasks(self) -> None:
-        def log_error_on_exit(error, status_code):
+        def log_error_on_exit(error: Any, status_code: Union[str, int, None]) -> None:
             log.error("%s%s", f"Exiting {prog_name} with status code {status_code}. Cause: ", error)
 
         p, log = self.params, self.params.log
@@ -2431,7 +2442,7 @@ class Job:
         config.current_datetime = datetime.now(config.tz)
         return daemon_stoptime_nanos - time.monotonic_ns() > 0
 
-    def print_replication_stats(self, start_time_nanos: int):
+    def print_replication_stats(self, start_time_nanos: int) -> None:
         p, log = self.params, self.params.log
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
@@ -3741,9 +3752,11 @@ class Job:
         else:
             return "cat"
 
-    worker_thread_number_regex: re.Pattern = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
+    worker_thread_number_regex: re.Pattern[str] = re.compile(r"ThreadPoolExecutor-\d+_(\d+)")
 
-    def pv_cmd(self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar=False) -> str:
+    def pv_cmd(
+        self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar: bool = False
+    ) -> str:
         """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
         p = self.params
@@ -3772,7 +3785,14 @@ class Job:
             return "cat"
 
     def run_ssh_command(
-        self, remote: Remote, level: int = -1, is_dry=False, check=True, print_stdout=False, print_stderr=True, cmd=None
+        self,
+        remote: Remote,
+        level: int = -1,
+        is_dry: bool = False,
+        check: bool = True,
+        print_stdout: bool = False,
+        print_stderr: bool = True,
+        cmd: Optional[List[str]] = None,
     ) -> str:
         """Runs the given cmd via ssh on the given remote, and returns stdout. The full command is the concatenation
         of both the command to run on the localhost in order to talk to the remote host ($remote.local_ssh_command())
@@ -3809,8 +3829,15 @@ class Job:
             conn_pool.return_connection(conn)
 
     def try_ssh_command(
-        self, remote: Remote, level: int, is_dry=False, print_stdout=False, cmd=None, exists=True, error_trigger=None
-    ):
+        self,
+        remote: Remote,
+        level: int,
+        is_dry: bool = False,
+        print_stdout: bool = False,
+        cmd: Optional[List[str]] = None,
+        exists: bool = True,
+        error_trigger: Optional[str] = None,
+    ) -> Optional[str]:
         """Convenience method that helps retry/react to a dataset or pool that potentially doesn't exist anymore."""
         log = self.params.log
         try:
@@ -3877,26 +3904,29 @@ class Job:
             raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=self.params.timeout_nanos / 1_000_000_000)
         return delta_nanos / 1_000_000_000  # seconds
 
-    def maybe_inject_error(self, cmd=None, error_trigger: Optional[str] = None) -> None:
+    def maybe_inject_error(self, cmd: Optional[List[str]] = None, error_trigger: Optional[str] = None) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
         if error_trigger:
             counter = self.error_injection_triggers.get("before")
             if counter and self.decrement_injection_counter(counter, error_trigger):
                 try:
-                    raise CalledProcessError(returncode=1, cmd=" ".join(cmd), stderr=error_trigger + ":dataset is busy")
+                    cmd_str = " ".join(cmd or [])
+                    raise CalledProcessError(returncode=1, cmd=cmd_str, stderr=error_trigger + ":dataset is busy")
                 except subprocess.CalledProcessError as e:
                     if error_trigger.startswith("retryable_"):
                         raise RetryableError("Subprocess failed") from e
                     else:
                         raise
 
-    def maybe_inject_delete(self, remote: Remote, dataset=None, delete_trigger=None) -> None:
+    def maybe_inject_delete(
+        self, remote: Remote, dataset: Optional[str] = None, delete_trigger: Optional[str] = None
+    ) -> None:
         """For testing only; for unit tests to delete datasets during replication and test correct handling of that."""
         assert delete_trigger
         counter = self.delete_injection_triggers.get("before")
         if counter and self.decrement_injection_counter(counter, delete_trigger):
             p = self.params
-            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset)
+            cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset or "")
             self.run_ssh_command(remote, log_debug, print_stdout=True, cmd=cmd)
 
     def maybe_inject_params(self, error_trigger: str) -> None:
@@ -4124,7 +4154,7 @@ class Job:
         return snapshots
 
     def filter_properties(
-        self, props: Dict[str, Optional[str]], include_regexes, exclude_regexes
+        self, props: Dict[str, Optional[str]], include_regexes: RegexList, exclude_regexes: RegexList
     ) -> Dict[str, Optional[str]]:
         """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
         log = self.params.log
@@ -4261,7 +4291,7 @@ class Job:
                 remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
             )
 
-    def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: Optional[str], *items) -> int:
+    def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: Optional[str], *items: str) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
         p = self.params
         if p.no_estimate_send_size or self.is_solaris_zfs(remote):
@@ -4312,7 +4342,7 @@ class Job:
             results.append(regex)
         return results
 
-    def run_with_retries(self, policy: RetryPolicy, fn: Callable, *args, **kwargs) -> Any:
+    def run_with_retries(self, policy: RetryPolicy, fn: Callable[..., TRun], *args: Any, **kwargs: Any) -> TRun:
         """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
         log = self.params.log
         max_sleep_mark = policy.min_sleep_nanos
@@ -4609,7 +4639,7 @@ class Job:
 
         def create_snapshot_if_latest_is_too_old(
             datasets_to_snapshot: Dict[SnapshotLabel, List[str]], dataset: str, label: SnapshotLabel, creation_unixtime: int
-        ):
+        ) -> None:
             """Schedules creation of a snapshot for the given label if the label's existing latest snapshot is too old."""
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.log(log_trace, "Latest snapshot creation: %s for %s", creation_dt, label)
@@ -5150,7 +5180,7 @@ class Job:
         barriers_enabled: bool = bool(has_barrier or enable_barriers)
         p, log = self.params, self.params.log
 
-        def _process_dataset(dataset: str, tid: str):
+        def _process_dataset(dataset: str, tid: str) -> bool:
             start_time_nanos = time.monotonic_ns()
             try:
                 return self.run_with_retries(p.retry_policy, process_dataset, dataset, tid)
@@ -5590,12 +5620,24 @@ class Job:
         return any((proc.endswith(suffix) or infix in proc) and regex.fullmatch(proc) for proc in procs)
 
     def run_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29, sep=" "
+        self,
+        r: Remote,
+        cmd: List[str],
+        cmd_args: List[str],
+        fn: Callable[[List[str]], Any],
+        max_batch_items: int = 2**29,
+        sep: str = " ",
     ) -> None:
         drain(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items, sep=sep))
 
     def itr_ssh_cmd_batched(
-        self, r: Remote, cmd: List[str], cmd_args: List[str], fn: Callable[[List[str]], Any], max_batch_items=2**29, sep=" "
+        self,
+        r: Remote,
+        cmd: List[str],
+        cmd_args: List[str],
+        fn: Callable[[List[str]], Any],
+        max_batch_items: int = 2**29,
+        sep: str = " ",
     ) -> Generator[Any, None, None]:
         """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
         max_bytes = min(self.get_max_command_line_bytes("local"), self.get_max_command_line_bytes(r.location))
@@ -5637,7 +5679,7 @@ class Job:
         r: Remote,
         cmd_args_list: List[Tuple[List[str], List[str]]],
         fn: Callable[[List[str], List[str]], Any],
-        max_batch_items=2**29,
+        max_batch_items: int = 2**29,
     ) -> None:
         drain(self.itr_ssh_cmd_parallel(r, cmd_args_list, fn=fn, max_batch_items=max_batch_items, ordered=False))
 
@@ -5646,9 +5688,9 @@ class Job:
         r: Remote,
         cmd_args_list: List[Tuple[List[str], List[str]]],
         fn: Callable[[List[str], List[str]], Any],
-        max_batch_items=2**29,
-        ordered=True,
-    ) -> Generator:
+        max_batch_items: int = 2**29,
+        ordered: bool = True,
+    ) -> Generator[Any, None, Any]:
         """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
         max_workers = self.max_workers[r.location]
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -5683,7 +5725,9 @@ class Job:
                         yield done_future.result()  # does not block as processing has already completed
             assert next(iterator, None) is None
 
-    def zfs_list_snapshots_in_parallel(self, r: Remote, cmd: List[str], datasets: List[str], ordered=True) -> Generator:
+    def zfs_list_snapshots_in_parallel(
+        self, r: Remote, cmd: List[str], datasets: List[str], ordered: bool = True
+    ) -> Generator[Any, None, Any]:
         """Runs 'zfs list -t snapshot' on multiple datasets at the same time."""
         max_workers = self.max_workers[r.location]
         return self.itr_ssh_cmd_parallel(
@@ -5742,7 +5786,7 @@ class Connection:
     free: int  # sort order evens out the number of concurrent sessions among the TCP connections
     last_modified: int  # LIFO: tiebreaker favors latest returned conn as that's most alive and hot
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int, cid: int) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
         self.free: int = max_concurrent_ssh_sessions_per_tcp_connection
@@ -5781,7 +5825,7 @@ class Connection:
 class ConnectionPool:
     """Fetch a TCP connection for use in an SSH session, use it, finally return it back to the pool for future reuse."""
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
@@ -5835,7 +5879,7 @@ class ConnectionPool:
 class ConnectionPools:
     """A bunch of named connection pools with various multiplexing capacities."""
 
-    def __init__(self, remote: Remote, capacities: Dict[str, int]):
+    def __init__(self, remote: Remote, capacities: Dict[str, int]) -> None:
         self.pools = {name: ConnectionPool(remote, capacity) for name, capacity in capacities.items()}
 
     def __repr__(self) -> str:
@@ -5860,7 +5904,9 @@ class ProgressReporter:
     Example console status line:
     2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08"""
 
-    def __init__(self, p: Params, use_select: bool, progress_update_intervals: Optional[Tuple[float, float]], fail=False):
+    def __init__(
+        self, p: Params, use_select: bool, progress_update_intervals: Optional[Tuple[float, float]], fail: bool = False
+    ) -> None:
         # immutable variables:
         self.params: Params = p
         self.use_select: bool = use_select
@@ -6074,7 +6120,7 @@ class ProgressReporter:
 class InterruptibleSleep:
     """Provides a sleep(timeout) function that can be interrupted by another thread."""
 
-    def __init__(self, lock=None):
+    def __init__(self, lock: Optional[threading.Lock] = None) -> None:
         self.is_stopping: bool = False
         self._lock = lock if lock is not None else threading.Lock()
         self._condition = threading.Condition(self._lock)
@@ -6145,7 +6191,14 @@ def fix_solaris_raw_mode(lst: List[str]) -> List[str]:
 ssh_master_domain_socket_file_pid_regex = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
 
 
-def delete_stale_files(root_dir: str, prefix: str, millis: int = 60 * 60 * 1000, dirs=False, exclude=None, ssh=False):
+def delete_stale_files(
+    root_dir: str,
+    prefix: str,
+    millis: int = 60 * 60 * 1000,
+    dirs: bool = False,
+    exclude: Optional[str] = None,
+    ssh: bool = False,
+) -> None:
     """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
     seconds = millis / 1000
     now = time.time()
@@ -6166,7 +6219,7 @@ def delete_stale_files(root_dir: str, prefix: str, millis: int = 60 * 60 * 1000,
             pass  # harmless
 
 
-def die(msg: str, exit_code=die_status) -> None:
+def die(msg: str, exit_code: int = die_status) -> None:
     ex = SystemExit(msg)
     ex.code = exit_code
     raise ex
@@ -6225,8 +6278,11 @@ def replace_in_lines(lines: List[str], old: str, new: str, count: int = -1) -> N
         lines[i] = lines[i].replace(old, new, count)
 
 
-def has_duplicates(sorted_list: List) -> bool:
-    """Returns True if any adjacent items within the given sorted list are equal."""
+TAny = TypeVar("TAny")
+
+
+def has_duplicates(sorted_list: Sequence[TAny]) -> bool:
+    """Returns True if any adjacent items within the given sorted sequence are equal."""
     return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
 
 
@@ -6287,13 +6343,13 @@ def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     return regex
 
 
-def getenv_any(key: str, default=None) -> str:
+def getenv_any(key: str, default: Optional[str] = None) -> str:
     """All shell environment variable names used for configuration start with this prefix."""
-    return os.getenv(env_var_prefix + key, default)
+    return cast(str, os.getenv(env_var_prefix + key, default))
 
 
 def getenv_int(key: str, default: int) -> int:
-    return int(getenv_any(key, default))
+    return int(getenv_any(key, str(default)))
 
 
 def getenv_bool(key: str, default: bool = False) -> bool:
@@ -6344,19 +6400,19 @@ def find_match(
     raise ValueError(raises)
 
 
-def xappend(lst, *items) -> List[str]:
+def xappend(lst: List[TA], *items: Union[TA, Iterable[TA]]) -> List[TA]:
     """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
     If an item is an iterable does so recursively, flattening the output."""
     for item in items:
         if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
             if item:
-                lst.append(item)
+                lst.append(cast(TA, item))
         else:
             xappend(lst, *item)
     return lst
 
 
-def human_readable_bytes(num_bytes: float, separator=" ", precision=None, long=False) -> str:
+def human_readable_bytes(num_bytes: float, separator: str = " ", precision: Optional[int] = None, long: bool = False) -> str:
     sign = "-" if num_bytes < 0 else ""
     s = abs(num_bytes)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
@@ -6370,7 +6426,9 @@ def human_readable_bytes(num_bytes: float, separator=" ", precision=None, long=F
     return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
 
 
-def human_readable_duration(duration: float, unit="ns", separator="", precision=None, long=False) -> str:
+def human_readable_duration(
+    duration: float, unit: str = "ns", separator: str = "", precision: Optional[int] = None, long: bool = False
+) -> str:
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
@@ -6465,14 +6523,14 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
-def tail(file, n: int, errors=None) -> Sequence[str]:
+def tail(file: str, n: int, errors: Optional[str] = None) -> Sequence[str]:
     if not os.path.isfile(file):
         return []
     with open(file, "r", encoding="utf-8", errors=errors) as fd:
         return deque(fd, maxlen=n)
 
 
-def append_if_absent(lst: List, *items) -> List:
+def append_if_absent(lst: List[TA], *items: TA) -> List[TA]:
     for item in items:
         if item not in lst:
             lst.append(item)
@@ -6484,14 +6542,18 @@ def stderr_to_str(stderr: Any) -> str:
     return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
-def xprint(log: Logger, value, run: bool = True, end: str = "\n", file=None) -> None:
+def xprint(log: Logger, value: Any, run: bool = True, end: str = "\n", file: Optional[TextIO] = None) -> None:
     if run and value:
-        value = value if end else value.rstrip()
+        value = value if end else str(value).rstrip()
         level = log_stdout if file is sys.stdout else log_stderr
         log.log(level, "%s", value)
 
 
-def set_last_modification_time_safe(path: str, unixtime_in_secs: Union[int, Tuple[int, int]], if_more_recent=False) -> None:
+def set_last_modification_time_safe(
+    path: str,
+    unixtime_in_secs: Union[int, Tuple[int, int]],
+    if_more_recent: bool = False,
+) -> None:
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         set_last_modification_time(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
@@ -6499,7 +6561,11 @@ def set_last_modification_time_safe(path: str, unixtime_in_secs: Union[int, Tupl
         pass  # harmless
 
 
-def set_last_modification_time(path: str, unixtime_in_secs: Union[int, Tuple[int, int]], if_more_recent=False) -> None:
+def set_last_modification_time(
+    path: str,
+    unixtime_in_secs: Union[int, Tuple[int, int]],
+    if_more_recent: bool = False,
+) -> None:
     """if_more_recent=True is a concurrency control mechanism that prevents us from overwriting a newer (monotonically
     increasing) snapshots_changed value (which is a UTC Unix time in integer seconds) that might have been written to the
     cache file by a different, more up-to-date bzfs process."""
@@ -6512,7 +6578,7 @@ def set_last_modification_time(path: str, unixtime_in_secs: Union[int, Tuple[int
     os_utime(path, times=unixtime_in_secs)
 
 
-def drain(iterable: Iterable) -> None:
+def drain(iterable: Iterable[Any]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     deque(iterable, maxlen=0)
 
@@ -6529,7 +6595,7 @@ def nsuffix(s: str) -> str:
     return sys.intern("_" + s) if s else ""
 
 
-def format_dict(dictionary: Dict) -> str:
+def format_dict(dictionary: Dict[Any, Any]) -> str:
     return f'"{dictionary}"'
 
 
@@ -6762,7 +6828,7 @@ def round_datetime_up_to_duration_multiple(
         raise ValueError(f"Unsupported duration unit: {duration_unit}")
 
 
-def subprocess_run(*args, **kwargs):
+def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
     """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
     input_value = kwargs.pop("input", None)
     timeout = kwargs.pop("timeout", None)
@@ -6790,7 +6856,11 @@ def subprocess_run(*args, **kwargs):
     return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
 
 
-def terminate_process_subtree(except_current_process=False, root_pid=None, sig=signal.SIGTERM):
+def terminate_process_subtree(
+    except_current_process: bool = False,
+    root_pid: Optional[int] = None,
+    sig: signal.Signals = signal.SIGTERM,
+) -> None:
     """Sends signal also to descendant processes to also terminate processes started via subprocess.run()"""
     current_pid = os.getpid()
     root_pid = current_pid if root_pid is None else root_pid
@@ -6817,7 +6887,7 @@ def get_descendant_processes(root_pid: int) -> List[int]:
         procs[ppid].append(pid)
     descendants: List[int] = []
 
-    def recursive_append(ppid: int):
+    def recursive_append(ppid: int) -> None:
         for child_pid in procs[ppid]:
             descendants.append(child_pid)
             recursive_append(child_pid)
@@ -6987,18 +7057,22 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
         )
 
 
-def list_formatter(iterable: Iterable, separator=" ", lstrip=False):  # For lazy/noop evaluation in disabled log levels
+def list_formatter(
+    iterable: Iterable[Any],
+    separator: str = " ",
+    lstrip: bool = False,
+) -> Any:  # For lazy/noop evaluation in disabled log levels
     class CustomListFormatter:
-        def __str__(self):
+        def __str__(self) -> str:
             s = separator.join(map(str, iterable))
             return s.lstrip() if lstrip else s
 
     return CustomListFormatter()
 
 
-def pretty_print_formatter(obj_to_format):  # For lazy/noop evaluation in disabled log levels
+def pretty_print_formatter(obj_to_format: Any) -> Any:  # For lazy/noop evaluation in disabled log levels
     class PrettyPrintFormatter:
-        def __str__(self):
+        def __str__(self) -> str:
             import pprint
 
             return pprint.pformat(vars(obj_to_format))
@@ -7158,7 +7232,7 @@ def get_simple_logger(program: str) -> Logger:
     return log
 
 
-def add_trace_loglevel():
+def add_trace_loglevel() -> None:
     logging.addLevelName(log_trace, "TRACE")
 
 
@@ -7244,7 +7318,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     return logging.getLogger(get_logger_subname())
 
 
-def validate_log_config_variable(var: str) -> str:
+def validate_log_config_variable(var: str) -> Optional[str]:
     if not var.strip():
         return "Invalid log config NAME:VALUE variable. Variable must not be empty: " + var
     if ":" not in var:
@@ -7252,7 +7326,7 @@ def validate_log_config_variable(var: str) -> str:
     return validate_log_config_variable_name(var[0 : var.index(":")])
 
 
-def validate_log_config_variable_name(name: str):
+def validate_log_config_variable_name(name: str) -> Optional[str]:
     if not name:
         return "Invalid log config variable name. Name must not be empty: " + name
     bad_chars = "${} " + '"' + "'"
@@ -7267,17 +7341,17 @@ def validate_log_config_variable_name(name: str):
 class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
 
-    def __init__(self, message, no_sleep: bool = False):
+    def __init__(self, message: str, no_sleep: bool = False) -> None:
         super().__init__(message)
         self.no_sleep: bool = no_sleep
 
 
 #############################################################################
 class Tee:
-    def __init__(self, *files):
+    def __init__(self, *files: TextIO) -> None:
         self.files = files
 
-    def write(self, obj) -> None:
+    def write(self, obj: str) -> None:
         for file in self.files:
             file.write(obj)
             file.flush()  # Ensure each write is flushed immediately
@@ -7292,7 +7366,13 @@ class Tee:
 
 #############################################################################
 class NonEmptyStringAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         values = values.strip()
         if values == "":
             parser.error(f"{option_string}: Empty string is not valid")
@@ -7301,7 +7381,13 @@ class NonEmptyStringAction(argparse.Action):
 
 #############################################################################
 class DatasetPairsAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         datasets = []
         for value in values:
             if not value.startswith("+"):
@@ -7331,7 +7417,13 @@ class DatasetPairsAction(argparse.Action):
 
 #############################################################################
 class SafeFileNameAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         if ".." in values or "/" in values or "\\" in values:
             parser.error(f"Invalid file name '{values}': must not contain '..' or '/' or '\\'.")
         setattr(namespace, self.dest, values)
@@ -7339,7 +7431,13 @@ class SafeFileNameAction(argparse.Action):
 
 #############################################################################
 class NewSnapshotFilterGroupAction(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        args: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         if not hasattr(args, snapshot_filters_var):
             args.snapshot_filters_var = [[]]
         elif len(args.snapshot_filters_var[-1]) > 0:
@@ -7348,7 +7446,13 @@ class NewSnapshotFilterGroupAction(argparse.Action):
 
 #############################################################################
 class FileOrLiteralAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
@@ -7373,7 +7477,13 @@ class FileOrLiteralAction(argparse.Action):
 
 #############################################################################
 class IncludeSnapshotPlanAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         opts = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
         # The bzfs_include_snapshot_plan_excludes_outdated_snapshots env var flag is a work-around for (rare) replication
@@ -7388,7 +7498,14 @@ class IncludeSnapshotPlanAction(argparse.Action):
             opts += ["--new-snapshot-filter-group", "--include-snapshot-regex=!.*"]
         setattr(namespace, self.dest, opts)
 
-    def _add_opts(self, opts: List[str], include_snapshot_times_and_ranks: bool, parser, values, option_string=None) -> bool:
+    def _add_opts(
+        self,
+        opts: List[str],
+        include_snapshot_times_and_ranks: bool,
+        parser: argparse.ArgumentParser,
+        values: str,
+        option_string: Optional[str] = None,
+    ) -> bool:
         """Generates extra options to be parsed later during second parse_args() pass, within run_main()"""
         xperiods = SnapshotPeriods()
         has_at_least_one_filter_clause = False
@@ -7420,7 +7537,13 @@ class IncludeSnapshotPlanAction(argparse.Action):
 
 #############################################################################
 class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         opts = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
         opts += ["--delete-dst-snapshots-except"]
@@ -7437,8 +7560,14 @@ class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
 
 #############################################################################
 class TimeRangeAndRankRangeAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
-        def parse_time(time_spec):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
+        def parse_time(time_spec: str) -> Optional[Union[int, timedelta]]:
             time_spec = time_spec.strip()
             if time_spec == "*" or time_spec == "anytime":
                 return None
@@ -7459,15 +7588,15 @@ class TimeRangeAndRankRangeAction(argparse.Action):
             value = "0..0"
         if ".." not in value:
             parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
-        timerange = [parse_time(time_spec) for time_spec in value.split("..", 1)]
+        timerange_specs = [parse_time(time_spec) for time_spec in value.split("..", 1)]
         rankranges = self.parse_rankranges(parser, values[1:], option_string=option_string)
-        setattr(namespace, self.dest, [timerange] + rankranges)  # for testing only
-        timerange = self.get_include_snapshot_times(timerange)
+        setattr(namespace, self.dest, [timerange_specs] + rankranges)  # for testing only
+        timerange = self.get_include_snapshot_times(timerange_specs)
         add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
 
     @staticmethod
-    def get_include_snapshot_times(times) -> UnixTimeRange:
-        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int], default: int) -> Union[timedelta, int]:
+    def get_include_snapshot_times(times: List[Union[timedelta, int, None]]) -> UnixTimeRange:
+        def utc_unix_time_in_seconds(time_spec: Union[timedelta, int, None], default: int) -> Union[timedelta, int]:
             if isinstance(time_spec, timedelta):
                 return time_spec
             if isinstance(time_spec, int):
@@ -7484,8 +7613,12 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         return lo, hi
 
     @staticmethod
-    def parse_rankranges(parser, values, option_string=None) -> List[RankRange]:
-        def parse_rank(spec):
+    def parse_rankranges(
+        parser: argparse.ArgumentParser,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> List[RankRange]:
+        def parse_rank(spec: str) -> Tuple[bool, str, int, bool]:
             spec = spec.strip()
             if not (match := re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)):
                 parser.error(f"{option_string}: Invalid rank format: {spec}")
@@ -7550,7 +7683,7 @@ def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> No
 
 def add_time_and_rank_snapshot_filter(
     args: argparse.Namespace, dst: str, timerange: UnixTimeRange, rankranges: List[RankRange]
-):
+) -> None:
     if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
         add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
     else:
@@ -7650,7 +7783,7 @@ def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> Non
     Example: reorders --include-snapshot-regex .*daily --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 into
     --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 --include-snapshot-regex .*daily"""
 
-    def reorder_time_filters_within_section(i: int, j: int):
+    def reorder_time_filters_within_section(i: int, j: int) -> None:
         while j > i:
             filter_j = snapshot_filters[j]
             if filter_j.name == "include_snapshot_times":
@@ -7671,7 +7804,13 @@ def reorder_snapshot_time_filters(snapshot_filters: List[SnapshotFilter]) -> Non
 
 #############################################################################
 class LogConfigVariablesAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
@@ -7716,7 +7855,7 @@ class CheckRange(argparse.Action):
            'sup': operator.lt,
            'max': operator.le}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         if 'min' in kwargs and 'inf' in kwargs:
             raise ValueError('either min or inf, but not both')
         if 'max' in kwargs and 'sup' in kwargs:
@@ -7728,7 +7867,7 @@ class CheckRange(argparse.Action):
 
         super().__init__(*args, **kwargs)
 
-    def interval(self):
+    def interval(self) -> str:
         if hasattr(self, 'min'):
             lo = f'[{self.min}'
         elif hasattr(self, 'inf'):
@@ -7745,7 +7884,13 @@ class CheckRange(argparse.Action):
 
         return f'valid range: {lo}, {up}'
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         for name, op in self.ops.items():
             if hasattr(self, name) and not op(values, getattr(self, name)):
                 raise argparse.ArgumentError(self, self.interval())
@@ -7756,7 +7901,13 @@ class CheckRange(argparse.Action):
 #############################################################################
 class CheckPercentRange(CheckRange):
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
         assert isinstance(values, str)
         original = values
         values = values.strip()
@@ -7835,7 +7986,7 @@ class SmallPriorityQueue(Generic[T]):
 class SynchronizedBool:
     """Thread-safe bool."""
 
-    def __init__(self, val: bool):
+    def __init__(self, val: bool) -> None:
         assert isinstance(val, bool)
         self._lock: threading.Lock = threading.Lock()
         self._value: bool = val
@@ -7881,7 +8032,7 @@ V = TypeVar("V")
 class SynchronizedDict(Generic[K, V]):
     """Thread-safe dict."""
 
-    def __init__(self, val: Dict[K, V]):
+    def __init__(self, val: Dict[K, V]) -> None:
         assert isinstance(val, dict)
         self._lock: threading.Lock = threading.Lock()
         self._dict: Dict[K, V] = val

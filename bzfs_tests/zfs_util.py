@@ -16,7 +16,7 @@
 import platform
 import re
 import subprocess
-from typing import List, Mapping, Optional, Union
+from typing import List, Mapping, Optional, Sequence, Union
 
 sudo_cmd = []
 
@@ -169,7 +169,7 @@ def take_snapshot(dataset: str, snapshot_tag: str, recursive=False, props=[]) ->
     return snapshot
 
 
-def snapshots(dataset: str, max_depth: int = 1) -> List[str]:
+def snapshots(dataset: str, max_depth: Optional[int] = 1) -> List[str]:
     return zfs_list([dataset], types=["snapshot"], max_depth=max_depth)
 
 
@@ -397,6 +397,7 @@ def is_solaris_zfs() -> bool:
     return platform.system() == "SunOS"
 
 
-def run_cmd(*params, splitlines=True):
-    stdout = subprocess.run(*params, stdout=subprocess.PIPE, text=True, check=True).stdout
-    return stdout.splitlines() if splitlines else stdout[0:-1]  # omit trailing newline char
+def run_cmd(cmd: Sequence[str], splitlines: bool = True) -> Union[List[str], str]:
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True)
+    stdout = result.stdout or ""
+    return stdout.splitlines() if splitlines else stdout[:-1]
