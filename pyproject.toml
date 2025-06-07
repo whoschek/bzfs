@@ -111,8 +111,3 @@ select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
 
 [tool.mypy]
 python_version = "3.8"
-disable_error_code = [
-  "call-overload",
-  "no-redef",
-  "type-var",
-]

@@ -80,7 +80,7 @@ from pathlib import Path
 from subprocess import CalledProcessError, DEVNULL, PIPE
 from typing import Any, Callable, Deque, Dict, FrozenSet, Iterable, Iterator, List, Literal, NamedTuple, Optional
 from typing import DefaultDict, Sequence, Set, Tuple
-from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union
+from typing import Final, Generator, Generic, ItemsView, TextIO, Type, TypeVar, Union, Protocol
 from typing import cast
 
 from bzfs_main.utils import cut
@@ -1638,8 +1638,7 @@ class Params:
         self.force: SynchronizedBool = SynchronizedBool(args.force)
         self.force_once: bool = args.force_once
         self.force_unmount: str = "-f" if args.force_unmount else ""
-        self.force_hard: str = "-R" if args.force_destroy_dependents else ""
-        self.force_hard: str = "-R" if args.force_hard else self.force_hard  # --force-hard is deprecated
+        self.force_hard: str = "-R" if args.force_destroy_dependents or args.force_hard else ""
 
         self.skip_parent: bool = args.skip_parent
         self.skip_missing_snapshots: str = args.skip_missing_snapshots
@@ -2292,7 +2291,9 @@ class Job:
                 raise
             log_params.params = p
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
-                with contextlib.redirect_stderr(Tee(log_file_fd, sys.stderr)):  # send stderr to both logfile and stderr
+                with contextlib.redirect_stderr(
+                    cast(TextIO, Tee(log_file_fd, sys.stderr))
+                ):  # send stderr to both logfile and stderr
                     lock_file = p.lock_file_name()
                     with open(lock_file, "w") as lock_fd:
                         try:
@@ -3829,8 +3830,7 @@ class Job:
                 log.warning("%s", stderr.rstrip())
             raise RetryableError("Subprocess failed") from e
 
-    def refresh_ssh_connection_if_necessary(self, remote: Remote, conn) -> None:
-        conn: Connection = conn
+    def refresh_ssh_connection_if_necessary(self, remote: Remote, conn: "Connection") -> None:
         p, log = self.params, self.params.log
         if remote.ssh_user_host == "":
             return  # we're in local mode; no ssh required
@@ -5157,7 +5157,7 @@ class Job:
         assert "%" not in task_name
         has_barrier = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
         assert (enable_barriers is not False) or not has_barrier
-        enable_barriers: bool = has_barrier or enable_barriers
+        barriers_enabled: bool = bool(has_barrier or enable_barriers)
         p, log = self.params, self.params.log
 
         def _process_dataset(dataset: str, tid: str):
@@ -5258,7 +5258,7 @@ class Job:
                         log.error("%s", e)
                         self.append_exception(e, task_name, dataset)
 
-                    if not enable_barriers:
+                    if not barriers_enabled:
                         # This simple algorithm is sufficient for almost all use cases:
                         def simple_enqueue_children(node: TreeNode) -> None:
                             for child, grandchildren in node.children.items():  # as processing of parent has now completed
@@ -5333,7 +5333,7 @@ class Job:
                                 node.mut.pending -= 1  # mark subtree as completed
                                 assert node.mut.pending >= 0
 
-                        assert enable_barriers
+                        assert barriers_enabled
                         on_job_completion_with_barriers(done_future.node, no_skip)  # type: ignore[attr-defined]
             # endwhile submit_datasets()
             assert len(priority_queue) == 0
@@ -5695,9 +5695,9 @@ class Job:
                 while todo_futures:
                     done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
                     for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
-                        next_future: Optional[Future] = next(iterator, None)  # causes the next CLI call to be submitted
-                        if next_future is not None:
-                            todo_futures.add(next_future)
+                        fut: Optional[Future] = next(iterator, None)  # causes the next CLI call to be submitted
+                        if fut is not None:
+                            todo_futures.add(fut)
                         yield done_future.result()  # does not block as processing has already completed
             assert next(iterator, None) is None
 
@@ -7795,7 +7795,14 @@ class CheckPercentRange(CheckRange):
 
 
 #############################################################################
-T = TypeVar("T")  # Generic type variable for elements stored in a SmallPriorityQueue
+
+
+class Comparable(Protocol):
+    def __lt__(self, other: Any) -> bool:  # pragma: no cover - behavior defined by implementor
+        ...
+
+
+T = TypeVar("T", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue
 
 
 class SmallPriorityQueue(Generic[T]):
