@@ -250,7 +250,18 @@ def main(argv: Optional[List[str]] = None) -> None:
     if conclusion != "success":
         tmp_dir = tempfile.mkdtemp(prefix=f"gh_{run_id}_")
         for attempt in range(1, GH_MAX_RETRIES + 1):
-            run(["gh", "run", "download", str(run_id), "-R", args.repo, "--dir", tmp_dir])
+            run(
+                [
+                    "gh",
+                    "run",
+                    "download",
+                    str(run_id),
+                    "-R",
+                    args.repo,
+                    "--dir",
+                    tmp_dir,
+                ]
+            )
             zip_path = next(pathlib.Path(tmp_dir).glob("*.zip"), None)
             if zip_path:
                 result["log_archive"] = str(zip_path.resolve())
@@ -261,7 +272,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             extract_dir = tempfile.mkdtemp(prefix=f"gh_{run_id}_logs_")
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(extract_dir)
-            result["log_dir"] = str(pathlib.Path(extract_dir).resolve())
+            result["archive_log_dir"] = str(pathlib.Path(extract_dir).resolve())
     json.dump(result, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
 
