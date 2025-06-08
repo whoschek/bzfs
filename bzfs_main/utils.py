@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Optional
 
 
-def cut(field: int = -1, separator: str = "\t", lines: List[str] = None) -> List[str]:
+def cut(field: int = -1, separator: str = "\t", lines: Optional[List[str]] = None) -> List[str]:
     """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
+    assert lines is not None
     assert isinstance(lines, list)
     assert len(separator) == 1
     if field == 1:

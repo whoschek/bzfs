@@ -103,33 +103,54 @@ target_version = ["py38", "py39", "py310", "py311", "py312", "py313"]
 
 [tool.ruff]
 target-version = "py38"
-line-length = 127
+line-length = 125
 
 [tool.ruff.lint]
 select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
-#ignore = [ "F841" ]
+ignore = [
+#    "E501",  # Line too long
+#    "E203",  # Whitespace before ':', conflicts with Black
+#    "F401",  # Module imported but unused
+#    "F403",  # 'from module import *' used
+#    "F405",  # Name may be undefined from import *
+#    "F841",  # Local variable assigned but never used
+#    "E402",  # Module level import not at top of file
+#    "E722",  # Do not use bare 'except'
+#    "E731",  # Do not assign a lambda expression, use a def
+#    "E741",  # Do not use ambiguous variable names like 'l', 'O', 'I'
+#    "B008",  # Do not perform function calls in argument defaults
+#    "B006",  # Do not use mutable data structures for argument defaults
+#    "B007",  # Loop control variable not used within the loop body
+#    "B018",  # Found useless expression (typically typo/logic)
+#    "B005",  # Using .strip() with multi-character strings
+#    "B904",  # Raise exception with from err (except clause)
+#    "B011",  # Do not use assert False
+#    "A003"  # Class attribute is shadowing a Python builtin
+]
 
 [tool.mypy]
-modules = ["bzfs_main"]
 python_version = "3.8"
-no_implicit_optional = false
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
 disable_error_code = [
-  "assignment",
-  "attr-defined",
-  "name-defined",
-  "misc",
-  "arg-type",
-  "return-value",
-  "var-annotated",
-  "union-attr",
-  "operator",
-  "call-overload",
-  "no-redef",
-  "type-var",
-  "str-bytes-safe",
-  "func-returns-value",
-  "return",
-  "exit-return",
-  "index",
-  "call-arg",
+#    "assignment",
+#    "attr-defined",
+#    "name-defined",
+#    "misc",
+#    "arg-type",
+#    "return-value",
+#    "var-annotated",
+#    "union-attr",
+#    "operator",
+#    "call-overload",
+#    "no-redef",
+#    "type-var",
+#    "str-bytes-safe",
+#    "func-returns-value",
+#    "return",
+#    "exit-return",
+#    "index",
+#    "call-arg",
 ]
