@@ -27,6 +27,7 @@
 [![pypi](https://img.shields.io/pypi/v/bzfs.svg)](https://pypi.org/project/bzfs)
 [![zfs](https://whoschek.github.io/bzfs/badges/zfs-badge.svg)](https://github.com/whoschek/bzfs/blob/main/.github/workflows/python-app.yml)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 - [Introduction](#Introduction)
@@ -547,49 +548,36 @@ coverage report that merges all jobs of the run.
 
 
 # Unit Testing Locally
-```
-# verify zfs is installed
-zfs --version
+```bash
+# Check prerequisites
+zfs --version             # verify ZFS is installed
+python3 --version         # verify Python 3.8 or newer is installed
+sudo ls                   # verify sudo works
 
-# verify python 3.8 or higher is installed
-python3 --version
-
-# verify sudo is working
-sudo ls
-
-# set this for unit tests if sshd is on a non-standard port (default is 22)
+# If sshd uses a non-standard port
 # export bzfs_test_ssh_port=12345
-# export bzfs_test_ssh_port=22
 
-# export bzfs_test_mode=unit  # run only unit tests (takes < 5 seconds; skip integration tests)
-export bzfs_test_mode=smoke  # also run a small subset of integration tests (takes < 1 minute)
-# export bzfs_test_mode=functional  # also run most integration tests but only in a single local config (takes ~4 minutes)
-# unset bzfs_test_mode  # run all tests (this can take hours)
+# Choose test scope
+# export bzfs_test_mode=unit       # unit tests only (takes < 5 seconds)
+export bzfs_test_mode=smoke        # small, quick integration test subset (takes < 1 minute)
+# export bzfs_test_mode=functional # most integration tests but only in a single local config (takes ~4 minutes)
+# unset bzfs_test_mode             # all tests (takes ~1 hour)
 
-# verify user can ssh in passwordless via loopback interface and private key;
-# you should not be asked for a password
-ssh -p $bzfs_test_ssh_port 127.0.0.1 echo hello
+# Confirm passwordless ssh works on connecting to localhost loopback address
+# You should not get prompted for a password
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 echo hello
 
-# verify zfs is on PATH
-ssh -p $bzfs_test_ssh_port 127.0.0.1 zfs --version
+# Ensure tools are on remote PATH
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 zfs --version
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 zpool --version
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 pv --version      # enables progress reporting
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 zstd --version    # enables compression-on-the-wire
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 mbuffer --version # enables buffering
 
-# verify zpool is on PATH
-ssh -p $bzfs_test_ssh_port 127.0.0.1 zpool --version
-
-# verify zstd is on PATH for compression to become enabled
-ssh -p $bzfs_test_ssh_port 127.0.0.1 zstd --version
-
-# verify pv is on PATH for progress monitoring to become enabled
-ssh -p $bzfs_test_ssh_port 127.0.0.1 pv --version
-
-# verify mbuffer is on PATH for efficient buffering to become enabled
-ssh -p $bzfs_test_ssh_port 127.0.0.1 mbuffer --version
-
-# Finally, run unit tests. If cloned from git:
-./test.sh
-
-# Finally, run unit tests. If installed via 'pip install':
-bzfs-test
+# Run the tests
+./test.sh        # when cloned from git
+# or
+bzfs-test        # when installed via pip
 ```
 
 
@@ -1470,10 +1458,13 @@ usage: bzfs [-h] [--recursive]
     (within the specified datasets). In other words, this flag enables to specify which snapshots
     to retain instead of which snapshots to delete.
 
-    *Note*: When a real (non-dummy) source dataset is specified, snapshots selected by this
-    'retain' policy are only kept on the destination if they also exist on the source. If the
-    source is 'dummy', then snapshots on the destination are kept if they match this 'retain'
-    policy, without any check against the source.
+    *Synchronization*: When a real (non-dummy) source dataset is specified in combination with
+    --delete-dst-snapshots-except, then any destination snapshot retained by the rules above is
+    actually only retained if it also exists in the source dataset - __all other destination
+    snapshots are deleted__. This is great for synchronization use cases but should __NEVER BE
+    USED FOR LONG-TERM ARCHIVAL__. Long-term archival use cases should instead specify the
+    `dummy` source dataset as they require an independent retention policy that is not tied to
+    the current contents of the source dataset.
 
 <!-- -->
 

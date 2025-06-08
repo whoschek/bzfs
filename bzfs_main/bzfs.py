@@ -20,6 +20,7 @@
 # ///
 
 """
+* Overview of the bzfs.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing into a "Params" class.
 * All CLI option/parameter values are reachable from the "Params" class.
 * Control flow starts in main(), far below ..., which kicks off a "Job".
@@ -28,6 +29,11 @@
 * The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
 * The --create-src-snapshots-* and --delete-* and --compare-* and --monitor-* algorithms also start in run_task().
 * Consider using an IDE/editor that can open multiple windows for the same (long) file, such as PyCharm or Sublime Text, etc.
+* The main retry logic is in run_with_retries() and clear_resumable_recv_state_if_necessary().
+* Progress reporting for use during `zfs send/recv` data transfers is in class ProgressReporter.
+* Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool.
+* Caching functionality can be found by searching for this regex: .*cach.*
+* The parallel processing engine is in itr_ssh_cmd_parallel() and process_datasets_in_parallel_and_fault_tolerant().
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.sh.
 Simply run that script whenever you change or add ArgumentParser help text.
 """
@@ -933,9 +939,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--delete-dst-snapshots option, thus deleting all snapshots except for the selected snapshots (within the "
              "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other "
              "words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n"
-             "*Note*: When a real (non-dummy) source dataset is specified, snapshots selected by this 'retain' policy are "
-             "only kept on the destination if they also exist on the source. If the source is 'dummy', then snapshots on "
-             "the destination are kept if they match this 'retain' policy, without any check against the source.\n\n")
+             "*Synchronization*: When a real (non-dummy) source dataset is specified in combination with "
+             "--delete-dst-snapshots-except, then any destination snapshot retained by the rules above is actually only "
+             "retained if it also exists in the source dataset - __all other destination snapshots are deleted__. This is "
+             "great for synchronization use cases but should __NEVER BE USED FOR LONG-TERM ARCHIVAL__. Long-term archival "
+             "use cases should instead specify the `dummy` source dataset as they require an independent retention policy "
+             "that is not tied to the current contents of the source dataset.\n\n")
     parser.add_argument(
         "--delete-dst-snapshots-except-plan", action=DeleteDstSnapshotsExceptPlanAction, default=None, metavar="DICT_STRING",
         help="Retention periods to be used if pruning snapshots or bookmarks within the selected destination datasets via "
@@ -5199,7 +5208,6 @@ class Job:
                 self.barrier: Optional[TreeNode] = None  # zero or one barrier TreeNode waiting for this node to complete
 
         class TreeNode(NamedTuple):
-
             # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
             dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
             children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
@@ -5587,12 +5595,21 @@ class Job:
         )
 
     def check_zfs_dataset_busy(self, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
-        """Decline to start a state changing ZFS operation that may conflict with other currently running processes.
-        Instead, retry the operation later and only execute it when it's become safe. For example, decline to start
-        a 'zfs receive' into a destination dataset if another process is already running another 'zfs receive' into
-        the same destination dataset. However, it's actually safe to run an incremental 'zfs receive' into a dataset
-        in parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where
-        A replicates to B, and B replicates to C."""
+        """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with other
+        currently running processes. Instead, retry the operation later, after some delay. For example, decline to
+        start a 'zfs receive' into a destination dataset if another process is already running another 'zfs receive'
+        into the same destination dataset, as ZFS would reject any such attempt. However, it's actually fine to run an
+        incremental 'zfs receive' into a dataset in parallel with a 'zfs send' out of the very same dataset. This also
+        helps daisy chain use cases where A replicates to B, and B replicates to C.
+
+        check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words,
+        even if the process check below passes there is no guarantee that the destination dataset won't be busy by the
+        time we actually execute the 'zfs send' operation. In such an event ZFS will reject the operation, we'll detect
+        that, and we'll simply retry, after some delay. check_zfs_dataset_busy() can be disabled via --ps-program=-.
+
+        TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic
+        concurrency control where the parties simply retry on collisions detection (rather than coordinate concurrency
+        via a remote lock server)."""
         p, log = self.params, self.params.log
         if not self.is_program_available("ps", remote.location):
             return True
@@ -7009,7 +7026,7 @@ def parse_dataset_locator(
 
 
 def validate_dataset_name(dataset: str, input_text: str) -> None:
-    # 'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc.
+    """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
     # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
     # and https://github.com/openzfs/zfs/issues/8798
     # and (by now nomore accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
