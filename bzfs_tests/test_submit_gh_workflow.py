@@ -5,6 +5,7 @@ import io
 import json
 import pathlib
 import tempfile
+import subprocess
 from typing import Any, Callable, Iterator, List, Tuple
 
 import unittest
@@ -20,6 +21,8 @@ def _mock_subprocess_run(responses: List[Tuple[str, int, str]]) -> Callable[...,
         if not responses:
             raise RuntimeError("No more mock responses for subprocess.run")
         stdout, returncode, stderr = responses.pop(0)
+        if stdout == "TIMEOUT":
+            raise subprocess.TimeoutExpired(cmd=_args[0], timeout=_kw.get("timeout", 0))
         proc = mock.Mock()
         proc.stdout = stdout
         proc.returncode = returncode
@@ -135,7 +138,7 @@ class TestMainFlow(unittest.TestCase):
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
             ('[{"databaseId":1,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
-            ('{"status":"in_progress","conclusion":null,"htmlURL":"url","logUrl":"log"}', 0, ""),
+            ("", 0, ""),
             ('{"status":"completed","conclusion":"success","htmlURL":"url","logUrl":"log"}', 0, ""),
         ]
         with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
@@ -147,7 +150,6 @@ class TestMainFlow(unittest.TestCase):
                 sw.main(["repo", "main", yaml_path])
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "success")
-        self.assertIn(".", stderr_buf.getvalue())
 
     @mock.patch("time.sleep", lambda _x: None)
     def test_main_failure_with_log(self) -> None:
@@ -158,7 +160,7 @@ class TestMainFlow(unittest.TestCase):
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
             ('[{"databaseId":2,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
-            ('{"status":"in_progress","conclusion":null,"htmlURL":"url","logUrl":"log"}', 0, ""),
+            ("", 0, ""),
             ('{"status":"completed","conclusion":"failure","htmlURL":"url","logUrl":"log"}', 0, ""),
             ("", 0, ""),
         ]
@@ -184,7 +186,9 @@ class TestMainFlow(unittest.TestCase):
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
             ('[{"databaseId":3,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
-            ('{"status":"in_progress","conclusion":null,"htmlURL":"url","logUrl":"log"}', 0, ""),
+            ("TIMEOUT", 1, ""),
+            ("", 0, ""),
+            ("", 0, ""),
             ("", 0, ""),
         ]
 
@@ -198,6 +202,42 @@ class TestMainFlow(unittest.TestCase):
                 sw.main(["repo", "main", yaml_path, "--timeout-secs", "0"])
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "timed_out")
+
+    def test_log_download_retry(self) -> None:
+        yaml_path = self._make_yaml()
+        tmp_dir = tempfile.mkdtemp()
+        zip_path = pathlib.Path(tmp_dir) / "logs.zip"
+
+        responses: List[Tuple[str, int, str]] = [
+            ("", 0, ""),
+            ('[{"databaseId":4,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
+            ("", 0, ""),
+            ('{"status":"completed","conclusion":"failure","htmlURL":"url","logUrl":"log"}', 0, ""),
+            ("", 0, ""),
+            ("", 0, ""),
+        ]
+
+        glob_calls = []
+
+        def glob_override(self: pathlib.Path, pattern: str = "*") -> Iterator[pathlib.Path]:
+            glob_calls.append(None)
+            if len(glob_calls) == 2:
+                yield zip_path
+
+        with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
+            "bzfs_gh.submit_gh_workflow.pathlib.Path.glob",
+            glob_override,
+        ), mock.patch("bzfs_gh.submit_gh_workflow.tempfile.mkdtemp", lambda prefix: tmp_dir), mock.patch(
+            "bzfs_gh.submit_gh_workflow.network_available",
+            return_value=True,
+        ):
+            stdout_buf = io.StringIO()
+            with contextlib.redirect_stdout(stdout_buf):
+                sw.main(["repo", "main", yaml_path])
+
+        result = json.loads(stdout_buf.getvalue().strip())
+        self.assertEqual(result["log_archive"], str(zip_path.resolve()))
+        self.assertEqual(len(glob_calls), 2)
 
 
 def suite() -> unittest.TestSuite:

@@ -33,19 +33,31 @@ def network_available(host: str = "github.com", port: int = 443, timeout: int = 
         return False
 
 
-def run(cmd: List[str]) -> str:
+def run(cmd: List[str], *, capture: bool = True, check: bool = True, timeout: Optional[int] = None) -> str:
+    """Run *cmd* with retries and optional timeout.
+
+    When ``capture`` is ``False`` output is streamed to the terminal.
+    When ``check`` is ``False`` the return code is ignored after retries.
+    """
     last_err = ""
     for attempt in range(1, GH_MAX_RETRIES + 1):
-        proc: subprocess.CompletedProcess[str] = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode == 0:
-            return proc.stdout.strip()
+        proc = subprocess.run(
+            cmd,
+            capture_output=capture,
+            text=True,
+            timeout=timeout,
+        )
+        if proc.returncode == 0 or not check:
+            return proc.stdout.strip() if capture else ""
         last_err = proc.stderr.strip()
         if attempt < GH_MAX_RETRIES:
             time.sleep(GH_RETRY_DELAY)
         else:
             if last_err:
                 sys.stderr.write(last_err + "\n")
-            sys.exit(proc.returncode)
+            if check:
+                sys.exit(proc.returncode)
+            return proc.stdout.strip() if capture else ""
     return ""  # unreachable
 
 
@@ -141,31 +153,31 @@ def latest_run(repo: str, branch: str, workflow_file: str) -> JsonDict:
 
 
 def wait_done(repo: str, run_id: int, poll_secs: int, max_wait_secs: int) -> JsonDict:
-    start = time.monotonic()
-    while True:
-        raw: str = run(
-            [
-                "gh",
-                "run",
-                "view",
-                str(run_id),
-                "-R",
-                repo,
-                "--json",
-                "status,conclusion,htmlURL,logUrl",
-            ]
+    """Wait for completion using ``gh run watch`` and return final run info."""
+    try:
+        run(
+            ["gh", "run", "watch", str(run_id), "-R", repo, "--interval", str(poll_secs)],
+            capture=False,
+            check=False,
+            timeout=max_wait_secs,
         )
-        info: JsonDict = json.loads(raw)
-        if info["status"] not in ("queued", "in_progress"):
-            sys.stderr.write("\n")
-            return info
-        if time.monotonic() - start > max_wait_secs:
-            sys.stderr.write("\nTimeout waiting for workflow\n")
-            info["conclusion"] = "timed_out"
-            return info
-        sys.stderr.write(".")
-        sys.stderr.flush()
-        time.sleep(poll_secs)
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("\nTimeout waiting for workflow\n")
+        return {"conclusion": "timed_out", "status": "completed", "htmlURL": "", "logUrl": ""}
+
+    raw = run(
+        [
+            "gh",
+            "run",
+            "view",
+            str(run_id),
+            "-R",
+            repo,
+            "--json",
+            "status,conclusion,htmlURL,logUrl",
+        ]
+    )
+    return json.loads(raw)
 
 
 def main(argv: Optional[List[str]] = None) -> None:
@@ -208,10 +220,14 @@ def main(argv: Optional[List[str]] = None) -> None:
     result: JsonDict = {"run_id": run_id, "conclusion": conclusion, "html_url": final["htmlURL"]}
     if conclusion != "success":
         tmp_dir = tempfile.mkdtemp(prefix=f"gh_{run_id}_")
-        run(["gh", "run", "download", str(run_id), "-R", args.repo, "--dir", tmp_dir])
-        zip_path = next(pathlib.Path(tmp_dir).glob("*.zip"), None)
-        if zip_path:
-            result["log_archive"] = str(zip_path.resolve())
+        for attempt in range(1, GH_MAX_RETRIES + 1):
+            run(["gh", "run", "download", str(run_id), "-R", args.repo, "--dir", tmp_dir])
+            zip_path = next(pathlib.Path(tmp_dir).glob("*.zip"), None)
+            if zip_path:
+                result["log_archive"] = str(zip_path.resolve())
+                break
+            if attempt < GH_MAX_RETRIES:
+                time.sleep(GH_RETRY_DELAY)
     json.dump(result, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
 
