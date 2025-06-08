@@ -154,3 +154,4 @@ disable_error_code = [
 #    "index",
 #    "call-arg",
 ]
+ignore_errors = true

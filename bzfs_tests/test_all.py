@@ -20,6 +20,7 @@ import unittest
 from bzfs_tests.test_utils import suite as test_utils_suite
 from bzfs_tests.test_bzfs import suite as test_bzfs_suite
 from bzfs_tests.test_jobrunner import suite as test_jobrunner_suite
+from bzfs_tests.test_submit_gh_workflow import suite as test_submit_gh_workflow_suite
 from bzfs_tests.test_integrations import suite as test_integrations_suite
 from bzfs_main.bzfs import getenv_any
 
@@ -29,6 +30,7 @@ def main() -> None:
     suite.addTests(test_utils_suite())
     suite.addTests(test_bzfs_suite())
     suite.addTests(test_jobrunner_suite())
+    suite.addTests(test_submit_gh_workflow_suite())
     test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)
     if not is_unit_test:

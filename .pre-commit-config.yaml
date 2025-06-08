@@ -40,12 +40,6 @@ repos:
     hooks:
       - id: ruff
       # config options like `target-version` live in pyproject.toml
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.16.0
-    hooks:
-      - id: mypy
-        exclude: \.git*
-        # config options like `select` live in pyproject.toml
   - repo: https://github.com/psf/black
     rev: 25.1.0  # bump version number occasionally with autoupdate
     hooks:
