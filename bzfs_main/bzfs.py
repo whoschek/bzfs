@@ -3831,7 +3831,7 @@ class Job:
             else:
                 xprint(log, process.stdout, run=print_stdout, end="")
                 xprint(log, process.stderr, run=print_stderr, end="")
-                return process.stdout
+                return process.stdout  # type: ignore[no-any-return]  # need to ignore on python <= 3.8
         finally:
             conn_pool.return_connection(conn)
 
@@ -6830,7 +6830,7 @@ def round_datetime_up_to_duration_multiple(
         raise ValueError(f"Unsupported duration unit: {duration_unit}")
 
 
-def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
     """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
     input_value = kwargs.pop("input", None)
     timeout = kwargs.pop("timeout", None)
@@ -8085,9 +8085,9 @@ class _XFinally(contextlib.AbstractContextManager):
     def __init__(self, cleanup: Callable[[], None]) -> None:
         self._cleanup = cleanup  # Zero‑argument callable executed after the `with` block exits.
 
-    def __exit__(
+    def __exit__(  # type: ignore  # need to ignore on python <= 3.8
         self, exc_type: Optional[Type[BaseException]], exc: Optional[BaseException], tb: Optional[types.TracebackType]
-    ) -> Literal[False]:
+    ) -> bool:
         try:
             self._cleanup()
         except BaseException as cleanup_exc:

@@ -113,7 +113,7 @@ class TestXFinally(unittest.TestCase):
         cleanup.assert_called_once()
 
     # @unittest.skipIf(sys.version_info != (3, 10), "Requires Python <= 3.10")
-    # @unittest.skipIf(sys.version_info < (3, 10), "Requires Python >= 3.10")
+    @unittest.skipIf(sys.version_info < (3, 10), "Requires Python >= 3.10")
     def test_xfinally_handles_cleanup_exception_python_3_10_or_lower(self) -> None:
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
         with self.assertRaises(ValueError) as cm:
