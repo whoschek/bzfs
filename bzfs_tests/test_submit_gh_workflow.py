@@ -138,7 +138,7 @@ class TestMainFlow(unittest.TestCase):
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
             ('[{"databaseId":1,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
-            ("", 0, ""),
+            ("", 0, ""),  # gh run watch --exit-status (success)
             ('{"status":"completed","conclusion":"success","htmlURL":"url","logUrl":"log"}', 0, ""),
         ]
         with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
@@ -150,6 +150,7 @@ class TestMainFlow(unittest.TestCase):
                 sw.main(["repo", "main", yaml_path])
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "success")
+        self.assertEqual(result["exit_code"], 0)
 
     @mock.patch("time.sleep", lambda _x: None)
     def test_main_failure_with_log(self) -> None:
@@ -160,7 +161,7 @@ class TestMainFlow(unittest.TestCase):
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
             ('[{"databaseId":2,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
-            ("", 0, ""),
+            ("", 1, ""),
             ('{"status":"completed","conclusion":"failure","htmlURL":"url","logUrl":"log"}', 0, ""),
             ("", 0, ""),
         ]
@@ -179,6 +180,7 @@ class TestMainFlow(unittest.TestCase):
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "failure")
         self.assertEqual(result["log_archive"], str(zip_path.resolve()))
+        self.assertEqual(result["exit_code"], 1)
 
     @mock.patch("time.sleep", lambda _x: None)
     def test_main_timeout(self) -> None:
@@ -188,20 +190,31 @@ class TestMainFlow(unittest.TestCase):
             ('[{"databaseId":3,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
             ("TIMEOUT", 1, ""),
             ("", 0, ""),
-            ("", 0, ""),
-            ("", 0, ""),
         ]
+        tmp_dir = tempfile.mkdtemp()
+        zip_path = pathlib.Path(tmp_dir) / "logs.zip"
+        zip_path.touch()
 
         times = iter([0.0, 1.0])
 
         with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
             "bzfs_gh.submit_gh_workflow.time.monotonic", lambda: next(times)
-        ), mock.patch("bzfs_gh.submit_gh_workflow.network_available", return_value=True):
+        ), mock.patch(
+            "bzfs_gh.submit_gh_workflow.tempfile.mkdtemp",
+            lambda prefix: tmp_dir,
+        ), mock.patch(
+            "bzfs_gh.submit_gh_workflow.pathlib.Path.glob",
+            lambda self, pattern="*": iter([zip_path]),
+        ), mock.patch(
+            "bzfs_gh.submit_gh_workflow.network_available",
+            return_value=True,
+        ):
             stdout_buf = io.StringIO()
             with contextlib.redirect_stdout(stdout_buf):
                 sw.main(["repo", "main", yaml_path, "--timeout-secs", "0"])
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "timed_out")
+        self.assertEqual(result["exit_code"], 1)
 
     def test_log_download_retry(self) -> None:
         yaml_path = self._make_yaml()
@@ -211,7 +224,7 @@ class TestMainFlow(unittest.TestCase):
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
             ('[{"databaseId":4,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
-            ("", 0, ""),
+            ("", 1, ""),
             ('{"status":"completed","conclusion":"failure","htmlURL":"url","logUrl":"log"}', 0, ""),
             ("", 0, ""),
             ("", 0, ""),
@@ -238,6 +251,7 @@ class TestMainFlow(unittest.TestCase):
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["log_archive"], str(zip_path.resolve()))
         self.assertEqual(len(glob_calls), 2)
+        self.assertEqual(result["exit_code"], 1)
 
 
 def suite() -> unittest.TestSuite:

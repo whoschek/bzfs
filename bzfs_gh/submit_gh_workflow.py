@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import socket
 
@@ -33,7 +33,14 @@ def network_available(host: str = "github.com", port: int = 443, timeout: int = 
         return False
 
 
-def run(cmd: List[str], *, capture: bool = True, check: bool = True, timeout: Optional[int] = None) -> str:
+def run(
+    cmd: List[str],
+    *,
+    capture: bool = True,
+    check: bool = True,
+    timeout: Optional[int] = None,
+    return_proc: bool = False,
+) -> Union[str, subprocess.CompletedProcess[str]]:
     """Run *cmd* with retries and optional timeout.
 
     When ``capture`` is ``False`` output is streamed to the terminal.
@@ -48,6 +55,8 @@ def run(cmd: List[str], *, capture: bool = True, check: bool = True, timeout: Op
             timeout=timeout,
         )
         if proc.returncode == 0 or not check:
+            if return_proc:
+                return proc
             return proc.stdout.strip() if capture else ""
         last_err = proc.stderr.strip()
         if attempt < GH_MAX_RETRIES:
@@ -57,8 +66,10 @@ def run(cmd: List[str], *, capture: bool = True, check: bool = True, timeout: Op
                 sys.stderr.write(last_err + "\n")
             if check:
                 sys.exit(proc.returncode)
+            if return_proc:
+                return proc
             return proc.stdout.strip() if capture else ""
-    return ""  # unreachable
+    return proc if return_proc else ""
 
 
 def canonicalise_default(raw: Any, ptype: str) -> DefaultValue:
@@ -152,18 +163,30 @@ def latest_run(repo: str, branch: str, workflow_file: str) -> JsonDict:
     return data[0]
 
 
-def wait_done(repo: str, run_id: int, poll_secs: int, max_wait_secs: int) -> JsonDict:
-    """Wait for completion using ``gh run watch`` and return final run info."""
+def wait_done(repo: str, run_id: int, poll_secs: int, max_wait_secs: int) -> Tuple[JsonDict, int]:
+    """Wait for completion using ``gh run watch`` and return run info and exit code."""
     try:
-        run(
-            ["gh", "run", "watch", str(run_id), "-R", repo, "--interval", str(poll_secs)],
+        proc = run(
+            [
+                "gh",
+                "run",
+                "watch",
+                str(run_id),
+                "-R",
+                repo,
+                "--interval",
+                str(poll_secs),
+                "--exit-status",
+            ],
             capture=False,
             check=False,
             timeout=max_wait_secs,
+            return_proc=True,
         )
+        exit_code = proc.returncode
     except subprocess.TimeoutExpired:
         sys.stderr.write("\nTimeout waiting for workflow\n")
-        return {"conclusion": "timed_out", "status": "completed", "htmlURL": "", "logUrl": ""}
+        return ({"conclusion": "timed_out", "status": "completed", "htmlURL": "", "logUrl": ""}, 1)
 
     raw = run(
         [
@@ -177,7 +200,7 @@ def wait_done(repo: str, run_id: int, poll_secs: int, max_wait_secs: int) -> Jso
             "status,conclusion,htmlURL,logUrl",
         ]
     )
-    return json.loads(raw)
+    return json.loads(raw), exit_code
 
 
 def main(argv: Optional[List[str]] = None) -> None:
@@ -215,9 +238,14 @@ def main(argv: Optional[List[str]] = None) -> None:
     print("→", shlex.join(submit_cmd), file=sys.stderr)
     run(submit_cmd)
     run_id = int(latest_run(args.repo, args.branch, args.workflow_file)["databaseId"])
-    final = wait_done(args.repo, run_id, args.poll_secs, args.timeout_secs)
+    final, exit_code = wait_done(args.repo, run_id, args.poll_secs, args.timeout_secs)
     conclusion: str = final.get("conclusion") or "unknown"
-    result: JsonDict = {"run_id": run_id, "conclusion": conclusion, "html_url": final["htmlURL"]}
+    result: JsonDict = {
+        "run_id": run_id,
+        "conclusion": conclusion,
+        "html_url": final["htmlURL"],
+        "exit_code": exit_code,
+    }
     if conclusion != "success":
         tmp_dir = tempfile.mkdtemp(prefix=f"gh_{run_id}_")
         for attempt in range(1, GH_MAX_RETRIES + 1):
