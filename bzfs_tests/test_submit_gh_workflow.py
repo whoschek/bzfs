@@ -7,6 +7,7 @@ import pathlib
 import tempfile
 import subprocess
 from typing import Any, Callable, Iterator, List, Tuple
+import zipfile
 
 import unittest
 from unittest import mock
@@ -155,9 +156,11 @@ class TestMainFlow(unittest.TestCase):
     @mock.patch("time.sleep", lambda _x: None)
     def test_main_failure_with_log(self) -> None:
         yaml_path = self._make_yaml()
-        tmp_dir = tempfile.mkdtemp()
-        zip_path = pathlib.Path(tmp_dir) / "logs.zip"
-        zip_path.touch()
+        tmp_download = tempfile.mkdtemp()
+        tmp_extract = tempfile.mkdtemp()
+        zip_path = pathlib.Path(tmp_download) / "logs.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("dummy.txt", "hi")
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
             ('[{"databaseId":2,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
@@ -169,9 +172,10 @@ class TestMainFlow(unittest.TestCase):
         def glob_override(self: pathlib.Path, pattern: str = "*") -> Iterator[pathlib.Path]:
             yield zip_path
 
+        mkdtemp_mock = mock.Mock(side_effect=[tmp_download, tmp_extract])
         with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
             "bzfs_gh.submit_gh_workflow.pathlib.Path.glob", glob_override
-        ), mock.patch("bzfs_gh.submit_gh_workflow.tempfile.mkdtemp", lambda prefix: tmp_dir), mock.patch(
+        ), mock.patch("bzfs_gh.submit_gh_workflow.tempfile.mkdtemp", mkdtemp_mock), mock.patch(
             "bzfs_gh.submit_gh_workflow.network_available", return_value=True
         ):
             stdout_buf = io.StringIO()
@@ -180,6 +184,7 @@ class TestMainFlow(unittest.TestCase):
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "failure")
         self.assertEqual(result["log_archive"], str(zip_path.resolve()))
+        self.assertEqual(result["log_dir"], str(pathlib.Path(tmp_extract).resolve()))
         self.assertEqual(result["exit_code"], 1)
 
     @mock.patch("time.sleep", lambda _x: None)
@@ -191,17 +196,20 @@ class TestMainFlow(unittest.TestCase):
             ("TIMEOUT", 1, ""),
             ("", 0, ""),
         ]
-        tmp_dir = tempfile.mkdtemp()
-        zip_path = pathlib.Path(tmp_dir) / "logs.zip"
-        zip_path.touch()
+        tmp_download = tempfile.mkdtemp()
+        tmp_extract = tempfile.mkdtemp()
+        zip_path = pathlib.Path(tmp_download) / "logs.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("dummy.txt", "hi")
 
         times = iter([0.0, 1.0])
 
+        mkdtemp_mock = mock.Mock(side_effect=[tmp_download, tmp_extract])
         with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
             "bzfs_gh.submit_gh_workflow.time.monotonic", lambda: next(times)
         ), mock.patch(
             "bzfs_gh.submit_gh_workflow.tempfile.mkdtemp",
-            lambda prefix: tmp_dir,
+            mkdtemp_mock,
         ), mock.patch(
             "bzfs_gh.submit_gh_workflow.pathlib.Path.glob",
             lambda self, pattern="*": iter([zip_path]),
@@ -214,12 +222,16 @@ class TestMainFlow(unittest.TestCase):
                 sw.main(["repo", "main", yaml_path, "--timeout-secs", "0"])
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "timed_out")
+        self.assertEqual(result["log_dir"], str(pathlib.Path(tmp_extract).resolve()))
         self.assertEqual(result["exit_code"], 1)
 
     def test_log_download_retry(self) -> None:
         yaml_path = self._make_yaml()
-        tmp_dir = tempfile.mkdtemp()
-        zip_path = pathlib.Path(tmp_dir) / "logs.zip"
+        tmp_download = tempfile.mkdtemp()
+        tmp_extract = tempfile.mkdtemp()
+        zip_path = pathlib.Path(tmp_download) / "logs.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("dummy.txt", "hi")
 
         responses: List[Tuple[str, int, str]] = [
             ("", 0, ""),
@@ -237,10 +249,11 @@ class TestMainFlow(unittest.TestCase):
             if len(glob_calls) == 2:
                 yield zip_path
 
+        mkdtemp_mock = mock.Mock(side_effect=[tmp_download, tmp_extract])
         with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
             "bzfs_gh.submit_gh_workflow.pathlib.Path.glob",
             glob_override,
-        ), mock.patch("bzfs_gh.submit_gh_workflow.tempfile.mkdtemp", lambda prefix: tmp_dir), mock.patch(
+        ), mock.patch("bzfs_gh.submit_gh_workflow.tempfile.mkdtemp", mkdtemp_mock), mock.patch(
             "bzfs_gh.submit_gh_workflow.network_available",
             return_value=True,
         ):
@@ -250,6 +263,7 @@ class TestMainFlow(unittest.TestCase):
 
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["log_archive"], str(zip_path.resolve()))
+        self.assertEqual(result["log_dir"], str(pathlib.Path(tmp_extract).resolve()))
         self.assertEqual(len(glob_calls), 2)
         self.assertEqual(result["exit_code"], 1)
 

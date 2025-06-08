@@ -13,6 +13,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import socket
+import zipfile
 
 import yaml
 
@@ -256,6 +257,11 @@ def main(argv: Optional[List[str]] = None) -> None:
                 break
             if attempt < GH_MAX_RETRIES:
                 time.sleep(GH_RETRY_DELAY)
+        if zip_path:
+            extract_dir = tempfile.mkdtemp(prefix=f"gh_{run_id}_logs_")
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+            result["log_dir"] = str(pathlib.Path(extract_dir).resolve())
     json.dump(result, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
 
