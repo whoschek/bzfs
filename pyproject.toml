@@ -104,6 +104,11 @@ target_version = ["py38", "py39", "py310", "py311", "py312", "py313"]
 [tool.ruff]
 target-version = "py38"
 line-length = 125
+exclude = [  # temporarily ignore these dirs in development mode
+#    "bzfs_main",
+#    "bzfs_tests",
+]
+
 
 [tool.ruff.lint]
 select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
@@ -134,6 +139,7 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 warn_return_any = true
 warn_unused_ignores = true
+#ignore_errors = true  # temporarily ignore all errors in development mode
 disable_error_code = [
 #    "assignment",
 #    "attr-defined",

@@ -38,16 +38,16 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.13
     hooks:
-      - id: ruff
+      - id: ruff  # Run linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.16.0
     hooks:
-      - id: mypy
+      - id: mypy  # Run Python type checker
         exclude: \.git*
         # config options like `select` live in pyproject.toml
   - repo: https://github.com/psf/black
     rev: 25.1.0  # bump version number occasionally with autoupdate
     hooks:
-      - id: black
+      - id: black  # Run Python code formatter
       # style options like `line_length` live in pyproject.toml

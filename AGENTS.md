@@ -1,7 +1,8 @@
 # AGENT instructions
 
-- Run `pre-commit run --all-files` before each commit.
-- Run `bzfs_test_mode=unit ./test.sh` after code changes.
+- Run `pre-commit run --all-files` before each commit. This runs the hooks specified in `.pre-commit-hooks.yaml` and
+  configured in `pyproject.toml`.
+- Run `bzfs_test_mode=unit ./test.sh` after code changes. This runs the unit tests.
 - Integration tests rely on ZFS and should not be run in the sandbox.
 - New unit tests should fit into the `test_bzfs.py`/`test_jobrunner.py` framework whereas new integration tests should
   fit into the `test_integrations.py` framework.
