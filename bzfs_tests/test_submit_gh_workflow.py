@@ -84,6 +84,17 @@ class TestHelpers(unittest.TestCase):
             out = sw.run(["gh"])
         self.assertEqual(out, "ok")
 
+    def test_run_failure(self) -> None:
+        responses = [("", 1, "boom1"), ("", 1, "boom2"), ("", 1, "boom3")]
+        with mock.patch(
+            "bzfs_gh.submit_gh_workflow.subprocess.run",
+            _mock_subprocess_run(responses),
+        ), mock.patch("time.sleep", lambda _x: None):
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf), self.assertRaises(SystemExit):
+                sw.run(["gh"])
+            self.assertIn("boom3", buf.getvalue())
+
     def test_load_inputs_and_parser(self) -> None:
         with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
             tf.write(SAMPLE_YAML)
@@ -166,6 +177,27 @@ class TestMainFlow(unittest.TestCase):
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "failure")
         self.assertEqual(result["log_archive"], str(zip_path.resolve()))
+
+    @mock.patch("time.sleep", lambda _x: None)
+    def test_main_timeout(self) -> None:
+        yaml_path = self._make_yaml()
+        responses: List[Tuple[str, int, str]] = [
+            ("", 0, ""),
+            ('[{"databaseId":3,"status":"queued","conclusion":null,"htmlURL":"url"}]', 0, ""),
+            ('{"status":"in_progress","conclusion":null,"htmlURL":"url","logUrl":"log"}', 0, ""),
+            ("", 0, ""),
+        ]
+
+        times = iter([0.0, 1.0])
+
+        with mock.patch("bzfs_gh.submit_gh_workflow.subprocess.run", _mock_subprocess_run(responses)), mock.patch(
+            "bzfs_gh.submit_gh_workflow.time.monotonic", lambda: next(times)
+        ), mock.patch("bzfs_gh.submit_gh_workflow.network_available", return_value=True):
+            stdout_buf = io.StringIO()
+            with contextlib.redirect_stdout(stdout_buf):
+                sw.main(["repo", "main", yaml_path, "--timeout-secs", "0"])
+        result = json.loads(stdout_buf.getvalue().strip())
+        self.assertEqual(result["conclusion"], "timed_out")
 
 
 def suite() -> unittest.TestSuite:
