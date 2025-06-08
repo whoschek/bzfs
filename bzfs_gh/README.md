@@ -85,6 +85,29 @@ Example failure output:
 {"run_id": 5678, "conclusion": "failure", "html_url": "https://github.com/...", "log_archive": "/tmp/gh_5678/logs.zip"}
 ```
 
+## Example: running python-app.yml
+
+To run the `.github/workflows/python-app.yml` workflow for branch
+`wip/mypy5` of the repository `whoschek/bzfs`, invoke the tool like so:
+
+```sh
+python -m bzfs_gh.submit_gh_workflow \
+    whoschek/bzfs wip/mypy5 .github/workflows/python-app.yml \
+    --job-name test_ubuntu_24_04_fast --bzfs-test-mode unit --num-runs 1
+```
+
+Swap `unit` with `functional` to run integration tests with ZFS:
+
+```sh
+python -m bzfs_gh.submit_gh_workflow \
+    whoschek/bzfs wip/mypy5 .github/workflows/python-app.yml \
+    --job-name test_ubuntu_24_04_fast --bzfs-test-mode functional --num-runs 1
+```
+
+The script prints a single JSON line that Codex or any other tool can
+parse with `json.loads`.  When the workflow fails the JSON contains a
+`log_archive` field pointing to the downloaded logs.
+
 ## Troubleshooting
 
 - **Network unavailable** – the tool checks for connectivity before submitting a
