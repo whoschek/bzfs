@@ -179,21 +179,7 @@ to tank2/boo/bar:
 $ bzfs tank1/foo/bar tank2/boo/bar
 ```
 
-
-
-```
-$ zfs list -t snapshot tank1/foo/bar
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
-```
-
-
-
-```
-$ zfs list -t snapshot tank2/boo/bar
-tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
-tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
-```
+The destination now contains the same snapshots as the source.
 
 
 * Same example in pull mode:
@@ -226,16 +212,6 @@ and its descendant datasets to tank2/boo/bar:
 
 ```
 $ bzfs tank1/foo/bar tank2/boo/bar --recursive
-```
-
-
-
-```
-$ zfs list -t snapshot -r tank1/foo/bar
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_daily
-tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly
-tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_daily
-tank1/foo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly
 ```
 
 
@@ -547,49 +523,35 @@ coverage report that merges all jobs of the run.
 
 
 # Unit Testing Locally
-```
-# verify zfs is installed
-zfs --version
+```bash
+# Check prerequisites
+zfs --version             # verify ZFS
+python3 --version         # Python 3.8 or newer
+sudo ls                   # sudo must work
 
-# verify python 3.8 or higher is installed
-python3 --version
-
-# verify sudo is working
-sudo ls
-
-# set this for unit tests if sshd is on a non-standard port (default is 22)
+# If sshd uses a non-standard port
 # export bzfs_test_ssh_port=12345
-# export bzfs_test_ssh_port=22
 
-# export bzfs_test_mode=unit  # run only unit tests (takes < 5 seconds; skip integration tests)
-export bzfs_test_mode=smoke  # also run a small subset of integration tests (takes < 1 minute)
-# export bzfs_test_mode=functional  # also run most integration tests but only in a single local config (takes ~4 minutes)
-# unset bzfs_test_mode  # run all tests (this can take hours)
+# Choose test scope
+# export bzfs_test_mode=unit       # unit tests only
+export bzfs_test_mode=smoke        # small integration subset
+# export bzfs_test_mode=functional # most integration tests
+# unset bzfs_test_mode             # run everything
 
-# verify user can ssh in passwordless via loopback interface and private key;
-# you should not be asked for a password
-ssh -p $bzfs_test_ssh_port 127.0.0.1 echo hello
+# Confirm passwordless ssh to localhost
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 echo hello
 
-# verify zfs is on PATH
-ssh -p $bzfs_test_ssh_port 127.0.0.1 zfs --version
+# Ensure remote tools are on PATH
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 zfs --version
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 zpool --version
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 zstd --version   # enables compression
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 pv --version     # enables progress
+ssh -p ${bzfs_test_ssh_port:-22} 127.0.0.1 mbuffer --version  # enables buffering
 
-# verify zpool is on PATH
-ssh -p $bzfs_test_ssh_port 127.0.0.1 zpool --version
-
-# verify zstd is on PATH for compression to become enabled
-ssh -p $bzfs_test_ssh_port 127.0.0.1 zstd --version
-
-# verify pv is on PATH for progress monitoring to become enabled
-ssh -p $bzfs_test_ssh_port 127.0.0.1 pv --version
-
-# verify mbuffer is on PATH for efficient buffering to become enabled
-ssh -p $bzfs_test_ssh_port 127.0.0.1 mbuffer --version
-
-# Finally, run unit tests. If cloned from git:
-./test.sh
-
-# Finally, run unit tests. If installed via 'pip install':
-bzfs-test
+# Run the tests
+./test.sh        # when cloned from git
+# or
+bzfs-test        # when installed via pip
 ```
 
 
