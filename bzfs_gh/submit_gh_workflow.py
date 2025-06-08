@@ -272,7 +272,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             extract_dir = tempfile.mkdtemp(prefix=f"gh_{run_id}_logs_")
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(extract_dir)
-            result["archive_log_dir"] = str(pathlib.Path(extract_dir).resolve())
+            result["log_archive_dir"] = str(pathlib.Path(extract_dir).resolve())
     json.dump(result, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
 

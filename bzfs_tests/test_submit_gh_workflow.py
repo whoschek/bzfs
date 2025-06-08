@@ -184,7 +184,7 @@ class TestMainFlow(unittest.TestCase):
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "failure")
         self.assertEqual(result["log_archive"], str(zip_path.resolve()))
-        self.assertEqual(result["archive_log_dir"], str(pathlib.Path(tmp_extract).resolve()))
+        self.assertEqual(result["log_archive_dir"], str(pathlib.Path(tmp_extract).resolve()))
         self.assertEqual(result["exit_code"], 1)
 
     @mock.patch("time.sleep", lambda _x: None)
@@ -222,7 +222,7 @@ class TestMainFlow(unittest.TestCase):
                 sw.main(["repo", "main", yaml_path, "--timeout-secs", "0"])
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["conclusion"], "timed_out")
-        self.assertEqual(result["archive_log_dir"], str(pathlib.Path(tmp_extract).resolve()))
+        self.assertEqual(result["log_archive_dir"], str(pathlib.Path(tmp_extract).resolve()))
         self.assertEqual(result["exit_code"], 1)
 
     def test_log_download_retry(self) -> None:
@@ -263,7 +263,7 @@ class TestMainFlow(unittest.TestCase):
 
         result = json.loads(stdout_buf.getvalue().strip())
         self.assertEqual(result["log_archive"], str(zip_path.resolve()))
-        self.assertEqual(result["archive_log_dir"], str(pathlib.Path(tmp_extract).resolve()))
+        self.assertEqual(result["log_archive_dir"], str(pathlib.Path(tmp_extract).resolve()))
         self.assertEqual(len(glob_calls), 2)
         self.assertEqual(result["exit_code"], 1)
 

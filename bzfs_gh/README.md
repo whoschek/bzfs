@@ -72,7 +72,7 @@ The JSON object contains the following keys:
 - `html_url` – URL of the workflow run
 - `log_archive` – path to the downloaded log archive when the conclusion is not
   `success`
-- `archive_log_dir` – directory containing the extracted log files when the
+- `log_archive_dir` – directory containing the extracted log files when the
   conclusion is not `success`
 
 Example success output:
@@ -84,7 +84,7 @@ Example success output:
 Example failure output:
 
 ```json
-{"run_id": 5678, "conclusion": "failure", "html_url": "https://github.com/...", "log_archive": "/tmp/gh_5678/logs.zip", "archive_log_dir": "/tmp/gh_logs_5678"}
+{"run_id": 5678, "conclusion": "failure", "html_url": "https://github.com/...", "log_archive": "/tmp/gh_5678/logs.zip", "log_archive_dir": "/tmp/gh_logs_5678"}
 ```
 
 ## Example: running python-app.yml
@@ -108,7 +108,7 @@ python -m bzfs_gh.submit_gh_workflow \
 
 The script prints a single JSON line that Codex or any other tool can
 parse with `json.loads`.  When the workflow fails the JSON contains
-`log_archive` and `archive_log_dir` fields pointing to the downloaded and
+`log_archive` and `log_archive_dir` fields pointing to the downloaded and
 extracted logs.
 
 ## Troubleshooting
