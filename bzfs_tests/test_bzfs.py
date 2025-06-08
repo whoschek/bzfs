@@ -31,15 +31,15 @@ import time
 import unittest
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, DefaultDict, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union, cast
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
-from bzfs_main.bzfs import find_match, getenv_any, Remote, PeriodAnchors
+from bzfs_main.bzfs import find_match, getenv_any, log_trace, Remote, PeriodAnchors
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 # constants:
@@ -50,7 +50,7 @@ is_functional_test = test_mode == "functional"  # run most tests but only in a s
 is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
 
 
-def suite():
+def suite() -> unittest.TestSuite:
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestXFinally))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
@@ -91,20 +91,20 @@ def argparser_parse_args(args: List[str]) -> argparse.Namespace:
 #############################################################################
 class TestXFinally(unittest.TestCase):
 
-    def test_xfinally_executes_cleanup_on_success(self):
+    def test_xfinally_executes_cleanup_on_success(self) -> None:
         cleanup = MagicMock()
         with bzfs.xfinally(cleanup):
             pass
         cleanup.assert_called_once()
 
-    def test_xfinally_executes_cleanup_on_exception(self):
+    def test_xfinally_executes_cleanup_on_exception(self) -> None:
         cleanup = MagicMock()
         with self.assertRaises(ValueError):
             with bzfs.xfinally(cleanup):
                 raise ValueError("Body error")
         cleanup.assert_called_once()
 
-    def test_xfinally_propagates_cleanup_exception(self):
+    def test_xfinally_propagates_cleanup_exception(self) -> None:
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
         with self.assertRaises(RuntimeError) as cm:
             with bzfs.xfinally(cleanup):
@@ -113,8 +113,8 @@ class TestXFinally(unittest.TestCase):
         cleanup.assert_called_once()
 
     # @unittest.skipIf(sys.version_info != (3, 10), "Requires Python <= 3.10")
-    @unittest.skipIf(sys.version_info < (3, 10), "Requires Python >= 3.10")
-    def test_xfinally_handles_cleanup_exception_python_3_10_or_lower(self):
+    # @unittest.skipIf(sys.version_info < (3, 10), "Requires Python >= 3.10")
+    def test_xfinally_handles_cleanup_exception_python_3_10_or_lower(self) -> None:
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
         with self.assertRaises(ValueError) as cm:
             with bzfs.xfinally(cleanup):
@@ -124,10 +124,10 @@ class TestXFinally(unittest.TestCase):
         cleanup.assert_called_once()
 
     @unittest.skipIf(not sys.version_info >= (3, 11), "Requires Python >= 3.11")
-    def test_xfinally_handles_cleanup_exception_python_3_11_or_higher(self):
+    def test_xfinally_handles_cleanup_exception_python_3_11_or_higher(self) -> None:
         self.skipTest("disabled until python 3.11 is the minimum supported")
         cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
-        with self.assertRaises(ExceptionGroup) as cm:  # noqa: F821  # type: ignore
+        with self.assertRaises(ExceptionGroup) as cm:  # type: ignore  # noqa: F821
             with bzfs.xfinally(cleanup):
                 raise ValueError("Body error")
         self.assertEqual(2, len(cm.exception.exceptions))
@@ -142,17 +142,17 @@ class TestHelperFunctions(unittest.TestCase):
     d = "d"
     a = "a"
 
-    def merge_sorted_iterators(self, src: List[str], dst: List[str], choice: str) -> List[Tuple]:
+    def merge_sorted_iterators(self, src: List[Any], dst: List[Any], choice: str) -> List[Tuple[Any, ...]]:
         s, d, a = self.s, self.d, self.a
         return [item for item in bzfs.Job().merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst))]
 
     def assert_merge_sorted_iterators(
         self,
-        expected: List[Tuple],
-        src: List[str],
-        dst: List[str],
-        choice=f"{s}+{d}+{a}",
-        invert=True,
+        expected: List[Tuple[Any, ...]],
+        src: List[Any],
+        dst: List[Any],
+        choice: str = f"{s}+{d}+{a}",
+        invert: bool = True,
     ) -> None:
         s, d, a = self.s, self.d, self.a
         self.assertListEqual(expected, self.merge_sorted_iterators(src, dst, choice))
@@ -160,7 +160,7 @@ class TestHelperFunctions(unittest.TestCase):
             inverted = [(s if item[0] == d else d if item[0] == s else a,) + item[1:] for item in expected]
             self.assertListEqual(inverted, self.merge_sorted_iterators(dst, src, choice))
 
-    def test_merge_sorted_iterators(self):
+    def test_merge_sorted_iterators(self) -> None:
         s, d, a = self.s, self.d, self.a
         self.assert_merge_sorted_iterators([], [], [])
         self.assert_merge_sorted_iterators([(s, "x")], ["x"], [])
@@ -177,12 +177,12 @@ class TestHelperFunctions(unittest.TestCase):
         self.assert_merge_sorted_iterators([], ["x"], ["x", "z"], s, invert=False)
         self.assert_merge_sorted_iterators([], ["y"], ["x", "z"], a)
 
-    def test_append_if_absent(self):
+    def test_append_if_absent(self) -> None:
         self.assertListEqual([], bzfs.append_if_absent([]))
         self.assertListEqual(["a"], bzfs.append_if_absent([], "a"))
         self.assertListEqual(["a"], bzfs.append_if_absent([], "a", "a"))
 
-    def test_cut(self):
+    def test_cut(self) -> None:
         lines = ["34\td1@s1", "56\td2@s2"]
         self.assertListEqual(["34", "56"], bzfs.cut(1, lines=lines))
         self.assertListEqual(["d1@s1", "d2@s2"], bzfs.cut(2, lines=lines))
@@ -191,7 +191,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(ValueError):
             bzfs.cut(0, lines=lines)
 
-    def test_get_home_directory(self):
+    def test_get_home_directory(self) -> None:
         old_home = os.environ.get("HOME")
         if old_home is not None:
             self.assertEqual(old_home, bzfs.get_home_directory())
@@ -201,7 +201,7 @@ class TestHelperFunctions(unittest.TestCase):
             finally:
                 os.environ["HOME"] = old_home
 
-    def test_tail(self):
+    def test_tail(self) -> None:
         fd, file = tempfile.mkstemp(prefix="test_bzfs.tail_")
         os.write(fd, "line1\nline2\n".encode())
         os.close(fd)
@@ -212,7 +212,7 @@ class TestHelperFunctions(unittest.TestCase):
         os.remove(file)
         self.assertEqual([], list(bzfs.tail(file, n=2)))
 
-    def test_validate_port(self):
+    def test_validate_port(self) -> None:
         bzfs.validate_port(47, "msg")
         bzfs.validate_port("47", "msg")
         bzfs.validate_port(0, "msg")
@@ -220,7 +220,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.validate_port("xxx47", "msg")
 
-    def test_validate_quoting(self):
+    def test_validate_quoting(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         params.validate_quoting([""])
         params.validate_quoting(["foo"])
@@ -231,7 +231,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             params.validate_quoting(["foo`"])
 
-    def test_validate_arg(self):
+    def test_validate_arg(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         params.validate_arg("")
         params.validate_arg("foo")
@@ -265,13 +265,13 @@ class TestHelperFunctions(unittest.TestCase):
         params.validate_arg("foo\rbar", allow_all=True)
         params.validate_arg(" foo  bar ", allow_all=True)
 
-    def test_validate_program_name_must_not_be_empty(self):
+    def test_validate_program_name_must_not_be_empty(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         args.zfs_program = ""
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
 
-    def test_split_args(self):
+    def test_split_args(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.split_args(""))
         self.assertEqual([], params.split_args("  "))
@@ -296,18 +296,18 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
-    def test_compile_regexes(self):
-        def _assertFullMatch(text: str, regex: str, re_suffix="", expected=True):
+    def test_compile_regexes(self) -> None:
+        def _assertFullMatch(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
             match = bzfs.compile_regexes([regex], suffix=re_suffix)[0][0].fullmatch(text)
             if expected:
                 self.assertTrue(match)
             else:
                 self.assertFalse(match)
 
-        def assertFullMatch(text: str, regex: str, re_suffix=""):
+        def assertFullMatch(text: str, regex: str, re_suffix: str = "") -> None:
             _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=True)
 
-        def assertNotFullMatch(text: str, regex: str, re_suffix=""):
+        def assertNotFullMatch(text: str, regex: str, re_suffix: str = "") -> None:
             _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=False)
 
         re_suffix = bzfs.Job().re_suffix
@@ -330,7 +330,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(re.error):
             bzfs.compile_regexes(["fo$o"], re_suffix)
 
-    def test_filter_lines(self):
+    def test_filter_lines(self) -> None:
         input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
 
         # Empty input_set
@@ -348,7 +348,7 @@ class TestHelperFunctions(unittest.TestCase):
         # input_set with all elements matching
         self.assertListEqual(input_list, bzfs.filter_lines(input_list, {"apple", "banana", "cherry", "date"}))
 
-    def test_filter_lines_except(self):
+    def test_filter_lines_except(self) -> None:
         input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
 
         # Empty input_set
@@ -366,7 +366,7 @@ class TestHelperFunctions(unittest.TestCase):
         # input_set with all elements from input_list (exclude all)
         self.assertListEqual([], bzfs.filter_lines_except(input_list, {"apple", "banana", "cherry", "date"}))
 
-    def test_fix_send_recv_opts(self):
+    def test_fix_send_recv_opts(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.fix_recv_opts(["-n"]))
         self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"]))
@@ -393,7 +393,7 @@ class TestHelperFunctions(unittest.TestCase):
             ["--exclude", "d1,d2", "--redact", "b1"], params.fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
         )
 
-    def test_xprint(self):
+    def test_xprint(self) -> None:
         log = logging.getLogger()
         bzfs.xprint(log, "foo")
         bzfs.xprint(log, "foo", run=True)
@@ -404,7 +404,7 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.xprint(log, "", run=False)
         bzfs.xprint(log, None)
 
-    def test_pid_exists(self):
+    def test_pid_exists(self) -> None:
         self.assertTrue(bzfs.pid_exists(os.getpid()))
         self.assertFalse(bzfs.pid_exists(-1))
         self.assertFalse(bzfs.pid_exists(0))
@@ -418,14 +418,14 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertTrue(bzfs.pid_exists(1))
 
     @patch("os.kill")
-    def test_pid_exists_with_unexpected_oserror_returns_none(self, mock_kill):
+    def test_pid_exists_with_unexpected_oserror_returns_none(self, mock_kill: MagicMock) -> None:
         # Simulate an unexpected OSError (e.g., EINVAL) and verify that pid_exists returns None.
         err = OSError()
         err.errno = errno.EINVAL
         mock_kill.side_effect = err
         self.assertIsNone(bzfs.pid_exists(1234))
 
-    def test_delete_stale_files(self):
+    def test_delete_stale_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             new_socket_file = os.path.join(tmpdir, "s_new_socket_file")
             Path(new_socket_file).touch()
@@ -445,7 +445,7 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertTrue(os.path.exists(sdir))
             self.assertTrue(os.path.exists(non_socket_file))
 
-    def test_delete_stale_files_ssh_alive(self):
+    def test_delete_stale_files_ssh_alive(self) -> None:
         """Socket file with a live pid (current process) should NOT be removed."""
         with tempfile.TemporaryDirectory() as tmpdir:
             socket_name = f"s{os.getpid()}foo"
@@ -463,7 +463,7 @@ class TestHelperFunctions(unittest.TestCase):
                 if os.path.exists(socket_path):
                     os.remove(socket_path)
 
-    def test_delete_stale_files_ssh_stale(self):
+    def test_delete_stale_files_ssh_stale(self) -> None:
         """Socket file with a non-existent pid should be removed."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # This fake PID is extremely unlikely to be alive because it is orders of magnitude higher than the typical
@@ -484,7 +484,7 @@ class TestHelperFunctions(unittest.TestCase):
                 if os.path.exists(socket_path):
                     os.remove(socket_path)
 
-    def test_delete_stale_files_ssh_regular_file(self):
+    def test_delete_stale_files_ssh_regular_file(self) -> None:
         """A regular file should be removed even when ssh=True."""
         with tempfile.TemporaryDirectory() as tmpdir:
             regular_file = os.path.join(tmpdir, "s_regular_file")
@@ -492,7 +492,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
             self.assertFalse(os.path.exists(regular_file))
 
-    def test_set_last_modification_time(self):
+    def test_set_last_modification_time(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             file = os.path.join(tmpdir, "foo")
             bzfs.set_last_modification_time(file, unixtime_in_secs=0)
@@ -506,7 +506,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=True)
             self.assertEqual(1001, round(os.stat(file).st_mtime))
 
-    def test_set_last_modification_time_with_FileNotFoundError(self):
+    def test_set_last_modification_time_with_FileNotFoundError(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             file = os.path.join(tmpdir, "foo")
             with patch("bzfs_main.bzfs.os_utime", side_effect=FileNotFoundError):
@@ -515,7 +515,7 @@ class TestHelperFunctions(unittest.TestCase):
                 file = os.path.join(file, "x", "nonexisting2")
                 bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
 
-    def test_recv_option_property_names(self):
+    def test_recv_option_property_names(self) -> None:
         def names(lst: List[str]) -> Set[str]:
             return bzfs.Job().recv_option_property_names(lst)
 
@@ -548,7 +548,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             names([" -o ", " -o ", "name1=value1"])
 
-    def test_fix_solaris_raw_mode(self):
+    def test_fix_solaris_raw_mode(self) -> None:
         self.assertListEqual(["-w", "none"], bzfs.fix_solaris_raw_mode(["-w"]))
         self.assertListEqual(["-w", "none"], bzfs.fix_solaris_raw_mode(["--raw"]))
         self.assertListEqual(["-w", "none"], bzfs.fix_solaris_raw_mode(["-w", "none"]))
@@ -558,7 +558,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual(["-w", "none", "foo"], bzfs.fix_solaris_raw_mode(["-w", "foo"]))
         self.assertListEqual(["-F"], bzfs.fix_solaris_raw_mode(["-F"]))
 
-    def test_get_logger_with_cleanup(self):
+    def test_get_logger_with_cleanup(self) -> None:
         def check(log: Logger, files: Set[str]) -> None:
             files_todo = files.copy()
             for handler in log.handlers:
@@ -570,7 +570,7 @@ class TestHelperFunctions(unittest.TestCase):
         prefix = "test_get_logger:"
         args = argparser_parse_args(args=["src", "dst"])
         root_logger = logging.getLogger()
-        log_params = None
+        log_params = bzfs.LogParams(args)
         log = bzfs.get_logger(log_params, args, root_logger)
         self.assertTrue(log is root_logger)
         log.info(prefix + "aaa1")
@@ -585,9 +585,9 @@ class TestHelperFunctions(unittest.TestCase):
         log.log(bzfs.log_stderr, "%s", prefix + "bbbe2")
         log.log(bzfs.log_stdout, "%s", prefix + "bbbo2")
         log.info("%s", prefix + "bbb4")
-        log.trace("%s", prefix + "bbb5")
-        log.setLevel(bzfs.log_trace)
-        log.trace("%s", prefix + "bbb6")
+        log.log(log_trace, "%s", prefix + "bbb5")
+        log.setLevel(log_trace)
+        log.log(log_trace, "%s", prefix + "bbb6")
         files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
@@ -619,7 +619,7 @@ class TestHelperFunctions(unittest.TestCase):
 
         bzfs.reset_logger()
 
-    def test_get_syslog_address(self):
+    def test_get_syslog_address(self) -> None:
         udp = socket.SOCK_DGRAM
         tcp = socket.SOCK_STREAM
         self.assertEqual((("localhost", 514), udp), bzfs.get_syslog_address("localhost:514", "UDP"))
@@ -627,12 +627,12 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(("/dev/log", None), bzfs.get_syslog_address("/dev/log", "UDP"))
         self.assertEqual(("/dev/log", None), bzfs.get_syslog_address("/dev/log", "TCP"))
 
-    def test_validate_log_config_variable(self):
+    def test_validate_log_config_variable(self) -> None:
         self.assertIsNone(bzfs.validate_log_config_variable("name:value"))
         for var in ["noColon", ":noName", "$n:v", "{:v", "}:v", "", "  ", "\t", "a\tb:v", "spa ce:v", '"k":v', "'k':v"]:
             self.assertIsNotNone(bzfs.validate_log_config_variable(var))
 
-    def test_has_siblings(self):
+    def test_has_siblings(self) -> None:
         self.assertFalse(bzfs.has_siblings([]))
         self.assertFalse(bzfs.has_siblings(["a"]))
         self.assertFalse(bzfs.has_siblings(["a", "a/b"]))
@@ -646,7 +646,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c", "a/b/d"]))
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
-    def test_is_descendant(self):
+    def test_is_descendant(self) -> None:
         self.assertTrue(bzfs.is_descendant("pool/fs/child", "pool/fs"))
         self.assertTrue(bzfs.is_descendant("pool/fs/child/grandchild", "pool/fs"))
         self.assertTrue(bzfs.is_descendant("a/b/c/d", "a/b"))
@@ -662,7 +662,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(bzfs.is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(bzfs.is_descendant("pool/fs", "pool"))
 
-    def test_validate_default_shell(self):
+    def test_validate_default_shell(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         remote = bzfs.Remote("src", args, p)
@@ -673,7 +673,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.validate_default_shell("/bin/tcsh", remote)
 
-    def test_filter_datasets_with_test_mode_is_false(self):
+    def test_filter_datasets_with_test_mode_is_false(self) -> None:
         # test with Job.is_test_mode == False for coverage with the assertion therein disabled
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
@@ -686,8 +686,8 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             bzfs.reset_logger()
 
-    def test_is_zfs_dataset_busy_match(self):
-        def is_busy(proc, dataset, busy_if_send: bool = True):
+    def test_is_zfs_dataset_busy_match(self) -> None:
+        def is_busy(proc: str, dataset: str, busy_if_send: bool = True) -> bool:
             return bzfs.Job().is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
 
         ds = "tank/foo/bar"
@@ -710,11 +710,11 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(is_busy("zfs send " + ds + "@snap", ds, busy_if_send=False))
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
-    def assert_human_readable_float(self, actual, expected):
+    def assert_human_readable_float(self, actual: float, expected: str) -> None:
         self.assertEqual(bzfs.human_readable_float(actual), expected)
         self.assertEqual(bzfs.human_readable_float(-actual), "-" + expected)
 
-    def test_human_readable_float_with_one_digit_before_decimal(self):
+    def test_human_readable_float_with_one_digit_before_decimal(self) -> None:
         self.assert_human_readable_float(3.14159, "3.14")
         self.assert_human_readable_float(5.0, "5")
         self.assert_human_readable_float(0.5, "0.5")
@@ -724,13 +724,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assert_human_readable_float(2.5, "2.5")
         self.assert_human_readable_float(3.5, "3.5")
 
-    def test_human_readable_float_with_two_digits_before_decimal(self):
+    def test_human_readable_float_with_two_digits_before_decimal(self) -> None:
         self.assert_human_readable_float(12.34, "12.3")
         self.assert_human_readable_float(12.0, "12")
         self.assert_human_readable_float(12.54, "12.5")
         self.assert_human_readable_float(12.56, "12.6")
 
-    def test_human_readable_float_with_three_or_more_digits_before_decimal(self):
+    def test_human_readable_float_with_three_or_more_digits_before_decimal(self) -> None:
         self.assert_human_readable_float(123.456, "123")
         self.assert_human_readable_float(123.516, "124")
         self.assert_human_readable_float(1234.4678, "1234")
@@ -739,13 +739,13 @@ class TestHelperFunctions(unittest.TestCase):
         self.assert_human_readable_float(12345.678, "12346")
         self.assert_human_readable_float(999.99, "1000")
 
-    def test_human_readable_float_with_zero(self):
+    def test_human_readable_float_with_zero(self) -> None:
         self.assertEqual(bzfs.human_readable_float(0.0), "0")
         self.assertEqual(bzfs.human_readable_float(-0.0), "0")
         self.assertEqual(bzfs.human_readable_float(0.001), "0")
         self.assertEqual(bzfs.human_readable_float(-0.001), "0")
 
-    def test_human_readable_float_with_halfway_rounding_behavior(self):
+    def test_human_readable_float_with_halfway_rounding_behavior(self) -> None:
         # For |n| < 10 => 2 decimals
         self.assert_human_readable_float(1.15, "1.15")
         self.assert_human_readable_float(1.25, "1.25")
@@ -759,7 +759,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assert_human_readable_float(10.35 + eps, "10.4")
         self.assert_human_readable_float(10.45, "10.4")
 
-    def test_human_readable_bytes(self):
+    def test_human_readable_bytes(self) -> None:
         self.assertEqual("0 B", bzfs.human_readable_bytes(0))
         self.assertEqual("581 B", bzfs.human_readable_bytes(0.567 * 1024**1))
         self.assertEqual("2 KiB", bzfs.human_readable_bytes(2 * 1024**1))
@@ -778,7 +778,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("2.57 B", bzfs.human_readable_bytes(2.567, precision=2))
         self.assertEqual("2.57 B", bzfs.human_readable_bytes(2.567, precision=None))
 
-    def test_human_readable_duration(self):
+    def test_human_readable_duration(self) -> None:
         ms = 1000_000
         self.assertEqual("0ns", bzfs.human_readable_duration(0, long=False))
         self.assertEqual("3ns", bzfs.human_readable_duration(3, long=False))
@@ -831,7 +831,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("2.57ns", bzfs.human_readable_duration(2.567, precision=2))
         self.assertEqual("2.57ns", bzfs.human_readable_duration(2.567, precision=None))
 
-    def test_pv_cmd(self):
+    def test_pv_cmd(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         log_params = bzfs.LogParams(args)
         try:
@@ -842,7 +842,7 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             bzfs.reset_logger()
 
-    def test_pv_size_to_bytes(self):
+    def test_pv_size_to_bytes(self) -> None:
         def pv_size_to_bytes(line: str) -> int:
             num_bytes, _ = bzfs.pv_size_to_bytes(line)
             return num_bytes
@@ -871,7 +871,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(ValueError):
             pv_size_to_bytes("4.12 KiB/s")
 
-    def test_count_num_bytes_transferred_by_pv(self):
+    def test_count_num_bytes_transferred_by_pv(self) -> None:
         default_opts = bzfs.argument_parser().get_default("pv_program_opts")
         self.assertTrue(isinstance(default_opts, str) and default_opts)
         pv_fd, pv_file = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
@@ -888,7 +888,7 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             Path(pv_file).unlink(missing_ok=True)
 
-    def test_count_num_bytes_transferred_by_zfs_send(self):
+    def test_count_num_bytes_transferred_by_zfs_send(self) -> None:
         self.assertEqual(0, bzfs.count_num_bytes_transferred_by_zfs_send("/tmp/nonexisting_bzfs_test_file"))
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -912,7 +912,7 @@ class TestHelperFunctions(unittest.TestCase):
                     os.remove(pv2)
                     shutil.rmtree(pv3)
 
-    def test_progress_reporter_parse_pv_line(self):
+    def test_progress_reporter_parse_pv_line(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None)
@@ -996,7 +996,7 @@ class TestHelperFunctions(unittest.TestCase):
                     self.assertEqual(curr_time_nanos, eta_timestamp_nanos)
                     self.assertEqual("", line_tail)
 
-    def test_progress_reporter_update_transfer_stat(self):
+    def test_progress_reporter_update_transfer_stat(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         curr_time_nanos = 123
@@ -1020,7 +1020,7 @@ class TestHelperFunctions(unittest.TestCase):
                 self.assertEqual(curr_time_nanos + 1_000_000_000 * (6 * 60 + 3), stat.eta.timestamp_nanos)
                 self.assertEqual("[>                   ]  2% ETA 0:06:03 ETA 17:27:49", stat.eta.line_tail)
 
-    def test_progress_reporter_stop(self):
+    def test_progress_reporter_stop(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         log_params = bzfs.LogParams(args)
         try:
@@ -1048,7 +1048,7 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             bzfs.reset_logger()
 
-    def test_progress_reporter_exhausted_iterator_sees_appended_data(self):
+    def test_progress_reporter_exhausted_iterator_sees_appended_data(self) -> None:
         # Create a temporary file. We will keep the file descriptor from mkstemp open for the read iterator
         temp_file_fd_write, temp_file_path = tempfile.mkstemp(prefix="test_iterator_behavior_")
         try:
@@ -1098,7 +1098,7 @@ class TestHelperFunctions(unittest.TestCase):
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
 
-    def test_progress_reporter_state_with_reused_pv_file(self):
+    def test_progress_reporter_state_with_reused_pv_file(self) -> None:
         # We will manually call the reporter's update method to simulate its internal loop.
         mock_params = MagicMock(spec=bzfs.Params)
         reporter = bzfs.ProgressReporter(mock_params, use_select=False, progress_update_intervals=(0.01, 0.02))
@@ -1144,7 +1144,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(total_bytes_op2, 200 * 1024, "Total bytes for Op2 incorrect")
         self.assertEqual(stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op2")
 
-    def test_reporter_handles_pv_log_file_disappearing_before_initial_open(self):
+    def test_reporter_handles_pv_log_file_disappearing_before_initial_open(self) -> None:
         # Test if ProgressReporter handles FileNotFoundError during the initial open of a pv_log_file.
         mock_params = MagicMock(spec=bzfs.Params)
         mock_params.log = MagicMock(spec=logging.Logger)
@@ -1160,7 +1160,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertSetEqual(set(), reporter.file_name_set)
         self.assertSetEqual({pv_log_file}, reporter.file_name_queue)
 
-        def mock_open(*args, **kwargs):
+        def mock_open(*args: Any, **kwargs: Any) -> Any:
             if args[0] == pv_log_file:
                 raise FileNotFoundError(f"File {pv_log_file} disappeared before opening.")
             return open(*args, **kwargs)
@@ -1177,7 +1177,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertSetEqual(set(), reporter.file_name_queue)
         self.assertIsNone(reporter.exception)
 
-    def test_has_duplicates(self):
+    def test_has_duplicates(self) -> None:
         self.assertFalse(bzfs.has_duplicates([]))
         self.assertFalse(bzfs.has_duplicates([42]))
         self.assertFalse(bzfs.has_duplicates([1, 2, 3, 4, 5]))
@@ -1202,8 +1202,8 @@ class TestHelperFunctions(unittest.TestCase):
                         return None
         return root_datasets
 
-    def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self):
-        def run_filter(src_datasets: List[str], basis_src_datasets: List[str]) -> Optional[List[str]]:
+    def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self) -> None:
+        def run_filter(src_datasets: List[str], basis_src_datasets: List[str]) -> List[str]:
             assert set(src_datasets).issubset(set(basis_src_datasets))
             src_datasets = list(sorted(src_datasets))
             basis_src_datasets = list(sorted(basis_src_datasets))
@@ -1212,15 +1212,15 @@ class TestHelperFunctions(unittest.TestCase):
             )
             actual = bzfs.Job().root_datasets_if_recursive_zfs_snapshot_is_possible(src_datasets, basis_src_datasets)
             if expected is not None:
-                self.assertListEqual(expected, actual)
+                self.assertListEqual(expected, cast(List[str], actual))
             self.assertEqual(expected, actual)
-            return actual
+            return cast(List[str], actual)
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d"]
         self.assertListEqual([], run_filter([], basis_src_datasets))
         self.assertListEqual(["a"], run_filter(basis_src_datasets, basis_src_datasets))
-        self.assertIsNone(run_filter(["a", "a/b", "a/b/c"], basis_src_datasets))
-        self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["a", "a/b", "a/b/c"], basis_src_datasets)))
+        self.assertIsNone(cast(None, run_filter(["a/b", "a/d"], basis_src_datasets)))
         self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
         self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
         self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
@@ -1228,14 +1228,14 @@ class TestHelperFunctions(unittest.TestCase):
 
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/d", "e", "e/f"]
         self.assertListEqual(["a", "e"], run_filter(basis_src_datasets, basis_src_datasets))
-        self.assertIsNone(run_filter(["e"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["e"], basis_src_datasets)))
         self.assertListEqual(["e/f"], run_filter(["e/f"], basis_src_datasets))
         self.assertListEqual(["a", "e/f"], run_filter(["a", "a/b", "a/b/c", "a/d", "e/f"], basis_src_datasets))
         self.assertListEqual(["a/b"], run_filter(["a/b", "a/b/c"], basis_src_datasets))
         self.assertListEqual(["a/b", "a/d"], run_filter(["a/b", "a/b/c", "a/d"], basis_src_datasets))
         self.assertListEqual(["a/d"], run_filter(["a/d"], basis_src_datasets))
-        self.assertIsNone(run_filter(["a/b", "a/d"], basis_src_datasets))
-        self.assertIsNone(run_filter(["a", "a/b", "a/d"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["a/b", "a/d"], basis_src_datasets)))
+        self.assertIsNone(cast(None, run_filter(["a", "a/b", "a/d"], basis_src_datasets)))
 
         basis_src_datasets = ["a", "e", "h"]
         self.assertListEqual([], run_filter([], basis_src_datasets))
@@ -1251,32 +1251,32 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual([], run_filter([], basis_src_datasets))
         self.assertListEqual(["a", "e", "h"], run_filter(basis_src_datasets, basis_src_datasets))
 
-        self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["a", "h"], basis_src_datasets)))
         self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "k", "k/l"]
         self.assertListEqual([], run_filter([], basis_src_datasets))
         self.assertListEqual(["a", "e", "h", "k"], run_filter(basis_src_datasets, basis_src_datasets))
 
-        self.assertIsNone(run_filter(["a", "h"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["a", "h"], basis_src_datasets)))
         self.assertListEqual(["a", "h/g"], run_filter(["a", "h/g"], basis_src_datasets))
-        self.assertIsNone(run_filter(["a", "k"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["a", "k"], basis_src_datasets)))
         self.assertListEqual(["a", "k/l"], run_filter(["a", "k/l"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "k", "kk", "k/l", "kk/l"]
-        self.assertIsNone(run_filter(["a", "hh"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["a", "hh"], basis_src_datasets)))
         self.assertListEqual(["a", "hh/g"], run_filter(["a", "hh/g"], basis_src_datasets))
-        self.assertIsNone(run_filter(["kk"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["kk"], basis_src_datasets)))
         self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
-        self.assertIsNone(run_filter(["k"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["k"], basis_src_datasets)))
         self.assertListEqual(["k/l"], run_filter(["k/l"], basis_src_datasets))
-        self.assertIsNone(run_filter(["h"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["h"], basis_src_datasets)))
         self.assertListEqual(["h/g"], run_filter(["h/g"], basis_src_datasets))
 
         basis_src_datasets = ["a", "e", "e/f", "h", "h/g", "hh", "hh/g", "kk", "kk/l"]
-        self.assertIsNone(run_filter(["kk"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["kk"], basis_src_datasets)))
         self.assertListEqual(["kk/l"], run_filter(["kk/l"], basis_src_datasets))
-        self.assertIsNone(run_filter(["hh"], basis_src_datasets))
+        self.assertIsNone(cast(None, run_filter(["hh"], basis_src_datasets)))
 
         # sorted()
         basis_src_datasets = ["a", "a/b", "a/b/c", "a/B", "a/B/c", "a/D", "a/X", "a/X/c"]
@@ -1284,7 +1284,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual(["a/B", "a/D", "a/b"], run_filter(["a/B", "a/B/c", "a/b", "a/b/c", "a/D"], basis_src_datasets))
         self.assertListEqual(["a/B", "a/D", "a/X"], run_filter(["a/B", "a/B/c", "a/X", "a/X/c", "a/D"], basis_src_datasets))
 
-    def test_validate_snapshot_name(self):
+    def test_validate_snapshot_name(self) -> None:
         bzfs.SnapshotLabel("foo_", "", "", "").validate_label("")
         bzfs.SnapshotLabel("foo_", "", "", "_foo").validate_label("")
         bzfs.SnapshotLabel("foo_", "foo_", "", "_foo").validate_label("")
@@ -1308,7 +1308,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.SnapshotLabel("foo/bar_", "", "", "").validate_label("")
         self.assertTrue(str(bzfs.SnapshotLabel("foo_", "", "", "")))
 
-    def test_label_milliseconds(self):
+    def test_label_milliseconds(self) -> None:
         xperiods = bzfs.SnapshotPeriods()
         self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 1, xperiods.label_milliseconds("foo_yearly"))
         self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 2, xperiods.label_milliseconds("foo_2yearly"))
@@ -1326,7 +1326,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(xperiods.suffix_milliseconds["secondly"], xperiods.label_milliseconds("foo_secondly"))
         self.assertEqual(xperiods.suffix_milliseconds["millisecondly"], xperiods.label_milliseconds("foo_millisecondly"))
 
-    def test_CreateSrcSnapshotConfig(self):
+    def test_CreateSrcSnapshotConfig(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         good_args = bzfs.argument_parser().parse_args(
             [
@@ -1511,8 +1511,8 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
 
-    def test_MonitorSnapshotsConfig(self):
-        def plan(alerts) -> str:
+    def test_MonitorSnapshotsConfig(self) -> None:
+        def plan(alerts: Dict[str, Any]) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
@@ -1522,7 +1522,7 @@ class TestHelperFunctions(unittest.TestCase):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(100 + 1, 100 + 2)], [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts]
+            [(100 + 1, 100 + 2)], [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts]  # type: ignore
         )
         self.assertListEqual([None], [alert.oldest for alert in config.alerts])
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -1542,7 +1542,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual([None], [alert.latest for alert in config.alerts])
         self.assertListEqual(
             [(3 * 100 + 1, 3 * 100 + 2)],
-            [(alert.oldest.warning_millis, alert.oldest.critical_millis) for alert in config.alerts],
+            [(alert.oldest.warning_millis, alert.oldest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
         self.assertTrue(config.enable_monitor_snapshots)
@@ -1556,7 +1556,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(str(config))
         self.assertListEqual(
             [(100 + 2, bzfs.unixtime_infinity_secs)],
-            [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],
+            [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
 
@@ -1567,7 +1567,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(str(config))
         self.assertListEqual(
             [(bzfs.unixtime_infinity_secs, 100 + 2)],
-            [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],
+            [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
 
@@ -1631,7 +1631,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(config.dont_crit)
 
     @patch("bzfs_main.bzfs.Job.itr_ssh_cmd_parallel")
-    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel):
+    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
         job = bzfs.Job()
         job.params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         self.mock_remote = MagicMock(spec=bzfs.Remote)  # spec helps catch calls to non-existent attrs
@@ -1680,10 +1680,10 @@ class TestHelperFunctions(unittest.TestCase):
 
 #############################################################################
 class TestTerminateProcessSubtree(unittest.TestCase):
-    def setUp(self):
-        self.children = []
+    def setUp(self) -> None:
+        self.children: List[subprocess.Popen[Any]] = []
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         for child in self.children:
             try:
                 child.kill()
@@ -1691,14 +1691,14 @@ class TestTerminateProcessSubtree(unittest.TestCase):
                 pass
         self.children = []
 
-    def test_get_descendant_processes(self):
+    def test_get_descendant_processes(self) -> None:
         child = subprocess.Popen(["sleep", "1"])
         self.children.append(child)
         time.sleep(0.1)
         descendants = bzfs.get_descendant_processes(os.getpid())
         self.assertIn(child.pid, descendants, "Child PID not found in descendants")
 
-    def test_terminate_process_subtree_excluding_current(self):
+    def test_terminate_process_subtree_excluding_current(self) -> None:
         child = subprocess.Popen(["sleep", "1"])
         self.children.append(child)
         time.sleep(0.1)
@@ -1710,44 +1710,44 @@ class TestTerminateProcessSubtree(unittest.TestCase):
 
 #############################################################################
 class TestSubprocessRun(unittest.TestCase):
-    def test_successful_command(self):
+    def test_successful_command(self) -> None:
         result = bzfs.subprocess_run(["true"], stdout=PIPE, stderr=PIPE)
         self.assertEqual(0, result.returncode)
         self.assertEqual(b"", result.stdout)
         self.assertEqual(b"", result.stderr)
 
-    def test_failing_command_no_check(self):
+    def test_failing_command_no_check(self) -> None:
         result = bzfs.subprocess_run(["false"], stdout=PIPE, stderr=PIPE)
         self.assertNotEqual(0, result.returncode)
         self.assertEqual(b"", result.stdout)
         self.assertEqual(b"", result.stderr)
 
-    def test_failing_command_with_check(self):
+    def test_failing_command_with_check(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError) as context:
             bzfs.subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True)
         self.assertIsInstance(context.exception, subprocess.CalledProcessError)
         self.assertIsInstance(context.exception.returncode, int)
         self.assertTrue(context.exception.returncode != 0)
 
-    def test_input_bytes(self):
+    def test_input_bytes(self) -> None:
         result = bzfs.subprocess_run(["cat"], input=b"hello", stdout=PIPE, stderr=PIPE)
         self.assertEqual(b"hello", result.stdout)
 
-    def test_valueerror_input_and_stdin(self):
+    def test_valueerror_input_and_stdin(self) -> None:
         with self.assertRaises(ValueError):
             bzfs.subprocess_run(["cat"], input=b"hello", stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
-    def test_timeout_expired(self):
+    def test_timeout_expired(self) -> None:
         with self.assertRaises(subprocess.TimeoutExpired) as context:
             bzfs.subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE)
         self.assertIsInstance(context.exception, subprocess.TimeoutExpired)
         self.assertEqual(["sleep", "1"], context.exception.cmd)
 
-    def test_keyboardinterrupt_signal(self):
+    def test_keyboardinterrupt_signal(self) -> None:
         old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)  # install a handler that ignores SIGINT
         try:
 
-            def send_sigint_to_sleep_cli():
+            def send_sigint_to_sleep_cli() -> None:
                 time.sleep(0.1)  # ensure sleep CLI has started before we kill it
                 os.kill(os.getpid(), signal.SIGINT)  # send SIGINT to all members of the process group, including `sleep` CLI
 
@@ -1762,7 +1762,15 @@ class TestSubprocessRun(unittest.TestCase):
 
 #############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
-    def run_test(self, input_value, expected_user, expected_host, expected_dataset, expected_user_host, expected_error):
+    def run_test(
+        self,
+        input_value: str,
+        expected_user: str,
+        expected_host: str,
+        expected_dataset: str,
+        expected_user_host: str,
+        expected_error: bool,
+    ) -> None:
         expected_status = 0 if not expected_error else 3
         passed = False
 
@@ -1796,7 +1804,7 @@ class TestParseDatasetLocator(unittest.TestCase):
             )
             self.fail()
 
-    def test_basic(self):
+    def test_basic(self) -> None:
         # Input format is [[user@]host:]dataset
         # test columns indicate values for: input | user | host | dataset | userhost | validationError
         self.run_test(
@@ -1915,48 +1923,48 @@ class TestReplaceCapturingGroups(unittest.TestCase):
     def replace_capturing_group(self, regex: str) -> str:
         return bzfs.replace_capturing_groups_with_non_capturing_groups(regex)
 
-    def test_basic_case(self):
+    def test_basic_case(self) -> None:
         self.assertEqual(self.replace_capturing_group("(abc)"), "(?:abc)")
 
-    def test_nested_groups(self):
+    def test_nested_groups(self) -> None:
         self.assertEqual(self.replace_capturing_group("(a(bc)d)"), "(?:a(?:bc)d)")
 
-    def test_preceding_backslash(self):
+    def test_preceding_backslash(self) -> None:
         self.assertEqual(self.replace_capturing_group("\\(abc)"), "\\(abc)")
 
-    def test_group_starting_with_question_mark(self):
+    def test_group_starting_with_question_mark(self) -> None:
         self.assertEqual(self.replace_capturing_group("(?abc)"), "(?abc)")
 
-    def test_multiple_groups(self):
+    def test_multiple_groups(self) -> None:
         self.assertEqual(self.replace_capturing_group("(abc)(def)"), "(?:abc)(?:def)")
 
-    def test_mixed_cases(self):
+    def test_mixed_cases(self) -> None:
         self.assertEqual(self.replace_capturing_group("a(bc\\(de)f(gh)?i"), "a(?:bc\\(de)f(?:gh)?i")
 
-    def test_empty_group(self):
+    def test_empty_group(self) -> None:
         self.assertEqual(self.replace_capturing_group("()"), "(?:)")
 
-    def test_group_with_named_group(self):
+    def test_group_with_named_group(self) -> None:
         self.assertEqual(self.replace_capturing_group("(?P<name>abc)"), "(?P<name>abc)")
 
-    def test_group_with_non_capturing_group(self):
+    def test_group_with_non_capturing_group(self) -> None:
         self.assertEqual(self.replace_capturing_group("(a(?:bc)d)"), "(?:a(?:bc)d)")
 
-    def test_group_with_lookahead(self):
+    def test_group_with_lookahead(self) -> None:
         self.assertEqual(self.replace_capturing_group("(abc)(?=def)"), "(?:abc)(?=def)")
 
-    def test_group_with_lookbehind(self):
+    def test_group_with_lookbehind(self) -> None:
         self.assertEqual(self.replace_capturing_group("(?<=abc)(def)"), "(?<=abc)(?:def)")
 
-    def test_escaped_characters(self):
+    def test_escaped_characters(self) -> None:
         pattern = re.escape("(abc)")
         self.assertEqual(self.replace_capturing_group(pattern), pattern)
 
-    def test_complex_pattern_with_escape(self):
+    def test_complex_pattern_with_escape(self) -> None:
         complex_pattern = re.escape("(a[b]c{d}e|f.g)")
         self.assertEqual(self.replace_capturing_group(complex_pattern), complex_pattern)
 
-    def test_complex_pattern(self):
+    def test_complex_pattern(self) -> None:
         complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
         expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
         self.assertEqual(self.replace_capturing_group(complex_pattern), expected_result)
@@ -1964,111 +1972,111 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
 #############################################################################
 class TestBuildTree(unittest.TestCase):
-    def assert_keys_sorted(self, tree: Dict[str, Optional[Dict]]):
+    def assert_keys_sorted(self, tree: Dict[str, Any]) -> None:
         keys = list(tree.keys())
         self.assertEqual(keys, sorted(keys), f"Keys are not sorted: {keys}")
         for value in tree.values():
             if isinstance(value, dict):
                 self.assert_keys_sorted(value)
 
-    def test_basic_tree(self):
+    def test_basic_tree(self) -> None:
         datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
         expected_tree = {"pool": {"dataset": {"sub": {}}, "other": {"sub": {"child": {}}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_empty_input(self):
-        datasets = []
-        expected_tree = {}
+    def test_empty_input(self) -> None:
+        datasets: List[str] = []
+        expected_tree: bzfs.Tree = {}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
 
-    def test_single_root(self):
-        datasets = ["pool"]
-        expected_tree = {"pool": {}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_single_branch(self):
-        datasets = ["pool/dataset/sub/child"]
-        expected_tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
+    def test_single_root(self) -> None:
+        datasets: List[str] = ["pool"]
+        expected_tree: bzfs.Tree = {"pool": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_multiple_roots(self):
-        datasets = ["pool", "otherpool", "anotherpool"]
-        expected_tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
+    def test_single_branch(self) -> None:
+        datasets: List[str] = ["pool/dataset/sub/child"]
+        expected_tree: bzfs.Tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
+        tree = bzfs.Job().build_dataset_tree(datasets)
+        self.assertEqual(tree, expected_tree)
+        self.assert_keys_sorted(tree)
+
+    def test_multiple_roots(self) -> None:
+        datasets: List[str] = ["pool", "otherpool", "anotherpool"]
+        expected_tree: bzfs.Tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_large_dataset(self):
-        datasets = [f"pool/dataset{i}" for i in range(100)]
+    def test_large_dataset(self) -> None:
+        datasets: List[str] = [f"pool/dataset{i}" for i in range(100)]
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(len(tree["pool"]), 100)
         self.assert_keys_sorted(tree)
 
-    def test_nested_structure(self):
-        datasets = [
+    def test_nested_structure(self) -> None:
+        datasets: List[str] = [
             "pool/parent",
             "pool/parent/child1",
             "pool/parent/child2",
             "pool/parent/child2/grandchild",
             "pool/parent/child3",
         ]
-        expected_tree = {"pool": {"parent": {"child1": {}, "child2": {"grandchild": {}}, "child3": {}}}}
+        expected_tree: bzfs.Tree = {"pool": {"parent": {"child1": {}, "child2": {"grandchild": {}}, "child3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_no_children(self):
-        datasets = ["pool", "otherpool"]
-        expected_tree = {"otherpool": {}, "pool": {}}
+    def test_no_children(self) -> None:
+        datasets: List[str] = ["pool", "otherpool"]
+        expected_tree: bzfs.Tree = {"otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_single_level(self):
-        datasets = ["pool", "pool1", "pool2", "pool3"]
-        expected_tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
+    def test_single_level(self) -> None:
+        datasets: List[str] = ["pool", "pool1", "pool2", "pool3"]
+        expected_tree: bzfs.Tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_multiple_roots_with_hierarchy(self):
-        datasets = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
-        expected_tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
+    def test_multiple_roots_with_hierarchy(self) -> None:
+        datasets: List[str] = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
+        expected_tree: bzfs.Tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_multiple_roots_flat(self):
-        datasets = ["root1", "root2", "root3", "root4"]
-        expected_tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
+    def test_multiple_roots_flat(self) -> None:
+        datasets: List[str] = ["root1", "root2", "root3", "root4"]
+        expected_tree: bzfs.Tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_multiple_roots_mixed_depth(self):
-        datasets = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
-        expected_tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
+    def test_multiple_roots_mixed_depth(self) -> None:
+        datasets: List[str] = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
+        expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_tree_with_missing_intermediate_nodes(self):
-        datasets = ["a", "a/b/c", "z/2/3"]
-        expected_tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
+    def test_tree_with_missing_intermediate_nodes(self) -> None:
+        datasets: List[str] = ["a", "a/b/c", "z/2/3"]
+        expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
-    def test_tree_with_barriers(self):
+    def test_tree_with_barriers(self) -> None:
         BR = bzfs.BARRIER_CHAR
-        datasets = [
+        datasets: List[str] = [
             "a/b/c",
             "a/b/c/0d",
             "a/b/c/1d",
@@ -2076,7 +2084,9 @@ class TestBuildTree(unittest.TestCase):
             f"a/b/c/{BR}/prune/monitor",
             f"a/b/c/{BR}/{BR}/done",
         ]
-        expected_tree = {"a": {"b": {"c": {"0d": {}, "1d": {}, BR: {"prune": {"monitor": {}}, BR: {"done": {}}}}}}}
+        expected_tree: bzfs.Tree = {
+            "a": {"b": {"c": {"0d": {}, "1d": {}, BR: {"prune": {"monitor": {}}, BR: {"done": {}}}}}}
+        }
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
@@ -2085,10 +2095,10 @@ class TestBuildTree(unittest.TestCase):
 #############################################################################
 class TestCurrentDateTime(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)  # in no timezone
 
-    def test_now(self):
+    def test_now(self) -> None:
         self.assertIsNotNone(bzfs.current_datetime(tz_spec=None, now_fn=None))
         self.assertIsNotNone(bzfs.current_datetime(tz_spec="UTC", now_fn=None))
         self.assertIsNotNone(bzfs.current_datetime(tz_spec="+0530", now_fn=None))
@@ -2096,9 +2106,9 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertIsNotNone(bzfs.current_datetime(tz_spec="-0430", now_fn=None))
         self.assertIsNotNone(bzfs.current_datetime(tz_spec="-04:30", now_fn=None))
 
-    def test_local_timezone(self):
+    def test_local_timezone(self) -> None:
         expected = self.fixed_datetime.astimezone(tz=None)
-        actual = bzfs.current_datetime(tz_spec=None, now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))
+        actual = bzfs.current_datetime(tz_spec=None, now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))  # type: ignore
         self.assertEqual(expected, actual)
 
         # For the strftime format, see https://docs.python.org/3.12/library/datetime.html#strftime-strptime-behavior.
@@ -2119,26 +2129,38 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertIn(suffix[0], ["+", "-"])
         self.assertTrue(suffix[1:].isdigit())
 
-    def test_utc_timezone(self):
+    def test_utc_timezone(self) -> None:
         expected = self.fixed_datetime.astimezone(tz=timezone.utc)
-        actual = bzfs.current_datetime(tz_spec="UTC", now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(tz: Optional[tzinfo] = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec="UTC", now_fn=now_fn)
         self.assertEqual(expected, actual)
 
-    def test_tzoffset_positive(self):
+    def test_tzoffset_positive(self) -> None:
         tz_spec = "+0530"
         tz = timezone(timedelta(hours=5, minutes=30))
         expected = self.fixed_datetime.astimezone(tz=tz)
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(_: Optional[tzinfo] = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
         self.assertEqual(expected, actual)
 
-    def test_tzoffset_negative(self):
+    def test_tzoffset_negative(self) -> None:
         tz_spec = "-0430"
         tz = timezone(timedelta(hours=-4, minutes=-30))
         expected = self.fixed_datetime.astimezone(tz=tz)
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(_: Optional[tzinfo] = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
         self.assertEqual(expected, actual)
 
-    def test_iana_timezone(self):
+    def test_iana_timezone(self) -> None:
         if sys.version_info < (3, 9):
             self.skipTest("ZoneInfo requires python >= 3.9")
         from zoneinfo import ZoneInfo  # requires python >= 3.9
@@ -2156,12 +2178,12 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertIn(suffix[0], ["+", "-"])
         self.assertTrue(suffix[1:].isdigit())
 
-    def test_invalid_timezone(self):
+    def test_invalid_timezone(self) -> None:
         with self.assertRaises(ValueError) as context:
             bzfs.current_datetime(tz_spec="INVALID")
         self.assertIn("Invalid timezone specification", str(context.exception))
 
-    def test_invalid_timezone_format_missing_sign(self):
+    def test_invalid_timezone_format_missing_sign(self) -> None:
         with self.assertRaises(ValueError):
             bzfs.current_datetime(tz_spec="0400")
 
@@ -2174,11 +2196,11 @@ def round_datetime_up_to_duration_multiple(
 
 
 class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         # Use a fixed timezone (e.g. Eastern Standard Time, UTC-5) for all tests.
         self.tz = timezone(timedelta(hours=-5))
 
-    def test_examples(self):
+    def test_examples(self) -> None:
         def make_dt(hour: int, minute: int, second: int) -> datetime:
             return datetime(2024, 11, 29, hour, minute, second, 0, tzinfo=self.tz)
 
@@ -2233,7 +2255,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         dt = make_dt(hour=23, minute=55, second=1)
         self.assertEqual(dt.replace(day=dt.day + 1, hour=0, minute=0, second=0), round_up(dt, duration_amount=2))
 
-    def test_zero_unixtime(self):
+    def test_zero_unixtime(self) -> None:
         dt = datetime.fromtimestamp(0, tz=timezone.utc)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt
@@ -2247,7 +2269,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
         self.assertEqual(tz, result.tzinfo)
 
-    def test_zero_unixtime_plus_one_microsecond(self):
+    def test_zero_unixtime_plus_one_microsecond(self) -> None:
         dt = datetime.fromtimestamp(1 / 1_000_000, tz=timezone.utc)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt.replace(microsecond=0) + timedelta(hours=1)
@@ -2261,14 +2283,14 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
         self.assertEqual(tz, result.tzinfo)
 
-    def test_zero_duration_amount(self):
+    def test_zero_duration_amount(self) -> None:
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 0, "hourly")
         expected = dt
         self.assertEqual(expected, result)
         self.assertEqual(self.tz, result.tzinfo)
 
-    def test_milliseconds_non_boundary(self):
+    def test_milliseconds_non_boundary(self) -> None:
         """Rounding up to the next millisecond when dt is not on a millisecond boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "millisecondly")
@@ -2276,13 +2298,13 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
         self.assertEqual(self.tz, result.tzinfo)
 
-    def test_milliseconds_boundary(self):
+    def test_milliseconds_boundary(self) -> None:
         """Rounding up to the next second when dt is exactly on a second boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 123000, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "millisecondly")
         self.assertEqual(dt, result)
 
-    def test_seconds_non_boundary(self):
+    def test_seconds_non_boundary(self) -> None:
         """Rounding up to the next second when dt is not on a second boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 123456, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
@@ -2290,112 +2312,112 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected, result)
         self.assertEqual(self.tz, result.tzinfo)
 
-    def test_seconds_boundary(self):
+    def test_seconds_boundary(self) -> None:
         """Rounding up to the next second when dt is exactly on a second boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "secondly")
         self.assertEqual(dt, result)
 
-    def test_minutes_non_boundary(self):
+    def test_minutes_non_boundary(self) -> None:
         """Rounding up to the next minute when dt is not on a minute boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, 500000, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
         expected = dt.replace(second=0, microsecond=0) + timedelta(minutes=1)
         self.assertEqual(expected, result)
 
-    def test_minutes_boundary(self):
+    def test_minutes_boundary(self) -> None:
         """Rounding up to the next minute when dt is exactly on a minute boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 5, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "minutely")
         self.assertEqual(dt, result)
 
-    def test_hours_non_boundary(self):
+    def test_hours_non_boundary(self) -> None:
         """Rounding up to the next hour when dt is not on an hour boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         expected = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         self.assertEqual(expected, result)
 
-    def test_hours_non_boundary2(self):
+    def test_hours_non_boundary2(self) -> None:
         """Rounding up to the next hour when dt is not on an hour boundary."""
         dt = datetime(2025, 2, 11, 0, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(**{"hourly_minute": 59}))
         expected = dt.replace(minute=59, second=0, microsecond=0) + timedelta(hours=0)
         self.assertEqual(expected, result)
 
-    def test_hours_non_boundary3(self):
+    def test_hours_non_boundary3(self) -> None:
         """Rounding up to the next hour when dt is not on an hour boundary."""
         dt = datetime(2025, 2, 11, 2, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(**{"hourly_minute": 59}))
         expected = dt.replace(minute=59, second=0, microsecond=0) + timedelta(hours=0)
         self.assertEqual(expected, result)
 
-    def test_hours_boundary(self):
+    def test_hours_boundary(self) -> None:
         """Rounding up to the next hour when dt is exactly on an hour boundary returns dt."""
         dt = datetime(2025, 2, 11, 14, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         self.assertEqual(dt, result)
 
-    def test_days_non_boundary(self):
+    def test_days_non_boundary(self) -> None:
         """Rounding up to the next day when dt is not on a day boundary."""
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
         expected = dt.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         self.assertEqual(expected, result)
 
-    def test_days_non_boundary2(self):
+    def test_days_non_boundary2(self) -> None:
         """Rounding up to the next day when dt is not on a day boundary."""
         dt = datetime(2025, 2, 11, 1, 59, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily", PeriodAnchors(**{"daily_hour": 2}))
         expected = dt.replace(hour=2, minute=0, second=0, microsecond=0) + timedelta(days=0)
         self.assertEqual(expected, result)
 
-    def test_days_boundary(self):
+    def test_days_boundary(self) -> None:
         """Rounding up to the next day when dt is exactly at midnight returns dt."""
         dt = datetime(2025, 2, 11, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily")
         self.assertEqual(dt, result)
 
-    def test_weeks_non_boundary_saturday(self):
+    def test_weeks_non_boundary_saturday(self) -> None:
         # anchor is the most recent between Friday and Saturday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=6))
         self.assertEqual(expected, result)
 
-    def test_weeks_non_boundary_sunday(self):
+    def test_weeks_non_boundary_sunday(self) -> None:
         # anchor is the most recent midnight between Saturday and Sunday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=0))
         self.assertEqual(expected, result)
 
-    def test_weeks_non_boundary_monday(self):
+    def test_weeks_non_boundary_monday(self) -> None:
         # anchor is the most recent midnight between Sunday and Monday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=1))
         self.assertEqual(expected, result)
 
-    def test_weeks_boundary_saturday(self):
+    def test_weeks_boundary_saturday(self) -> None:
         # dt is exactly at midnight between Friday and Saturday
         dt = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=6))
         self.assertEqual(dt, result)
 
-    def test_weeks_boundary_sunday(self):
+    def test_weeks_boundary_sunday(self) -> None:
         # dt is exactly at midnight between Saturday and Sunday
         dt = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=0))
         self.assertEqual(dt, result)
 
-    def test_weeks_boundary_monday(self):
+    def test_weeks_boundary_monday(self) -> None:
         # dt is exactly at midnight between Sunday and Monday
         dt = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=1))
         self.assertEqual(dt, result)
 
-    def test_months_non_boundary2a(self):
+    def test_months_non_boundary2a(self) -> None:
         """Rounding up to the next multiple of months when dt is not on a boundary."""
         # For a 2-month step, using dt = March 15, 2025 should round up to May 1, 2025.
         dt = datetime(2025, 3, 15, 10, 30, tzinfo=self.tz)
@@ -2403,7 +2425,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2025, 5, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
-    def test_months_non_boundary2b(self):
+    def test_months_non_boundary2b(self) -> None:
         """Rounding up to the next multiple of months when dt is not on a boundary."""
         # For a 2-month step, using dt = April 15, 2025 should round up to June 1, 2025.
         dt = datetime(2025, 4, 15, 10, 30, tzinfo=self.tz)
@@ -2411,13 +2433,13 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2025, 6, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
-    def test_months_boundary(self):
+    def test_months_boundary(self) -> None:
         """When dt is exactly on a month boundary that is a multiple, dt is returned unchanged."""
         dt = datetime(2025, 3, 1, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
         self.assertEqual(dt, result)
 
-    def test_years_non_boundary2a(self):
+    def test_years_non_boundary2a(self) -> None:
         """Rounding up to the next multiple of years when dt is not on a boundary."""
         # For a 2-year step, using dt = Feb 11, 2024 should round up to Jan 1, 2025.
         dt = datetime(2024, 2, 11, 14, 5, tzinfo=self.tz)
@@ -2425,7 +2447,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2026, 1, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
-    def test_years_non_boundary2b(self):
+    def test_years_non_boundary2b(self) -> None:
         """Rounding up to the next multiple of years when dt is not on a boundary."""
         # For a 2-year step, using dt = Feb 11, 2025 should round up to Jan 1, 2027.
         dt = datetime(2025, 2, 11, 14, 5, tzinfo=self.tz)
@@ -2433,26 +2455,26 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         expected = datetime(2027, 1, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
-    def test_years_boundary(self):
+    def test_years_boundary(self) -> None:
         """When dt is exactly on a year boundary that is a multiple, dt is returned unchanged."""
         # January 1, 2025 is on a valid boundary if (2025-1) % 2 == 0.
         dt = datetime(2025, 1, 1, 0, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly")
         self.assertEqual(dt, result)
 
-    def test_invalid_unit(self):
+    def test_invalid_unit(self) -> None:
         """Passing an unsupported time unit should raise a ValueError."""
         dt = datetime(2025, 2, 11, 14, 5, tzinfo=self.tz)
         with self.assertRaises(ValueError):
             round_datetime_up_to_duration_multiple(dt, 2, "fortnights")
 
-    def test_preserves_timezone(self):
+    def test_preserves_timezone(self) -> None:
         """The returned datetime must have the same timezone as the input."""
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "hourly")
         self.assertEqual(dt.tzinfo, result.tzinfo)
 
-    def test_custom_hourly_anchor(self):
+    def test_custom_hourly_anchor(self) -> None:
         # Custom hourly: snapshots occur at :15:30 each hour.
         dt = datetime(2025, 2, 11, 14, 20, 0, tzinfo=self.tz)
         # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
@@ -2463,7 +2485,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         )
         self.assertEqual(expected, result)
 
-    def test_custom_hourly_anchor2a(self):
+    def test_custom_hourly_anchor2a(self) -> None:
         # Custom hourly: snapshots occur at :15:30 every other hour.
         dt = datetime(2025, 2, 11, 14, 20, 0, tzinfo=self.tz)
         # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
@@ -2474,7 +2496,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         )
         self.assertEqual(expected, result)
 
-    def test_custom_hourly_anchor2b(self):
+    def test_custom_hourly_anchor2b(self) -> None:
         # Custom hourly: snapshots occur at :15:30 every other hour.
         dt = datetime(2025, 2, 11, 15, 20, 0, tzinfo=self.tz)
         # Global base (daily) is 00:00:00, so effective hourly base = 00:15:30.
@@ -2485,7 +2507,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         )
         self.assertEqual(expected, result)
 
-    def test_custom_daily_anchor(self):
+    def test_custom_daily_anchor(self) -> None:
         # Custom daily: snapshots occur at 01:30:00.
         custom = bzfs.PeriodAnchors(daily_hour=1, daily_minute=30, daily_second=0)
         dt = datetime(2025, 2, 11, 0, 45, 0, tzinfo=self.tz)
@@ -2497,7 +2519,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "daily", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_weekly_anchor1a(self):
+    def test_custom_weekly_anchor1a(self) -> None:
         # Custom weekly: every week, weekly_weekday=2, weekly time = 03:00:00.
         custom = bzfs.PeriodAnchors(weekly_weekday=2, weekly_hour=3, weekly_minute=0, weekly_second=0)
         dt = datetime(2025, 2, 13, 5, 0, 0, tzinfo=self.tz)  # Thursday
@@ -2506,7 +2528,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_monthly_anchor1a(self):
+    def test_custom_monthly_anchor1a(self) -> None:
         # Custom monthly: snapshots every month on the 15th at 12:00:00.
         custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 4, 20, 10, 0, 0, tzinfo=self.tz)
@@ -2514,7 +2536,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_monthly_anchor1b(self):
+    def test_custom_monthly_anchor1b(self) -> None:
         # Custom monthly: snapshots every month on the 15th at 12:00:00.
         custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 5, 12, 10, 0, 0, tzinfo=self.tz)
@@ -2522,7 +2544,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_monthly_anchor2a(self):
+    def test_custom_monthly_anchor2a(self) -> None:
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
         custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 4, 20, 10, 0, 0, tzinfo=self.tz)
@@ -2530,7 +2552,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_monthly_anchor2b(self):
+    def test_custom_monthly_anchor2b(self) -> None:
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
         custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 5, 12, 10, 0, 0, tzinfo=self.tz)
@@ -2538,7 +2560,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_monthly_anchor2c(self):
+    def test_custom_monthly_anchor2c(self) -> None:
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
         custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 5, 17, 10, 0, 0, tzinfo=self.tz)
@@ -2546,7 +2568,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_yearly_anchor1a(self):
+    def test_custom_yearly_anchor1a(self) -> None:
         # Custom yearly: snapshots on June 30 at 02:00:00.
         custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2024, 3, 15, 10, 0, 0, tzinfo=self.tz)
@@ -2554,7 +2576,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_yearly_anchor1b(self):
+    def test_custom_yearly_anchor1b(self) -> None:
         # Custom yearly: snapshots on June 30 at 02:00:00.
         custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2025, 3, 15, 10, 0, 0, tzinfo=self.tz)
@@ -2562,7 +2584,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_yearly_anchor2a(self):
+    def test_custom_yearly_anchor2a(self) -> None:
         # Custom yearly: snapshots every other year on June 30 at 02:00:00.
         custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2024, 3, 15, 10, 0, 0, tzinfo=self.tz)
@@ -2570,7 +2592,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_custom_yearly_anchor2b(self):
+    def test_custom_yearly_anchor2b(self) -> None:
         # Custom yearly: snapshots every other year on June 30 at 02:00:00.
         custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2025, 3, 15, 10, 0, 0, tzinfo=self.tz)
@@ -2580,7 +2602,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
         self.assertEqual(expected, result)
 
-    def test_timezone_preservation(self):
+    def test_timezone_preservation(self) -> None:
         if sys.version_info < (3, 9):
             self.skipTest("ZoneInfo requires python >= 3.9")
         from zoneinfo import ZoneInfo  # requires python >= 3.9
@@ -2606,7 +2628,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         self.assertEqual(expected.tzinfo, result.tzinfo)
         self.assertEqual(expected.utcoffset(), result.utcoffset())
 
-    def test_monthly_anchor_invalid_day(self):
+    def test_monthly_anchor_invalid_day(self) -> None:
         # Custom monthly: snapshots every month on the 31st
         custom = bzfs.PeriodAnchors(monthly_monthday=31, monthly_hour=12, monthly_minute=0, monthly_second=0)
 
@@ -2623,7 +2645,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
 #############################################################################
 class TestFindMatch(unittest.TestCase):
 
-    def test_basic(self):
+    def test_basic(self) -> None:
         condition = lambda arg: arg.startswith("-")  # noqa: E731
 
         lst = ["a", "b", "-c", "d"]
@@ -2733,15 +2755,24 @@ class TestFindMatch(unittest.TestCase):
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=False))
         self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=True))
 
-    def assert_find_match(self, expected, lst, condition, start=None, end=None, raises=False):
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raises))
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True, raises=raises))
+    def assert_find_match(
+        self,
+        expected: int,
+        lst: Sequence[str],
+        condition: Callable[[str], bool],
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        raises: Optional[Union[bool, str, Callable[[], str]]] = False,
+    ) -> None:
+        raise_arg = cast(Union[bool, str, Callable[[], str]], raises)
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raise_arg))
+        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True, raises=raise_arg))
 
 
 #############################################################################
 class TestArgumentParser(unittest.TestCase):
 
-    def test_help(self):
+    def test_help(self) -> None:
         if is_solaris_zfs():
             self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = bzfs.argument_parser()
@@ -2749,25 +2780,25 @@ class TestArgumentParser(unittest.TestCase):
             parser.parse_args(["--help"])
         self.assertEqual(0, e.exception.code)
 
-    def test_version(self):
+    def test_version(self) -> None:
         parser = bzfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
             parser.parse_args(["--version"])
         self.assertEqual(0, e.exception.code)
 
-    def test_missing_datasets(self):
+    def test_missing_datasets(self) -> None:
         parser = bzfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
             parser.parse_args(["--retries=1"])
         self.assertEqual(2, e.exception.code)
 
-    def test_missing_dst_dataset(self):
+    def test_missing_dst_dataset(self) -> None:
         parser = bzfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
             parser.parse_args(["src_dataset"])  # Each SRC_DATASET must have a corresponding DST_DATASET
         self.assertEqual(2, e.exception.code)
 
-    def test_program_must_not_be_empty_string(self):
+    def test_program_must_not_be_empty_string(self) -> None:
         parser = bzfs.argument_parser()
         with self.assertRaises(SystemExit) as e:
             parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])
@@ -2777,49 +2808,49 @@ class TestArgumentParser(unittest.TestCase):
 #############################################################################
 class TestDatasetPairsAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--input", nargs="+", action=bzfs.DatasetPairsAction)
 
-    def test_direct_value(self):
+    def test_direct_value(self) -> None:
         args = self.parser.parse_args(["--input", "src1", "dst1"])
         self.assertEqual(args.input, [("src1", "dst1")])
 
-    def test_direct_value_without_corresponding_dst(self):
+    def test_direct_value_without_corresponding_dst(self) -> None:
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["--input", "src1"])
 
-    def test_file_input(self):
+    def test_file_input(self) -> None:
         with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "+testfile"])
             self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
 
-    def test_file_input_without_trailing_newline(self):
+    def test_file_input_without_trailing_newline(self) -> None:
         with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2")):
             args = self.parser.parse_args(["--input", "+testfile"])
             self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
 
-    def test_mixed_input(self):
+    def test_mixed_input(self) -> None:
         with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "src0", "dst0", "+testfile"])
             self.assertEqual(args.input, [("src0", "dst0"), ("src1", "dst1"), ("src2", "dst2")])
 
-    def test_file_skip_comments_and_empty_lines(self):
+    def test_file_skip_comments_and_empty_lines(self) -> None:
         with patch("builtins.open", mock_open(read_data="\n\n#comment\nsrc1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "+testfile"])
             self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
 
-    def test_file_skip_stripped_empty_lines(self):
+    def test_file_skip_stripped_empty_lines(self) -> None:
         with patch("builtins.open", mock_open(read_data=" \t \nsrc1\tdst1")):
             args = self.parser.parse_args(["--input", "+testfile"])
             self.assertEqual(args.input, [("src1", "dst1")])
 
-    def test_file_missing_tab(self):
+    def test_file_missing_tab(self) -> None:
         with patch("builtins.open", mock_open(read_data="src1\nsrc2")):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+testfile"])
 
-    def test_file_whitespace_only(self):
+    def test_file_whitespace_only(self) -> None:
         with patch("builtins.open", mock_open(read_data=" \tdst1")):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+testfile"])
@@ -2832,7 +2863,7 @@ class TestDatasetPairsAction(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+nonexistentfile"])
 
-    def test_option_not_specified(self):
+    def test_option_not_specified(self) -> None:
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
 
@@ -2840,35 +2871,35 @@ class TestDatasetPairsAction(unittest.TestCase):
 #############################################################################
 class TestFileOrLiteralAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--input", nargs="+", action=bzfs.FileOrLiteralAction)
 
-    def test_direct_value(self):
+    def test_direct_value(self) -> None:
         args = self.parser.parse_args(["--input", "literalvalue"])
         self.assertEqual(args.input, ["literalvalue"])
 
-    def test_file_input(self):
+    def test_file_input(self) -> None:
         with patch("builtins.open", mock_open(read_data="line 1\nline 2  \n")):
             args = self.parser.parse_args(["--input", "+testfile"])
             self.assertEqual(args.input, ["line 1", "line 2  "])
 
-    def test_mixed_input(self):
+    def test_mixed_input(self) -> None:
         with patch("builtins.open", mock_open(read_data="line 1\nline 2")):
             args = self.parser.parse_args(["--input", "literalvalue", "+testfile"])
             self.assertEqual(args.input, ["literalvalue", "line 1", "line 2"])
 
-    def test_skip_comments_and_empty_lines(self):
+    def test_skip_comments_and_empty_lines(self) -> None:
         with patch("builtins.open", mock_open(read_data="\n\n#comment\nline 1\n\n\nline 2\n")):
             args = self.parser.parse_args(["--input", "+testfile"])
             self.assertEqual(args.input, ["line 1", "line 2"])
 
-    def test_file_not_found(self):
+    def test_file_not_found(self) -> None:
         with patch("builtins.open", side_effect=FileNotFoundError):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+nonexistentfile"])
 
-    def test_option_not_specified(self):
+    def test_option_not_specified(self) -> None:
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
 
@@ -2876,39 +2907,39 @@ class TestFileOrLiteralAction(unittest.TestCase):
 #############################################################################
 class TestNewSnapshotFilterGroupAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--new-snapshot-filter-group", action=bzfs.NewSnapshotFilterGroupAction, nargs=0)
 
-    def test_basic0(self):
+    def test_basic0(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group"])
         self.assertListEqual([[]], getattr(args, bzfs.snapshot_filters_var))
 
-    def test_basic1(self):
+    def test_basic1(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group", "--new-snapshot-filter-group"])
         self.assertListEqual([[]], getattr(args, bzfs.snapshot_filters_var))
 
 
 #############################################################################
 class TestTimeRangeAction(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--time-n-ranks", action=bzfs.TimeRangeAndRankRangeAction, nargs="+")
 
-    def parse_duration(self, arg):
+    def parse_duration(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--time-n-ranks", arg + " ago..anytime"])
 
-    def parse_timestamp(self, arg):
+    def parse_timestamp(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--time-n-ranks", arg + "..anytime"])
 
-    def test_parse_unix_time(self):  # Test Unix time in integer seconds
+    def test_parse_unix_time(self) -> None:  # Test Unix time in integer seconds
         args = self.parse_timestamp("1696510080")
         self.assertEqual(args.time_n_ranks[0][0], 1696510080)
 
         args = self.parse_timestamp("0")
         self.assertEqual(args.time_n_ranks[0][0], 0)
 
-    def test_valid_durations(self):
+    def test_valid_durations(self) -> None:
         args = self.parse_duration("5millis")
         self.assertEqual(args.time_n_ranks[0][0], timedelta(milliseconds=5))
 
@@ -2959,7 +2990,7 @@ class TestTimeRangeAction(unittest.TestCase):
         args = self.parse_duration("5secs")
         self.assertEqual(args.time_n_ranks[0][0], timedelta(seconds=5))
 
-    def test_invalid_time_spec(self):
+    def test_invalid_time_spec(self) -> None:
         with self.assertRaises(SystemExit):
             self.parse_duration("")  # Empty string
 
@@ -2987,7 +3018,7 @@ class TestTimeRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["--time-n-ranks", "60_mins_ago"])  # Missing ..
 
-    def test_parse_datetime(self):
+    def test_parse_datetime(self) -> None:
         # Test ISO 8601 datetime strings without timezone
         args = self.parse_timestamp("2024-01-01")
         self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-01-01").timestamp()))
@@ -2999,7 +3030,7 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:55").timestamp()))
         self.assertNotEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:01").timestamp()))
 
-    def test_parse_datetime_with_timezone(self):
+    def test_parse_datetime_with_timezone(self) -> None:
         tz_py_version = (3, 11)
         if sys.version_info < tz_py_version:
             self.skipTest("Timezone support in datetime.fromisoformat() requires python >= 3.11")
@@ -3017,7 +3048,7 @@ class TestTimeRangeAction(unittest.TestCase):
         args = self.parse_timestamp("2024-10-05T14:48:55+02:00")
         self.assertEqual(args.time_n_ranks[0][0], int(datetime.fromisoformat("2024-10-05T14:48:55+02:00").timestamp()))
 
-    def test_get_include_snapshot_times(self):
+    def test_get_include_snapshot_times(self) -> None:
         times_and_ranks_opt = "--include-snapshot-times-and-ranks="
         wildcards = ["*", "anytime"]
 
@@ -3047,26 +3078,30 @@ class TestTimeRangeAction(unittest.TestCase):
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertEqual(timedelta(seconds=0), p.snapshot_filters[0][0].timerange[0])
-        self.assertEqual(timedelta(seconds=60), p.snapshot_filters[0][0].timerange[1])
+        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        self.assertEqual(timedelta(seconds=0), timerange[0])
+        self.assertEqual(timedelta(seconds=60), timerange[1])
 
         args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1secs ago..60secs ago"])
         p = bzfs.Params(args)
-        self.assertEqual(timedelta(seconds=1), p.snapshot_filters[0][0].timerange[0])
-        self.assertEqual(timedelta(seconds=60), p.snapshot_filters[0][0].timerange[1])
+        timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+        self.assertEqual(timedelta(seconds=1), timerange[0])
+        self.assertEqual(timedelta(seconds=60), timerange[1])
 
         for wildcard in wildcards:
             args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
             p = bzfs.Params(args)
-            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0][0].timerange[0])
-            self.assertLess(int(time.time() + 86400 * 365 * 1000), p.snapshot_filters[0][0].timerange[1])
+            timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), timerange[0])
+            self.assertLess(int(time.time() + 86400 * 365 * 1000), cast(int, timerange[1]))
 
             args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + wildcard + "..2024-01-01"])
             p = bzfs.Params(args)
-            self.assertEqual(0, p.snapshot_filters[0][0].timerange[0])
-            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), p.snapshot_filters[0][0].timerange[1])
+            timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
+            self.assertEqual(0, timerange[0])
+            self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), cast(int, timerange[1]))
 
-    def test_filter_snapshots_by_times(self):
+    def test_filter_snapshots_by_times(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
         self.assertListEqual(["\td#1"], self.filter_snapshots_by_times_and_rank1(lst1, "0..0"))
         self.assertListEqual(["\td#1"], self.filter_snapshots_by_times_and_rank1(lst1, "notime"))
@@ -3104,18 +3139,18 @@ def filter_snapshots_by_times_and_rank(
 #############################################################################
 class TestRankRangeAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--ranks", nargs="+", action=bzfs.TimeRangeAndRankRangeAction)
 
-    def parse_args(self, arg):
+    def parse_args(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--ranks", "0..0", arg])
 
-    def test_valid_ranks(self):
+    def test_valid_ranks(self) -> None:
         self.assertEqual((("latest", 0, False), ("latest", 2, True)), self.parse_args("latest0..latest2%").ranks[1])
         self.assertEqual((("oldest", 5, True), ("oldest", 9, True)), self.parse_args("oldest5%..oldest9%").ranks[1])
 
-    def test_invalid_ranks(self):
+    def test_invalid_ranks(self) -> None:
         with self.assertRaises(SystemExit):
             self.parse_args("all except oldest0..all except oldest10")  # Range partitioning not yet implemented
 
@@ -3149,7 +3184,7 @@ class TestRankRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse_args("oldest1..xxxx100%")  # unknown param
 
-    def test_ambigous_rankrange(self):
+    def test_ambigous_rankrange(self) -> None:
         with self.assertRaises(SystemExit):
             self.parse_args("latest0..oldest0")
         with self.assertRaises(SystemExit):
@@ -3164,7 +3199,7 @@ class TestRankRangeAction(unittest.TestCase):
     def filter_snapshots_by_rank(self, snapshots: List[str], ranks: List[str], timerange: str = "0..0") -> List[str]:
         return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
 
-    def test_filter_snapshots_by_rank(self):
+    def test_filter_snapshots_by_rank(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2", "d@3"]]
         self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest0..latest0"]))
         self.assertListEqual(["\td@3"], self.filter_snapshots_by_rank(lst1, ["latest0..latest1"]))
@@ -3231,7 +3266,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest1"]))
         self.assertListEqual(["\td@0", "\td@1"], self.filter_snapshots_by_rank(lst2, ["latest100%..latest1"]))
 
-    def test_filter_snapshots_by_rank_with_bookmarks(self):
+    def test_filter_snapshots_by_rank_with_bookmarks(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
         self.assertListEqual(["\td#1"], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest0"]))
         self.assertListEqual(["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, ["oldest0..oldest1"]))
@@ -3241,7 +3276,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(lst1, self.filter_snapshots_by_rank(lst1, ["oldest0..oldest5"]))
         self.assertListEqual(["\td@0", "\td#1", "\td@2"], self.filter_snapshots_by_rank(lst1, ["latest1..latest100%"]))
 
-    def test_filter_snapshots_by_rank_with_chain(self):
+    def test_filter_snapshots_by_rank_with_chain(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
         results = self.filter_snapshots_by_rank(lst1, ["latest1..latest100%", "latest1..latest100%"])
         self.assertListEqual(["\td@0", "\td#1"], results)
@@ -3249,7 +3284,7 @@ class TestRankRangeAction(unittest.TestCase):
         results = self.filter_snapshots_by_rank(lst1, ["latest1..latest100%", "oldest1..oldest100%"])
         self.assertListEqual(["\td#1", "\td@2"], results)
 
-    def test_filter_snapshots_by_rank_with_times(self):
+    def test_filter_snapshots_by_rank_with_times(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d#1", "d@2", "d@3"]]
         self.assertListEqual(["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, ["oldest 1"], timerange="0..0"))
         self.assertListEqual(["\td@0", "\td#1"], self.filter_snapshots_by_rank(lst1, ["oldest 1"], timerange="notime"))
@@ -3265,11 +3300,11 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
 
     @staticmethod
-    def get_snapshot_filters(cli):
+    def get_snapshot_filters(cli: List[str]) -> Any:
         args = argparser_parse_args(args=["src", "dst", *cli])
         return bzfs.Params(args).snapshot_filters[0]
 
-    def test_merge_adjacent_snapshot_regexes_and_filters0(self):
+    def test_merge_adjacent_snapshot_regexes_and_filters0(self) -> None:
         ranks = "--include-snapshot-times-and-ranks"
         cli = [ranks, "0..1", "oldest 50%", ranks, "0..0", "oldest 10%"]
         ranks_filter = self.get_snapshot_filters(cli)
@@ -3278,7 +3313,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertEqual((0, 0), ranks_filter[1].timerange)
         self.assertEqual([(("oldest", 0, False), ("oldest", 10, True))], ranks_filter[1].options)
 
-    def test_merge_adjacent_snapshot_regexes_and_filters1(self):
+    def test_merge_adjacent_snapshot_regexes_and_filters1(self) -> None:
         ranks = "--include-snapshot-times-and-ranks"
         cli = [ranks, "0..0", "oldest 50%", ranks, "0..0", "oldest 10%"]
         ranks_filter = self.get_snapshot_filters(cli)[0]
@@ -3291,7 +3326,7 @@ class TestRankRangeAction(unittest.TestCase):
             ranks_filter.options,
         )
 
-    def test_merge_adjacent_snapshot_regexes_and_filters2(self):
+    def test_merge_adjacent_snapshot_regexes_and_filters2(self) -> None:
         ranks = "--include-snapshot-times-and-ranks"
         cli = [ranks, "0..0", "oldest 50%", ranks, "0..0", "oldest 10%", ranks, "0..0", "oldest 20%"]
         ranks_filter = self.get_snapshot_filters(cli)[0]
@@ -3305,7 +3340,7 @@ class TestRankRangeAction(unittest.TestCase):
             ranks_filter.options,
         )
 
-    def test_merge_adjacent_snapshot_regexes_and_filters3(self):
+    def test_merge_adjacent_snapshot_regexes_and_filters3(self) -> None:
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
         times = "--include-snapshot-times-and-ranks"
@@ -3316,7 +3351,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual((["w", "m"], ["f", "d", "h"]), regex_filter.options)
 
-    def test_merge_adjacent_snapshot_regexes_doesnt_merge_across_groups(self):
+    def test_merge_adjacent_snapshot_regexes_doesnt_merge_across_groups(self) -> None:
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
         ranks = "--include-snapshot-times-and-ranks"
@@ -3330,7 +3365,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter2.name)
         self.assertEqual(([".*m"], []), regex_filter2.options)
 
-    def test_reorder_snapshot_times_simple(self):
+    def test_reorder_snapshot_times_simple(self) -> None:
         include = "--include-snapshot-regex"
         times = "--include-snapshot-times-and-ranks"
         cli = [include, ".*daily", times, "0..9"]
@@ -3340,7 +3375,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([], [".*daily"]), regex_filter.options)
 
-    def test_reorder_snapshot_times_complex(self):
+    def test_reorder_snapshot_times_complex(self) -> None:
         include = "--include-snapshot-regex"
         exclude = "--exclude-snapshot-regex"
         times = "--include-snapshot-times-and-ranks"
@@ -3359,11 +3394,11 @@ class TestRankRangeAction(unittest.TestCase):
 #############################################################################
 class TestLogConfigVariablesAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--log-config-var", nargs="+", action=bzfs.LogConfigVariablesAction)
 
-    def test_basic(self):
+    def test_basic(self) -> None:
         args = self.parser.parse_args(["--log-config-var", "name1:val1", "name2:val2"])
         self.assertEqual(args.log_config_var, ["name1:val1", "name2:val2"])
 
@@ -3375,35 +3410,35 @@ class TestLogConfigVariablesAction(unittest.TestCase):
 #############################################################################
 class TestSafeFileNameAction(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("filename", action=bzfs.SafeFileNameAction)
 
-    def test_safe_filename(self):
+    def test_safe_filename(self) -> None:
         args = self.parser.parse_args(["file1.txt"])
         self.assertEqual(args.filename, "file1.txt")
 
-    def test_empty_filename(self):
+    def test_empty_filename(self) -> None:
         args = self.parser.parse_args([""])
         self.assertEqual(args.filename, "")
 
-    def test_filename_in_subdirectory(self):
+    def test_filename_in_subdirectory(self) -> None:
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["subdir/safe_file.txt"])
 
-    def test_unsafe_filename_with_parent_directory_reference(self):
+    def test_unsafe_filename_with_parent_directory_reference(self) -> None:
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["../escape.txt"])
 
-    def test_unsafe_filename_with_absolute_path(self):
+    def test_unsafe_filename_with_absolute_path(self) -> None:
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["/unsafe_file.txt"])
 
-    def test_unsafe_nested_parent_directory(self):
+    def test_unsafe_nested_parent_directory(self) -> None:
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["../../another_escape.txt"])
 
-    def test_filename_with_single_dot_slash(self):
+    def test_filename_with_single_dot_slash(self) -> None:
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["./file.txt"])
 
@@ -3411,123 +3446,123 @@ class TestSafeFileNameAction(unittest.TestCase):
 #############################################################################
 class TestCheckRange(unittest.TestCase):
 
-    def test_valid_range_min_max(self):
+    def test_valid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=0, max=100)
         args = parser.parse_args(["--age", "50"])
         self.assertEqual(args.age, 50)
 
-    def test_valid_range_inf_sup(self):
+    def test_valid_range_inf_sup(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange, inf=0, sup=100)
         args = parser.parse_args(["--age", "50"])
         self.assertEqual(args.age, 50)
 
-    def test_invalid_range_min_max(self):
+    def test_invalid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=0, max=100)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "-1"])
 
-    def test_invalid_range_inf_sup(self):
+    def test_invalid_range_inf_sup(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange, inf=0, sup=100)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "101"])
 
-    def test_invalid_combination_min_inf(self):
+    def test_invalid_combination_min_inf(self) -> None:
         with self.assertRaises(ValueError):
             parser = argparse.ArgumentParser()
             parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=0, inf=100)
 
-    def test_invalid_combination_max_sup(self):
+    def test_invalid_combination_max_sup(self) -> None:
         with self.assertRaises(ValueError):
             parser = argparse.ArgumentParser()
             parser.add_argument("--age", type=int, action=bzfs.CheckRange, max=0, sup=100)
 
-    def test_valid_float_range_min_max(self):
+    def test_valid_float_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "50.5"])
         self.assertEqual(args.age, 50.5)
 
-    def test_invalid_float_range_min_max(self):
+    def test_invalid_float_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "-0.1"])
 
-    def test_valid_edge_case_min(self):
+    def test_valid_edge_case_min(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "0.0"])
         self.assertEqual(args.age, 0.0)
 
-    def test_valid_edge_case_max(self):
+    def test_valid_edge_case_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "100.0"])
         self.assertEqual(args.age, 100.0)
 
-    def test_invalid_edge_case_sup(self):
+    def test_invalid_edge_case_sup(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=bzfs.CheckRange, inf=0.0, sup=100.0)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "100.0"])
 
-    def test_invalid_edge_case_inf(self):
+    def test_invalid_edge_case_inf(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=bzfs.CheckRange, inf=0.0, sup=100.0)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "0.0"])
 
-    def test_no_range_constraints(self):
+    def test_no_range_constraints(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange)
         args = parser.parse_args(["--age", "150"])
         self.assertEqual(args.age, 150)
 
-    def test_no_range_constraints_float(self):
+    def test_no_range_constraints_float(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=bzfs.CheckRange)
         args = parser.parse_args(["--age", "150.5"])
         self.assertEqual(args.age, 150.5)
 
-    def test_very_large_value(self):
+    def test_very_large_value(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange, max=10**18)
         args = parser.parse_args(["--age", "999999999999999999"])
         self.assertEqual(args.age, 999999999999999999)
 
-    def test_very_small_value(self):
+    def test_very_small_value(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=-(10**18))
         args = parser.parse_args(["--age", "-999999999999999999"])
         self.assertEqual(args.age, -999999999999999999)
 
-    def test_default_interval(self):
+    def test_default_interval(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange)
         action = bzfs.CheckRange(option_strings=["--age"], dest="age")
         self.assertEqual(action.interval(), "valid range: (-infinity, +infinity)")
 
-    def test_interval_with_inf_sup(self):
+    def test_interval_with_inf_sup(self) -> None:
         action = bzfs.CheckRange(option_strings=["--age"], dest="age", inf=0, sup=100)
         self.assertEqual(action.interval(), "valid range: (0, 100)")
 
-    def test_interval_with_min_max(self):
+    def test_interval_with_min_max(self) -> None:
         action = bzfs.CheckRange(option_strings=["--age"], dest="age", min=0, max=100)
         self.assertEqual(action.interval(), "valid range: [0, 100]")
 
-    def test_interval_with_min(self):
+    def test_interval_with_min(self) -> None:
         action = bzfs.CheckRange(option_strings=["--age"], dest="age", min=0)
         self.assertEqual(action.interval(), "valid range: [0, +infinity)")
 
-    def test_interval_with_max(self):
+    def test_interval_with_max(self) -> None:
         action = bzfs.CheckRange(option_strings=["--age"], dest="age", max=100)
         self.assertEqual(action.interval(), "valid range: (-infinity, 100]")
 
-    def test_call_without_range_constraints(self):
+    def test_call_without_range_constraints(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=bzfs.CheckRange)
         args = parser.parse_args(["--age", "50"])
@@ -3537,7 +3572,7 @@ class TestCheckRange(unittest.TestCase):
 #############################################################################
 class TestCheckPercentRange(unittest.TestCase):
 
-    def test_valid_range_min(self):
+    def test_valid_range_min(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
         args = parser.parse_args(["--threads", "1"])
@@ -3545,7 +3580,7 @@ class TestCheckPercentRange(unittest.TestCase):
         self.assertEqual(threads, 1.0)
         self.assertFalse(is_percent)
 
-    def test_valid_range_percent(self):
+    def test_valid_range_percent(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
         args = parser.parse_args(["--threads", "5.2%"])
@@ -3553,7 +3588,7 @@ class TestCheckPercentRange(unittest.TestCase):
         self.assertEqual(threads, 5.2)
         self.assertTrue(is_percent)
 
-    def test_invalid(self):
+    def test_invalid(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
         with self.assertRaises(SystemExit):
@@ -3574,7 +3609,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 6))
-    def test_version_below_3_8(self, mock_exit):
+    def test_version_below_3_8(self, mock_exit: MagicMock) -> None:
         with patch("sys.stderr"):
             import importlib
             from bzfs_main import bzfs
@@ -3584,7 +3619,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 8))
-    def test_version_3_8_or_higher(self, mock_exit):
+    def test_version_3_8_or_higher(self, mock_exit: MagicMock) -> None:
         import importlib
         from bzfs_main import bzfs
 
@@ -3594,7 +3629,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
 #############################################################################
 class TestConnectionPool(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         args = argparser_parse_args(args=["src", "dst", "-v"])
         p = bzfs.Params(args, log=bzfs.get_logger(bzfs.LogParams(args), args))
         self.src = p.src
@@ -3603,31 +3638,39 @@ class TestConnectionPool(unittest.TestCase):
         self.remote = bzfs.Remote("src", args, p)
         self.src2 = bzfs.Remote("src", args, p)
 
-    def assert_priority_queue(self, cpool, queuelen):
+    def assert_priority_queue(self, cpool: bzfs.ConnectionPool, queuelen: int) -> None:
         self.assertEqual(len(cpool.priority_queue), queuelen)
 
-    def assert_equal_connections(self, conn, donn):
+    def assert_equal_connections(self, conn: bzfs.Connection, donn: bzfs.Connection) -> None:
         self.assertTupleEqual((conn.cid, conn.ssh_cmd), (donn.cid, donn.ssh_cmd))
         self.assertEqual(conn.free, donn.free)
         self.assertEqual(conn.last_modified, donn.last_modified)
 
-    def get_connection(self, cpool, dpool):
+    def get_connection(
+        self, cpool: bzfs.ConnectionPool, dpool: "SlowButCorrectConnectionPool"
+    ) -> Tuple[bzfs.Connection, bzfs.Connection]:
         conn = cpool.get_connection()
         donn = dpool.get_connection()
         self.assert_equal_connections(conn, donn)
         return conn, donn
 
-    def return_connection(self, cpool, conn, dpool, donn):
+    def return_connection(
+        self,
+        cpool: bzfs.ConnectionPool,
+        conn: bzfs.Connection,
+        dpool: "SlowButCorrectConnectionPool",
+        donn: bzfs.Connection,
+    ) -> None:
         self.assertTupleEqual((conn.cid, conn.ssh_cmd), (donn.cid, donn.ssh_cmd))
         cpool.return_connection(conn)
         dpool.return_connection(donn)
 
-    def test_basic(self):
+    def test_basic(self) -> None:
         counter1a = itertools.count()
         counter2a = itertools.count()
         counter1b = itertools.count()
-        self.src.local_ssh_command = lambda: [str(next(counter1a))]
-        self.src2.local_ssh_command = lambda: [str(next(counter1b))]
+        self.src.local_ssh_command = lambda counter=counter1a: [str(next(counter))]  # type: ignore
+        self.src2.local_ssh_command = lambda counter=counter1b: [str(next(counter))]  # type: ignore
 
         with self.assertRaises(AssertionError):
             bzfs.ConnectionPool(self.src, 0)
@@ -3668,13 +3711,13 @@ class TestConnectionPool(unittest.TestCase):
         self.assert_priority_queue(cpool, 1)
 
         with self.assertRaises(AssertionError):
-            cpool.return_connection(None)
+            cpool.return_connection(cast(Any, None))
         with self.assertRaises(AssertionError):
             cpool.return_connection(conn3)
         cpool.shutdown("bar")
         cpool.return_connection(conn3)
 
-    def test_multiple_TCP_connections(self):
+    def test_multiple_TCP_connections(self) -> None:
         capacity = 2
         cpool = bzfs.ConnectionPool(self.remote, capacity)
 
@@ -3742,7 +3785,7 @@ class TestConnectionPool(unittest.TestCase):
 
         cpool.shutdown("foo")
 
-    def test_pools(self):
+    def test_pools(self) -> None:
         with self.assertRaises(AssertionError):
             bzfs.ConnectionPools(self.dst, {"shared": 0})
 
@@ -3756,7 +3799,7 @@ class TestConnectionPool(unittest.TestCase):
         pools.pool("shared").get_connection()
         pools.shutdown("foo")
 
-    def test_return_sequence(self):
+    def test_return_sequence(self) -> None:
         maxsessions = 10
         items = 10
         for j in range(0, 3):
@@ -3770,10 +3813,10 @@ class TestConnectionPool(unittest.TestCase):
                 self.return_connection(cpool, conn, dpool, donn)
             print(f"cpool: {cpool}")
 
-    def test_long_random_walk(self):
+    def test_long_random_walk(self) -> None:
         log = logging.getLogger(bzfs.__name__)
         # loglevel = logging.DEBUG
-        loglevel = bzfs.log_trace
+        loglevel = log_trace
         is_logging = log.isEnabledFor(loglevel)
         num_steps = 75 if is_unit_test or is_smoke_test or is_functional_test or is_adhoc_test else 1000
         log.info(f"num_random_steps: {num_steps}")
@@ -3782,8 +3825,8 @@ class TestConnectionPool(unittest.TestCase):
             for items in range(0, 64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
-                self.src.local_ssh_command = lambda: [str(next(counter1a))]  # noqa: B023
-                self.src2.local_ssh_command = lambda: [str(next(counter1b))]  # noqa: B023
+                self.src.local_ssh_command = lambda counter=counter1a: [str(next(counter))]  # type: ignore
+                self.src2.local_ssh_command = lambda counter=counter1b: [str(next(counter))]  # type: ignore
                 cpool = bzfs.ConnectionPool(self.src, maxsessions)
                 dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
                 # dpool = bzfs.ConnectionPool(self.src2, maxsessions)
@@ -3829,9 +3872,9 @@ class TestConnectionPool(unittest.TestCase):
 #############################################################################
 class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better implementation against this baseline
 
-    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection):
+    def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
         super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection)
-        self.priority_queue = []
+        self.priority_queue: List[bzfs.Connection] = []  # type: ignore
 
     def get_connection(self) -> bzfs.Connection:
         with self._lock:
@@ -3862,40 +3905,40 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
 #############################################################################
 class TestIncrementalSendSteps(unittest.TestCase):
 
-    def test_basic1(self):
+    def test_basic1(self) -> None:
         input_snapshots = ["d1", "h1", "d2", "d3", "d4"]
         expected_results = ["d1", "d2", "d3", "d4"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
-    def test_basic2(self):
+    def test_basic2(self) -> None:
         input_snapshots = ["d1", "d2", "h1", "d3", "d4"]
         expected_results = ["d1", "d2", "d3", "d4"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
-    def test_basic3(self):
-        input_snapshots = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
-        expected_results = ["d1", "d2", "d3", "d4"]
+    def test_basic3(self) -> None:
+        input_snapshots: List[str] = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
+        expected_results: List[str] = ["d1", "d2", "d3", "d4"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
-    def test_basic4(self):
-        input_snapshots = ["d1"]
-        expected_results = ["d1"]
+    def test_basic4(self) -> None:
+        input_snapshots: List[str] = ["d1"]
+        expected_results: List[str] = ["d1"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
-    def test_basic5(self):
-        input_snapshots = []
-        expected_results = []
+    def test_basic5(self) -> None:
+        input_snapshots: List[str] = []
+        expected_results: List[str] = []
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
-    def test_validate_snapshot_series_excluding_hourlies_with_permutations(self):
+    def test_validate_snapshot_series_excluding_hourlies_with_permutations(self) -> None:
         for i, testcase in enumerate(self.permute_snapshot_series()):
             with stop_on_failure_subtest(i=i):
                 self.validate_incremental_send_steps(testcase[None], testcase["d"])
 
-    def test_send_step_to_str(self):
+    def test_send_step_to_str(self) -> None:
         bzfs.Job().send_step_to_str(("-I", "d@s1", "d@s3"))
 
-    def permute_snapshot_series(self, max_length=9) -> List[Dict]:
+    def permute_snapshot_series(self, max_length: int = 9) -> List[DefaultDict[Optional[str], List[str]]]:
         """
         Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly
         snapshots from replication. The expectation is that after replication dst contains all daily snapshots
@@ -3914,8 +3957,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
                 steps = "d" * N + "h" * (L - N)
                 # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
                 for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
-                    snaps = defaultdict(list)
-                    count = defaultdict(int)
+                    snaps: DefaultDict[Optional[str], List[str]] = defaultdict(list)
+                    count: DefaultDict[str, int] = defaultdict(int)
                     for char in permutation:
                         count[char] += 1  # tag snapshots with a monotonically increasing number within each category
                         char_count = f"{count[char]:01}" if max_length < 10 else f"{count[char]:02}"  # zero pad number
@@ -3971,7 +4014,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
         return output_snapshots
 
     def incremental_send_steps1(
-        self, input_snapshots: List[str], src_dataset: str, is_resume=False, force_convert_I_to_i=False
+        self,
+        input_snapshots: List[str],
+        src_dataset: str,
+        is_resume: bool = False,
+        force_convert_I_to_i: bool = False,
     ) -> List[Tuple]:
         origin_src_snapshots_with_guids = []
         guid = 1
@@ -3983,7 +4030,10 @@ class TestIncrementalSendSteps(unittest.TestCase):
         )
 
     def incremental_send_steps2(
-        self, origin_src_snapshots_with_guids: List[str], is_resume=False, force_convert_I_to_i=False
+        self,
+        origin_src_snapshots_with_guids: List[str],
+        is_resume: bool = False,
+        force_convert_I_to_i: bool = False,
     ) -> List[Tuple]:
         guids = []
         input_snapshots = []
@@ -4007,11 +4057,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
 
 #############################################################################
 class TestSmallPriorityQueue(unittest.TestCase):
-    def setUp(self):
-        self.pq = bzfs.SmallPriorityQueue()
-        self.pq_reverse = bzfs.SmallPriorityQueue(reverse=True)
+    def setUp(self) -> None:
+        self.pq: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue()
+        self.pq_reverse: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue(reverse=True)
 
-    def test_basic(self):
+    def test_basic(self) -> None:
         self.assertEqual(0, len(self.pq))
         self.assertTrue(len(str(self.pq)) > 0)
         self.pq.push(2)
@@ -4024,7 +4074,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.pq.clear()
         self.assertEqual(len(self.pq), 0)
 
-    def test_push_and_pop(self):
+    def test_push_and_pop(self) -> None:
         self.pq.push(3)
         self.pq.push(1)
         self.pq.push(2)
@@ -4032,11 +4082,11 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertEqual(self.pq.pop(), 1)
         self.assertEqual(self.pq._lst, [2, 3])
 
-    def test_pop_empty(self):
+    def test_pop_empty(self) -> None:
         with self.assertRaises(IndexError):  # Generic IndexError from list.pop()
             self.pq.pop()
 
-    def test_remove(self):
+    def test_remove(self) -> None:
         self.pq.push(3)
         self.pq.push(1)
         self.pq.push(2)
@@ -4046,7 +4096,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertTrue(self.pq.remove(1))
         self.assertEqual(self.pq._lst, [3])
 
-    def test_remove_nonexistent_element(self):
+    def test_remove_nonexistent_element(self) -> None:
         self.pq.push(1)
         self.pq.push(3)
         self.pq.push(2)
@@ -4054,7 +4104,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         # Attempt to remove an element that doesn't exist (should raise IndexError)
         self.assertFalse(self.pq.remove(4))
 
-    def test_peek(self):
+    def test_peek(self) -> None:
         self.pq.push(3)
         self.pq.push(1)
         self.pq.push(2)
@@ -4066,21 +4116,21 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertEqual(self.pq_reverse.peek(), 3)
         self.assertEqual(self.pq_reverse._lst, [1, 2, 3])
 
-    def test_peek_empty(self):
+    def test_peek_empty(self) -> None:
         with self.assertRaises(IndexError):  # Generic IndexError from list indexing
             self.pq.peek()
 
         with self.assertRaises(IndexError):  # Generic IndexError from list indexing
             self.pq_reverse.peek()
 
-    def test_reverse_order(self):
+    def test_reverse_order(self) -> None:
         self.pq_reverse.push(1)
         self.pq_reverse.push(3)
         self.pq_reverse.push(2)
         self.assertEqual(self.pq_reverse.pop(), 3)
         self.assertEqual(self.pq_reverse._lst, [1, 2])
 
-    def test_iter(self):
+    def test_iter(self) -> None:
         self.pq.push(3)
         self.pq.push(1)
         self.pq.push(2)
@@ -4092,7 +4142,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertListEqual([3, 2, 1], list(iter(self.pq_reverse)))
         self.assertEqual("[3, 2, 1]", str(self.pq_reverse))
 
-    def test_duplicates(self):
+    def test_duplicates(self) -> None:
         self.pq.push(2)
         self.pq.push(2)
         self.pq.push(1)
@@ -4111,7 +4161,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
         self.assertEqual(self.pq.pop(), 2)
         self.assertEqual(len(self.pq), 0)
 
-    def test_reverse_with_duplicates(self):
+    def test_reverse_with_duplicates(self) -> None:
         self.pq_reverse.push(2)
         self.pq_reverse.push(2)
         self.pq_reverse.push(3)
@@ -4135,7 +4185,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
 
 #############################################################################
 class TestSynchronizedBool(unittest.TestCase):
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         b = bzfs.SynchronizedBool(True)
         self.assertTrue(b.value)
 
@@ -4143,34 +4193,34 @@ class TestSynchronizedBool(unittest.TestCase):
         self.assertFalse(b.value)
 
         with self.assertRaises(AssertionError):
-            bzfs.SynchronizedBool("not_a_bool")
+            bzfs.SynchronizedBool(cast(Any, "not_a_bool"))
 
-    def test_value_property(self):
+    def test_value_property(self) -> None:
         b = bzfs.SynchronizedBool(True)
         self.assertTrue(b.value)
 
         b.value = False
         self.assertFalse(b.value)
 
-    def test_loop(self):
+    def test_loop(self) -> None:
         b = bzfs.SynchronizedBool(False)
         for _ in range(3):
             b.value = not b.value
         self.assertIsInstance(b.value, bool)
 
-    def test_bool_conversion(self):
+    def test_bool_conversion(self) -> None:
         b = bzfs.SynchronizedBool(True)
         self.assertTrue(bool(b))
 
         b.value = False
         self.assertFalse(bool(b))
 
-    def test_get_and_set(self):
+    def test_get_and_set(self) -> None:
         b = bzfs.SynchronizedBool(True)
         self.assertTrue(b.get_and_set(False))
         self.assertFalse(b.value)
 
-    def test_compare_and_set(self):
+    def test_compare_and_set(self) -> None:
         b = bzfs.SynchronizedBool(True)
         self.assertTrue(b.compare_and_set(True, False))
         self.assertFalse(b.value)
@@ -4179,7 +4229,7 @@ class TestSynchronizedBool(unittest.TestCase):
         self.assertFalse(b.compare_and_set(False, False))
         self.assertTrue(b.value)
 
-    def test_str_and_repr(self):
+    def test_str_and_repr(self) -> None:
         b = bzfs.SynchronizedBool(True)
         self.assertEqual(str(b), "True")
         self.assertEqual(repr(b), "True")
@@ -4191,65 +4241,65 @@ class TestSynchronizedBool(unittest.TestCase):
 
 #############################################################################
 class TestSynchronizedDict(unittest.TestCase):
-    def setUp(self):
-        self.sync_dict = bzfs.SynchronizedDict({"a": 1, "b": 2, "c": 3})
+    def setUp(self) -> None:
+        self.sync_dict: bzfs.SynchronizedDict = bzfs.SynchronizedDict({"a": 1, "b": 2, "c": 3})
 
-    def test_getitem(self):
+    def test_getitem(self) -> None:
         self.assertEqual(self.sync_dict["a"], 1)
         self.assertEqual(self.sync_dict["b"], 2)
 
-    def test_setitem(self):
+    def test_setitem(self) -> None:
         self.sync_dict["d"] = 4
         self.assertEqual(self.sync_dict["d"], 4)
 
-    def test_delitem(self):
+    def test_delitem(self) -> None:
         del self.sync_dict["a"]
         self.assertNotIn("a", self.sync_dict)
 
-    def test_contains(self):
+    def test_contains(self) -> None:
         self.assertTrue("a" in self.sync_dict)
         self.assertFalse("z" in self.sync_dict)
 
-    def test_len(self):
+    def test_len(self) -> None:
         self.assertEqual(len(self.sync_dict), 3)
         del self.sync_dict["a"]
         self.assertEqual(len(self.sync_dict), 2)
 
-    def test_repr(self):
+    def test_repr(self) -> None:
         self.assertEqual(repr(self.sync_dict), repr({"a": 1, "b": 2, "c": 3}))
 
-    def test_str(self):
+    def test_str(self) -> None:
         self.assertEqual(str(self.sync_dict), str({"a": 1, "b": 2, "c": 3}))
 
-    def test_get(self):
+    def test_get(self) -> None:
         self.assertEqual(self.sync_dict.get("a"), 1)
         self.assertEqual(self.sync_dict.get("z", 42), 42)
 
-    def test_pop(self):
+    def test_pop(self) -> None:
         value = self.sync_dict.pop("b")
         self.assertEqual(value, 2)
         self.assertNotIn("b", self.sync_dict)
 
-    def test_clear(self):
+    def test_clear(self) -> None:
         self.sync_dict.clear()
         self.assertEqual(len(self.sync_dict), 0)
 
-    def test_items(self):
+    def test_items(self) -> None:
         items = self.sync_dict.items()
         self.assertEqual(set(items), {("a", 1), ("b", 2), ("c", 3)})
 
-    def test_loop(self):
+    def test_loop(self) -> None:
         self.sync_dict["key"] = 1
         self.assertIn("key", self.sync_dict)
 
 
 #############################################################################
 # class TestItrSSHCmdParallel(unittest.TestCase)
-def dummy_fn_ordered(cmd, batch):
+def dummy_fn_ordered(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     return cmd, batch
 
 
-def dummy_fn_unordered(cmd, batch):
+def dummy_fn_unordered(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     if cmd[0] == "zfslist1":
         time.sleep(0.2)
     elif cmd[0] == "zfslist2":
@@ -4257,13 +4307,13 @@ def dummy_fn_unordered(cmd, batch):
     return cmd, batch
 
 
-def dummy_fn_raise(cmd, batch):
+def dummy_fn_raise(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     if cmd[0] == "fail":
         raise ValueError("Intentional failure")
     return cmd, batch
 
 
-def dummy_fn_race(cmd, batch):
+def dummy_fn_race(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
     if cmd[0] == "zfslist1":
         time.sleep(0.3)
     elif cmd[0] == "zfslist2":
@@ -4274,19 +4324,19 @@ def dummy_fn_race(cmd, batch):
 
 
 class TestItrSSHCmdParallel(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         job = bzfs.Job()
         job.params = p
-        job.src = bzfs.Remote("src", args, p)
+        p.src = bzfs.Remote("src", args, p)
         job.params.connection_pools["src"] = bzfs.ConnectionPools(
-            job.src, {bzfs.SHARED: job.src.max_concurrent_ssh_sessions_per_tcp_connection, bzfs.DEDICATED: 1}
+            p.src, {bzfs.SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, bzfs.DEDICATED: 1}
         )
         job.max_workers = {"src": 2}
         job.params.available_programs = {"src": {"os": "Linux"}, "local": {"os": "Linux"}}
         self.job = job
-        self.r = job.src
+        self.r = p.src
 
         # Test data with max_batch_items=2
         self.cmd_args_list_2 = [(["zfslist1"], ["d1", "d2", "d3", "d4"]), (["zfslist2"], ["d5", "d6", "d7", "d8"])]
@@ -4306,34 +4356,34 @@ class TestItrSSHCmdParallel(unittest.TestCase):
             (["zfslist2"], ["b4", "b5"]),
         ]
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         bzfs.reset_logger()
 
-    def test_ordered_with_max_batch_items_2(self):
+    def test_ordered_with_max_batch_items_2(self) -> None:
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_2, dummy_fn_ordered, max_batch_items=2, ordered=True)
         )
         self.assertEqual(results, self.expected_ordered_2)
 
-    def test_unordered_with_max_batch_items_2(self):
+    def test_unordered_with_max_batch_items_2(self) -> None:
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_2, dummy_fn_unordered, max_batch_items=2, ordered=False)
         )
         self.assertEqual(sorted(results), sorted(self.expected_ordered_2))
 
-    def test_ordered_with_max_batch_items_3(self):
+    def test_ordered_with_max_batch_items_3(self) -> None:
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_3, dummy_fn_ordered, max_batch_items=3, ordered=True)
         )
         self.assertEqual(results, self.expected_ordered_3)
 
-    def test_unordered_with_max_batch_items_3(self):
+    def test_unordered_with_max_batch_items_3(self) -> None:
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_3, dummy_fn_unordered, max_batch_items=3, ordered=False)
         )
         self.assertEqual(sorted(results), sorted(self.expected_ordered_3))
 
-    def test_exception_propagation_ordered(self):
+    def test_exception_propagation_ordered(self) -> None:
         cmd_args_list = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
         gen = self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=True)
         result = next(gen)
@@ -4342,7 +4392,7 @@ class TestItrSSHCmdParallel(unittest.TestCase):
             next(gen)
         self.assertEqual(str(context.exception), "Intentional failure")
 
-    def test_exception_propagation_unordered(self):
+    def test_exception_propagation_unordered(self) -> None:
         cmd_args_list = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
         gen = self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=False)
         caught_exception = False
@@ -4355,7 +4405,7 @@ class TestItrSSHCmdParallel(unittest.TestCase):
             self.assertEqual(str(e), "Intentional failure")
         self.assertTrue(caught_exception, "Expected exception was not raised in unordered mode..")
 
-    def test_unordered_thread_scheduling(self):
+    def test_unordered_thread_scheduling(self) -> None:
         cmd_args_list = [
             (["zfslist1"], ["a1"]),
             (["zfslist2"], ["b1"]),
@@ -4371,15 +4421,15 @@ class TestItrSSHCmdParallel(unittest.TestCase):
         )
         self.assertEqual(sorted(unordered_results), sorted(expected_ordered))
 
-    def test_empty_cmd_args_list_ordered(self):
+    def test_empty_cmd_args_list_ordered(self) -> None:
         results = list(self.job.itr_ssh_cmd_parallel(self.r, [], dummy_fn_ordered, max_batch_items=2, ordered=True))
         self.assertEqual(results, [])
 
-    def test_empty_cmd_args_list_unordered(self):
+    def test_empty_cmd_args_list_unordered(self) -> None:
         results = list(self.job.itr_ssh_cmd_parallel(self.r, [], dummy_fn_ordered, max_batch_items=2, ordered=False))
         self.assertEqual(results, [])
 
-    def test_cmd_with_empty_arguments_ordered(self):
+    def test_cmd_with_empty_arguments_ordered(self) -> None:
         cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
         expected_ordered = [(["zfslist2"], ["d1", "d2"])]
         results = list(
@@ -4387,7 +4437,7 @@ class TestItrSSHCmdParallel(unittest.TestCase):
         )
         self.assertEqual(results, expected_ordered)
 
-    def test_cmd_with_empty_arguments_unordered(self):
+    def test_cmd_with_empty_arguments_unordered(self) -> None:
         cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
         expected_ordered = [(["zfslist2"], ["d1", "d2"])]
         results = list(
@@ -4398,19 +4448,19 @@ class TestItrSSHCmdParallel(unittest.TestCase):
 
 #############################################################################
 class TestProcessDatasetsInParallel(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args, log=bzfs.get_simple_logger("myprogram"))
         self.job = bzfs.Job()
         self.job.params = p
         self.lock = threading.Lock()
-        self.submitted = []
+        self.submitted: List[str] = []
 
-    def append_submission(self, dataset):
+    def append_submission(self, dataset: str) -> None:
         with self.lock:
             self.submitted.append(dataset)
 
-    def test_submit_no_skiptree(self):
+    def test_submit_no_skiptree(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
@@ -4431,7 +4481,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                 self.assertFalse(failed)
                 self.assertListEqual(["a1", "a1/b1", "a2"], sorted(self.submitted))
 
-    def test_submit_skiptree(self):
+    def test_submit_skiptree(self) -> None:
         def submit_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return False
@@ -4450,12 +4500,12 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
                 self.assertFalse(failed)
                 self.assertListEqual(["a1", "a2"], sorted(self.submitted))
 
-    def test_submit_zero_datasets(self):
+    def test_submit_zero_datasets(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
 
-        src_datasets = []
+        src_datasets: List[str] = []
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
             process_dataset=submit_no_skiptree,  # lambda
@@ -4465,7 +4515,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual([], sorted(self.submitted))
 
-    def test_submit_timeout_with_skip_on_error_is_fail(self):
+    def test_submit_timeout_with_skip_on_error_is_fail(self) -> None:
         def submit_raise_timeout(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             raise subprocess.TimeoutExpired("submit_raise_timeout", 10)
@@ -4481,7 +4531,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             )
         self.assertListEqual(["a1"], sorted(self.submitted))
 
-    def test_submit_timeout_with_skip_on_error_is_not_fail(self):
+    def test_submit_timeout_with_skip_on_error_is_not_fail(self) -> None:
         def submit_raise_timeout(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             raise subprocess.TimeoutExpired("submit_raise_timeout", 10)
@@ -4500,7 +4550,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.append_submission(dataset)
         raise subprocess.CalledProcessError(1, "foo_cmd")
 
-    def test_submit_raise_error_with_skip_tree_on_error_is_false(self):
+    def test_submit_raise_error_with_skip_tree_on_error_is_false(self) -> None:
         src_datasets = ["a1", "a1/b1", "a2"]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
@@ -4511,7 +4561,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertTrue(failed)
         self.assertListEqual(["a1", "a1/b1", "a2"], sorted(self.submitted))
 
-    def test_submit_raise_error_with_skip_tree_on_error_is_true(self):
+    def test_submit_raise_error_with_skip_tree_on_error_is_true(self) -> None:
         src_datasets = ["a1", "a1/b1", "a2"]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
@@ -4522,7 +4572,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertTrue(failed)
         self.assertListEqual(["a1", "a2"], sorted(self.submitted))
 
-    def test_submit_barriers0a_no_skiptree(self):
+    def test_submit_barriers0a_no_skiptree(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
@@ -4539,7 +4589,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual(src_datasets, sorted(self.submitted))
 
-    def test_submit_barriers0a_with_skiptree(self):
+    def test_submit_barriers0a_with_skiptree(self) -> None:
         def submit_with_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return dataset != "a/b/c/0d"
@@ -4556,7 +4606,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual(["a/b/c", "a/b/c/0d", "a/b/c/1d"], sorted(self.submitted))
 
-    def test_submit_barriers0b(self):
+    def test_submit_barriers0b(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
@@ -4572,7 +4622,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual(src_datasets, sorted(self.submitted))
 
-    def test_submit_barriers0c(self):
+    def test_submit_barriers0c(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
@@ -4588,7 +4638,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual(src_datasets, sorted(self.submitted))
 
-    def test_submit_barriers1(self):
+    def test_submit_barriers1(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
@@ -4612,7 +4662,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual(src_datasets, sorted(self.submitted))
 
-    def test_submit_barriers2(self):
+    def test_submit_barriers2(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
@@ -4636,7 +4686,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.assertFalse(failed)
         self.assertListEqual(src_datasets, sorted(self.submitted))
 
-    def test_submit_barriers3(self):
+    def test_submit_barriers3(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
             self.append_submission(dataset)
             return True
@@ -4664,7 +4714,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 #############################################################################
 class TestPerformance(unittest.TestCase):
 
-    def test_close_fds(self):
+    def test_close_fds(self) -> None:
         """see https://bugs.python.org/issue42738
         and https://github.com/python/cpython/pull/113118/commits/654f63053aee162a6e59fa894b2cd8ee82a33a77"""
         iters = 2000
@@ -4683,9 +4733,9 @@ class TestPerformance(unittest.TestCase):
 
 
 @contextmanager
-def stop_on_failure_subtest(**params):
+def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
     """Context manager to mimic UnitTest.subTest() but stop on first failure"""
     try:
         yield
-    except AssertionError:
-        raise AssertionError(f"SubTest failed with parameters: {params}") from None
+    except AssertionError as e:
+        raise AssertionError(f"SubTest failed with parameters: {params}") from e

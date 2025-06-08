@@ -18,15 +18,16 @@ import shutil
 import signal
 import subprocess
 import unittest
+from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Union
+from typing import Dict, List, Optional, Tuple, Union, cast
 from unittest.mock import patch, MagicMock
 
 from bzfs_main import bzfs_jobrunner
 from bzfs_main.bzfs_jobrunner import die_status
 
 
-def suite():
+def suite() -> unittest.TestSuite:
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidation))
@@ -39,10 +40,10 @@ def suite():
 
 #############################################################################
 class TestHelperFunctions(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
 
-    def test_validate_type(self):
+    def test_validate_type(self) -> None:
         self.job.validate_type("foo", str, "name")
         self.job.validate_type(123, int, "name")
         with self.assertRaises(SystemExit):
@@ -58,23 +59,23 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.job.validate_type(None, Union[str, int], "name")
 
-    def test_validate_non_empty_string(self):
+    def test_validate_non_empty_string(self) -> None:
         self.job.validate_non_empty_string("valid_string", "name")
         with self.assertRaises(SystemExit):
             self.job.validate_non_empty_string("", "name")
 
-    def test_validate_non_negative_int(self):
+    def test_validate_non_negative_int(self) -> None:
         self.job.validate_non_negative_int(1, "name")
         self.job.validate_non_negative_int(0, "name")
         with self.assertRaises(SystemExit):
             self.job.validate_non_negative_int(-1, "name")
 
-    def test_validate_true(self):
+    def test_validate_true(self) -> None:
         self.job.validate_true(1, "name")
         with self.assertRaises(SystemExit):
             self.job.validate_true(0, "name")
 
-    def test_validate_is_subset(self):
+    def test_validate_is_subset(self) -> None:
         self.job.validate_is_subset(["1"], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], ["1", "2"], "x", "y")
         self.job.validate_is_subset([], [], "x", "y")
@@ -87,37 +88,37 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3"], "foo", "x", "y")
 
-    def _make_mock_socket(self, bind_side_effect=None):
+    def _make_mock_socket(self, bind_side_effect: Optional[Exception] = None) -> MagicMock:
         sock = MagicMock()
         sock.bind.side_effect = bind_side_effect
         sock.__enter__.return_value = sock
         sock.__exit__.return_value = False
         return sock
 
-    def test_detect_loopback_address_ipv4_supported(self):
+    def test_detect_loopback_address_ipv4_supported(self) -> None:
         ipv4 = self._make_mock_socket()
         with patch("socket.socket", side_effect=[ipv4]) as socket_factory:
             self.assertEqual("127.0.0.1", bzfs_jobrunner.detect_loopback_address())
             self.assertEqual(1, socket_factory.call_count)
 
-    def test_detect_loopback_address_ipv6_fallback(self):
+    def test_detect_loopback_address_ipv6_fallback(self) -> None:
         ipv4_fail = self._make_mock_socket(OSError("No IPv4"))
         ipv6_ok = self._make_mock_socket()
         with patch("socket.socket", side_effect=[ipv4_fail, ipv6_ok]) as socket_factory:
             self.assertEqual("::1", bzfs_jobrunner.detect_loopback_address())
             self.assertEqual(2, socket_factory.call_count)
 
-    def test_detect_loopback_address_neither_supported(self):
+    def test_detect_loopback_address_neither_supported(self) -> None:
         ipv4_fail = self._make_mock_socket(OSError("No IPv4"))
         ipv6_fail = self._make_mock_socket(OSError("No IPv6"))
         with patch("socket.socket", side_effect=[ipv4_fail, ipv6_fail]) as socket_factory:
             self.assertEqual("", bzfs_jobrunner.detect_loopback_address())
             self.assertEqual(2, socket_factory.call_count)
 
-    def test_pretty_print_formatter(self):
+    def test_pretty_print_formatter(self) -> None:
         self.assertIsNotNone(str(bzfs_jobrunner.pretty_print_formatter({"foo": "bar"})))
 
-    def test_help(self):
+    def test_help(self) -> None:
         if is_solaris_zfs():
             self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = bzfs_jobrunner.argument_parser()
@@ -125,36 +126,36 @@ class TestHelperFunctions(unittest.TestCase):
             parser.parse_args(["--help"])
         self.assertEqual(0, e.exception.code)
 
-    def test_version(self):
+    def test_version(self) -> None:
         parser = bzfs_jobrunner.argument_parser()
         with self.assertRaises(SystemExit) as e:
             parser.parse_args(["--version"])
         self.assertEqual(0, e.exception.code)
 
-    def test_sorted_dict_empty_dictionary_returns_empty(self):
-        result = bzfs_jobrunner.sorted_dict({})
+    def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
+        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({})
         self.assertEqual(result, {})
 
-    def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self):
-        result = bzfs_jobrunner.sorted_dict({"a": 1})
+    def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self) -> None:
+        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({"a": 1})
         self.assertEqual(result, {"a": 1})
 
-    def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self):
-        result = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
+    def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self) -> None:
+        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
         self.assertEqual(result, {"a": 1, "b": 2, "c": 3})
 
-    def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self):
-        result = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
+    def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self) -> None:
+        result: Dict[int, str] = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
         self.assertEqual(result, {1: "one", 2: "two", 3: "three"})
 
-    def test_sorted_dict_with_mixed_key_types_raises_error(self):
+    def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
         with self.assertRaises(TypeError):
             bzfs_jobrunner.sorted_dict({"a": 1, 2: "two"})
 
 
 #############################################################################
 class TestValidation(unittest.TestCase):
-    def test_multisource_substitution_token_validation_with_empty_target(self):
+    def test_multisource_substitution_token_validation_with_empty_target(self) -> None:
         job = bzfs_jobrunner.Job()
         job.log = MagicMock()
         job.is_test_mode = True
@@ -197,7 +198,7 @@ class TestValidation(unittest.TestCase):
             self.assertEqual(die_status, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
 
-    def test_multisource_substitution_token_validation_passes_safe_config(self):
+    def test_multisource_substitution_token_validation_passes_safe_config(self) -> None:
         job = bzfs_jobrunner.Job()
         job.log = MagicMock()
         job.is_test_mode = True
@@ -234,7 +235,7 @@ class TestValidation(unittest.TestCase):
                     job.run_main(base_argv_safe)  # Should not raise SystemExit
                     mock_run_subjobs_2.assert_called_once()
 
-    def test_multisource_substitution_token_validation_rejects_unsafe_config(self):
+    def test_multisource_substitution_token_validation_rejects_unsafe_config(self) -> None:
         job = bzfs_jobrunner.Job()
         job.log = MagicMock()
         job.is_test_mode = True
@@ -282,16 +283,17 @@ class TestValidation(unittest.TestCase):
 
 #############################################################################
 class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
-        self.job.log = MagicMock()
+        self.log_mock = MagicMock()
+        self.job.log = cast(Logger, self.log_mock)
 
-    def test_empty_input_raises(self):
+    def test_empty_input_raises(self) -> None:
         with self.assertRaises(AssertionError):
             self.job.skip_nonexisting_local_dst_pools([])
 
     @patch("subprocess.run")
-    def test_single_existing_pool(self, mock_run):
+    def test_single_existing_pool(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
         pairs = [("-:srcpool1/src1", "-:dstpool1/dst1")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
@@ -302,19 +304,19 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
 
     @patch("subprocess.run")
-    def test_single_nonexisting_pool(self, mock_run):
+    def test_single_nonexisting_pool(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         pairs = [("-:srcpool2/src2", "-:dstpool2/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual([], result)
         self.assertSetEqual(set(), self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool2"}, self.job.cache_known_dst_pools)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"
         )
 
     @patch("subprocess.run")
-    def test_multiple_pools_mixed(self, mock_run):
+    def test_multiple_pools_mixed(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
         pairs = [
             ("srcpool1/src1", "-:dstpool1/dst1"),
@@ -325,24 +327,24 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertListEqual([("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool3/src3", "-:dstpool1/dst3")], result)
         self.assertSetEqual({"-:dstpool1"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool1", "-:dstpool2"}, self.job.cache_known_dst_pools)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"
         )
 
     @patch("subprocess.run")
-    def test_caching_avoids_subprocess_run(self, mock_run):
+    def test_caching_avoids_subprocess_run(self, mock_run: MagicMock) -> None:
         self.job.cache_existing_dst_pools = {"-:dstpool1"}
         self.job.cache_known_dst_pools = {"-:dstpool1", "-:dstpool2"}
         pairs = [("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool2/src2", "-:dstpool2/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual([("srcpool1/src1", "-:dstpool1/dst1")], result)
         mock_run.assert_not_called()
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"
         )
 
     @patch("subprocess.run")
-    def test_multiple_pools_exist_returns_all(self, mock_run):
+    def test_multiple_pools_exist_returns_all(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\ndstpool2\n", stderr="")
         pairs = [("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool2/src2", "-:dstpool2/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
@@ -352,7 +354,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         mock_run.assert_called_once()
 
     @patch("subprocess.run")
-    def test_repeated_call_caching(self, mock_run):
+    def test_repeated_call_caching(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = [
             subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr=""),
             subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool3\n", stderr=""),
@@ -366,7 +368,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertEqual(2, mock_run.call_count)
 
     @patch("subprocess.run")
-    def test_multislash_dataset_names(self, mock_run):
+    def test_multislash_dataset_names(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
         pairs = [("srcpool1/src1", "-:dstpool1/child/grand")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
@@ -374,7 +376,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertIn("-:dstpool1", self.job.cache_existing_dst_pools)
 
     @patch("subprocess.run")
-    def test_multiple_warnings_for_nonexistent(self, mock_run):
+    def test_multiple_warnings_for_nonexistent(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         pairs = [("srcpool1/src1", "-:srcpool1/dst1"), ("srcpool2/src2", "-:dstpool2/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
@@ -383,10 +385,10 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
             unittest.mock.call("Skipping dst dataset for which local dst pool does not exist: %s", "-:srcpool1/dst1"),
             unittest.mock.call("Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2/dst2"),
         ]
-        self.assertEqual(expected_calls, self.job.log.warning.mock_calls)
+        self.assertEqual(expected_calls, self.log_mock.warning.mock_calls)
 
     @patch("subprocess.run")
-    def test_duplicate_pool_input(self, mock_run):
+    def test_duplicate_pool_input(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool1\n", stderr="")
         pairs = [("srcpool1/src1", "-:dstpool1/dst1"), ("srcpool2/src2", "-:dstpool1/dst2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
@@ -395,7 +397,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
 
     # dst without slash, existing pool
     @patch("subprocess.run")
-    def test_dst_without_slash_existing_pool(self, mock_run):
+    def test_dst_without_slash_existing_pool(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="dstpool4\n", stderr="")
         pairs = [("srcpool4/src4", "-:dstpool4")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
@@ -407,30 +409,30 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
 
     # dst without slash, non-existing pool
     @patch("subprocess.run")
-    def test_dst_without_slash_nonexisting_pool(self, mock_run):
+    def test_dst_without_slash_nonexisting_pool(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         pairs = [("srcpool4/src4", "-:dstpool2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual([], result)
         self.assertSetEqual(set(), self.job.cache_existing_dst_pools)
         self.assertSetEqual({"-:dstpool2"}, self.job.cache_known_dst_pools)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:dstpool2"
         )
 
     # non-local dst and without slash
     @patch("subprocess.run")
-    def test_nonlocaldst_without_slash(self, mock_run):
+    def test_nonlocaldst_without_slash(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         pairs = [("srcpool4/src4", "127.0.0.1:dstpool2")]
         result = self.job.skip_nonexisting_local_dst_pools(pairs)
         self.assertListEqual(pairs, result)
         self.assertSetEqual({"127.0.0.1:dstpool2"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"127.0.0.1:dstpool2"}, self.job.cache_known_dst_pools)
-        self.assertEqual([], self.job.log.warning.mock_calls)
+        self.assertEqual([], self.log_mock.warning.mock_calls)
 
     @patch("subprocess.run")
-    def test_mixed_local_existing_and_remote(self, mock_run):
+    def test_mixed_local_existing_and_remote(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="local1\n", stderr="")
         pairs = [
             ("srcpool4/src1", "-:local1/src1"),  # Local, should be checked and found
@@ -442,10 +444,10 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertSetEqual({"-:local1", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local1"]
         mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
-        self.job.log.warning.assert_not_called()
+        self.log_mock.warning.assert_not_called()
 
     @patch("subprocess.run")
-    def test_mixed_local_nonexisting_and_remote(self, mock_run):
+    def test_mixed_local_nonexisting_and_remote(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")  # local2 nonexistng
         pairs = [
             ("src1/src1", "-:local2/src1"),  # Local, should be checked and NOT found
@@ -459,12 +461,12 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertSetEqual({"-:local2", "127.0.0.1:dstpool1"}, self.job.cache_known_dst_pools)
         expected_cmd = "zfs list -t filesystem,volume -Hp -o name".split(" ") + ["local2"]
         mock_run.assert_called_once_with(expected_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:local2/src1"
         )
 
     @patch("subprocess.run")
-    def test_mixed_local_existing_nonexisting_and_remote(self, mock_run):
+    def test_mixed_local_existing_nonexisting_and_remote(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="local1\n", stderr=""
         )  # local1 exists, local2 does not
@@ -489,12 +491,12 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertEqual(called_cmd[: len(expected_cmd_parts)], expected_cmd_parts)
         self.assertCountEqual(sorted(["local1", "local2"]), sorted(called_cmd[len(expected_cmd_parts) :]))
 
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: %s", "-:local2/data3"
         )
 
     @patch("subprocess.run")
-    def test_all_remote_pools(self, mock_run):
+    def test_all_remote_pools(self, mock_run: MagicMock) -> None:
         pairs = [
             ("src1/src1", "remote1:pool1/src1"),
             ("src2/src2", "remote2:pool2/src2"),
@@ -504,10 +506,10 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertSetEqual({"remote1:pool1", "remote2:pool2"}, self.job.cache_existing_dst_pools)
         self.assertSetEqual({"remote1:pool1", "remote2:pool2"}, self.job.cache_known_dst_pools)
         mock_run.assert_not_called()  # No local pools to check
-        self.job.log.warning.assert_not_called()
+        self.log_mock.warning.assert_not_called()
 
     @patch("subprocess.run")
-    def unexpected_error_on_local_dst_pool_check_raises_exception(self, mock_subprocess_run):
+    def unexpected_error_on_local_dst_pool_check_raises_exception(self, mock_subprocess_run: MagicMock) -> None:
         mock_subprocess_run.return_value = subprocess.CompletedProcess(
             args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
             returncode=2,
@@ -520,7 +522,7 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         self.assertIn("Unexpected error 2 on checking for existing local dst pools: Permission denied", str(cm.exception))
 
     @patch("subprocess.run")
-    def local_dst_pool_not_found_skips_dataset(self, mock_subprocess_run):
+    def local_dst_pool_not_found_skips_dataset(self, mock_subprocess_run: MagicMock) -> None:
         mock_subprocess_run.return_value = subprocess.CompletedProcess(
             args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
             returncode=1,
@@ -529,12 +531,12 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         )
         result = self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:nonexistent_pool/dataset")])
         self.assertEqual([], result)
-        self.job.log.warning.assert_called_once_with(
+        self.log_mock.warning.assert_called_once_with(
             "Skipping dst dataset for which local dst pool does not exist: -:nonexistent_pool/dataset"
         )
 
     @patch("subprocess.run")
-    def local_dst_pool_exists_processes_dataset(self, mock_subprocess_run):
+    def local_dst_pool_exists_processes_dataset(self, mock_subprocess_run: MagicMock) -> None:
         mock_subprocess_run.return_value = subprocess.CompletedProcess(
             args=["zfs", "list", "-t", "filesystem,volume", "-Hp", "-o", "name"],
             returncode=0,
@@ -548,45 +550,45 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
 #############################################################################
 class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.assertIsNotNone(shutil.which("sh"))
         self.job = bzfs_jobrunner.Job()
 
-    def run_and_capture(self, cmd, timeout_secs):
+    def run_and_capture(self, cmd: List[str], timeout_secs: Optional[float]) -> Tuple[Optional[int], List[str]]:
         """
         Helper: invoke the method, return (exit_code, [all error‑log messages]).
         """
         with patch.object(self.job.log, "error") as mock_error:
             code = self.job.run_worker_job_spawn_process_per_job(cmd, timeout_secs=timeout_secs)
-            logs = [call.args[1] for call in mock_error.call_args_list]
+            logs = [cast(str, call.args[1]) for call in mock_error.call_args_list]
         return code, logs
 
-    def test_normal_completion(self):
+    def test_normal_completion(self) -> None:
         """Exits 0 under timeout, no errors."""
         code, logs = self.run_and_capture(["sleep", "0"], timeout_secs=1.0)
         self.assertEqual(0, code)
         self.assertListEqual([], logs)
 
-    def test_none_timeout(self):
+    def test_none_timeout(self) -> None:
         """timeout_secs=None -> wait indefinitely, no errors."""
         code, logs = self.run_and_capture(["sleep", "0"], timeout_secs=None)
         self.assertEqual(0, code)
         self.assertListEqual([], logs)
 
-    def test_nonzero_exit(self):
+    def test_nonzero_exit(self) -> None:
         """Non‑zero exit code is propagated, no errors logged."""
         code, logs = self.run_and_capture(["sh", "-c", "exit 3"], timeout_secs=1.0)
         self.assertEqual(3, code)
         self.assertListEqual([], logs)
 
-    def test_dryrun(self):
+    def test_dryrun(self) -> None:
         """dryrun mode does not actually execute the CLI command."""
         self.job.jobrunner_dryrun = True
         code, logs = self.run_and_capture(["sh", "-c", "exit 3"], timeout_secs=None)
         self.assertEqual(0, code)
         self.assertListEqual([], logs)
 
-    def test_timeout_terminate(self):
+    def test_timeout_terminate(self) -> None:
         """Timeout->SIGTERM path: return code and first log prefix."""
         code, logs = self.run_and_capture(["sleep", "1"], timeout_secs=0.1)
         self.assertEqual(-signal.SIGTERM, code)
@@ -595,7 +597,7 @@ class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
             f"Expected first log starting with 'Terminating worker job', got {logs!r}",
         )
 
-    def test_timeout_kill(self):
+    def test_timeout_kill(self) -> None:
         """SIGTERM ignored→SIGKILL path: return code and kill‐log present."""
         code, logs = self.run_and_capture(["sh", "-c", 'trap "" TERM; sleep 1'], timeout_secs=0.1)
         self.assertEqual(-signal.SIGKILL, code)
@@ -608,41 +610,41 @@ class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
 #############################################################################
 @patch("bzfs_main.bzfs_jobrunner.Job._bzfs_run_main")
 class TestRunSubJobInCurrentThread(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
 
-    def test_no_timeout_success(self, mock_bzfs_run_main):
+    def test_no_timeout_success(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo", "bar"]
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(0, result)
         mock_bzfs_run_main.assert_called_once_with(cmd)
 
-    def test_timeout_flag_insertion(self, mock_bzfs_run_main):
+    def test_timeout_flag_insertion(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
         timeout = 1.234
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=timeout)
         self.assertEqual(0, result)
         mock_bzfs_run_main.assert_called_once_with(["bzfs", "--timeout=1234milliseconds", "foo"])
 
-    def test_called_process_error_returns_returncode(self, mock_bzfs_run_main):
+    def test_called_process_error_returns_returncode(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = subprocess.CalledProcessError(returncode=7, cmd=cmd)
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(7, result)
 
-    def test_system_exit_with_code(self, mock_bzfs_run_main):
+    def test_system_exit_with_code(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = SystemExit(3)
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(3, result)
 
-    def test_system_exit_without_code(self, mock_bzfs_run_main):
+    def test_system_exit_without_code(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = SystemExit
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertIsNone(result)
 
-    def test_dryrun(self, mock_bzfs_run_main):
+    def test_dryrun(self, mock_bzfs_run_main: MagicMock) -> None:
         """dryrun mode does not actually execute the CLI command."""
         self.job.jobrunner_dryrun = True
         cmd = ["bzfs", "foo"]
@@ -650,19 +652,19 @@ class TestRunSubJobInCurrentThread(unittest.TestCase):
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(0, result)
 
-    def test_generic_exception_returns_die_status(self, mock_bzfs_run_main):
+    def test_generic_exception_returns_die_status(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = SystemExit(die_status)
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(die_status, result)
 
-    def test_single_element_cmd_edge(self, mock_bzfs_run_main):
+    def test_single_element_cmd_edge(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs"]
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
         self.assertEqual(0, result)
         mock_bzfs_run_main.assert_called_once_with(cmd)
 
-    def test_unexpected_exception(self, mock_bzfs_run_main):
+    def test_unexpected_exception(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = ValueError
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
@@ -671,16 +673,16 @@ class TestRunSubJobInCurrentThread(unittest.TestCase):
 
 #############################################################################
 class TestRunSubJob(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
         self.job.stats.jobs_all = 1
         self.assertIsNone(self.job.first_exception)
 
-    def test_success(self):
+    def test_success(self) -> None:
         result = self.job.run_subjob(cmd=["true"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertEqual(0, result)
 
-    def test_failure(self):
+    def test_failure(self) -> None:
         self.job.stats.jobs_all = 2
         result = self.job.run_subjob(cmd=["false"], name="j0", timeout_secs=None, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
@@ -692,14 +694,14 @@ class TestRunSubJob(unittest.TestCase):
         self.assertIsInstance(self.job.first_exception, int)
         self.assertTrue(self.job.first_exception != 0)
 
-    def test_timeout(self):
+    def test_timeout(self) -> None:
         self.job.stats.jobs_all = 2
         result = self.job.run_subjob(cmd=["sleep", "0"], name="j0", timeout_secs=1, spawn_process_per_job=True)
         self.assertEqual(0, result)
         result = self.job.run_subjob(cmd=["sleep", "1"], name="j1", timeout_secs=0.01, spawn_process_per_job=True)
         self.assertNotEqual(0, result)
 
-    def test_nonexisting_cmd(self):
+    def test_nonexisting_cmd(self) -> None:
         with self.assertRaises(FileNotFoundError):
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
 

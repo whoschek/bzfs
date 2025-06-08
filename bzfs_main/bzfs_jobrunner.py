@@ -38,10 +38,10 @@ import uuid
 from ast import literal_eval
 from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, TypeVar, Union
 
 from bzfs_main import bzfs
-from bzfs_main.bzfs import die_status, prog_name as bzfs_prog_name
+from bzfs_main.bzfs import die_status, log_trace, prog_name as bzfs_prog_name
 
 # constants:
 prog_name = "bzfs_jobrunner"
@@ -370,13 +370,13 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
 
 #############################################################################
-def main():
+def main() -> None:
     Job().run_main(sys.argv)
 
 
 #############################################################################
 class Job:
-    def __init__(self, log: Optional[Logger] = None):
+    def __init__(self, log: Optional[Logger] = None) -> None:
         # immutable variables:
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
@@ -652,7 +652,7 @@ class Job:
         log.info(
             msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
         )
-        log.trace("subjobs: \n%s", pretty_print_formatter(subjobs))
+        log.log(log_trace, "subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
         ex = self.first_exception
         if isinstance(ex, int):
@@ -662,7 +662,15 @@ class Job:
         log.info("Succeeded. Bye!")
 
     def replication_opts(
-        self, dst_snapshot_plan, targets, lhn: str, src_hostname: str, dst_hostname: str, tag: str, job_id: str, job_run: str
+        self,
+        dst_snapshot_plan: Dict[str, Dict[str, Dict[str, int]]],
+        targets: Set[str],
+        localhostname: str,
+        src_hostname: str,
+        dst_hostname: str,
+        tag: str,
+        job_id: str,
+        job_run: str,
     ) -> List[str]:
         log = self.log
         log.debug("%s", f"Replicating targets {sorted(targets)} from {src_hostname} to {dst_hostname} ...")
@@ -688,7 +696,7 @@ class Job:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
             opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
             opts += [f"--log-file-infix={sep}{job_id}"]
-            opts += [f"--log-file-suffix={sep}{job_run}{log_suffix(lhn, src_hostname, dst_hostname)}{sep}"]
+            opts += [f"--log-file-suffix={sep}{job_run}{log_suffix(localhostname, src_hostname, dst_hostname)}{sep}"]
         return opts
 
     def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
@@ -745,7 +753,7 @@ class Job:
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(bzfs.BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
-            log.trace("%s", "spawn_process_per_job: True")
+            log.log(log_trace, "%s", "spawn_process_per_job: True")
             helper = bzfs.Job()
             helper.params = bzfs.Params(self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"]), log=log)
             helper.is_test_mode = self.is_test_mode
@@ -762,7 +770,7 @@ class Job:
                 task_name="Subjob",
             )
         else:
-            log.trace("%s", "spawn_process_per_job: False")
+            log.log(log_trace, "%s", "spawn_process_per_job: False")
             next_update_nanos = time.monotonic_ns()
             for subjob in sorted_subjobs:
                 time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)  # seconds
@@ -795,7 +803,7 @@ class Job:
                 stats.jobs_running += 1
                 stats.started_job_names.add(name)
                 msg = str(stats)
-            log.trace("Starting worker job: %s", cmd_str)
+            log.log(log_trace, "Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
             start_time_nanos = time.monotonic_ns()
             if spawn_process_per_job:
@@ -846,6 +854,7 @@ class Job:
         except subprocess.CalledProcessError as e:
             return e.returncode
         except SystemExit as e:
+            assert e.code is None or isinstance(e.code, int)
             return e.code
         except BaseException as e:
             log.error("Worker job failed with unexpected exception for command: %s", " ".join(cmd), exc_info=e)
@@ -881,14 +890,14 @@ class Job:
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         return proc.returncode
 
-    def validate_src_hosts(self, src_hosts: List) -> List[str]:
+    def validate_src_hosts(self, src_hosts: List[str]) -> List[str]:
         context = "--src-hosts"
         self.validate_type(src_hosts, list, context)
         for src_hostname in src_hosts:
             self.validate_host_name(src_hostname, context)
         return src_hosts
 
-    def validate_dst_hosts(self, dst_hosts: Dict) -> Dict[str, List[str]]:
+    def validate_dst_hosts(self, dst_hosts: Dict[str, List[str]]) -> Dict[str, List[str]]:
         context = "--dst-hosts"
         self.validate_type(dst_hosts, dict, context)
         for dst_hostname, targets in dst_hosts.items():
@@ -898,7 +907,7 @@ class Job:
                 self.validate_type(target, str, f"{context} target")
         return dst_hosts
 
-    def validate_dst_root_datasets(self, dst_root_datasets: Dict) -> Dict[str, str]:
+    def validate_dst_root_datasets(self, dst_root_datasets: Dict[str, str]) -> Dict[str, str]:
         context = "--dst-root-datasets"
         self.validate_type(dst_root_datasets, dict, context)
         for dst_hostname, dst_root_dataset in dst_root_datasets.items():
@@ -906,7 +915,9 @@ class Job:
             self.validate_type(dst_root_dataset, str, f"{context} root dataset")
         return dst_root_datasets
 
-    def validate_snapshot_plan(self, snapshot_plan: Dict, context: str) -> Dict[str, Dict[str, Dict[str, int]]]:
+    def validate_snapshot_plan(
+        self, snapshot_plan: Dict[str, Dict[str, Dict[str, int]]], context: str
+    ) -> Dict[str, Dict[str, Dict[str, int]]]:
         self.validate_type(snapshot_plan, dict, context)
         for org, target_periods in snapshot_plan.items():
             self.validate_type(org, str, f"{context} org")
@@ -919,7 +930,10 @@ class Job:
                     self.validate_non_negative_int(period_amount, f"{context} org/target/period_amount")
         return snapshot_plan
 
-    def validate_monitor_snapshot_plan(self, monitor_snapshot_plan) -> Dict[str, Dict[str, Dict[str, Union[str, int]]]]:
+    def validate_monitor_snapshot_plan(
+        self,
+        monitor_snapshot_plan: Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]],
+    ) -> Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]]:
         context = "--monitor-snapshot-plan"
         self.validate_type(monitor_snapshot_plan, dict, context)
         for org, target_periods in monitor_snapshot_plan.items():
@@ -963,7 +977,7 @@ class Job:
         if not bool(expr):
             self.die(msg)
 
-    def validate_type(self, value, expected_type, name: str) -> None:
+    def validate_type(self, value: Any, expected_type: Any, name: str) -> None:
         if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10
             union_types = expected_type.__args__
             for t in union_types:
@@ -981,7 +995,7 @@ class Job:
 
 #############################################################################
 class Stats:
-    def __init__(self):
+    def __init__(self) -> None:
         self.lock: threading.Lock = threading.Lock()
         self.jobs_all: int = 0
         self.jobs_started: int = 0
@@ -1010,13 +1024,17 @@ def flatten(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
     return [item for pair in root_dataset_pairs for item in pair]
 
 
-def shuffle_dict(dictionary: Dict) -> Dict:
+V = TypeVar("V")
+KT = TypeVar("KT")
+
+
+def shuffle_dict(dictionary: Dict[str, V]) -> Dict[str, V]:
     items = list(dictionary.items())
     random.shuffle(items)
     return dict(items)
 
 
-def sorted_dict(dictionary: Dict) -> Dict:
+def sorted_dict(dictionary: Dict[KT, V]) -> Dict[KT, V]:
     return dict(sorted(dictionary.items()))
 
 
@@ -1031,13 +1049,13 @@ def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     return f"{sep}{sanitize(localhostname)}{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
 
 
-def format_dict(dictionary: Dict) -> str:
+def format_dict(dictionary: Dict[str, Any]) -> str:
     return bzfs.format_dict(dictionary)
 
 
-def pretty_print_formatter(dictionary):  # For lazy/noop evaluation in disabled log levels
+def pretty_print_formatter(dictionary: Dict[str, Any]) -> Any:  # For lazy/noop evaluation in disabled log levels
     class PrettyPrintFormatter:
-        def __str__(self):
+        def __str__(self) -> str:
             import json
 
             return json.dumps(dictionary, indent=4, sort_keys=True)
