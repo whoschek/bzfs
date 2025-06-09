@@ -1323,6 +1323,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         #      "or every 10 seconds, or every minute, respectively. Only has an effect if --daemon-lifetime is nonzero.\n\n")
         help=argparse.SUPPRESS)
     parser.add_argument(
+        "--daemon-remote-conf-cache-ttl", default="300 seconds", metavar="DURATION",
+        # help="The Time-To-Live for the remote host configuration cache, which stores available programs and "
+        #      f"ZFS features. After this duration, {prog_name} will re-detect the remote environment. Set to '0 seconds' "
+        #      "to re-detect on every daemon iteration. Default: %(default)s.\n\n")
+        help=argparse.SUPPRESS)
+    parser.add_argument(
         "--no-estimate-send-size", action="store_true",
         # help="Skip 'zfs send -n -v'. This may improve performance if replicating small snapshots at high frequency.\n\n")
         help=argparse.SUPPRESS)
@@ -1727,11 +1733,11 @@ class Params:
         self.max_datasets_per_minibatch_on_list_snaps: int = getenv_int("max_datasets_per_minibatch_on_list_snaps", -1)
         self.max_snapshots_per_minibatch_on_delete_snaps = getenv_int("max_snapshots_per_minibatch_on_delete_snaps", 2**29)
         self.dedicated_tcp_connection_per_zfs_send: bool = getenv_bool("dedicated_tcp_connection_per_zfs_send", True)
-        self.threads: Tuple[int, bool] = args.threads
+        self.threads: Tuple[int, bool] = (1, False) if self.force_once else args.threads
         timeout_nanos = None if args.timeout is None else 1_000_000 * parse_duration_to_milliseconds(args.timeout)
         self.timeout_nanos: Optional[int] = timeout_nanos
         self.no_estimate_send_size: bool = args.no_estimate_send_size
-
+        self.remote_conf_cache_ttl_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_remote_conf_cache_ttl)
         self.terminal_columns: int = (
             getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
             if self.isatty and self.pv_program != disable_prg and not self.quiet
@@ -2230,6 +2236,7 @@ class RemoteConfCacheItem:
     connection_pools: "ConnectionPools"
     available_programs: Dict[str, str]
     zpool_features: Dict[str, str]
+    timestamp_nanos: int = field(default_factory=time.monotonic_ns)
 
 
 #############################################################################
@@ -2372,6 +2379,7 @@ class Job:
                 daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
                 while True:  # loop for daemon mode
                     self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
+                    self.all_dst_dataset_exists.clear()
                     self.progress_reporter.reset()
                     src, dst = p.src, p.dst
                     for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
@@ -3244,7 +3252,7 @@ class Job:
         if self.dst_dataset_exists[dst_dataset]:
             if len(dst_snapshots_with_guids) > 0:
                 latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
-                if p.force_rollback_to_latest_snapshot or p.force:
+                if p.force_rollback_to_latest_snapshot:
                     log.info(p.dry(f"{tid} Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
@@ -5394,12 +5402,14 @@ class Job:
             if cache_item is not None:
                 # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
                 p.connection_pools[loc] = cache_item.connection_pools
-                available_programs[loc] = cache_item.available_programs
-                p.zpool_features[loc] = cache_item.zpool_features
-                continue
-            p.connection_pools[loc] = ConnectionPools(
-                r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
-            )
+                if time.monotonic_ns() - cache_item.timestamp_nanos < p.remote_conf_cache_ttl_nanos:
+                    available_programs[loc] = cache_item.available_programs
+                    p.zpool_features[loc] = cache_item.zpool_features
+                    continue  # cache hit, skip remote detection
+            else:
+                p.connection_pools[loc] = ConnectionPools(
+                    r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
+                )
             self.detect_zpool_features(r)
             self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
             self.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
@@ -5557,6 +5567,7 @@ class Job:
         r, loc, log = remote, remote.location, p.log
         lines = []
         features = {}
+        params.zpool_features.pop(loc, None)
         if self.is_dummy(r):
             params.zpool_features[loc] = {}
             return
