@@ -5475,25 +5475,28 @@ class Job:
             self.params.available_programs[location].pop(program, None)
 
     def find_available_programs(self) -> str:
+        """POSIX shell script that checks for the existence of various programs. It uses `if` statements instead of `&&` plus
+        `printf` instead of `echo` to ensure maximum compatibility across shells."""
         p = self.params
         cmds = []
-        cmds.append("command -v echo > /dev/null && echo echo")
-        cmds.append("command -v echo > /dev/null && echo default_shell-$SHELL")
-        cmds.append(f"command -v {p.zpool_program} > /dev/null && echo zpool")
-        cmds.append(f"command -v {p.ssh_program} > /dev/null && echo ssh")
-        cmds.append(f"command -v {p.shell_program} > /dev/null && echo sh")
-        cmds.append(f"command -v {p.sudo_program} > /dev/null && echo sudo")
-        cmds.append(f"command -v {p.compression_program} > /dev/null && echo zstd")
-        cmds.append(f"command -v {p.mbuffer_program} > /dev/null && echo mbuffer")
-        cmds.append(f"command -v {p.pv_program} > /dev/null && echo pv")
-        cmds.append(f"command -v {p.ps_program} > /dev/null && echo ps")
-        # print num CPUs on Solaris:
-        cmds.append(f"command -v {p.psrinfo_program} > /dev/null && printf getconf_cpu_count- && {p.psrinfo_program} -p")
-        cmds.append(  # print num CPUs on POSIX except Solaris
-            f"! command -v {p.psrinfo_program} && command -v {p.getconf_program} > /dev/null &&"
-            f" printf getconf_cpu_count- && {p.getconf_program} _NPROCESSORS_ONLN"
+        cmds.append("printf 'default_shell-%s\n' \"$SHELL\"")
+        cmds.append("if command -v echo > /dev/null; then printf 'echo\n'; fi")
+        cmds.append(f"if command -v {p.zpool_program} > /dev/null; then printf 'zpool\n'; fi")
+        cmds.append(f"if command -v {p.ssh_program} > /dev/null; then printf 'ssh\n'; fi")
+        cmds.append(f"if command -v {p.shell_program} > /dev/null; then printf 'sh\n'; fi")
+        cmds.append(f"if command -v {p.sudo_program} > /dev/null; then printf 'sudo\n'; fi")
+        cmds.append(f"if command -v {p.compression_program} > /dev/null; then printf 'zstd\n'; fi")
+        cmds.append(f"if command -v {p.mbuffer_program} > /dev/null; then printf 'mbuffer\n'; fi")
+        cmds.append(f"if command -v {p.pv_program} > /dev/null; then printf 'pv\n'; fi")
+        cmds.append(f"if command -v {p.ps_program} > /dev/null; then printf 'ps\n'; fi")
+        cmds.append(
+            f"if command -v {p.psrinfo_program} > /dev/null; then "
+            f"printf 'getconf_cpu_count-'; {p.psrinfo_program} -p; "
+            f"elif command -v {p.getconf_program} > /dev/null; then "
+            f"printf 'getconf_cpu_count-'; {p.getconf_program} _NPROCESSORS_ONLN; "
+            "fi"
         )
-        cmds.append(f"command -v {p.uname_program} > /dev/null && printf uname- && {p.uname_program} -a || true")
+        cmds.append(f"if command -v {p.uname_program} > /dev/null; then printf 'uname-'; {p.uname_program} -a || true; fi")
         return "; ".join(cmds)
 
     def detect_available_programs_remote(self, remote: Remote, available_programs: Dict, ssh_user_host: str) -> None:
