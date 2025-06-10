@@ -939,7 +939,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--delete-dst-snapshots option, thus deleting all snapshots except for the selected snapshots (within the "
              "specified datasets), instead of deleting all selected snapshots (within the specified datasets). In other "
              "words, this flag enables to specify which snapshots to retain instead of which snapshots to delete.\n\n"
-             "*Synchronization*: When a real (non-dummy) source dataset is specified in combination with "
+             "*Synchronization vs. Backup*: When a real (non-dummy) source dataset is specified in combination with "
              "--delete-dst-snapshots-except, then any destination snapshot retained by the rules above is actually only "
              "retained if it also exists in the source dataset - __all other destination snapshots are deleted__. This is "
              "great for synchronization use cases but should __NEVER BE USED FOR LONG-TERM ARCHIVAL__. Long-term archival "
