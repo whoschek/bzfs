@@ -1024,17 +1024,17 @@ def flatten(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
     return [item for pair in root_dataset_pairs for item in pair]
 
 
+K = TypeVar("K")
 V = TypeVar("V")
-KT = TypeVar("KT")
 
 
-def shuffle_dict(dictionary: Dict[str, V]) -> Dict[str, V]:
+def shuffle_dict(dictionary: Dict[K, V]) -> Dict[K, V]:
     items = list(dictionary.items())
     random.shuffle(items)
     return dict(items)
 
 
-def sorted_dict(dictionary: Dict[KT, V]) -> Dict[KT, V]:
+def sorted_dict(dictionary: Dict[K, V]) -> Dict[K, V]:
     return dict(sorted(dictionary.items()))
 
 

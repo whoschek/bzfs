@@ -1643,6 +1643,7 @@ class Params:
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
         self.unset_matching_env_vars(args)
+        self.program_validator = ProgramValidator()
         self.xperiods = SnapshotPeriods()
 
         assert len(args.root_dataset_pairs) > 0
@@ -1707,7 +1708,7 @@ class Params:
         self.monitor_snapshots_config: MonitorSnapshotsConfig = MonitorSnapshotsConfig(args, self)
         self.is_caching_snapshots: bool = args.cache_snapshots == "true"
 
-        self.compression_program: str = self.program_name(args.compression_program)
+        self.compression_program: str = self.program_name(args.compression_program, allow_compression=True)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
         self.getconf_program: str = self.program_name("getconf")  # print number of CPUs on POSIX except Solaris
         self.psrinfo_program: str = self.program_name("psrinfo")  # print number of CPUs on Solaris
@@ -1720,12 +1721,12 @@ class Params:
         if args.bwlimit:
             self.pv_program_opts += [f"--rate-limit={self.validate_arg_str(args.bwlimit)}"]
         self.shell_program_local: str = "sh"
-        self.shell_program: str = self.program_name(args.shell_program)
-        self.ssh_program: str = self.program_name(args.ssh_program)
-        self.sudo_program: str = self.program_name(args.sudo_program)
+        self.shell_program: str = self.program_name(args.shell_program, allow_shell=True)
+        self.ssh_program: str = self.program_name(args.ssh_program, allow_ssh=True)
+        self.sudo_program: str = self.program_name(args.sudo_program, allow_sudo=True)
         self.uname_program: str = self.program_name("uname")
-        self.zfs_program: str = self.program_name(args.zfs_program)
-        self.zpool_program: str = self.program_name(args.zpool_program)
+        self.zfs_program: str = self.program_name(args.zfs_program, allow_zfs=True)
+        self.zpool_program: str = self.program_name(args.zpool_program, allow_zpool=True)
 
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = getenv_int("min_pipe_transfer_size", 1024 * 1024)
@@ -1814,11 +1815,27 @@ class Params:
             exclude_arg_opts=frozenset({"-i", "-I"}),
         )
 
-    def program_name(self, program: str) -> str:
+    def program_name(
+        self,
+        program: str,
+        allow_shell: bool = False,
+        allow_sudo: bool = False,
+        allow_ssh: bool = False,
+        allow_zfs: bool = False,
+        allow_zpool: bool = False,
+        allow_compression: bool = False,
+    ) -> str:
         """For testing: helps simulate errors caused by external programs."""
-        self.validate_arg(program)
-        if not program:
-            die("Program name must not be the empty string")
+        self.validate_arg_str(program)
+        self.program_validator.validate_program(
+            program,
+            allow_shell=allow_shell,
+            allow_sudo=allow_sudo,
+            allow_ssh=allow_ssh,
+            allow_zfs=allow_zfs,
+            allow_zpool=allow_zpool,
+            allow_compression=allow_compression,
+        )
         if self.inject_params.get("inject_unavailable_" + program, False):
             return program + "-xxx"  # substitute a program that cannot be found on the PATH
         if self.inject_params.get("inject_failing_" + program, False):
@@ -3494,8 +3511,8 @@ class Job:
         self, src_dataset: str, send_cmd: List[str], recv_cmd: List[str], size_estimate_bytes: int, size_estimate_human: str
     ) -> Tuple[str, str, str]:
         p = self.params
-        send_cmd_str = " ".join([shlex.quote(item) for item in send_cmd])
-        recv_cmd_str = " ".join([shlex.quote(item) for item in recv_cmd])
+        send_cmd_str = shlex.join(send_cmd)
+        recv_cmd_str = shlex.join(recv_cmd)
 
         if self.is_program_available("zstd", "src") and self.is_program_available("zstd", "dst"):
             _compress_cmd = self.compress_cmd("src", size_estimate_bytes)
@@ -3748,7 +3765,7 @@ class Job:
             and self.is_program_available("mbuffer", loc)
         ):
             recordsize = max(recordsize, 128 * 1024 if self.is_solaris_zfs_location(loc) else 2 * 1024 * 1024)
-            return f"{p.mbuffer_program} {' '.join(['-s', str(recordsize)] + p.mbuffer_program_opts)}"
+            return shlex.join([p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts)
         else:
             return "cat"
 
@@ -3761,7 +3778,7 @@ class Job:
             and (p.src.is_nonlocal or p.dst.is_nonlocal)
             and self.is_program_available("zstd", loc)
         ):
-            return f"{p.compression_program} {' '.join(p.compression_program_opts)}"
+            return shlex.join([p.compression_program] + p.compression_program_opts)
         else:
             return "cat"
 
@@ -3772,7 +3789,7 @@ class Job:
             and (p.src.is_nonlocal or p.dst.is_nonlocal)
             and self.is_program_available("zstd", loc)
         ):
-            return f"{p.compression_program} -dc"
+            return shlex.join([p.compression_program, "-dc"])
         else:
             return "cat"
 
@@ -3788,7 +3805,6 @@ class Job:
             size = f"--size={size_estimate_bytes}"
             if disable_progress_bar or size_estimate_bytes == 0:
                 size = ""
-            readable = shlex.quote(size_estimate_human)
             pv_log_file = p.log_params.pv_log_file
             thread_name = threading.current_thread().name
             if match := Job.worker_thread_number_regex.fullmatch(thread_name):
@@ -3801,10 +3817,11 @@ class Job:
                 self.replication_start_time_nanos = time.monotonic_ns()
             if self.isatty and not p.quiet:
                 self.progress_reporter.enqueue_pv_log_file(pv_log_file)
-            pv_program_opts = p.pv_program_opts
+            pv_program_opts = [p.pv_program] + p.pv_program_opts
             if self.progress_update_intervals is not None:  # for testing
-                pv_program_opts = pv_program_opts + [f"--interval={self.progress_update_intervals[0]}"]
-            return f"LC_ALL=C {p.pv_program} {' '.join(pv_program_opts)} --force --name={readable} {size} 2>> {pv_log_file}"
+                pv_program_opts += [f"--interval={self.progress_update_intervals[0]}"]
+            pv_program_opts += ["--force", f"--name={size_estimate_human}"] + ([size] if size else [])
+            return f"LC_ALL=C {shlex.join(pv_program_opts)} 2>> {shlex.quote(pv_log_file)}"
         else:
             return "cat"
 
@@ -5622,7 +5639,7 @@ class Job:
         that, and we'll simply retry, after some delay. check_zfs_dataset_busy() can be disabled via --ps-program=-.
 
         TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic
-        concurrency control where the parties simply retry on collisions detection (rather than coordinate concurrency
+        concurrency control where the parties simply retry on collision detection (rather than coordinate concurrency
         via a remote lock server)."""
         p, log = self.params, self.params.log
         if not self.is_program_available("ps", remote.location):
@@ -5848,7 +5865,7 @@ class Connection:
         ssh_cmd = self.ssh_cmd
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
-            p.log.log(log_trace, f"Executing {msg_prefix}: %s", " ".join([shlex.quote(x) for x in ssh_socket_cmd]))
+            p.log.log(log_trace, f"Executing {msg_prefix}: %s", shlex.join(ssh_socket_cmd))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
                 p.log.log(log_trace, "%s", process.stderr.rstrip())
@@ -6056,7 +6073,7 @@ class ProgressReporter:
                 try:
                     Path(pv_log_file).touch()
                     fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
-                except FileNotFoundError:
+                except FileNotFoundError:  # a third party has somehow deleted the log file or directory
                     with self.lock:
                         self.file_name_set.discard(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
                     log.warning("ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_log_file)
@@ -7067,8 +7084,8 @@ def validate_user_name(user: str, input_text: str) -> None:
 
 
 def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = "") -> None:
-    extra = extra_invalid_chars
-    if host and (".." in host or any(c.isspace() or c == '"' or c == "'" or c in "/@`" or c in extra for c in host)):
+    invalid_chars = '"' + "'`~!@#$%^&*()+={}[]|;<>?/,\\" + extra_invalid_chars
+    if host and (".." in host or any(c.isspace() or c in invalid_chars for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
@@ -8161,6 +8178,250 @@ def xfinally(cleanup: Callable[[], None]) -> _XFinally:
     The single *with* line replaces verbose ``try/except/finally`` boilerplate while preserving full error information.
     """
     return _XFinally(cleanup)
+
+
+#############################################################################
+class ProgramValidator:
+    """These exclusion lists are not complete or exhaustive; they are merely a weak first line of defense, and no substitute
+    for strong sandboxing mechanisms in additional layers of defense."""
+
+    def __init__(self) -> None:
+        # immutable variables:
+        self.shell_programs: FrozenSet[str] = frozenset({"bash", "dash", "sh"})
+        self.sudo_programs: FrozenSet[str] = frozenset({"sudo", "doas"})
+        self.ssh_programs: FrozenSet[str] = frozenset({"ssh", "hpnssh"})
+        self.zfs_programs: FrozenSet[str] = frozenset({"zfs"})
+        self.zpool_programs: FrozenSet[str] = frozenset({"zpool"})
+        self.compression_programs: FrozenSet[str] = frozenset({"zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", "lzma"})
+        self.disallowed_programs: FrozenSet[str] = frozenset(
+            {
+                "ansible",
+                "apt",
+                "apt-add-repository",
+                "apt-config",
+                "apt-get",
+                "apt-key",
+                "apt-mark",
+                "awk",
+                "aws",
+                "az",
+                "btrfs",
+                "cargo",
+                "cat",
+                "cd",
+                "cfdisk",
+                "chacl",
+                "chgpasswd",
+                "chgroup",
+                "chmod",
+                "chown",
+                "chroot",
+                "chsh",
+                "cloud-init",
+                "conda",
+                "cp",
+                "cpan",
+                "cryptsetup",
+                "csh",
+                "curl",
+                "dd",
+                "delgroup",
+                "delpart",
+                "deluser",
+                "deno",
+                "dnf",
+                "dpkg",
+                "echo",
+                "egrep",
+                "emacs",
+                "env",
+                "ethtool",
+                "eval",
+                "exec",
+                "fdisk",
+                "fgrep",
+                "find",
+                "firewalld",
+                "fsck",
+                "ftp",
+                "fwupdmgr",
+                "gawk",
+                "gcloud",
+                "gcp",
+                "gdisk",
+                "gh",
+                "git",
+                "git-lfs",
+                "git-shell",
+                "gkill",
+                "go",
+                "gparted",
+                "gpasswd",
+                "grep",
+                "grm",
+                "grmdir",
+                "groupadd",
+                "groupdel",
+                "groupmod",
+                "gsed",
+                "gsutil",
+                "gtar",
+                "gtimeout",
+                "halt",
+                "hdparm",
+                "head",
+                "hostname",
+                "ifconfig",
+                "init",
+                "initctl",
+                "ionice",
+                "ip",
+                "iptables",
+                "java",
+                "kill",
+                "killall",
+                "ksh",
+                "ln",
+                "losetup",
+                "ls",
+                "lvm",
+                "mawk",
+                "mdadm",
+                "mkfs",
+                "mkfs.btrfs",
+                "mkfs.ext2",
+                "mkfs.ext3",
+                "mkfs.ext4",
+                "mkfs.fat",
+                "mkfs.msdos",
+                "mkfs.xfs",
+                "modprobe",
+                "mosh",
+                "mount",
+                "mv",
+                "nice",
+                "node",
+                "nohup",
+                "nvme",
+                "parallel",
+                "parted",
+                "partx",
+                "passwd",
+                "perl",
+                "perl5",
+                "php",
+                "pip",
+                "pip3",
+                "pipx",
+                "pkill",
+                "poweroff",
+                "pvchange",
+                "pvcreate",
+                "pvmove",
+                "pvremove",
+                "pvresize",
+                "pyenv",
+                "python",
+                "python2",
+                "python3",
+                "rclone",
+                "reboot",
+                "renice",
+                "resize2fs",
+                "resizepart",
+                "restic",
+                "rm",
+                "rmdir",
+                "route",
+                "rpm",
+                "rsh",
+                "rsync",
+                "ruby",
+                "scp",
+                "sdparm",
+                "sed",
+                "service",
+                "setsid",
+                "sftp",
+                "sgdisk",
+                "shutdown",
+                "sleep",
+                "smbd",
+                "smbpasswd",
+                "source",
+                "ssh-add",
+                "ssh-agent",
+                "sshd",
+                "su",
+                "swapoff",
+                "swapon",
+                "systemctl",
+                "tail",
+                "tar",
+                "tc",
+                "tclsh",
+                "tcsh",
+                "tee",
+                "telnet",
+                "time",
+                "timeout",
+                "tmux",
+                "tree",
+                "ts-node",
+                "tune2fs",
+                "ufw",
+                "umount",
+                "unlink",
+                "update-initramfs",
+                "userdel",
+                "uv",
+                "wget",
+                "wipe",
+                "wipefs",
+                "xargs",
+                "yum",
+                "zdb",
+                "zed",
+                "zip",
+                "zsh",
+            }
+        )
+
+    def validate_program(
+        self,
+        path: str,
+        allow_shell: bool = False,
+        allow_sudo: bool = False,
+        allow_ssh: bool = False,
+        allow_zfs: bool = False,
+        allow_zpool: bool = False,
+        allow_compression: bool = False,
+        extra_invalid_chars: str = "",
+    ) -> str:
+        if not allow_shell:
+            self._validate_program(path, self.shell_programs)
+        if not allow_sudo:
+            self._validate_program(path, self.sudo_programs)
+        if not allow_ssh:
+            self._validate_program(path, self.ssh_programs)
+        if not allow_zfs:
+            self._validate_program(path, self.zfs_programs)
+        if not allow_zpool:
+            self._validate_program(path, self.zpool_programs)
+        if not allow_compression:
+            self._validate_program(path, self.compression_programs)
+        self._validate_program(path, self.disallowed_programs)
+        for char in '"' + "'`~!@#$%^&*()+={}[]|;:<>?,\\" + extra_invalid_chars:
+            if char in path:
+                die(f"Program name must not contain a '{char}' character: {path}")
+        return path
+
+    @staticmethod
+    def _validate_program(path: str, programs: FrozenSet[str]) -> None:
+        i = path.rfind("/")
+        basename = path[i + 1 :] if i >= 0 else path
+        if basename in programs or not basename:
+            die(f"Invalid program name: {path}")
 
 
 #############################################################################
