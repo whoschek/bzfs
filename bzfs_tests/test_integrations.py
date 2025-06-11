@@ -756,7 +756,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         src_foo = create_filesystem(src_root_dataset, "foo")
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
-        self.run_bzfs(src_foo, dst_foo, "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
+        self.run_bzfs(src_foo, dst_foo, "--quiet", "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
         self.assertSnapshotNames(dst_foo, expected_results)
 
         self.tearDownAndSetup()
@@ -2521,31 +2521,36 @@ class LocalTestCase(BZFSTestCase):
     def test_zfs_recv_include_regex(self) -> None:
         if self.is_no_privilege_elevation():
             self.skipTest("setting properties via zfs receive -o needs extra permissions")
-        self.setup_basic()
-        self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
+        for i in range(0, 2):
+            with stop_on_failure_subtest(i=i):
+                self.tearDownAndSetup()
+                self.setup_basic()
+                self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
 
-        included_props = {"include_bzfs:p1": "value1", "include_bzfs:p2": "value2"}
-        excluded_props = {"exclude_bzfs:p3": "value3"}
-        zfs_set([src_root_dataset + "/foo"], included_props)
-        zfs_set([src_root_dataset + "/foo"], excluded_props)
-        self.run_bzfs(
-            src_root_dataset + "/foo",
-            dst_root_dataset + "/foo",
-            "--zfs-send-program-opts=",
-            "--zfs-recv-o-targets=full",
-            "--zfs-recv-o-sources=local,inherited",
-            "--zfs-recv-o-include-regex=include_bzfs.*",
-            "--zfs-recv-x-targets=full+incremental",
-            "--zfs-recv-x-include-regex=.*",
-            "--zfs-recv-x-exclude-regex",
-            "include_bzfs.*",
-            *self.zfs_recv_x_excludes(),
-        )
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        for name, value in included_props.items():
-            self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
-        for name, _ in excluded_props.items():
-            self.assertEqual("-", dataset_property(dst_root_dataset + "/foo", name))
+                included_props = {"include_bzfs:p1": "value1", "include_bzfs:p2": "value2"}
+                excluded_props = {"exclude_bzfs:p3": "value3"}
+                zfs_set([src_root_dataset + "/foo"], included_props)
+                zfs_set([src_root_dataset + "/foo"], excluded_props)
+                extra_args = ["--quiet"] if i == 0 else []
+                self.run_bzfs(
+                    src_root_dataset + "/foo",
+                    dst_root_dataset + "/foo",
+                    *extra_args,
+                    "--zfs-send-program-opts=",
+                    "--zfs-recv-o-targets=full",
+                    "--zfs-recv-o-sources=local,inherited",
+                    "--zfs-recv-o-include-regex=include_bzfs.*",
+                    "--zfs-recv-x-targets=full+incremental",
+                    "--zfs-recv-x-include-regex=.*",
+                    "--zfs-recv-x-exclude-regex",
+                    "include_bzfs.*",
+                    *self.zfs_recv_x_excludes(),
+                )
+                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                for name, value in included_props.items():
+                    self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
+                for name, _ in excluded_props.items():
+                    self.assertEqual("-", dataset_property(dst_root_dataset + "/foo", name))
 
     def test_zfs_recv_include_regex_with_duplicate_o_and_x_names(self) -> None:
         if self.is_no_privilege_elevation():
