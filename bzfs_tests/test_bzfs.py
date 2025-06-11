@@ -1582,6 +1582,29 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(bad_args, params)
 
+        # Period duration should be a divisor of 12 months without remainder so that snapshots will be created at the same
+        # time every year
+        bad_args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"5monthly": 1}}}),
+            ]
+        )
+        with self.assertRaises(SystemExit):
+            bzfs.CreateSrcSnapshotConfig(bad_args, params)
+
+        good_args = bzfs.argument_parser().parse_args(
+            [
+                "src",
+                "dst",
+                "--create-src-snapshots",
+                "--create-src-snapshots-plan=" + str({"prod": {"onsite": {"6monthly": 1}}}),
+            ]
+        )
+        bzfs.CreateSrcSnapshotConfig(good_args, params)
+
         args = bzfs.argument_parser().parse_args(["src", "dst", "--daemon-frequency=2secondly"])
         config = bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
         self.assertDictEqual({"_2secondly": (2, "secondly")}, config.suffix_durations)
@@ -2514,10 +2537,10 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
 
     def test_months_non_boundary2b(self) -> None:
         """Rounding up to the next multiple of months when dt is not on a boundary."""
-        # For a 2-month step, using dt = April 15, 2025 should round up to June 1, 2025.
+        # For a 2-month step (Jan, Mar, May...), using dt = April 15, 2025 should round up to May 1, 2025.
         dt = datetime(2025, 4, 15, 10, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly")
-        expected = datetime(2025, 6, 1, 0, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 5, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
     def test_months_boundary(self) -> None:
@@ -2528,10 +2551,12 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
 
     def test_years_non_boundary2a(self) -> None:
         """Rounding up to the next multiple of years when dt is not on a boundary."""
-        # For a 2-year step, using dt = Feb 11, 2024 should round up to Jan 1, 2025.
+        # For a 2-year step with an anchor phase starting in 2025 (e.g. 2025, 2027...),
+        # using dt = Feb 11, 2024 should round up to Jan 1, 2025.
         dt = datetime(2024, 2, 11, 14, 5, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly")
-        expected = datetime(2026, 1, 1, 0, 0, 0, tzinfo=self.tz)
+        anchors = PeriodAnchors(yearly_year=2025)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=anchors)
+        expected = datetime(2025, 1, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
     def test_years_non_boundary2b(self) -> None:
@@ -2635,7 +2660,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
         custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 4, 20, 10, 0, 0, tzinfo=self.tz)
-        expected = datetime(2025, 6, 15, 12, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
         self.assertEqual(expected, result)
 
@@ -2643,7 +2668,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
         custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 5, 12, 10, 0, 0, tzinfo=self.tz)
-        expected = datetime(2025, 6, 15, 12, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
         self.assertEqual(expected, result)
 
@@ -2683,10 +2708,18 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # Custom yearly: snapshots every other year on June 30 at 02:00:00.
         custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2025, 3, 15, 10, 0, 0, tzinfo=self.tz)
-        # For 2-year steps, the most recent anchor for 2025 is 2025-06-30 02:00:00 (which is > dt), so roll back to 2024.
-        # Next boundary = 2024 + 2 = 2026.
-        expected = datetime(2026, 6, 30, 2, 0, 0, tzinfo=self.tz)
+        expected = datetime(2025, 6, 30, 2, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
+        self.assertEqual(expected, result)
+
+    def test_custom_yearly_anchor2c(self) -> None:
+        # Schedule: Every 2 years, starting in 2025.
+        # dt: 2025-02-11 (which is AFTER the default anchor of 2025-01-01)
+        # Expected result: 2027-01-01
+        dt = datetime(2025, 2, 11, 14, 5, tzinfo=self.tz)
+        anchors = PeriodAnchors(yearly_year=2025)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=anchors)
+        expected = datetime(2027, 1, 1, 0, 0, 0, tzinfo=self.tz)
         self.assertEqual(expected, result)
 
     def test_timezone_preservation(self) -> None:
@@ -2726,6 +2759,261 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
         # This will fail if the function tries to create an invalid date (Feb 31st)
         # or incorrectly jumps to March 31st instead of using Feb 28th
         expected = datetime(2025, 2, 28, 12, 0, 0, tzinfo=self.tz)
+        self.assertEqual(expected, result)
+
+    def test_monthly_with_custom_month_anchor(self) -> None:
+        """Tests that the `monthly_month` anchor correctly sets the cycle phase."""
+        # Anchor: every 1 month, starting in March (month=3), on the 1st day.
+        custom_anchors = PeriodAnchors(monthly_month=3, monthly_monthday=1)
+
+        # If it's Jan 15, the next anchor month is February.
+        dt = datetime(2025, 1, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2025, 2, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected, result)
+
+        # If it's March 15, the next anchor month is April.
+        dt2 = datetime(2025, 3, 15, 10, 0, tzinfo=self.tz)
+        expected2 = datetime(2025, 4, 1, 0, 0, tzinfo=self.tz)
+        result2 = round_datetime_up_to_duration_multiple(dt2, 1, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected2, result2)
+
+    def test_multi_month_with_custom_month_anchor(self) -> None:
+        """Tests multi-month logic with a custom `monthly_month` anchor."""
+        # Anchor: every 2 months (bi-monthly), starting in April (month=4).
+        # Schedule: Apr 1, Jun 1, Aug 1, Oct 1, Dec 1, Feb 1 (+1 year), etc.
+        custom_anchors = PeriodAnchors(monthly_month=4, monthly_monthday=2)
+
+        # Test Case 1: Current date is Mar 15. Next snapshot should be Apr 1.
+        dt1 = datetime(2025, 3, 15, 10, 0, tzinfo=self.tz)
+        expected1 = datetime(2025, 4, 2, 0, 0, tzinfo=self.tz)
+        result1 = round_datetime_up_to_duration_multiple(dt1, 2, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected1, result1)
+
+        # Test Case 2: Current date is April 15. Next snapshot should be June 1.
+        dt2 = datetime(2025, 4, 15, 10, 0, tzinfo=self.tz)
+        expected2 = datetime(2025, 6, 2, 0, 0, tzinfo=self.tz)
+        result2 = round_datetime_up_to_duration_multiple(dt2, 2, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected2, result2)
+
+        # Test Case 3: Current date is Dec 15. Next snapshot is Feb 1 of next year.
+        dt3 = datetime(2025, 12, 15, 10, 0, tzinfo=self.tz)
+        expected3 = datetime(2026, 2, 2, 0, 0, tzinfo=self.tz)
+        result3 = round_datetime_up_to_duration_multiple(dt3, 2, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected3, result3)
+
+    def test_quarterly_scheduling(self) -> None:
+        """Tests a common use case: quarterly snapshots."""
+        # Anchor: every 3 months, starting in January (month=1).
+        # Schedule: Jan 1, Apr 1, Jul 1, Oct 1.
+        custom_anchors = PeriodAnchors(monthly_month=1, monthly_monthday=1)
+
+        # Test Case 1: In February. Next is Apr 1.
+        dt1 = datetime(2025, 2, 20, 10, 0, tzinfo=self.tz)
+        expected1 = datetime(2025, 4, 1, 0, 0, tzinfo=self.tz)
+        result1 = round_datetime_up_to_duration_multiple(dt1, 3, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected1, result1)
+
+        # Test Case 2: In June. Next is Jul 1.
+        dt2 = datetime(2025, 6, 1, 12, 0, tzinfo=self.tz)
+        expected2 = datetime(2025, 7, 1, 0, 0, tzinfo=self.tz)
+        result2 = round_datetime_up_to_duration_multiple(dt2, 3, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected2, result2)
+
+        # Test Case 3: In November. Next is Jan 1 of next year.
+        dt3 = datetime(2025, 11, 5, 10, 0, tzinfo=self.tz)
+        expected3 = datetime(2026, 1, 1, 0, 0, tzinfo=self.tz)
+        result3 = round_datetime_up_to_duration_multiple(dt3, 3, "monthly", anchors=custom_anchors)
+        self.assertEqual(expected3, result3)
+
+    def test_multi_year_scheduling_is_correct(self) -> None:
+        """Verifies multi-year (3-year) scheduling logic with default anchors."""
+        # Schedule: Jan 1 of 2025, 2028, 2031, etc.
+        anchors = PeriodAnchors(yearly_year=2025)
+
+        # Case 1: In 2026. Next is 2028.
+        dt1 = datetime(2026, 6, 15, 10, 0, tzinfo=self.tz)
+        expected1 = datetime(2028, 1, 1, 0, 0, tzinfo=self.tz)
+        result1 = round_datetime_up_to_duration_multiple(dt1, 3, "yearly", anchors=anchors)
+        self.assertEqual(expected1, result1)
+
+        # Case 2: In 2028, but after the anchor date. Next is 2031.
+        dt2 = datetime(2028, 2, 1, 12, 0, tzinfo=self.tz)
+        expected2 = datetime(2031, 1, 1, 0, 0, tzinfo=self.tz)
+        result2 = round_datetime_up_to_duration_multiple(dt2, 3, "yearly", anchors=anchors)
+        self.assertEqual(expected2, result2)
+
+    def test_multi_year_with_custom_anchor_properties(self) -> None:
+        """Verifies multi-year scheduling with custom month and day anchors."""
+        # Schedule: Every 2 years, on July 4th, starting in year 2024.
+        # Valid snapshots: 2024-07-04, 2026-07-04, 2028-07-04...
+        anchors = PeriodAnchors(yearly_year=2024, yearly_month=7, yearly_monthday=4)
+
+        # Case 1: In 2025. Next boundary is 2026-07-04.
+        dt1 = datetime(2025, 8, 1, 10, 0, tzinfo=self.tz)
+        expected1 = datetime(2026, 7, 4, 0, 0, tzinfo=self.tz)
+        result1 = round_datetime_up_to_duration_multiple(dt1, 2, "yearly", anchors=anchors)
+        self.assertEqual(expected1, result1)
+
+        # Case 2: In 2026, but before the anchor date. Next is 2026-07-04.
+        dt2 = datetime(2026, 3, 10, 10, 0, tzinfo=self.tz)
+        expected2 = datetime(2026, 7, 4, 0, 0, tzinfo=self.tz)
+        result2 = round_datetime_up_to_duration_multiple(dt2, 2, "yearly", anchors=anchors)
+        self.assertEqual(expected2, result2)
+
+        # Case 3 (Boundary): Exactly on the anchor date.
+        dt3 = datetime(2026, 7, 4, 0, 0, tzinfo=self.tz)
+        result3 = round_datetime_up_to_duration_multiple(dt3, 2, "yearly", anchors=anchors)
+        self.assertEqual(dt3, result3)
+
+        # Case 4 (Just after Boundary): One second after the anchor date.
+        dt4 = datetime(2026, 7, 4, 0, 0, 1, tzinfo=self.tz)
+        expected4 = datetime(2028, 7, 4, 0, 0, tzinfo=self.tz)
+        result4 = round_datetime_up_to_duration_multiple(dt4, 2, "yearly", anchors=anchors)
+        self.assertEqual(expected4, result4)
+
+    def test_monthly_boundary_exact_time(self) -> None:
+        """Tests that a dt exactly on a monthly anchor is returned unchanged."""
+        anchors = PeriodAnchors(monthly_monthday=15, monthly_hour=10)
+        dt = datetime(2025, 4, 15, 10, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(dt, result)
+
+    def test_monthly_just_after_boundary(self) -> None:
+        """Tests that a dt just after a monthly anchor correctly advances to the next month."""
+        anchors = PeriodAnchors(monthly_monthday=15, monthly_hour=10)
+        dt = datetime(2025, 4, 15, 10, 0, 1, tzinfo=self.tz)  # 1 microsecond after
+        expected = datetime(2025, 5, 15, 10, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_before_anchor_day_in_same_month(self) -> None:
+        """Tests when dt is in the correct month but before the anchor day."""
+        anchors = PeriodAnchors(monthly_monthday=25)
+        dt = datetime(2025, 4, 10, 10, 0, tzinfo=self.tz)
+        expected = datetime(2025, 4, 25, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_end_of_month_rollover(self) -> None:
+        """Tests monthly scheduling at the end of a year."""
+        anchors = PeriodAnchors(monthly_monthday=1)
+        dt = datetime(2025, 12, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2026, 1, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_anchor_on_31st_for_short_month(self) -> None:
+        """Tests that an anchor on day 31 correctly resolves to the last day of a shorter month."""
+        anchors = PeriodAnchors(monthly_monthday=31)
+        # Next boundary after April 15 should be April 30th
+        dt = datetime(2025, 4, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2025, 4, 30, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+        # Next boundary after Feb 15 (non-leap) should be Feb 28th
+        dt2 = datetime(2025, 2, 15, 10, 0, tzinfo=self.tz)
+        expected2 = datetime(2025, 2, 28, 0, 0, tzinfo=self.tz)
+        result2 = round_datetime_up_to_duration_multiple(dt2, 1, "monthly", anchors=anchors)
+        self.assertEqual(expected2, result2)
+
+    def test_multi_month_with_phase_wrapping_year(self) -> None:
+        """Tests a multi-month schedule where the anchor phase causes cycles to straddle year boundaries."""
+        # Schedule: Every 4 months, starting in November.
+        # Cycles: ..., Jul 2024, Nov 2024, Mar 2025, Jul 2025, ...
+        anchors = PeriodAnchors(monthly_month=11)
+        # dt is Jan 2025. The last anchor was Nov 2024. Next is Mar 2025.
+        dt = datetime(2025, 1, 20, 10, 0, tzinfo=self.tz)
+        expected = datetime(2025, 3, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 4, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_monthly_cycle_with_future_anchor_month(self) -> None:
+        """Tests that the monthly cycle works correctly when the anchor month is after the current month.
+        This is already covered by other tests, but this one makes it explicit."""
+        # Schedule: Every 3 months (quarterly). Anchor phase is set to start in November (month 11).
+        # Schedule is Feb, May, Aug, Nov.
+        anchors = PeriodAnchors(monthly_month=11)
+
+        # Current date is March 2025. The last anchor was Nov 2024. The one before that was Aug 2024.
+        # The period `dt` falls into started in Feb 2025. The next boundary is May 2025.
+        dt = datetime(2025, 3, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2025, 5, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 3, "monthly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    # --- Comprehensive Tests for Yearly Scheduling ---
+
+    def test_yearly_just_before_boundary(self) -> None:
+        """Tests that a dt just before a yearly anchor correctly snaps to that anchor."""
+        anchors = PeriodAnchors(yearly_month=7, yearly_monthday=4)
+        dt = datetime(2025, 7, 3, 23, 59, 59, tzinfo=self.tz)
+        expected = datetime(2025, 7, 4, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_yearly_on_exact_boundary_with_offset_cycle(self) -> None:
+        """Tests a dt exactly on a multi-year anchor boundary."""
+        # Schedule: Every 3 years, phase starting 2022. (2022, 2025, 2028...)
+        anchors = PeriodAnchors(yearly_year=2022)
+        dt = datetime(2025, 1, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 3, "yearly", anchors=anchors)
+        self.assertEqual(dt, result)
+
+    def test_yearly_just_after_boundary_with_offset_cycle(self) -> None:
+        """Tests a dt just after a multi-year anchor boundary."""
+        # Schedule: Every 3 years, phase starting 2022. (2022, 2025, 2028...)
+        anchors = PeriodAnchors(yearly_year=2022)
+        dt = datetime(2025, 1, 1, 0, 0, 1, tzinfo=self.tz)  # 1 microsecond after
+        expected = datetime(2028, 1, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 3, "yearly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_yearly_leap_year_anchor_from_non_leap(self) -> None:
+        """Tests scheduling for a Feb 29 anchor when the current year is not a leap year."""
+        # Schedule: Every year on Feb 29.
+        anchors = PeriodAnchors(yearly_month=2, yearly_monthday=29)
+        # dt is in 2025 (non-leap). The next valid Feb 29 is in 2028.
+        # The anchor for 2025 is 2025-02-28. Since dt is past it, the next is 2026-02-28.
+        dt = datetime(2025, 3, 1, 10, 0, tzinfo=self.tz)
+        expected = datetime(2026, 2, 28, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+    def test_yearly_leap_year_anchor_from_leap(self) -> None:
+        """Tests scheduling for a Feb 29 anchor when the current year is a leap year."""
+        # Schedule: Every year on Feb 29.
+        anchors = PeriodAnchors(yearly_month=2, yearly_monthday=29)
+        # dt is Jan 2028 (leap). The next boundary is Feb 29, 2028.
+        dt = datetime(2028, 1, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2028, 2, 29, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=anchors)
+        self.assertEqual(expected, result)
+        # dt is Mar 2028 (leap), after the anchor. Next boundary is Feb 28, 2029.
+        dt2 = datetime(2028, 3, 1, 10, 0, tzinfo=self.tz)
+        expected2 = datetime(2029, 2, 28, 0, 0, tzinfo=self.tz)
+        result2 = round_datetime_up_to_duration_multiple(dt2, 1, "yearly", anchors=anchors)
+        self.assertEqual(expected2, result2)
+
+    def test_yearly_cycle_with_future_anchor_year(self) -> None:
+        """Tests that the cycle phase works correctly even if the anchor year is in the future.
+        The anchor year should only define the phase (e.g., odd/even years), not a starting point."""
+        # Schedule: Every 2 years. The anchor phase is defined by year 2051 (an odd year).
+        # This means snapshots should occur in ..., 2023, 2025, 2027, ...
+        anchors = PeriodAnchors(yearly_year=2051)
+
+        # Current date is in 2024. The next snapshot should be in 2025.
+        dt = datetime(2024, 5, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2025, 1, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=anchors)
+        self.assertEqual(expected, result)
+
+        anchors = PeriodAnchors(yearly_year=2050)
+
+        # Current date is in 2024. The next snapshot should be in 2026.
+        dt = datetime(2024, 5, 15, 10, 0, tzinfo=self.tz)
+        expected = datetime(2026, 1, 1, 0, 0, tzinfo=self.tz)
+        result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=anchors)
         self.assertEqual(expected, result)
 
 

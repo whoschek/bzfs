@@ -2141,6 +2141,12 @@ class CreateSrcSnapshotConfig:
                         "Invalid --create-src-snapshots-plan: Period duration should be a divisor of 86400 seconds "
                         f"without remainder so that snapshots will be created at the same time of day every day: {suffix}"
                     )
+            if suffix.endswith("monthly"):
+                if duration_amount != 0 and 12 % duration_amount != 0:
+                    die(
+                        "Invalid --create-src-snapshots-plan: Period duration should be a divisor of 12 months "
+                        f"without remainder so that snapshots will be created at the same time every year: {suffix}"
+                    )
             return duration_milliseconds, suffix
 
         suffixes = sorted(suffixes, key=suffix_key, reverse=True)  # take snapshots for dailies before hourlies, and so on
@@ -6712,6 +6718,7 @@ metadata_microsecond = {"min": 0, "max": 999, "help": "The microsecond within a 
 class PeriodAnchors:
     # The anchors for a given duration unit are computed as follows:
     # yearly: Anchor(dt) = latest T where T <= dt and T == Start of January 1 of dt + anchor.yearly_* vars
+    yearly_year: int = field(default=1, metadata={"min": 1, "max": 9999, "help": "The anchor year for multi-year periods"})
     yearly_month: int = field(default=1, metadata=metadata_month)  # 1 <= x <= 12
     yearly_monthday: int = field(default=1, metadata=metadata_day)  # 1 <= x <= 31
     yearly_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
@@ -6719,6 +6726,7 @@ class PeriodAnchors:
     yearly_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
 
     # monthly: Anchor(dt) = latest T where T <= dt && T == Start of first day of month of dt + anchor.monthly_* vars
+    monthly_month: int = field(default=1, metadata={"min": 1, "max": 12, "help": "The anchor month for multi-month periods"})
     monthly_monthday: int = field(default=1, metadata=metadata_day)  # 1 <= x <= 31
     monthly_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
     monthly_minute: int = field(default=0, metadata=metadata_minute)  # 0 <= x <= 59
@@ -6844,6 +6852,7 @@ def round_datetime_up_to_duration_multiple(
     elif duration_unit == "monthly":
         last_day = calendar.monthrange(dt.year, dt.month)[1]  # last valid day of the current month
         anchor = dt.replace(  # Compute the base anchor for the month ensuring the day is valid
+            month=anchors.monthly_month,
             day=min(anchors.monthly_monthday, last_day),
             hour=anchors.monthly_hour,
             minute=anchors.monthly_minute,
@@ -6851,7 +6860,7 @@ def round_datetime_up_to_duration_multiple(
             microsecond=0,
         )
         if anchor > dt:
-            anchor = add_months(anchor, -1)
+            anchor = add_months(anchor, -duration_amount)
         diff_months = (dt.year - anchor.year) * 12 + (dt.month - anchor.month)
         anchor_boundary = add_months(anchor, duration_amount * (diff_months // duration_amount))
         if anchor_boundary < dt:
@@ -6859,8 +6868,12 @@ def round_datetime_up_to_duration_multiple(
         return anchor_boundary
 
     elif duration_unit == "yearly":
-        last_day = calendar.monthrange(dt.year, anchors.yearly_month)[1]  # last valid day for anchor month in current year
-        anchor = dt.replace(  # Compute the base yearly anchor candidate for the current year, ensuring the day is valid
+        # Calculate the start of the cycle period that `dt` falls into.
+        year_offset = (dt.year - anchors.yearly_year) % duration_amount
+        period_start_year = dt.year - year_offset
+        last_day = calendar.monthrange(period_start_year, anchors.yearly_month)[1]  # last valid day of the month
+        anchor = dt.replace(
+            year=period_start_year,
             month=anchors.yearly_month,
             day=min(anchors.yearly_monthday, last_day),
             hour=anchors.yearly_hour,
@@ -6868,13 +6881,9 @@ def round_datetime_up_to_duration_multiple(
             second=anchors.yearly_second,
             microsecond=0,
         )
-        if anchor > dt:
-            anchor = anchor.replace(year=anchor.year - 1)
-        diff_years = dt.year - anchor.year
-        anchor_boundary = add_years(anchor, duration_amount * (diff_years // duration_amount))
-        if anchor_boundary < dt:
-            anchor_boundary = add_years(anchor_boundary, duration_amount)
-        return anchor_boundary
+        if anchor < dt:
+            return add_years(anchor, duration_amount)
+        return anchor
 
     else:
         raise ValueError(f"Unsupported duration unit: {duration_unit}")

@@ -1080,7 +1080,7 @@ class LocalTestCase(BZFSTestCase):
                     "--recursive",
                     "--skip-replication",
                     "--create-src-snapshots",
-                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"yearly": 1}}}),
+                    "--create-src-snapshots-plan=" + str({"z": {"onsite": {"monthly": 1}}}),
                     "--create-src-snapshots-timeformat=",
                     dry_run=(i == 0),
                 )

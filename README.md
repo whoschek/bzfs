@@ -655,9 +655,10 @@ usage: bzfs [-h] [--recursive]
             [--log-config-var NAME:VALUE [NAME:VALUE ...]]
             [--include-envvar-regex REGEX [REGEX ...]]
             [--exclude-envvar-regex REGEX [REGEX ...]]
-            [--yearly_month INT] [--yearly_monthday INT]
-            [--yearly_hour INT] [--yearly_minute INT]
-            [--yearly_second INT] [--monthly_monthday INT]
+            [--yearly_year INT] [--yearly_month INT]
+            [--yearly_monthday INT] [--yearly_hour INT]
+            [--yearly_minute INT] [--yearly_second INT]
+            [--monthly_month INT] [--monthly_monthday INT]
             [--monthly_hour INT] [--monthly_minute INT]
             [--monthly_second INT] [--weekly_weekday INT]
             [--weekly_hour INT] [--weekly_minute INT]
@@ -2351,6 +2352,14 @@ usage: bzfs [-h] [--recursive]
 Use these options to customize when snapshots that happen every N years are scheduled to be
 created on the source by the --create-src-snapshots option.
 
+<div id="--yearly_year"></div>
+
+**--yearly_year** *INT*
+
+*  The anchor year for multi-year periods (1 ≤ x ≤ 9999, default: 1).
+
+<!-- -->
+
 <div id="--yearly_month"></div>
 
 **--yearly_month** *INT*
@@ -2393,6 +2402,14 @@ created on the source by the --create-src-snapshots option.
 
 Use these options to customize when snapshots that happen every N months are scheduled to be
 created on the source by the --create-src-snapshots option.
+
+<div id="--monthly_month"></div>
+
+**--monthly_month** *INT*
+
+*  The anchor month for multi-month periods (1 ≤ x ≤ 12, default: 1).
+
+<!-- -->
 
 <div id="--monthly_monthday"></div>
 
