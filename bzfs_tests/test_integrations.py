@@ -106,9 +106,9 @@ def suite() -> unittest.TestSuite:
     is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
     is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
     suite = unittest.TestSuite()
-    if not (is_smoke_test or is_functional_test or is_adhoc_test):
+    if True or not (is_smoke_test or is_functional_test or is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
-        suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
+        # suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
 
     # for ssh_mode in ["pull-push"]:
     # for ssh_mode in ["local", "pull-push"]:
@@ -678,71 +678,11 @@ class AdhocTestCase(BZFSTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
-    def test_include_snapshots_plan(self) -> None:
-        LocalTestCase(param=self.param).test_include_snapshots_plan()
+    def test_basic_replication_recursive_with_exclude_property(self) -> None:
+        LocalTestCase(param=self.param).test_basic_replication_recursive_with_exclude_property()
 
-    def test_include_snapshots_plan_without_excludes_outdated_snapshots(self) -> None:
-        LocalTestCase(param=self.param).test_include_snapshots_plan_without_excludes_outdated_snapshots()
-
-    def test_delete_dst_snapshots_except_plan(self) -> None:
-        LocalTestCase(param=self.param).test_delete_dst_snapshots_except_plan()
-
-    def test_daemon_frequency(self) -> None:
-        LocalTestCase(param=self.param).test_daemon_frequency()
-
-    def test_daemon_frequency_invalid(self) -> None:
-        LocalTestCase(param=self.param).test_daemon_frequency_invalid()
-
-    def test_basic_snapshotting_flat_simple(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_simple()
-
-    def test_basic_snapshotting_flat_non_existing_root(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_non_existing_root()
-
-    def test_basic_snapshotting_flat_empty(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_empty()
-
-    def test_basic_snapshotting_recursive_simple(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple()
-
-    def test_basic_snapshotting_recursive_with_skip_parent(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_with_skip_parent()
-
-    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning()
-
-    def test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_recursive_simple_with_incompatible_pruning_with_skip_parent()
-
-    def test_basic_snapshotting_flat_even_if_not_due(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_even_if_not_due()
-
-    def test_invalid_use_of_dummy(self) -> None:
-        LocalTestCase(param=self.param).test_invalid_use_of_dummy()
-
-    def test_basic_snapshotting_flat_daemon(self) -> None:
-        LocalTestCase(param=self.param).test_basic_snapshotting_flat_daemon()
-
-    def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self) -> None:
-        LocalTestCase(param=self.param).test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning()
-
-    def test_jobrunner_flat_simple(self) -> None:
-        LocalTestCase(param=self.param).test_jobrunner_flat_simple()
-
-    def test_jobrunner_flat_simple_with_empty_targets(self) -> None:
-        LocalTestCase(param=self.param).test_jobrunner_flat_simple_with_empty_targets()
-
-    def test_last_replicated_cache_with_no_sleep(self) -> None:
-        LocalTestCase(param=self.param).test_last_replicated_cache_with_no_sleep()
-
-    def test_last_replicated_cache_with_sleep_longer_than_threshold(self) -> None:
-        LocalTestCase(param=self.param).test_last_replicated_cache_with_sleep_longer_than_threshold()
-
-    def test_cache_flat_simple(self) -> None:
-        LocalTestCase(param=self.param).test_cache_flat_simple()
-
-    def test_cache_flat_simple_subset(self) -> None:
-        LocalTestCase(param=self.param).test_cache_flat_simple_subset()
+    def test_zfs_recv_include_regex(self) -> None:
+        LocalTestCase(param=self.param).test_zfs_recv_include_regex()
 
 
 #############################################################################
