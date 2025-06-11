@@ -154,6 +154,7 @@ BARRIER_CHAR = "~"
 SHARED = "shared"
 DEDICATED = "dedicated"
 DONT_SKIP_DATASET = ""
+SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -1903,7 +1904,7 @@ class Remote:
             self.socket_prefix = "s"
             delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
-        self.sanitize2_regex = re.compile(r"[^a-zA-Z0-9;:,<.>?~`!%#$^&*+=_-]")  # Remove chars not in the allowed set
+        self.sanitize2_regex = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove chars not in the allowed set
 
         # mutable variables:
         self.root_dataset: str = ""  # deferred until run_main()
@@ -7072,7 +7073,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or dataset.endswith("/..")
         or "/./" in dataset
         or "/../" in dataset
-        or any(char in "'~@#`%$^&*+=|,\\" or char == '"' or (char.isspace() and char != " ") for char in dataset)
+        or any(char in SHELL_CHARS or (char.isspace() and char != " ") for char in dataset)
         or not dataset[0].isalpha()
     ):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
@@ -7084,7 +7085,7 @@ def validate_user_name(user: str, input_text: str) -> None:
 
 
 def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = "") -> None:
-    invalid_chars = '"' + "'`~!@#$%^&*()+={}[]|;<>?/,\\" + extra_invalid_chars
+    invalid_chars = SHELL_CHARS + "/" + extra_invalid_chars
     if host and (".." in host or any(c.isspace() or c in invalid_chars for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
@@ -8192,7 +8193,9 @@ class ProgramValidator:
         self.ssh_programs: FrozenSet[str] = frozenset({"ssh", "hpnssh"})
         self.zfs_programs: FrozenSet[str] = frozenset({"zfs"})
         self.zpool_programs: FrozenSet[str] = frozenset({"zpool"})
-        self.compression_programs: FrozenSet[str] = frozenset({"zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", "lzma"})
+        self.compression_programs: FrozenSet[str] = frozenset(
+            {"zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", "brotli", "lzma"}
+        )
         self.disallowed_programs: FrozenSet[str] = frozenset(
             {
                 "ansible",
@@ -8206,6 +8209,7 @@ class ProgramValidator:
                 "aws",
                 "az",
                 "btrfs",
+                "busybox",
                 "cargo",
                 "cat",
                 "cd",
@@ -8221,6 +8225,7 @@ class ProgramValidator:
                 "conda",
                 "cp",
                 "cpan",
+                "cryptcat",
                 "cryptsetup",
                 "csh",
                 "curl",
@@ -8229,14 +8234,17 @@ class ProgramValidator:
                 "delpart",
                 "deluser",
                 "deno",
+                "dmsetup",
                 "dnf",
                 "dpkg",
                 "echo",
+                "ed",
                 "egrep",
                 "emacs",
                 "env",
                 "ethtool",
                 "eval",
+                "ex",
                 "exec",
                 "fdisk",
                 "fgrep",
@@ -8276,17 +8284,22 @@ class ProgramValidator:
                 "initctl",
                 "ionice",
                 "ip",
+                "iperf",
+                "iperf3",
                 "iptables",
                 "java",
                 "kill",
                 "killall",
                 "ksh",
+                "less",
                 "ln",
                 "losetup",
                 "ls",
                 "lvm",
                 "mawk",
+                "mconnect",
                 "mdadm",
+                "mkdir",
                 "mkfs",
                 "mkfs.btrfs",
                 "mkfs.ext2",
@@ -8296,13 +8309,19 @@ class ProgramValidator:
                 "mkfs.msdos",
                 "mkfs.xfs",
                 "modprobe",
+                "more",
                 "mosh",
                 "mount",
                 "mv",
+                "nano",
+                "nc",
+                "neovim",
                 "nice",
                 "node",
                 "nohup",
+                "ntpd",
                 "nvme",
+                "openssl",
                 "parallel",
                 "parted",
                 "partx",
@@ -8325,18 +8344,26 @@ class ProgramValidator:
                 "python2",
                 "python3",
                 "rclone",
+                "rcp",
                 "reboot",
+                "red",
                 "renice",
                 "resize2fs",
                 "resizepart",
                 "restic",
+                "rg",
+                "rgrep",
+                "rlogin",
                 "rm",
                 "rmdir",
+                "rnano",
                 "route",
                 "rpm",
                 "rsh",
                 "rsync",
                 "ruby",
+                "runuser",
+                "rvim",
                 "scp",
                 "sdparm",
                 "sed",
@@ -8348,6 +8375,7 @@ class ProgramValidator:
                 "sleep",
                 "smbd",
                 "smbpasswd",
+                "socat",
                 "source",
                 "ssh-add",
                 "ssh-agent",
@@ -8355,17 +8383,22 @@ class ProgramValidator:
                 "su",
                 "swapoff",
                 "swapon",
+                "sysctl",
                 "systemctl",
+                "systemd",
+                "tac",
                 "tail",
                 "tar",
                 "tc",
                 "tclsh",
+                "tcpdump",
                 "tcsh",
                 "tee",
                 "telnet",
                 "time",
                 "timeout",
                 "tmux",
+                "touch",
                 "tree",
                 "ts-node",
                 "tune2fs",
@@ -8373,17 +8406,25 @@ class ProgramValidator:
                 "umount",
                 "unlink",
                 "update-initramfs",
+                "useradd",
                 "userdel",
+                "usermod",
                 "uv",
+                "vi",
+                "view",
+                "vim",
                 "wget",
                 "wipe",
                 "wipefs",
+                "wireshark",
                 "xargs",
                 "yum",
                 "zdb",
                 "zed",
                 "zip",
                 "zsh",
+                prog_name + "_jobrunner",
+                prog_name,
             }
         )
 
@@ -8397,7 +8438,10 @@ class ProgramValidator:
         allow_zpool: bool = False,
         allow_compression: bool = False,
         extra_invalid_chars: str = "",
-    ) -> str:
+    ) -> None:
+        for char in SHELL_CHARS + ":" + extra_invalid_chars:
+            if char in path:
+                die(f"Program name must not contain a '{char}' character: {path}")
         if not allow_shell:
             self._validate_program(path, self.shell_programs)
         if not allow_sudo:
@@ -8411,15 +8455,10 @@ class ProgramValidator:
         if not allow_compression:
             self._validate_program(path, self.compression_programs)
         self._validate_program(path, self.disallowed_programs)
-        for char in '"' + "'`~!@#$%^&*()+={}[]|;:<>?,\\" + extra_invalid_chars:
-            if char in path:
-                die(f"Program name must not contain a '{char}' character: {path}")
-        return path
 
     @staticmethod
     def _validate_program(path: str, programs: FrozenSet[str]) -> None:
-        i = path.rfind("/")
-        basename = path[i + 1 :] if i >= 0 else path
+        basename = os.path.basename(path)
         if basename in programs or not basename:
             die(f"Invalid program name: {path}")
 

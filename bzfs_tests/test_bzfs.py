@@ -273,6 +273,13 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.ProgramValidator().validate_program("awk")
         with self.assertRaises(SystemExit):
             bzfs.ProgramValidator().validate_program("/usr/bin/awk")
+        bzfs.ProgramValidator().validate_program("/foo/bar")
+        with self.assertRaises(SystemExit):
+            bzfs.ProgramValidator().validate_program("/foo/bar/")
+        with self.assertRaises(SystemExit):
+            bzfs.ProgramValidator().validate_program("/")
+        with self.assertRaises(SystemExit):
+            bzfs.ProgramValidator().validate_program("")
 
     def test_validate_program_name_must_not_be_empty(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
