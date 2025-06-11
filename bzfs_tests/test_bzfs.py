@@ -3192,22 +3192,26 @@ class TestTimeRangeAction(unittest.TestCase):
         self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "0..5"))
         self.assertListEqual(["\td#1", "\td@2"], self.filter_snapshots_by_times_and_rank1(lst1, "1..3"))
         self.assertListEqual(lst1, self.filter_snapshots_by_times_and_rank1(lst1, "1000 years ago..0secondsago"))
+        self.assertListEqual(
+            ["\td#1", "\td@2"], self.filter_snapshots_by_times_and_rank1(lst1, "1..3", loglevel=logging.INFO)
+        )
 
     @staticmethod
     def filter_snapshots_by_times_and_rank1(
-        snapshots: List[str], timerange: str, ranks: List[str] = []  # noqa: B006
+        snapshots: List[str], timerange: str, ranks: List[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
     ) -> List[str]:
-        return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
+        return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
 
 
 def filter_snapshots_by_times_and_rank(
-    snapshots: List[str], timerange: str, ranks: List[str] = []  # noqa: B006
+    snapshots: List[str], timerange: str, ranks: List[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
 ) -> List[str]:
-    args = argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks, "--verbose"])
+    args = argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks])
     log_params = bzfs.LogParams(args)
     try:
         job = bzfs.Job()
         job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+        job.params.log.setLevel(loglevel)
         snapshots = [f"{i}\t" + snapshot for i, snapshot in enumerate(snapshots)]  # simulate creation time
         results = job.filter_snapshots(snapshots)
         results = [result.split("\t", 1)[1] for result in results]  # drop creation time
@@ -3276,8 +3280,10 @@ class TestRankRangeAction(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.parse_args("oldest99%..latest100%")
 
-    def filter_snapshots_by_rank(self, snapshots: List[str], ranks: List[str], timerange: str = "0..0") -> List[str]:
-        return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks)
+    def filter_snapshots_by_rank(
+        self, snapshots: List[str], ranks: List[str], timerange: str = "0..0", loglevel: int = logging.DEBUG
+    ) -> List[str]:
+        return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
 
     def test_filter_snapshots_by_rank(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2", "d@3"]]
@@ -3290,6 +3296,9 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(["\td@0"], self.filter_snapshots_by_rank(lst1, ["latest3..latest4"]))
         self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest4..latest4"]))
         self.assertListEqual(["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest2..latest0"]))
+        self.assertListEqual(
+            ["\td@2", "\td@3"], self.filter_snapshots_by_rank(lst1, ["latest2..latest0"], loglevel=logging.INFO)
+        )
 
         self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["oldest 0"]))
         self.assertListEqual([], self.filter_snapshots_by_rank(lst1, ["latest 0"]))
