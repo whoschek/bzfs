@@ -100,6 +100,7 @@ from typing import (
     List,
     Literal,
     NamedTuple,
+    NoReturn,
     Optional,
     Protocol,
     Sequence,
@@ -5653,7 +5654,6 @@ class Job:
         op = "zfs {receive" + ("|send" if busy_if_send else "") + "} operation"
         try:
             die(f"Cannot continue now: Destination is already busy with {op} from another process: {dataset}")
-            return False  # make mypy happy
         except SystemExit as e:
             log.warning("%s", e)
             raise RetryableError("dst currently busy with zfs mutation op") from e
@@ -6269,7 +6269,7 @@ def delete_stale_files(
             pass  # harmless
 
 
-def die(msg: str, exit_code: int = die_status) -> None:
+def die(msg: str, exit_code: int = die_status) -> NoReturn:
     ex = SystemExit(msg)
     ex.code = exit_code
     raise ex
