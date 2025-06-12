@@ -31,6 +31,7 @@
 * Consider using an IDE/editor that can open multiple windows for the same (long) file, such as PyCharm or Sublime Text, etc.
 * The main retry logic is in run_with_retries() and clear_resumable_recv_state_if_necessary().
 * Progress reporting for use during `zfs send/recv` data transfers is in class ProgressReporter.
+* Executing a CLI commmand on a local or remote host is in run_ssh_command().
 * Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool.
 * Caching functionality can be found by searching for this regex: .*cach.*
 * The parallel processing engine is in itr_ssh_cmd_parallel() and process_datasets_in_parallel_and_fault_tolerant().
@@ -879,7 +880,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while processing "
              "tank/user1. In this case processing skips tank/user1/foo and proceeds with tank/user2.\n\n"
              "c) 'dataset' (default): Same as 'tree' except if the destination dataset already exists, skip to "
-             "the next dataset instead. "
+             "the next dataset instead.\n\n"
              "Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while "
              "processing tank/user1. In this case processing skips tank/user1 and proceeds with tank/user1/foo "
              "if the destination already contains tank/user1. Otherwise processing continues with tank/user2. "
@@ -5305,6 +5306,7 @@ class Job:
                     todo_futures.add(future)
                 return len(todo_futures) > 0
 
+            # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
             failed = False
             while submit_datasets():
                 done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)

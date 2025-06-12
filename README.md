@@ -1362,15 +1362,16 @@ usage: bzfs [-h] [--recursive]
     case processing skips tank/user1/foo and proceeds with tank/user2.
 
     c) 'dataset' (default): Same as 'tree' except if the destination dataset already exists,
-    skip to the next dataset instead. Example: Assume datasets tank/user1/foo and tank/user2/bar
-    and an error occurs while processing tank/user1. In this case processing skips tank/user1 and
-    proceeds with tank/user1/foo if the destination already contains tank/user1. Otherwise
-    processing continues with tank/user2. This mode is for production use cases that require
-    timely forward progress even in the presence of partial failures. For example, assume the job
-    is to backup the home directories or virtual machines of thousands of users across an
-    organization. Even if replication of some of the datasets for some users fails due too
-    conflicts, busy datasets, etc, the replication job will continue for the remaining datasets
-    and the remaining users.
+    skip to the next dataset instead.
+
+    Example: Assume datasets tank/user1/foo and tank/user2/bar and an error occurs while
+    processing tank/user1. In this case processing skips tank/user1 and proceeds with
+    tank/user1/foo if the destination already contains tank/user1. Otherwise processing continues
+    with tank/user2. This mode is for production use cases that require timely forward progress
+    even in the presence of partial failures. For example, assume the job is to backup the home
+    directories or virtual machines of thousands of users across an organization. Even if
+    replication of some of the datasets for some users fails due too conflicts, busy datasets,
+    etc, the replication job will continue for the remaining datasets and the remaining users.
 
 <!-- -->
 
