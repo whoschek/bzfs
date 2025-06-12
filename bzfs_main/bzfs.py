@@ -1585,7 +1585,8 @@ class LogParams:
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
-        os.makedirs(self.log_dir, exist_ok=True)
+        os.makedirs(log_parent_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+        os.makedirs(self.log_dir, mode=stat.S_IRWXU, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
         self.log_file_infix = args.log_file_infix
         self.log_file_suffix = args.log_file_suffix
