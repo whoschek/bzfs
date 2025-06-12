@@ -645,6 +645,20 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual(["-w", "none", "foo"], bzfs.fix_solaris_raw_mode(["-w", "foo"]))
         self.assertListEqual(["-F"], bzfs.fix_solaris_raw_mode(["-F"]))
 
+    def test_logdir_basename_prefix(self) -> None:
+        """Basename of --log-dir must start with prefix 'bzfs-logs'"""
+        logdir = os.path.join(bzfs.get_home_directory(), "bzfs-logs-tmp")
+        try:
+            bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
+            self.assertTrue(os.path.exists(logdir))
+        finally:
+            shutil.rmtree(logdir, ignore_errors=True)
+
+        logdir = os.path.join(bzfs.get_home_directory(), "bzfs-tmp")
+        with self.assertRaises(SystemExit):
+            bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
+        self.assertFalse(os.path.exists(logdir))
+
     def test_get_logger_with_cleanup(self) -> None:
         def check(log: Logger, files: Set[str]) -> None:
             files_todo = files.copy()

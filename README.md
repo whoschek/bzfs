@@ -2162,13 +2162,15 @@ usage: bzfs [-h] [--recursive]
 
 *  Path to the log output directory on local host (optional). Default: $HOME/bzfs-logs. The
     logger that is used by default writes log files there, in addition to the console. The
-    current.dir symlink always points to the subdirectory containing the most recent log file. The
-    current.log symlink always points to the most recent log file. The current.pv symlink always
-    points to the most recent data transfer monitoring log. Run `tail --follow=name
-    --max-unchanged-stats=1` on both symlinks to follow what's currently going on. Parallel
-    replication generates a separate .pv file per thread. To monitor these, run something like
-    `while true; do clear; for f in $(realpath $HOME/bzfs-logs/current/current.pv)*; do tac -s
-    $(printf '\r') $f | tr '\r' '\n' | grep -m1 -v '^$'; done; sleep 1; done`
+    basename of --log-dir must start with the prefix 'bzfs-logs' as this helps prevent
+    accidents. The current.dir symlink always points to the subdirectory containing the most
+    recent log file. The current.log symlink always points to the most recent log file. The
+    current.pv symlink always points to the most recent data transfer monitoring log. Run `tail
+    --follow=name --max-unchanged-stats=1` on both symlinks to follow what's currently going
+    on. Parallel replication generates a separate .pv file per thread. To monitor these, run
+    something like `while true; do clear; for f in $(realpath
+    $HOME/bzfs-logs/current/current.pv)*; do tac -s $(printf '\r') $f | tr '\r' '\n'
+    | grep -m1 -v '^$'; done; sleep 1; done`
 
 <!-- -->
 

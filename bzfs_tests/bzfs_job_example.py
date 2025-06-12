@@ -252,9 +252,10 @@ jitter = False  # don't randomize
 worker_timeout_seconds = None
 
 
+basename_stem = pathlib.Path(sys.argv[0]).stem  # stem is basename without file extension ("bzfs_job_example")
 extra_args = []
-extra_args += [f"--job-id={pathlib.Path(sys.argv[0]).stem}"]  # stem is basename without file extension ("bzfs_job_example")
-extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', pathlib.Path(sys.argv[0]).stem)}"]
+extra_args += [f"--job-id={basename_stem}"]
+extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', 'bzfs-logs-' + basename_stem)}"]
 # extra_args += ["--ssh-src-port=2222"]  # for hpnssh
 # extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
 # extra_args += ["--localhost=bak-us-west-1"]

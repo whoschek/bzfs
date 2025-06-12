@@ -1386,7 +1386,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--log-dir", type=str, metavar="DIR",
         help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "
-             "that is used by default writes log files there, in addition to the console. The current.dir symlink "
+             "that is used by default writes log files there, in addition to the console. The basename of --log-dir must "
+             f"start with the prefix '{prog_name}-logs' as this helps prevent accidents. The current.dir symlink "
              "always points to the subdirectory containing the most recent log file. The current.log symlink "
              "always points to the most recent log file. The current.pv symlink always points to the most recent "
              "data transfer monitoring log. Run `tail --follow=name --max-unchanged-stats=1` on both symlinks to "
@@ -1581,7 +1582,12 @@ class LogParams:
         timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.timestamp: str = timestamp
         self.home_dir: str = get_home_directory()
-        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, prog_name + "-logs")
+        default_dir_name = prog_name + "-logs"
+        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, default_dir_name)
+        if not os.path.basename(log_parent_dir).startswith(default_dir_name):
+            msg = f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}"
+            get_simple_logger(prog_name).error("%s", msg)
+            die(msg)
         self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
