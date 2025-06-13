@@ -7102,7 +7102,8 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 
 
 def validate_user_name(user: str, input_text: str) -> None:
-    if user and (".." in user or any(c.isspace() or c == '"' or c == "'" or c in "/@`" for c in user)):
+    invalid_chars = SHELL_CHARS + "/"
+    if user and (".." in user or any(c.isspace() or c in invalid_chars for c in user)):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
