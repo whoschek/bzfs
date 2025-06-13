@@ -35,6 +35,7 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobSpawnProcessPerJob))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobInCurrentThread))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJob))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidateSshOptions))
     return suite
 
 
@@ -704,6 +705,104 @@ class TestRunSubJob(unittest.TestCase):
     def test_nonexisting_cmd(self) -> None:
         with self.assertRaises(FileNotFoundError):
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+
+
+#############################################################################
+class TestValidateSshOptions(unittest.TestCase):
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        # Mock the die method to catch the SystemExit and inspect the message
+        self.mock_die = patch.object(self.job, "die").start()
+        self.addCleanup(patch.stopall)
+
+    def test_ssh_src_host_opt(self) -> None:
+        parser = bzfs_jobrunner.argument_parser()
+        with self.assertRaises(SystemExit) as cm:
+            parser.parse_args(["--ssh-src-host=foo"])
+        self.assertEqual(2, cm.exception.code)
+        with self.assertRaises(SystemExit) as cm:
+            parser.parse_args(["--ssh-dst-host=foo"])
+        self.assertEqual(2, cm.exception.code)
+
+    def test_rejects_dangerous_proxycommand_in_extra_opts(self) -> None:
+        malicious_args = ["--ssh-src-extra-opts", "-v -o ProxyCommand=evil_script.sh"]
+        self.job.validate_ssh_options(malicious_args)
+        self.mock_die.assert_called_once_with(
+            "Security: Dangerous ssh option 'ProxyCommand' is not allowed in '--ssh-src-extra-opts'."
+        )
+
+    def test_rejects_dangerous_localcommand_in_extra_opt(self) -> None:
+        malicious_args = ["--ssh-dst-extra-opt", "-oLocalCommand=touch /tmp/pwned"]
+        self.job.validate_ssh_options(malicious_args)
+        self.mock_die.assert_called_once_with(
+            "Security: Dangerous ssh option 'LocalCommand' is not allowed in '--ssh-dst-extra-opt'."
+        )
+
+    def test_rejects_dangerous_option_with_space_syntax(self) -> None:
+        malicious_args = ["--ssh-src-extra-opts", "-o PermitLocalCommand yes"]
+        self.job.validate_ssh_options(malicious_args)
+        self.mock_die.assert_called_once_with(
+            "Security: Dangerous ssh option 'PermitLocalCommand' is not allowed in '--ssh-src-extra-opts'."
+        )
+
+    def test_rejects_dangerous_option_concatenated(self) -> None:
+        malicious_args = ["--ssh-src-extra-opt", "-oProxyCommand=evil"]
+        self.job.validate_ssh_options(malicious_args)
+        self.mock_die.assert_called_once_with(
+            "Security: Dangerous ssh option 'ProxyCommand' is not allowed in '--ssh-src-extra-opt'."
+        )
+
+    def test_allows_safe_options(self) -> None:
+        safe_args = ["--ssh-src-extra-opts", "-v -o StrictHostKeyChecking=no", "--ssh-dst-extra-opt", "-o ConnectTimeout=10"]
+        self.job.validate_ssh_options(safe_args)
+        self.mock_die.assert_not_called()
+
+    def test_handles_malformed_trailing_o_flag(self) -> None:
+        # This should not crash, and since no dangerous option is found, it should pass.
+        args = ["--ssh-src-extra-opts", "-v -o"]
+        self.job.validate_ssh_options(args)
+        self.mock_die.assert_not_called()
+
+    def test_no_false_positives(self) -> None:
+        # Ensure that options that *contain* dangerous strings but aren't the dangerous option itself are not blocked.
+        args = ["--ssh-src-extra-opt", "-oUser=ProxyCommand"]
+        self.job.validate_ssh_options(args)
+        self.mock_die.assert_not_called()
+
+    def test_handles_trailing_extra_opts_flag_without_value(self) -> None:
+        # This represents a malformed command line, but the validator should handle it gracefully.
+        malformed_args = ["--some-other-arg", "value", "--ssh-src-extra-opts"]  # Trailing flag
+        # The test passes if no exception is raised and die is not called.
+        self.job.validate_ssh_options(malformed_args)
+        self.mock_die.assert_not_called()
+
+    def test_handles_trailing_extra_opt_flag_without_value(self) -> None:
+        # This is also a malformed command line.
+        malformed_args = ["--ssh-dst-extra-opt"]  # Trailing flag
+        # The test passes if no exception is raised and die is not called.
+        self.job.validate_ssh_options(malformed_args)
+        self.mock_die.assert_not_called()
+
+    def test_fixed_validator_catches_quoted_proxycommand(self) -> None:
+        malicious_args = ["--ssh-src-extra-opts", "'-oProxyCommand=evil.sh'"]
+        self.job.validate_ssh_options(malicious_args)
+        self.mock_die.assert_called_once_with(
+            "Security: Dangerous ssh option 'ProxyCommand' is not allowed in '--ssh-src-extra-opts'."
+        )
+
+    def test_rejects_dangerous_option_with_quoting_bypass(self) -> None:
+        malicious_args = ["--ssh-src-extra-opts", "'-o ProxyCommand=touch /tmp/pwned'"]
+        self.job.validate_ssh_options(malicious_args)
+        self.mock_die.assert_called_once_with(
+            "Security: Dangerous ssh option 'ProxyCommand' is not allowed in '--ssh-src-extra-opts'."
+        )
+
+    def test_fixed_validator_catches_leading_space_in_quotes(self) -> None:
+        malicious_args = ["--ssh-src-extra-opts", "' -oProxyCommand=evil'"]
+        self.job.validate_ssh_options(malicious_args)
+        self.mock_die.assert_called_once_with(
+            "Security: Dangerous ssh option 'ProxyCommand' is not allowed in '--ssh-src-extra-opts'."
+        )
 
 
 #############################################################################
