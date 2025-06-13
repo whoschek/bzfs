@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
+import io
 import platform
 import shutil
 import signal
@@ -123,7 +125,7 @@ class TestHelperFunctions(unittest.TestCase):
         if is_solaris_zfs():
             self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = bzfs_jobrunner.argument_parser()
-        with self.assertRaises(SystemExit) as e:
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as e:
             parser.parse_args(["--help"])
         self.assertEqual(0, e.exception.code)
 
@@ -717,10 +719,10 @@ class TestValidateSshOptions(unittest.TestCase):
 
     def test_ssh_src_host_opt(self) -> None:
         parser = bzfs_jobrunner.argument_parser()
-        with self.assertRaises(SystemExit) as cm:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
             parser.parse_args(["--ssh-src-host=foo"])
         self.assertEqual(2, cm.exception.code)
-        with self.assertRaises(SystemExit) as cm:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as cm:
             parser.parse_args(["--ssh-dst-host=foo"])
         self.assertEqual(2, cm.exception.code)
 

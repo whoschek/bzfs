@@ -14,7 +14,9 @@
 # limitations under the License.
 
 import argparse
+import contextlib
 import errno
+import io
 import itertools
 import logging
 import os
@@ -3166,7 +3168,7 @@ class TestArgumentParser(unittest.TestCase):
         if is_solaris_zfs():
             self.skipTest("FIXME: BlockingIOError: [Errno 11] write could not complete without blocking")
         parser = bzfs.argument_parser()
-        with self.assertRaises(SystemExit) as e:
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as e:
             parser.parse_args(["--help"])
         self.assertEqual(0, e.exception.code)
 
@@ -3178,19 +3180,19 @@ class TestArgumentParser(unittest.TestCase):
 
     def test_missing_datasets(self) -> None:
         parser = bzfs.argument_parser()
-        with self.assertRaises(SystemExit) as e:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
             parser.parse_args(["--retries=1"])
         self.assertEqual(2, e.exception.code)
 
     def test_missing_dst_dataset(self) -> None:
         parser = bzfs.argument_parser()
-        with self.assertRaises(SystemExit) as e:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
             parser.parse_args(["src_dataset"])  # Each SRC_DATASET must have a corresponding DST_DATASET
         self.assertEqual(2, e.exception.code)
 
     def test_program_must_not_be_empty_string(self) -> None:
         parser = bzfs.argument_parser()
-        with self.assertRaises(SystemExit) as e:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
             parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])
         self.assertEqual(2, e.exception.code)
 
