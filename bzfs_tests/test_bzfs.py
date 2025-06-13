@@ -72,6 +72,7 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeDirectoryNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckPercentRange))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
@@ -3839,6 +3840,37 @@ class TestSafeFileNameAction(unittest.TestCase):
     def test_filename_with_single_dot_slash(self) -> None:
         with self.assertRaises(SystemExit):
             self.parser.parse_args(["./file.txt"])
+
+    def test_filename_with_tab(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["foo\nbar.txt"])
+
+
+#############################################################################
+class TestSafeDirectoryNameAction(unittest.TestCase):
+    def test_valid_directory_name_is_accepted(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
+        args = parser.parse_args(["--dir", "valid_directory"])
+        assert args.dir == "valid_directory"
+
+    def test_empty_directory_name_raises_error(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--dir", ""])
+
+    def test_directory_name_with_invalid_whitespace_raises_error(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--dir", "invalid\nname"])
+
+    def test_directory_name_with_leading_or_trailing_spaces_is_trimmed(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
+        args = parser.parse_args(["--dir", "  valid_directory  "])
+        assert args.dir == "valid_directory"
 
 
 #############################################################################
