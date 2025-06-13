@@ -353,5 +353,6 @@ cmd += [f"--workers={workers}"]
 cmd += [f"--work-period-seconds={work_period_seconds}"]
 cmd += ["--jitter"] if jitter else []
 cmd += [f"--worker-timeout-seconds={worker_timeout_seconds}"] if worker_timeout_seconds is not None else []
-cmd += extra_args + unknown_args + ["--root-dataset-pairs"] + root_dataset_pairs
+cmd += extra_args + unknown_args
+cmd += ["--root-dataset-pairs"] + root_dataset_pairs
 sys.exit(subprocess.run(cmd, input=f"{src_hosts}", text=True).returncode)
