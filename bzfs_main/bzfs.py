@@ -1384,7 +1384,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING",
         help=hlp("zpool") + msg)
     parser.add_argument(
-        "--log-dir", type=str, metavar="DIR",
+        "--log-dir", type=str, action=SafeDirectoryNameAction, metavar="DIR",
         help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "
              "that is used by default writes log files there, in addition to the console. The basename of --log-dir must "
              f"start with the prefix '{prog_name}-logs' as this helps prevent accidents. The current.dir symlink "
@@ -7494,7 +7494,26 @@ class SafeFileNameAction(argparse.Action):
         option_string: Optional[str] = None,
     ) -> None:
         if ".." in values or "/" in values or "\\" in values:
-            parser.error(f"Invalid file name '{values}': must not contain '..' or '/' or '\\'.")
+            parser.error(f"{option_string}: Invalid file name '{values}': must not contain '..' or '/' or '\\'.")
+        if any(char.isspace() and char != " " for char in values):
+            parser.error(f"{option_string}: Invalid file name '{values}': must not contain whitespace other than space.")
+        setattr(namespace, self.dest, values)
+
+
+#############################################################################
+class SafeDirectoryNameAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
+        values = values.strip()
+        if values == "":
+            parser.error(f"{option_string}: Empty string is not valid")
+        if any(char.isspace() and char != " " for char in values):
+            parser.error(f"{option_string}: Invalid dir name '{values}': must not contain whitespace other than space.")
         setattr(namespace, self.dest, values)
 
 
@@ -8205,7 +8224,7 @@ def xfinally(cleanup: Callable[[], None]) -> _XFinally:
 
 #############################################################################
 class ProgramValidator:
-    """These exclusion lists are not complete or exhaustive; they are merely a weak first line of defense, and no substitute
+    """These blacklists are not complete or exhaustive; they are merely a weak first line of defense, and no substitute
     for strong sandboxing mechanisms in additional layers of defense."""
 
     def __init__(self) -> None:
