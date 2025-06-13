@@ -411,7 +411,7 @@ class Job:
         dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
         monitor_snapshot_plan = self.validate_monitor_snapshot_plan(literal_eval(args.monitor_snapshot_plan))
         localhostname = args.localhost if args.localhost else socket.gethostname()
-        self.validate_non_empty_string(localhostname, "--localhost")
+        self.validate_host_name(localhostname, "--localhost")
         log.debug("localhostname: %s", localhostname)
         src_hosts = self.validate_src_hosts(literal_eval(args.src_hosts if args.src_hosts is not None else sys.stdin.read()))
         basis_src_hosts = src_hosts
