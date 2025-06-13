@@ -1450,8 +1450,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "This option can be specified multiple times. "
              "A leading `!` character indicates logical negation, i.e. the regex matches if the regex with the "
              "leading `!` character removed does not match. "
-             "The default is to include no environment variables, i.e. to make no exceptions to "
-             "--exclude-envvar-regex. "
+             "The default is to include no environment variables, i.e. to make no exceptions to --exclude-envvar-regex. "
              "Example that retains at least these two env vars: "
              "`--include-envvar-regex PATH "
              f"--include-envvar-regex {env_var_prefix}min_pipe_transfer_size`. "
@@ -6696,7 +6695,7 @@ metadata_microsecond = {"min": 0, "max": 999, "help": "The microsecond within a 
 class PeriodAnchors:
     # The anchors for a given duration unit are computed as follows:
     # yearly: Anchor(dt) = latest T where T <= dt and T == Start of January 1 of dt + anchor.yearly_* vars
-    yearly_year: int = field(default=1, metadata={"min": 1, "max": 9999, "help": "The anchor year for multi-year periods"})
+    yearly_year: int = field(default=2025, metadata={"min": 1, "max": 9999, "help": "The anchor year of multi-year periods"})
     yearly_month: int = field(default=1, metadata=metadata_month)  # 1 <= x <= 12
     yearly_monthday: int = field(default=1, metadata=metadata_day)  # 1 <= x <= 31
     yearly_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
@@ -6704,7 +6703,7 @@ class PeriodAnchors:
     yearly_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
 
     # monthly: Anchor(dt) = latest T where T <= dt && T == Start of first day of month of dt + anchor.monthly_* vars
-    monthly_month: int = field(default=1, metadata={"min": 1, "max": 12, "help": "The anchor month for multi-month periods"})
+    monthly_month: int = field(default=1, metadata={"min": 1, "max": 12, "help": "The anchor month of multi-month periods"})
     monthly_monthday: int = field(default=1, metadata=metadata_day)  # 1 <= x <= 31
     monthly_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
     monthly_minute: int = field(default=0, metadata=metadata_minute)  # 0 <= x <= 59

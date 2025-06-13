@@ -2276,7 +2276,7 @@ created on the source by the --create-src-snapshots option.
 
 **--yearly_year** *INT*
 
-*  The anchor year for multi-year periods (1 ≤ x ≤ 9999, default: 1).
+*  The anchor year of multi-year periods (1 ≤ x ≤ 9999, default: 2025).
 
 <!-- -->
 
@@ -2327,7 +2327,7 @@ created on the source by the --create-src-snapshots option.
 
 **--monthly_month** *INT*
 
-*  The anchor month for multi-month periods (1 ≤ x ≤ 12, default: 1).
+*  The anchor month of multi-month periods (1 ≤ x ≤ 12, default: 1).
 
 <!-- -->
 
