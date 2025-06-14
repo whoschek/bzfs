@@ -268,96 +268,30 @@ class TestHelperFunctions(unittest.TestCase):
         params.validate_arg("foo\rbar", allow_all=True)
         params.validate_arg(" foo  bar ", allow_all=True)
 
-    def test_validate_program_name(self) -> None:
-        bzfs.ProgramValidator().validate_program("/foo/bar.bak")
-        with self.assertRaises(SystemExit):
-            bzfs.ProgramValidator().validate_program("/foo/bar.bak", extra_invalid_chars=",.")
-        with self.assertRaises(SystemExit):
-            bzfs.ProgramValidator().validate_program("awk")
-        with self.assertRaises(SystemExit):
-            bzfs.ProgramValidator().validate_program("/usr/bin/awk")
-        bzfs.ProgramValidator().validate_program("/foo/bar")
-        with self.assertRaises(SystemExit):
-            bzfs.ProgramValidator().validate_program("/foo/bar/")
-        with self.assertRaises(SystemExit):
-            bzfs.ProgramValidator().validate_program("/")
-        with self.assertRaises(SystemExit):
-            bzfs.ProgramValidator().validate_program("")
-
     def test_validate_program_name_must_not_be_empty(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
-        args.zfs_program = ""
+        args.zpool_program = ""
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
-        args.zfs_program = None
+        args.zpool_program = None
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
 
     def test_validate_program_name_must_not_contain_special_chars(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
-        args.zfs_program = "true;false"
+        args.zpool_program = "true;false"
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
-        args.zfs_program = "echo foo|cat"
+        args.zpool_program = "echo foo|cat"
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
-        args.zfs_program = "foo>bar"
+        args.zpool_program = "foo>bar"
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
-        args.zfs_program = "foo\nbar"
+        args.zpool_program = "foo\nbar"
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
-        args.zfs_program = "foo\\bar"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-
-    def test_validate_program_name_must_not_be_sudo(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
-        args.zfs_program = "zfs"
-        bzfs.Params(args)
-        args.zfs_program = "sudo"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.zfs_program = "doas"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.zfs_program = "exec"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.zfs_program = "time"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.zfs_program = "zstd"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.sudo_program = "sudo"
-        args.shell_program = "bash"
-        args.ssh_program = "ssh"
-        args.zfs_program = "zfs"
-        args.zpool_program = "zpool"
-        args.compression_program = "zstd"
-        args.pv_program = "pv"
-        args.ps_program = "ps"
-        bzfs.Params(args)
-        args.pv_program = "sudo"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.pv_program = "bash"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.pv_program = "ssh"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.pv_program = "zfs"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.pv_program = "zpool"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.compression_program = "rm"
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-        args.pv_program = "awk"
+        args.zpool_program = "foo\\bar"
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
 

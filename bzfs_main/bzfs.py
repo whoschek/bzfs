@@ -1337,20 +1337,20 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=argparse.SUPPRESS)
 
     def hlp(program: str) -> str:
-        return f"The name or path to the '{program}' executable (optional). Default is '{program}'. "
+        return f"The name of the '{program}' executable (optional). Default is '{program}'. "
 
     msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
     parser.add_argument(
-        "--compression-program", default="zstd", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("zstd") + "Examples: 'lz4', 'pzstd', 'pigz', 'gzip', '/opt/bin/zstd'. " + msg.rstrip() + " The use is "
-                           "auto-disabled if data is transferred locally instead of via the network. This "
-                           "option is about transparent compression-on-the-wire, not about compression-at-rest.\n\n")
+        "--compression-program", default="zstd", choices=["zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", disable_prg],
+        help=hlp("zstd") + msg.rstrip() + " The use is auto-disabled if data is transferred locally instead of via the "
+                                          "network. This option is about transparent compression-on-the-wire, not about "
+                                          "compression-at-rest.\n\n")
     parser.add_argument(
         "--compression-program-opts", default="-1", metavar="STRING",
         help="The options to be passed to the compression program on the compression step (optional). "
              "Default is '%(default)s' (fastest).\n\n")
     parser.add_argument(
-        "--mbuffer-program", default="mbuffer", action=NonEmptyStringAction, metavar="STRING",
+        "--mbuffer-program", default="mbuffer", choices=["mbuffer", disable_prg],
         help=hlp("mbuffer") + msg.rstrip() + " The use is auto-disabled if data is transferred locally "
                                              "instead of via the network. This tool is used to smooth out the rate "
                                              "of data flow and prevent bottlenecks caused by network latency or "
@@ -1359,29 +1359,26 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--mbuffer-program-opts", default="-q -m 128M", metavar="STRING",
         help="Options to be passed to 'mbuffer' program (optional). Default: '%(default)s'.\n\n")
     parser.add_argument(
-        "--ps-program", default="ps", action=NonEmptyStringAction, metavar="STRING",
+        "--ps-program", default="ps", choices=["ps", disable_prg],
         help=hlp("ps") + msg)
     parser.add_argument(
-        "--pv-program", default="pv", action=NonEmptyStringAction, metavar="STRING",
+        "--pv-program", default="pv", choices=["pv", disable_prg],
         help=hlp("pv") + msg.rstrip() + " This is used for bandwidth rate-limiting and progress monitoring.\n\n")
     parser.add_argument(
         "--pv-program-opts", metavar="STRING",
         default="--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M",
         help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n")
     parser.add_argument(
-        "--shell-program", default="sh", action=NonEmptyStringAction, metavar="STRING",
+        "--shell-program", default="sh",  choices=["sh", disable_prg],
         help=hlp("sh") + msg)
     parser.add_argument(
-        "--ssh-program", default="ssh", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("ssh") + "Examples: 'hpnssh' or 'ssh' or '/opt/bin/ssh' or wrapper scripts around 'ssh'. " + msg)
+        "--ssh-program", default="ssh", choices=["ssh", "hpnssh", disable_prg],
+        help=hlp("ssh") + msg)
     parser.add_argument(
-        "--sudo-program", default="sudo", action=NonEmptyStringAction, metavar="STRING",
+        "--sudo-program", default="sudo", choices=["sudo", disable_prg],
         help=hlp("sudo") + msg)
     parser.add_argument(
-        "--zfs-program", default="zfs", action=NonEmptyStringAction, metavar="STRING",
-        help=hlp("zfs") + "\n\n")
-    parser.add_argument(
-        "--zpool-program", default="zpool", action=NonEmptyStringAction, metavar="STRING",
+        "--zpool-program", default="zpool", choices=["zpool", disable_prg],
         help=hlp("zpool") + msg)
     parser.add_argument(
         "--log-dir", type=str, action=SafeDirectoryNameAction, metavar="DIR",
@@ -1655,7 +1652,6 @@ class Params:
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
         self.unset_matching_env_vars(args)
-        self.program_validator = ProgramValidator()
         self.xperiods = SnapshotPeriods()
 
         assert len(args.root_dataset_pairs) > 0
@@ -1720,7 +1716,7 @@ class Params:
         self.monitor_snapshots_config: MonitorSnapshotsConfig = MonitorSnapshotsConfig(args, self)
         self.is_caching_snapshots: bool = args.cache_snapshots == "true"
 
-        self.compression_program: str = self.program_name(args.compression_program, allow_compression=True)
+        self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: List[str] = self.split_args(args.compression_program_opts)
         self.getconf_program: str = self.program_name("getconf")  # print number of CPUs on POSIX except Solaris
         self.psrinfo_program: str = self.program_name("psrinfo")  # print number of CPUs on Solaris
@@ -1733,12 +1729,12 @@ class Params:
         if args.bwlimit:
             self.pv_program_opts += [f"--rate-limit={self.validate_arg_str(args.bwlimit)}"]
         self.shell_program_local: str = "sh"
-        self.shell_program: str = self.program_name(args.shell_program, allow_shell=True)
-        self.ssh_program: str = self.program_name(args.ssh_program, allow_ssh=True)
-        self.sudo_program: str = self.program_name(args.sudo_program, allow_sudo=True)
+        self.shell_program: str = self.program_name(args.shell_program)
+        self.ssh_program: str = self.program_name(args.ssh_program)
+        self.sudo_program: str = self.program_name(args.sudo_program)
         self.uname_program: str = self.program_name("uname")
-        self.zfs_program: str = self.program_name(args.zfs_program, allow_zfs=True)
-        self.zpool_program: str = self.program_name(args.zpool_program, allow_zpool=True)
+        self.zfs_program: str = self.program_name("zfs")
+        self.zpool_program: str = self.program_name(args.zpool_program)
 
         # no point creating complex shell pipeline commands for tiny data transfers:
         self.min_pipe_transfer_size: int = getenv_int("min_pipe_transfer_size", 1024 * 1024)
@@ -1827,27 +1823,14 @@ class Params:
             exclude_arg_opts=frozenset({"-i", "-I"}),
         )
 
-    def program_name(
-        self,
-        program: str,
-        allow_shell: bool = False,
-        allow_sudo: bool = False,
-        allow_ssh: bool = False,
-        allow_zfs: bool = False,
-        allow_zpool: bool = False,
-        allow_compression: bool = False,
-    ) -> str:
+    def program_name(self, program: str) -> str:
         """For testing: helps simulate errors caused by external programs."""
         self.validate_arg_str(program)
-        self.program_validator.validate_program(
-            program,
-            allow_shell=allow_shell,
-            allow_sudo=allow_sudo,
-            allow_ssh=allow_ssh,
-            allow_zfs=allow_zfs,
-            allow_zpool=allow_zpool,
-            allow_compression=allow_compression,
-        )
+        if not program:
+            die(f"Program name must not be missing: {program}")
+        for char in SHELL_CHARS + ":":
+            if char in program:
+                die(f"Program name must not contain a '{char}' character: {program}")
         if self.inject_params.get("inject_unavailable_" + program, False):
             return program + "-xxx"  # substitute a program that cannot be found on the PATH
         if self.inject_params.get("inject_failing_" + program, False):
@@ -8221,288 +8204,6 @@ def xfinally(cleanup: Callable[[], None]) -> _XFinally:
     The single *with* line replaces verbose ``try/except/finally`` boilerplate while preserving full error information.
     """
     return _XFinally(cleanup)
-
-
-#############################################################################
-class ProgramValidator:
-    """These blacklists are not complete or exhaustive; they are merely a weak first line of defense, and no substitute
-    for strong sandboxing mechanisms in additional layers of defense."""
-
-    def __init__(self) -> None:
-        # immutable variables:
-        self.shell_programs: FrozenSet[str] = frozenset({"bash", "dash", "sh"})
-        self.sudo_programs: FrozenSet[str] = frozenset({"sudo", "doas"})
-        self.ssh_programs: FrozenSet[str] = frozenset({"ssh", "hpnssh"})
-        self.zfs_programs: FrozenSet[str] = frozenset({"zfs"})
-        self.zpool_programs: FrozenSet[str] = frozenset({"zpool"})
-        self.compression_programs: FrozenSet[str] = frozenset(
-            {"zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", "brotli", "lzma"}
-        )
-        self.disallowed_programs: FrozenSet[str] = frozenset(
-            {
-                "ansible",
-                "apt",
-                "apt-add-repository",
-                "apt-config",
-                "apt-get",
-                "apt-key",
-                "apt-mark",
-                "awk",
-                "aws",
-                "az",
-                "btrfs",
-                "busybox",
-                "cargo",
-                "cat",
-                "cd",
-                "cfdisk",
-                "chacl",
-                "chgpasswd",
-                "chgroup",
-                "chmod",
-                "chown",
-                "chroot",
-                "chsh",
-                "cloud-init",
-                "conda",
-                "cp",
-                "cpan",
-                "cryptcat",
-                "cryptsetup",
-                "csh",
-                "curl",
-                "dd",
-                "delgroup",
-                "delpart",
-                "deluser",
-                "deno",
-                "dmsetup",
-                "dnf",
-                "dpkg",
-                "echo",
-                "ed",
-                "egrep",
-                "emacs",
-                "env",
-                "ethtool",
-                "eval",
-                "ex",
-                "exec",
-                "fdisk",
-                "fgrep",
-                "find",
-                "firewalld",
-                "fsck",
-                "ftp",
-                "fwupdmgr",
-                "gawk",
-                "gcloud",
-                "gcp",
-                "gdisk",
-                "gh",
-                "git",
-                "git-lfs",
-                "git-shell",
-                "gkill",
-                "go",
-                "gparted",
-                "gpasswd",
-                "grep",
-                "grm",
-                "grmdir",
-                "groupadd",
-                "groupdel",
-                "groupmod",
-                "gsed",
-                "gsutil",
-                "gtar",
-                "gtimeout",
-                "halt",
-                "hdparm",
-                "head",
-                "hostname",
-                "ifconfig",
-                "init",
-                "initctl",
-                "ionice",
-                "ip",
-                "iperf",
-                "iperf3",
-                "iptables",
-                "java",
-                "kill",
-                "killall",
-                "ksh",
-                "less",
-                "ln",
-                "losetup",
-                "ls",
-                "lvm",
-                "mawk",
-                "mconnect",
-                "mdadm",
-                "mkdir",
-                "mkfs",
-                "mkfs.btrfs",
-                "mkfs.ext2",
-                "mkfs.ext3",
-                "mkfs.ext4",
-                "mkfs.fat",
-                "mkfs.msdos",
-                "mkfs.xfs",
-                "modprobe",
-                "more",
-                "mosh",
-                "mount",
-                "mv",
-                "nano",
-                "nc",
-                "neovim",
-                "nice",
-                "node",
-                "nohup",
-                "ntpd",
-                "nvme",
-                "openssl",
-                "parallel",
-                "parted",
-                "partx",
-                "passwd",
-                "perl",
-                "perl5",
-                "php",
-                "pip",
-                "pip3",
-                "pipx",
-                "pkill",
-                "poweroff",
-                "pvchange",
-                "pvcreate",
-                "pvmove",
-                "pvremove",
-                "pvresize",
-                "pyenv",
-                "python",
-                "python2",
-                "python3",
-                "rclone",
-                "rcp",
-                "reboot",
-                "red",
-                "renice",
-                "resize2fs",
-                "resizepart",
-                "restic",
-                "rg",
-                "rgrep",
-                "rlogin",
-                "rm",
-                "rmdir",
-                "rnano",
-                "route",
-                "rpm",
-                "rsh",
-                "rsync",
-                "ruby",
-                "runuser",
-                "rvim",
-                "scp",
-                "sdparm",
-                "sed",
-                "service",
-                "setsid",
-                "sftp",
-                "sgdisk",
-                "shutdown",
-                "sleep",
-                "smbd",
-                "smbpasswd",
-                "socat",
-                "source",
-                "ssh-add",
-                "ssh-agent",
-                "sshd",
-                "su",
-                "swapoff",
-                "swapon",
-                "sysctl",
-                "systemctl",
-                "systemd",
-                "tac",
-                "tail",
-                "tar",
-                "tc",
-                "tclsh",
-                "tcpdump",
-                "tcsh",
-                "tee",
-                "telnet",
-                "time",
-                "timeout",
-                "tmux",
-                "touch",
-                "tree",
-                "ts-node",
-                "tune2fs",
-                "ufw",
-                "umount",
-                "unlink",
-                "update-initramfs",
-                "useradd",
-                "userdel",
-                "usermod",
-                "uv",
-                "vi",
-                "view",
-                "vim",
-                "wget",
-                "wipe",
-                "wipefs",
-                "wireshark",
-                "xargs",
-                "yum",
-                "zdb",
-                "zed",
-                "zip",
-                "zsh",
-                prog_name + "_jobrunner",
-                prog_name,
-            }
-        )
-
-    def validate_program(
-        self,
-        path: str,
-        allow_shell: bool = False,
-        allow_sudo: bool = False,
-        allow_ssh: bool = False,
-        allow_zfs: bool = False,
-        allow_zpool: bool = False,
-        allow_compression: bool = False,
-        extra_invalid_chars: str = "",
-    ) -> None:
-        for char in SHELL_CHARS + ":" + extra_invalid_chars:
-            if char in path:
-                die(f"Program name must not contain a '{char}' character: {path}")
-        if not allow_shell:
-            self._validate_program(path, self.shell_programs)
-        if not allow_sudo:
-            self._validate_program(path, self.sudo_programs)
-        if not allow_ssh:
-            self._validate_program(path, self.ssh_programs)
-        if not allow_zfs:
-            self._validate_program(path, self.zfs_programs)
-        if not allow_zpool:
-            self._validate_program(path, self.zpool_programs)
-        if not allow_compression:
-            self._validate_program(path, self.compression_programs)
-        self._validate_program(path, self.disallowed_programs)
-
-    @staticmethod
-    def _validate_program(path: str, programs: FrozenSet[str]) -> None:
-        basename = os.path.basename(path)
-        if basename in programs or not basename:
-            die(f"Invalid program name: {path}")
 
 
 #############################################################################
