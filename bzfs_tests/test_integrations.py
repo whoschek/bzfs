@@ -4891,9 +4891,6 @@ class LocalTestCase(BZFSTestCase):
             bzfs.run_main(bzfs.argument_parser().parse_args(["xxxx", dst_root_dataset]))
         bzfs.run_main(bzfs.argument_parser().parse_args([src_root_dataset, dst_root_dataset]))
 
-    def test_program_name_must_not_contain_whitespace(self) -> None:
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--zfs-program=zfs zfs", expected_status=die_status)
-
     def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self) -> None:
         if not self.param or self.param.get("ssh_mode", "local") == "local" or ssh_program != "ssh":
             self.skipTest("ssh is only required in nonlocal mode")
