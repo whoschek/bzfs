@@ -637,13 +637,14 @@ usage: bzfs [-h] [--recursive]
             [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
             [--threads INT[%]]
             [--max-concurrent-ssh-sessions-per-tcp-connection INT]
-            [--bwlimit STRING] [--compression-program STRING]
+            [--bwlimit STRING]
+            [--compression-program {zstd,lz4,pzstd,pigz,gzip,bzip2,-}]
             [--compression-program-opts STRING]
-            [--mbuffer-program STRING] [--mbuffer-program-opts STRING]
-            [--ps-program STRING] [--pv-program STRING]
-            [--pv-program-opts STRING] [--shell-program STRING]
-            [--ssh-program STRING] [--sudo-program STRING]
-            [--zfs-program STRING] [--zpool-program STRING]
+            [--mbuffer-program {mbuffer,-}]
+            [--mbuffer-program-opts STRING] [--ps-program {ps,-}]
+            [--pv-program {pv,-}] [--pv-program-opts STRING]
+            [--shell-program {sh,-}] [--ssh-program {ssh,hpnssh,-}]
+            [--sudo-program {sudo,-}] [--zpool-program {zpool,-}]
             [--log-dir DIR] [--log-file-prefix STRING]
             [--log-file-infix STRING] [--log-file-suffix STRING]
             [--log-subdir {daily,hourly,minutely}]
@@ -2045,12 +2046,11 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--compression-program"></div>
 
-**--compression-program** *STRING*
+**--compression-program** *{zstd,lz4,pzstd,pigz,gzip,bzip2,-}*
 
-*  The name or path to the 'zstd' executable (optional). Default is 'zstd'. Examples:
-    'lz4', 'pzstd', 'pigz', 'gzip', '/opt/bin/zstd'. Use '-' to disable the use of
-    this program. The use is auto-disabled if data is transferred locally instead of via the
-    network. This option is about transparent compression-on-the-wire, not about
+*  The name of the 'zstd' executable (optional). Default is 'zstd'. Use '-' to disable the
+    use of this program. The use is auto-disabled if data is transferred locally instead of via
+    the network. This option is about transparent compression-on-the-wire, not about
     compression-at-rest.
 
 <!-- -->
@@ -2066,10 +2066,10 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--mbuffer-program"></div>
 
-**--mbuffer-program** *STRING*
+**--mbuffer-program** *{mbuffer,-}*
 
-*  The name or path to the 'mbuffer' executable (optional). Default is 'mbuffer'. Use '-'
-    to disable the use of this program. The use is auto-disabled if data is transferred locally
+*  The name of the 'mbuffer' executable (optional). Default is 'mbuffer'. Use '-' to
+    disable the use of this program. The use is auto-disabled if data is transferred locally
     instead of via the network. This tool is used to smooth out the rate of data flow and prevent
     bottlenecks caused by network latency or speed fluctuation.
 
@@ -2085,19 +2085,19 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--ps-program"></div>
 
-**--ps-program** *STRING*
+**--ps-program** *{ps,-}*
 
-*  The name or path to the 'ps' executable (optional). Default is 'ps'. Use '-' to disable
-    the use of this program.
+*  The name of the 'ps' executable (optional). Default is 'ps'. Use '-' to disable the use
+    of this program.
 
 <!-- -->
 
 <div id="--pv-program"></div>
 
-**--pv-program** *STRING*
+**--pv-program** *{pv,-}*
 
-*  The name or path to the 'pv' executable (optional). Default is 'pv'. Use '-' to disable
-    the use of this program. This is used for bandwidth rate-limiting and progress monitoring.
+*  The name of the 'pv' executable (optional). Default is 'pv'. Use '-' to disable the use
+    of this program. This is used for bandwidth rate-limiting and progress monitoring.
 
 <!-- -->
 
@@ -2113,46 +2113,37 @@ usage: bzfs [-h] [--recursive]
 
 <div id="--shell-program"></div>
 
-**--shell-program** *STRING*
+**--shell-program** *{sh,-}*
 
-*  The name or path to the 'sh' executable (optional). Default is 'sh'. Use '-' to disable
-    the use of this program.
+*  The name of the 'sh' executable (optional). Default is 'sh'. Use '-' to disable the use
+    of this program.
 
 <!-- -->
 
 <div id="--ssh-program"></div>
 
-**--ssh-program** *STRING*
+**--ssh-program** *{ssh,hpnssh,-}*
 
-*  The name or path to the 'ssh' executable (optional). Default is 'ssh'. Examples:
-    'hpnssh' or 'ssh' or '/opt/bin/ssh' or wrapper scripts around 'ssh'. Use '-' to
-    disable the use of this program.
+*  The name of the 'ssh' executable (optional). Default is 'ssh'. Use '-' to disable the
+    use of this program.
 
 <!-- -->
 
 <div id="--sudo-program"></div>
 
-**--sudo-program** *STRING*
+**--sudo-program** *{sudo,-}*
 
-*  The name or path to the 'sudo' executable (optional). Default is 'sudo'. Use '-' to
-    disable the use of this program.
-
-<!-- -->
-
-<div id="--zfs-program"></div>
-
-**--zfs-program** *STRING*
-
-*  The name or path to the 'zfs' executable (optional). Default is 'zfs'.
+*  The name of the 'sudo' executable (optional). Default is 'sudo'. Use '-' to disable the
+    use of this program.
 
 <!-- -->
 
 <div id="--zpool-program"></div>
 
-**--zpool-program** *STRING*
+**--zpool-program** *{zpool,-}*
 
-*  The name or path to the 'zpool' executable (optional). Default is 'zpool'. Use '-' to
-    disable the use of this program.
+*  The name of the 'zpool' executable (optional). Default is 'zpool'. Use '-' to disable
+    the use of this program.
 
 <!-- -->
 
