@@ -82,12 +82,9 @@ dst_root_dataset = ""
 zfs_encryption_key_fd, zfs_encryption_key = tempfile.mkstemp(prefix="test_bzfs.key_")
 os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
 os.close(zfs_encryption_key_fd)
-ssh_config_file_fd, ssh_config_file = tempfile.mkstemp(prefix="ssh_config_file_")
-os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
-os.write(ssh_config_file_fd, "# Empty ssh_config file".encode("utf-8"))
-os.close(ssh_config_file_fd)
 keylocation = f"file://{zfs_encryption_key}"
 
+ssh_config_file = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "bzfs_test_ssh_config_file")
 rng = random.Random(12345)
 has_netcat_prog = shutil.which("nc") is not None
 
@@ -161,7 +158,7 @@ def suite() -> unittest.TestSuite:
                     for encrypted_dataset in [False]:
                         params = {
                             "ssh_mode": ssh_mode,
-                            "verbose": True,
+                            "verbose": False,
                             "min_pipe_transfer_size": min_pipe_transfer_size,
                             "affix": affix,
                             "skip_missing_snapshots": "continue",
@@ -244,8 +241,16 @@ class BZFSTestCase(ParametrizedTestCase):
             self.assertIsNotNone(features)
             # print(f"test zpool features: {features}", file=sys.stderr)
 
+        private_key_file = "id_rsa" if platform.system() == "Linux" else "testid_rsa"
+        private_key_file = os.path.join(os.path.dirname(ssh_config_file), private_key_file)
+        fallback = "Fallback=no\n" if ssh_program == "hpnssh" else ""  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
+        with open(ssh_config_file, "w") as fd:
+            fd.write(f"IdentityFile {private_key_file}\nStrictHostKeyChecking=no\n{fallback}Include /etc/ssh/ssh_config\n")
+        os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
+
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/bzfs/
     def tearDown(self) -> None:
+        Path(ssh_config_file).unlink(missing_ok=True)
         pass  # tear down is deferred to next setup for easier debugging
 
     def tearDownAndSetup(self) -> None:
@@ -333,17 +338,11 @@ class BZFSTestCase(ParametrizedTestCase):
         src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
         src_user = ["--ssh-src-user", os_username()]
-        private_key_file2 = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/testid_rsa"
-        src_private_key2 = ["--ssh-src-private-key", private_key_file2, "--ssh-dst-private-key", private_key_file2]
-        private_key_file = pwd.getpwuid(os.getuid()).pw_dir + "/.ssh/id_rsa"
-        src_private_key = ["--ssh-src-private-key", private_key_file, "--ssh-dst-private-key", private_key_file]
-        src_ssh_config_file = ["--ssh-src-config-file", ssh_config_file]
-        dst_ssh_config_file = ["--ssh-dst-config-file", ssh_config_file]
         params = self.param
         if params and params.get("ssh_mode") == "push":
-            args = args + dst_host + dst_port
+            args += dst_host + dst_port
         elif params and params.get("ssh_mode") == "pull":
-            args = args + src_host + src_port
+            args += src_host + src_port
         elif params and params.get("ssh_mode") == "pull-push":
             if (
                 getenv_bool("test_enable_IPv6", True)
@@ -353,30 +352,17 @@ class BZFSTestCase(ParametrizedTestCase):
             ):
                 src_host = ["--ssh-src-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
                 dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
-            args = args + src_host + dst_host + src_port + dst_port
+            args += src_host + dst_host + src_port + dst_port
             if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
-                args = args + src_user + src_ssh_config_file + dst_ssh_config_file + ["--ssh-cipher="]
-            args = args + ["--bwlimit=10000m"]
+                args += src_user
+            args += ["--bwlimit=10000m"]
         elif params and params.get("ssh_mode", "local") != "local":
             raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])
 
-        if platform.system() == "Linux":
-            args += src_private_key
-        else:
-            args += src_private_key2
-        args = args + [
-            "--ssh-src-extra-opts",
-            "-o StrictHostKeyChecking=no",
-            "--ssh-dst-extra-opts",
-            "-o StrictHostKeyChecking=no",
+        args += [
+            "--ssh-src-config-file=" + os.path.basename(ssh_config_file),
+            "--ssh-dst-config-file=" + os.path.basename(ssh_config_file),
         ]
-        if params and params.get("ssh_mode", "local") != "local":
-            if ssh_program == "ssh" and has_netcat_prog and not is_solaris_zfs() and not platform.system() == "FreeBSD":
-                r = rng.randint(0, 2)
-                if r % 3 == 0:
-                    args = args + ["--ssh-src-extra-opt=-oProxyCommand=nc %h %p"]
-                elif r % 3 == 1:
-                    args = args + ["--ssh-dst-extra-opt=-oProxyCommand=nc %h %p"]
 
         for arg in args:
             assert "--retries" not in arg
@@ -410,11 +396,6 @@ class BZFSTestCase(ParametrizedTestCase):
 
         if ssh_program != "ssh" and "--ssh-program" not in args and "--ssh-program=" not in args:
             args = args + ["--ssh-program=" + ssh_program]
-
-        if ssh_program == "hpnssh":
-            # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
-            args = args + ["--ssh-src-extra-opt=-oFallback=no"]
-            args = args + ["--ssh-dst-extra-opt=-oFallback=no"]
 
         if params and params.get("verbose", None):
             args = args + ["--verbose"]
