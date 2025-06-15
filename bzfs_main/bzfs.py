@@ -2369,8 +2369,10 @@ class Job:
             log_params.params = p
             with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
                 with contextlib.redirect_stderr(cast(TextIO, Tee(log_file_fd, sys.stderr))):  # send stderr to logfile+stderr
+                    lock_permissions = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
                     lock_file = p.lock_file_name()
-                    with open(lock_file, "w") as lock_fd:
+                    lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, lock_permissions)
+                    with xfinally(lambda: os.close(lock_fd)):
                         try:
                             # Acquire an exclusive lock; will raise an error if lock is already held by another process.
                             # The (advisory) lock is auto-released when the process terminates or the fd is closed.
