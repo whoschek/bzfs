@@ -36,12 +36,12 @@ repos:
       - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
       - id: debug-statements  # Check for debugger imports and py37+ breakpoint() calls in python source
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13
+    rev: v0.12.0
     hooks:
       - id: ruff  # Run linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.16.0
+    rev: v1.16.1
     hooks:
       - id: mypy  # Run Python type checker
         exclude: ^\.git.*$
