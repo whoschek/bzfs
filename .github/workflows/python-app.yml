@@ -129,7 +129,7 @@ jobs:
     - name: Run pre-commit
       run: |
         python -m pip install --upgrade pip
-        pip install --upgrade "pre-commit==4.2" "ruff==0.11.13" "mypy==1.*"
+        pip install --upgrade "pre-commit==4.2"
         pre-commit run --all-files
     - name: Test with unittest
       run: |
