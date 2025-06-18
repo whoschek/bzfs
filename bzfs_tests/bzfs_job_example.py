@@ -258,6 +258,8 @@ extra_args += [f"--job-id={basename_stem}"]
 extra_args += [f"--log-dir={os.path.join(os.path.expanduser('~'), 'bzfs-job-logs', 'bzfs-logs-' + basename_stem)}"]
 # extra_args += ["--ssh-src-port=2222"]  # for hpnssh
 # extra_args += ["--ssh-dst-port=2222"]  # for hpnssh
+# extra_args += ["--ssh-src-config-file=bzfs_example_ssh_config_file"]  # for custom ssh options; relative to ~/.ssh/
+# extra_args += ["--ssh-dst-config-file=bzfs_example_ssh_config_file"]  # for custom ssh options; relative to ~/.ssh/
 # extra_args += ["--localhost=bak-us-west-1"]
 # extra_args += ["--src-user=alice"]  # ssh username on src; for pull mode and pull-push mode
 # extra_args += ["--dst-user=root"]  # ssh username on dst; for push mode and pull-push mode
