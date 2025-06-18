@@ -7052,15 +7052,9 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
     # and (by now nomore accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
     if (
         dataset in ("", ".", "..")
-        or "//" in dataset
-        or dataset.startswith("/")
-        or dataset.endswith("/")
-        or dataset.startswith("./")
-        or dataset.startswith("../")
-        or dataset.endswith("/.")
-        or dataset.endswith("/..")
-        or "/./" in dataset
-        or "/../" in dataset
+        or any(dataset.startswith(prefix) for prefix in ("/", "./", "../"))
+        or any(dataset.endswith(suffix) for suffix in ("/", "/.", "/.."))
+        or any(substring in dataset for substring in ("//", "/./", "/../"))
         or any(char in SHELL_CHARS or (char.isspace() and char != " ") for char in dataset)
         or not dataset[0].isalpha()
     ):
