@@ -1588,7 +1588,6 @@ class LogParams:
             msg = f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}"
             get_simple_logger(prog_name).error("%s", msg)
             die(msg)
-        self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
@@ -1604,13 +1603,16 @@ class LogParams:
         )
         os.close(fd)
         self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
+        self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
+        os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
         current = "current"
         dot_current_dir = os.path.join(log_parent_dir, f".{current}")
         current_dir = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
-        os.makedirs(current_dir, exist_ok=True)
+        os.makedirs(dot_current_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+        os.makedirs(current_dir, mode=stat.S_IRWXU, exist_ok=True)
         create_symlink(self.log_file, current_dir, f"{current}.log")
         create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
         create_symlink(self.log_dir, current_dir, f"{current}.dir")
