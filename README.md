@@ -409,8 +409,8 @@ $ bzfs tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive \
 --exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*' \
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset \
 /tank1/foo/bar/temporary --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex \
-'(.*/)?private' --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' \
---ssh-dst-private-key /root/.ssh/id_rsa
+'(.*/)?private' --exclude-dataset-regex \
+'(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'
 ```
 
 <!-- END DESCRIPTION SECTION -->
@@ -627,15 +627,11 @@ usage: bzfs [-h] [--recursive]
             [--dryrun [{recv,send}]] [--verbose] [--quiet]
             [--no-privilege-elevation] [--no-stream]
             [--no-resume-recv] [--create-bookmarks {all,many,none}]
-            [--no-use-bookmark] [--ssh-cipher STRING]
-            [--ssh-src-private-key FILE] [--ssh-dst-private-key FILE]
-            [--ssh-src-user STRING] [--ssh-dst-user STRING]
-            [--ssh-src-host STRING] [--ssh-dst-host STRING]
-            [--ssh-src-port INT] [--ssh-dst-port INT]
-            [--ssh-src-extra-opts STRING] [--ssh-src-extra-opt STRING]
-            [--ssh-dst-extra-opts STRING] [--ssh-dst-extra-opt STRING]
-            [--ssh-src-config-file FILE] [--ssh-dst-config-file FILE]
-            [--threads INT[%]]
+            [--no-use-bookmark] [--ssh-src-user STRING]
+            [--ssh-dst-user STRING] [--ssh-src-host STRING]
+            [--ssh-dst-host STRING] [--ssh-src-port INT]
+            [--ssh-dst-port INT] [--ssh-src-config-file FILE]
+            [--ssh-dst-config-file FILE] [--threads INT[%]]
             [--max-concurrent-ssh-sessions-per-tcp-connection INT]
             [--bwlimit STRING]
             [--compression-program {zstd,lz4,pzstd,pigz,gzip,bzip2,-}]
@@ -1856,36 +1852,6 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--ssh-cipher"></div>
-
-**--ssh-cipher** *STRING*
-
-*  SSH cipher specification for encrypting the session (optional); will be passed into ssh
-    -c CLI. --ssh-cipher is a comma-separated list of ciphers listed in order of preference. See
-    the 'Ciphers' keyword in ssh_config(5) for more information:
-    https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default:
-    `^aes256-gcm@openssh.com`
-
-<!-- -->
-
-<div id="--ssh-src-private-key"></div>
-
-**--ssh-src-private-key** *FILE*
-
-*  Path to SSH private key file on local host to connect to src (optional); will be passed into
-    ssh -i CLI. This option can be specified multiple times. default: $HOME/.ssh/id_rsa
-
-<!-- -->
-
-<div id="--ssh-dst-private-key"></div>
-
-**--ssh-dst-private-key** *FILE*
-
-*  Path to SSH private key file on local host to connect to dst (optional); will be passed into
-    ssh -i CLI. This option can be specified multiple times. default: $HOME/.ssh/id_rsa
-
-<!-- -->
-
 <div id="--ssh-src-user"></div>
 
 **--ssh-src-user** *STRING*
@@ -1938,53 +1904,13 @@ usage: bzfs [-h] [--recursive]
 
 <!-- -->
 
-<div id="--ssh-src-extra-opts"></div>
-
-**--ssh-src-extra-opts** *STRING*
-
-*  Additional options to be passed to ssh CLI when connecting to src host (optional). The value
-    is split on runs of one or more whitespace characters. Example: `--ssh-src-extra-opts='-v
-    -v'` to debug ssh config issues.
-
-<!-- -->
-
-<div id="--ssh-src-extra-opt"></div>
-
-**--ssh-src-extra-opt** *STRING*
-
-*  Additional option to be passed to ssh CLI when connecting to src host (optional). The value
-    can contain spaces and is not split. This option can be specified multiple times. Example:
-    `--ssh-src-extra-opt='-oProxyCommand=nc %h %p'` to disable the TCP_NODELAY socket option
-    for OpenSSH.
-
-<!-- -->
-
-<div id="--ssh-dst-extra-opts"></div>
-
-**--ssh-dst-extra-opts** *STRING*
-
-*  Additional options to be passed to ssh CLI when connecting to dst host (optional). The value
-    is split on runs of one or more whitespace characters. Example: `--ssh-dst-extra-opts='-v
-    -v'` to debug ssh config issues.
-
-<!-- -->
-
-<div id="--ssh-dst-extra-opt"></div>
-
-**--ssh-dst-extra-opt** *STRING*
-
-*  Additional option to be passed to ssh CLI when connecting to dst host (optional). The value
-    can contain spaces and is not split. This option can be specified multiple times. Example:
-    `--ssh-dst-extra-opt='-oProxyCommand=nc %h %p'` to disable the TCP_NODELAY socket option
-    for OpenSSH.
-
-<!-- -->
-
 <div id="--ssh-src-config-file"></div>
 
 **--ssh-src-config-file** *FILE*
 
 *  Path to SSH ssh_config(5) file to connect to src (optional); will be passed into ssh -F CLI.
+    The path is interpreted to be relative to ~/.ssh/ (and must not escape that directory
+    subtree).
 
 <!-- -->
 
@@ -1993,6 +1919,8 @@ usage: bzfs [-h] [--recursive]
 **--ssh-dst-config-file** *FILE*
 
 *  Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI.
+    The path is interpreted to be relative to ~/.ssh/ (and must not escape that directory
+    subtree).
 
 <!-- -->
 

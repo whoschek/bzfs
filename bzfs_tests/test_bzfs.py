@@ -73,6 +73,7 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNewSnapshotFilterGroupAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSaferFileNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeDirectoryNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
@@ -3740,6 +3741,48 @@ class TestLogConfigVariablesAction(unittest.TestCase):
         for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--log-config-var", var])
+
+
+#############################################################################
+class TestSaferFileNameAction(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("filename", action=bzfs.SaferFileNameAction)
+
+    def test_safe_filename(self) -> None:
+        args = self.parser.parse_args(["file1.txt"])
+        self.assertEqual(args.filename, "file1.txt")
+
+    def test_empty_filename(self) -> None:
+        args = self.parser.parse_args([""])
+        self.assertEqual(args.filename, "")
+
+    def test_filename_in_subdirectory(self) -> None:
+        self.parser.parse_args(["subdir/safe_file.txt"])
+
+    def test_unsafe_filename_with_parent_directory_reference(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["../escape.txt"])
+
+    def test_unsafe_filename_with_absolute_path(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["/unsafe_file.txt"])
+
+    def test_unsafe_nested_parent_directory(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["../../another_escape.txt"])
+
+    def test_filename_with_single_dot_slash(self) -> None:
+        self.parser.parse_args(["./file.txt"])
+
+    def test_filename_with_tab(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["foo\nbar.txt"])
+
+    def test_filename_with_special_char(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["foo'bar"])
 
 
 #############################################################################

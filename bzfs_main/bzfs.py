@@ -443,7 +443,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 --exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
 --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
---exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*' --ssh-dst-private-key /root/.ssh/id_rsa```
+--exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'```
 """)
 
     parser.add_argument(
@@ -1227,26 +1227,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
              "bookmarks currently exist, if any.\n\n")
 
-    ssh_cipher_default = "^aes256-gcm@openssh.com" if platform.system() != "SunOS" else ""
-    # for speed with confidentiality and integrity
+    # ^aes256-gcm@openssh.com cipher: for speed with confidentiality and integrity
     # measure cipher perf like so: count=5000; for i in $(seq 1 3); do echo "iteration $i:"; for cipher in $(ssh -Q cipher); do dd if=/dev/zero bs=1M count=$count 2> /dev/null | ssh -c $cipher -p 40999 127.0.0.1 "(time -p cat) > /dev/null" 2>&1 | grep real | awk -v count=$count -v cipher=$cipher '{print cipher ": " count / $2 " MB/s"}'; done; done  # noqa: E501
     # see https://gbe0.com/posts/linux/server/benchmark-ssh-ciphers/
     # and https://crypto.stackexchange.com/questions/43287/what-are-the-differences-between-these-aes-ciphers
-    parser.add_argument(
-        "--ssh-cipher", type=str, default=ssh_cipher_default, metavar="STRING",
-        help="SSH cipher specification for encrypting the session (optional); will be passed into ssh -c CLI. "
-             "--ssh-cipher is a comma-separated list of ciphers listed in order of preference. See the 'Ciphers' "
-             "keyword in ssh_config(5) for more information: "
-             "https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html. Default: `%(default)s`\n\n")
 
-    ssh_private_key_file_default = ".ssh/id_rsa"
     locations = ["src", "dst"]
-    for loc in locations:
-        parser.add_argument(
-            f"--ssh-{loc}-private-key", action="append", default=[], metavar="FILE",
-            help=f"Path to SSH private key file on local host to connect to {loc} (optional); will be passed into "
-                 "ssh -i CLI. This option can be specified multiple times. "
-                 f"default: $HOME/{ssh_private_key_file_default}\n\n")
     for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-user", type=str, metavar="STRING",
@@ -1263,20 +1249,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-extra-opts", type=str, default="", metavar="STRING",
-            help=f"Additional options to be passed to ssh CLI when connecting to {loc} host (optional). "
-                 "The value is split on runs of one or more whitespace characters. "
-                 f"Example: `--ssh-{loc}-extra-opts='-v -v'` to debug ssh config issues.\n\n")
-        parser.add_argument(
-            f"--ssh-{loc}-extra-opt", action="append", default=[], metavar="STRING",
-            help=f"Additional option to be passed to ssh CLI when connecting to {loc} host (optional). The value "
-                 "can contain spaces and is not split. This option can be specified multiple times. "
-                 f"Example: `--ssh-{loc}-extra-opt='-oProxyCommand=nc %%h %%p'` to disable the TCP_NODELAY "
-                 "socket option for OpenSSH.\n\n")
-    for loc in locations:
-        parser.add_argument(
-            f"--ssh-{loc}-config-file", type=str, metavar="FILE",
-            help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI.\n\n")
+            f"--ssh-{loc}-config-file", type=str, action=SaferFileNameAction, metavar="FILE",
+            help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. The path "
+                 "is interpreted to be relative to ~/.ssh/ (and must not escape that directory subtree).\n\n")
     parser.add_argument(
         "--timeout", default=None, metavar="DURATION",
         # help="Exit the program (or current task with non-zero --daemon-lifetime) with an error after this much time has "
@@ -1880,14 +1855,13 @@ class Remote:
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
-        self.ssh_config_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
-        self.ssh_cipher: Optional[str] = p.validate_arg(args.ssh_cipher)
-        self.ssh_private_key_files: List[str] = [p.validate_arg_str(key) for key in getattr(args, f"ssh_{loc}_private_key")]
+        conf_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
+        self.ssh_config_file: Optional[str] = os.path.join(get_home_directory(), ".ssh", conf_file) if conf_file else None
+
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
-        self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"]
-        self.ssh_extra_opts += p.split_args(getattr(args, f"ssh_{loc}_extra_opts"))
-        for extra_opt in getattr(args, f"ssh_{loc}_extra_opt"):
-            self.ssh_extra_opts.append(p.validate_arg_str(extra_opt, allow_spaces=True))
+        self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
+            ["-v"] if p.log_params is not None and p.log_params.log_level == "TRACE" else []
+        )
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
@@ -1923,10 +1897,6 @@ class Remote:
         ssh_cmd = [p.ssh_program] + self.ssh_extra_opts
         if self.ssh_config_file:
             ssh_cmd += ["-F", self.ssh_config_file]
-        for ssh_private_key_file in self.ssh_private_key_files:
-            ssh_cmd += ["-i", ssh_private_key_file]
-        if self.ssh_cipher:
-            ssh_cmd += ["-c", self.ssh_cipher]
         if self.ssh_port:
             ssh_cmd += ["-p", str(self.ssh_port)]
         if self.reuse_ssh_connection:
@@ -1946,10 +1916,7 @@ class Remote:
         return ssh_cmd
 
     def cache_key(self) -> Tuple:
-        # fmt: off
-        return (self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file, self.ssh_cipher,
-                tuple(self.ssh_private_key_files), tuple(self.ssh_extra_opts))
-        # fmt: on
+        return self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
     def __repr__(self) -> str:
         return str(self.__dict__)
@@ -3926,15 +3893,19 @@ class Job:
             else:  # ssh master is not alive; start a new master:
                 log.log(log_trace, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                 ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
-                ssh_socket_cmd += ["-M", f"-oControlPersist={self.control_persist_secs}s", remote.ssh_user_host, "exit"]
+                control_persist_secs = self.control_persist_secs
+                if "-v" in ssh_socket_cmd:
+                    # Unfortunately, with `ssh -v` (debug mode), the ssh master won’t background; instead it stays in the
+                    # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
+                    control_persist_secs = min(control_persist_secs, 1)  # tell ssh to block as briefly as possible (1 sec)
+                ssh_socket_cmd += ["-M", f"-oControlPersist={control_persist_secs}s", remote.ssh_user_host, "exit"]
                 log.log(log_trace, "Executing: %s", list_formatter(ssh_socket_cmd))
                 process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=self.timeout())
                 if process.returncode != 0:
                     log.error("%s", process.stderr.rstrip())
                     die(
                         f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                        f"first, considering diagnostic log file output from running {prog_name} with: "
-                        "-v -v --ssh-src-extra-opts='-v -v' --ssh-dst-extra-opts='-v -v'"
+                        f"first, considering diagnostic log file output from running {prog_name} with: -v -v"
                     )
             conn.last_refresh_time = time.monotonic_ns()
 
@@ -7466,6 +7437,22 @@ class DatasetPairsAction(argparse.Action):
             parser.error(f"Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
         root_dataset_pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
         setattr(namespace, self.dest, root_dataset_pairs)
+
+
+#############################################################################
+class SaferFileNameAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: Optional[str] = None,
+    ) -> None:
+        if ".." in values or values.startswith("/"):
+            parser.error(f"{option_string}: Invalid file name '{values}': must not contain '..' or '\\' or leading '/'.")
+        if any(char in SHELL_CHARS or char.isspace() for char in values):
+            parser.error(f"{option_string}: Invalid file name '{values}': must not whitespace or special chars.")
+        setattr(namespace, self.dest, values)
 
 
 #############################################################################
