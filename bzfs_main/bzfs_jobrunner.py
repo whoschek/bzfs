@@ -29,7 +29,6 @@ import contextlib
 import os
 import pwd
 import random
-import shlex
 import socket
 import subprocess
 import sys
@@ -405,7 +404,6 @@ class Job:
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
         assert len(args.root_dataset_pairs) > 0
-        self.validate_ssh_options(unknown_args)
         src_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.src_snapshot_plan), "--src-snapshot-plan")
         src_bookmark_plan = self.validate_snapshot_plan(literal_eval(args.src_bookmark_plan), "--src-bookmark-plan")
         dst_snapshot_plan = self.validate_snapshot_plan(literal_eval(args.dst_snapshot_plan), "--dst-snapshot-plan")
@@ -992,42 +990,6 @@ class Job:
             self.die(f"{name} must be of type {type_msg} but got {type(value).__name__}: {value}")
         elif not isinstance(value, expected_type):
             self.die(f"{name} must be of type {expected_type.__name__} but got {type(value).__name__}: {value}")
-
-    def validate_ssh_options(self, unknown_args: List[str]) -> None:
-        assert isinstance(unknown_args, list)
-        dangerous_ssh_options = {"ProxyCommand", "LocalCommand", "PermitLocalCommand", "Match"}
-        i = 0
-        while i < len(unknown_args):
-            arg = unknown_args[i]
-            opts_to_check = []
-            if arg in ("--ssh-src-extra-opts", "--ssh-dst-extra-opts"):
-                if i + 1 < len(unknown_args):
-                    # The value is a single string that will be split by bzfs
-                    opts_to_check = shlex.split(unknown_args[i + 1])
-                    assert len(opts_to_check) > 0
-                    i += 1
-            elif arg in ("--ssh-src-extra-opt", "--ssh-dst-extra-opt"):
-                if i + 1 < len(unknown_args):
-                    # The value is a single option
-                    opts_to_check = [unknown_args[i + 1]]
-                    i += 1
-
-            j = 0
-            while j < len(opts_to_check):
-                opt = opts_to_check[j].strip()
-                key = None
-                if opt == "-o":
-                    if j + 1 < len(opts_to_check):
-                        key_value = opts_to_check[j + 1]
-                        key = key_value.split("=", 1)[0].strip()
-                        j += 1
-                elif opt.startswith("-o") and len(opt) > 2:
-                    key_value = opt[2:]
-                    key = key_value.split("=", 1)[0].strip()
-                if key and key in dangerous_ssh_options:
-                    self.die(f"Security: Dangerous ssh option '{key}' is not allowed in '{arg}'.")
-                j += 1
-            i += 1
 
     def die(self, msg: str) -> None:
         self.log.error("%s", msg)
