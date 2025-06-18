@@ -56,7 +56,7 @@ def main() -> None:
 
 def touch(output_dir: str, path: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
-    Path(f"{output_dir}/{str(path)}").touch()
+    Path(f"{output_dir}/{path}").touch()
 
 
 def merge_versions(input_dir: str, natsort: bool = False) -> str:
