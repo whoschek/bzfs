@@ -862,8 +862,8 @@ class Job:
         except SystemExit as e:
             assert e.code is None or isinstance(e.code, int)
             return e.code
-        except BaseException as e:
-            log.error("Worker job failed with unexpected exception for command: %s", " ".join(cmd), exc_info=e)
+        except BaseException:
+            log.error("Worker job failed with unexpected exception for command: %s", " ".join(cmd), exc_info=True)
             return die_status
 
     def _bzfs_run_main(self, cmd: List[str]) -> None:

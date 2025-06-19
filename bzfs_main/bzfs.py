@@ -1563,9 +1563,7 @@ class LogParams:
         default_dir_name = prog_name + "-logs"
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, default_dir_name)
         if not os.path.basename(log_parent_dir).startswith(default_dir_name):
-            msg = f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}"
-            get_simple_logger(prog_name).error("%s", msg)
-            die(msg)
+            die(f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
@@ -2304,10 +2302,15 @@ class Job:
         assert isinstance(self.error_injection_triggers, dict)
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
-        log_params = LogParams(args)
         with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
-            log = get_logger(log_params, args, log)
-            log.info("%s", f"Log file is: {log_params.log_file}")
+            try:
+                log_params = LogParams(args)
+                log = get_logger(log_params, args, log)
+                log.info("%s", f"Log file is: {log_params.log_file}")
+            except BaseException as e:
+                get_simple_logger(__name__).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
+                raise e
+
             aux_args: List[str] = []
             if getattr(args, "include_snapshot_plan", None):
                 aux_args += args.include_snapshot_plan
@@ -2316,119 +2319,117 @@ class Job:
             if len(aux_args) > 0:
                 log.info("Auxiliary CLI arguments: %s", " ".join(aux_args))
                 args = argument_parser().parse_args(xappend(aux_args, "--", args.root_dataset_pairs), namespace=args)
-            log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
+
+            def log_error_on_exit(error: Any, status_code: Any, exc_info: bool = False) -> None:
+                log.error("%s%s", f"Exiting {prog_name} with status code {status_code}. Cause: ", error, exc_info=exc_info)
+
             try:
+                log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
                 self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
-            except SystemExit as e:
-                log.error("%s", e)
-                raise
-            log_params.params = p
-            with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
-                with contextlib.redirect_stderr(cast(TextIO, Tee(log_file_fd, sys.stderr))):  # send stderr to logfile+stderr
-                    lock_permissions = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
-                    lock_file = p.lock_file_name()
-                    lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, lock_permissions)
-                    with xfinally(lambda: os.close(lock_fd)):
-                        try:
-                            # Acquire an exclusive lock; will raise an error if lock is already held by another process.
-                            # The (advisory) lock is auto-released when the process terminates or the fd is closed.
-                            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
-                        except BlockingIOError:
-                            msg = "Exiting as same previous periodic job is still running without completion yet per "
-                            msg += lock_file
-                            log.error("%s", msg)
-                            die(msg, still_running_status)
-                        with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # avoid accumulating stale lockfiles
-                            # On CTRL-C and SIGTERM, send signal also to descendant processes to also terminate descendants
-                            old_term_handler = signal.getsignal(signal.SIGTERM)
-                            signal.signal(signal.SIGTERM, lambda sig, f: self.terminate(old_term_handler))
-                            old_int_handler = signal.signal(signal.SIGINT, lambda sig, f: self.terminate(old_term_handler))
+                log_params.params = p
+                with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
+                    with contextlib.redirect_stderr(cast(TextIO, Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
+                        lock_permissions = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+                        lock_file = p.lock_file_name()
+                        lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, lock_permissions)
+                        with xfinally(lambda: os.close(lock_fd)):
                             try:
-                                self.run_tasks()
-                            except BaseException as e:
-                                self.terminate(old_term_handler, except_current_process=True)
-                                raise e
-                            finally:
-                                signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
-                                signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
-                            for _ in range(2 if self.max_command_line_bytes else 1):
-                                self.shutdown()
+                                # Acquire an exclusive lock; will raise an error if lock is already held by another process.
+                                # The (advisory) lock is auto-released when the process terminates or the fd is closed.
+                                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
+                            except BlockingIOError:
+                                msg = "Exiting as same previous periodic job is still running without completion yet per "
+                                die(msg + lock_file, still_running_status)
+                            with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
+                                # On CTRL-C and SIGTERM, send signal to descendant processes to also terminate descendants
+                                old_term_handler = signal.getsignal(signal.SIGTERM)
+                                signal.signal(signal.SIGTERM, lambda sig, f: self.terminate(old_term_handler))
+                                old_int_handler = signal.signal(signal.SIGINT, lambda s, f: self.terminate(old_term_handler))
+                                try:
+                                    self.run_tasks()
+                                except BaseException as e:
+                                    self.terminate(old_term_handler, except_current_process=True)
+                                    raise e
+                                finally:
+                                    signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
+                                    signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
+                                for _ in range(2 if self.max_command_line_bytes else 1):
+                                    self.shutdown()
+                                print("", end="", file=sys.stderr)
+                                sys.stderr.flush()
+            except subprocess.CalledProcessError as e:
+                log_error_on_exit(e, e.returncode)
+                raise e
+            except SystemExit as e:
+                log_error_on_exit(e, e.code)
+                raise e
+            except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
+                log_error_on_exit(e, die_status)
+                raise SystemExit(die_status) from e
+            except re.error as e:
+                log_error_on_exit(f"{e} within regex {e.pattern!r}", die_status)
+                raise SystemExit(die_status) from e
+            except BaseException as e:
+                log_error_on_exit(e, die_status, exc_info=True)
+                raise SystemExit(die_status) from e
+            finally:
+                log.info("%s", f"Log file was: {log_params.log_file}")
+            log.info("Success. Goodbye!")
+            sys.stderr.flush()
 
     def run_tasks(self) -> None:
-        def log_error_on_exit(error: Any, status_code: Any) -> None:
-            log.error("%s%s", f"Exiting {prog_name} with status code {status_code}. Cause: ", error)
-
         p, log = self.params, self.params.log
-        try:
-            self.all_exceptions = []
-            self.all_exceptions_count = 0
-            self.first_exception = None
-            self.remote_conf_cache = {}
-            self.isatty = self.isatty if self.isatty is not None else p.isatty
-            self.validate_once()
-            self.replication_start_time_nanos = time.monotonic_ns()
-            self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
-            with xfinally(lambda: self.progress_reporter.stop()):
-                daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
-                while True:  # loop for daemon mode
-                    self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
-                    self.all_dst_dataset_exists.clear()
-                    self.progress_reporter.reset()
-                    src, dst = p.src, p.dst
-                    for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
-                        src.root_dataset = src.basis_root_dataset = src_root_dataset
-                        dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
-                        p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
-                        if p.daemon_lifetime_nanos > 0:
-                            self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
-                        recsep = " " if p.recursive_flag else ""
-                        task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recsep}--> {dst.basis_root_dataset}"
-                        if len(p.root_dataset_pairs) > 1:
-                            log.info("Starting task: %s", task_description + " ...")
+        self.all_exceptions = []
+        self.all_exceptions_count = 0
+        self.first_exception = None
+        self.remote_conf_cache = {}
+        self.isatty = self.isatty if self.isatty is not None else p.isatty
+        self.validate_once()
+        self.replication_start_time_nanos = time.monotonic_ns()
+        self.progress_reporter = ProgressReporter(p, self.use_select, self.progress_update_intervals)
+        with xfinally(lambda: self.progress_reporter.stop()):
+            daemon_stoptime_nanos = time.monotonic_ns() + p.daemon_lifetime_nanos
+            while True:  # loop for daemon mode
+                self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
+                self.all_dst_dataset_exists.clear()
+                self.progress_reporter.reset()
+                src, dst = p.src, p.dst
+                for src_root_dataset, dst_root_dataset in p.root_dataset_pairs:
+                    src.root_dataset = src.basis_root_dataset = src_root_dataset
+                    dst.root_dataset = dst.basis_root_dataset = dst_root_dataset
+                    p.curr_zfs_send_program_opts = p.zfs_send_program_opts.copy()
+                    if p.daemon_lifetime_nanos > 0:
+                        self.timeout_nanos = None if p.timeout_nanos is None else time.monotonic_ns() + p.timeout_nanos
+                    recurs_sep = " " if p.recursive_flag else ""
+                    task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recurs_sep}--> {dst.basis_root_dataset}"
+                    if len(p.root_dataset_pairs) > 1:
+                        log.info("Starting task: %s", task_description + " ...")
+                    try:
                         try:
-                            try:
-                                self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
-                                self.timeout()
-                                self.validate_task()
-                                self.run_task()
-                            except RetryableError as retryable_error:
-                                assert retryable_error.__cause__ is not None
-                                raise retryable_error.__cause__ from None
-                        except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                            if p.skip_on_error == "fail" or (
-                                isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
-                            ):
-                                raise
-                            log.error("%s", e)
-                            self.append_exception(e, "task", task_description)
-                    if not self.sleep_until_next_daemon_iteration(daemon_stoptime_nanos):
-                        break
-            if not p.skip_replication:
-                self.print_replication_stats(self.replication_start_time_nanos)
-            error_count = self.all_exceptions_count
-            if error_count > 0 and p.daemon_lifetime_nanos == 0:
-                msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
-                log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
-                assert self.first_exception is not None
-                raise self.first_exception
-        except subprocess.CalledProcessError as e:
-            log_error_on_exit(e, e.returncode)
-            raise
-        except SystemExit as e:
-            log_error_on_exit(e, e.code)
-            raise
-        except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-            log_error_on_exit(e, die_status)
-            raise SystemExit(die_status) from e
-        except re.error as e:
-            log_error_on_exit(f"{e} within regex {e.pattern!r}", die_status)
-            raise SystemExit(die_status) from e
-        finally:
-            log.info("%s", f"Log file was: {p.log_params.log_file}")
-
-        log.info("Success. Goodbye!")
-        print("", end="", file=sys.stderr)
-        sys.stderr.flush()
+                            self.maybe_inject_error(cmd=[], error_trigger="retryable_run_tasks")
+                            self.timeout()
+                            self.validate_task()
+                            self.run_task()
+                        except RetryableError as retryable_error:
+                            assert retryable_error.__cause__ is not None
+                            raise retryable_error.__cause__ from None
+                    except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
+                        if p.skip_on_error == "fail" or (
+                            isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
+                        ):
+                            raise e
+                        log.error("%s", e)
+                        self.append_exception(e, "task", task_description)
+                if not self.sleep_until_next_daemon_iteration(daemon_stoptime_nanos):
+                    break
+        if not p.skip_replication:
+            self.print_replication_stats(self.replication_start_time_nanos)
+        error_count = self.all_exceptions_count
+        if error_count > 0 and p.daemon_lifetime_nanos == 0:
+            msgs = "\n".join([f"{i + 1}/{error_count}: {e}" for i, e in enumerate(self.all_exceptions)])
+            log.error("%s", f"Tolerated {error_count} errors. Error Summary: \n{msgs}")
+            assert self.first_exception is not None
+            raise self.first_exception
 
     def append_exception(self, e: BaseException, task_name: str, task_description: str) -> None:
         self.first_exception = self.first_exception or e
@@ -5997,7 +5998,7 @@ class ProgressReporter:
                     fd.close()
         except BaseException as e:
             self.exception = e  # will be reraised in stop()
-            log.error("%s", "ProgressReporter:", exc_info=e)
+            log.exception("%s", "ProgressReporter:")
 
     @dataclass
     class TransferStat:
@@ -7202,12 +7203,15 @@ def get_default_log_formatter(prefix: str = "", log_params: Optional[LogParams] 
                 if i >= 1:
                     i += len(ts_level)
                     msg = msg[0:i].ljust(54) + msg[i:]  # right-pad msg if record.msg contains "%s" unless at start
-                if record.args:
+                if record.exc_info or record.exc_text or record.stack_info:
+                    record.msg = msg
+                    msg = super().format(record)
+                elif record.args:
                     msg = msg % record.args
-                msg = prefix + msg
             else:
-                msg = prefix + super().format(record)
+                msg = super().format(record)
 
+            msg = prefix + msg
             cols = terminal_cols[0]
             if cols is None:
                 cols = self.ljust_cols()
