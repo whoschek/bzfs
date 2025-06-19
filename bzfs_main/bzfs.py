@@ -1255,7 +1255,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         parser.add_argument(
             f"--ssh-{loc}-config-file", type=str, action=SSHConfigFileNameAction, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
-                 "The basename must contain the substring 'ssh_config'.\n\n")
+                 "The basename must contain the substring 'bzfs_ssh_config'.\n\n")
     parser.add_argument(
         "--timeout", default=None, metavar="DURATION",
         # help="Exit the program (or current task with non-zero --daemon-lifetime) with an error after this much time has "
@@ -1861,8 +1861,8 @@ class Remote:
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
         self.ssh_config_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
         if self.ssh_config_file:
-            if "ssh_config" not in os.path.basename(self.ssh_config_file):
-                die(f"Basename of --ssh-{loc}-config-file must contain the substring 'ssh_config': {self.ssh_config_file}")
+            if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
+                die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
             validate_is_not_symlink(self.ssh_config_file, err_prefix=f"--ssh-{loc}-config-file: ")
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (

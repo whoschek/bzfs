@@ -1909,7 +1909,7 @@ usage: bzfs [-h] [--recursive]
 **--ssh-src-config-file** *FILE*
 
 *  Path to SSH ssh_config(5) file to connect to src (optional); will be passed into ssh -F CLI.
-    The basename must contain the substring 'ssh_config'.
+    The basename must contain the substring 'bzfs_ssh_config'.
 
 <!-- -->
 
@@ -1918,7 +1918,7 @@ usage: bzfs [-h] [--recursive]
 **--ssh-dst-config-file** *FILE*
 
 *  Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI.
-    The basename must contain the substring 'ssh_config'.
+    The basename must contain the substring 'bzfs_ssh_config'.
 
 <!-- -->
 

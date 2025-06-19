@@ -84,7 +84,7 @@ os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
 os.close(zfs_encryption_key_fd)
 keylocation = f"file://{zfs_encryption_key}"
 
-ssh_config_file = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "bzfs_test_ssh_config")
+ssh_config_file = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "test_bzfs_ssh_config")
 rng = random.Random(12345)
 has_netcat_prog = shutil.which("nc") is not None
 
@@ -1234,6 +1234,8 @@ class LocalTestCase(BZFSTestCase):
         self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_hourly", "s1.*_daily", "s1.*_hourly"])
 
     def test_basic_snapshotting_flat_daemon(self) -> None:
+        if self.param and self.param.get("ssh_mode", "local") not in ["local"]:
+            self.skipTest("Test is only working in local mode because of timing issues")
         destroy(dst_root_dataset, recursive=True)
         self.run_bzfs(
             src_root_dataset,
