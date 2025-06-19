@@ -296,12 +296,18 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
              "the given snapshot name pattern.\n\n")
+    for loc in ["src", "dst"]:
+        parser.add_argument(
+            f"--ssh-{loc}-user", default="", metavar="STRING",
+            help=f"Remote SSH username on {loc} hosts to connect to (optional). Examples: 'root', 'alice'.\n\n")
+        parser.add_argument(  # reject this arg as jobrunner will auto-generate it
+            f"--ssh-{loc}-host", action=RejectArgumentAction, help=argparse.SUPPRESS)
     parser.add_argument(
         "--src-user", default="", metavar="STRING",
-        help="SSH username on src hosts. Used in pull mode and pull-push mode. Example: 'alice'\n\n")
+        help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-src-user
     parser.add_argument(
         "--dst-user", default="", metavar="STRING",
-        help="SSH username on dst hosts. Used in push mode and pull-push mode. Example: 'root'\n\n")
+        help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-dst-user
     parser.add_argument(
         "--job-id", required=True, action=bzfs.NonEmptyStringAction, metavar="STRING",
         help="The identifier that remains constant across all runs of this particular job; will be included in the log file "
@@ -361,9 +367,6 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
-    for loc in ["src", "dst"]:
-        parser.add_argument(  # reject this arg as jobrunner will auto-generate it
-            f"--ssh-{loc}-host", action=RejectArgumentAction, help=argparse.SUPPRESS)
     parser.add_argument(  # reject this unnecessary arg
         "--log-config-file", action=RejectArgumentAction, help=argparse.SUPPRESS)
     parser.add_argument(
@@ -459,6 +462,8 @@ class Job:
                 "substitution token to prevent collisions on writing destination datasets. "
                 f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(basis_src_hosts)}"
             )
+        ssh_src_user = args.ssh_src_user if args.ssh_src_user is not None else args.src_user  # --src-user is deprecated
+        ssh_dst_user = args.ssh_dst_user if args.ssh_dst_user is not None else args.dst_user  # --dst-user is deprecated
         if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
             random.shuffle(src_hosts)
             dst_hosts = shuffle_dict(dst_hosts)
@@ -491,7 +496,7 @@ class Job:
                 return subjob_name + "/" + bzfs.BARRIER_CHAR
 
         def resolve_dataset(hostname: str, dataset: str, is_src: bool = True) -> str:
-            ssh_user = args.src_user if is_src else args.dst_user
+            ssh_user = ssh_src_user if is_src else ssh_dst_user
             ssh_user = ssh_user if ssh_user else username
             lb = self.loopback_address
             hostname = hostname if hostname != localhostname else (lb if lb else hostname) if username != ssh_user else "-"
@@ -516,7 +521,7 @@ class Job:
                 opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
                 opts += [f"--log-file-infix={sep}{job_id}"]
                 opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}"]
-                opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
+                opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
@@ -531,8 +536,8 @@ class Job:
                     )
                     if len(opts) > 0:
                         opts += [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                        opts += [f"--ssh-src-user={args.src_user}"] if args.src_user else []
-                        opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
+                        opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
+                        opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
                         opts += unknown_args + ["--"]
                         dataset_pairs = [
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
@@ -553,7 +558,7 @@ class Job:
                     f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",  # noqa: B023
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
-                opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
+                opts += [f"--ssh-dst-user={ssh_src_user}"] if ssh_src_user else []
                 opts += unknown_args + ["--"]
                 opts += flatten(
                     dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])  # noqa: B023
@@ -586,7 +591,7 @@ class Job:
                     opts += [f"--log-file-infix={sep}{job_id}"]
                     opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, dst_hostname)}{sep}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
-                    opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
+                    opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
                     opts += unknown_args + ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
@@ -628,7 +633,7 @@ class Job:
                 marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
                 opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, ""))
-                opts += [f"--ssh-dst-user={args.src_user}"] if args.src_user else []
+                opts += [f"--ssh-dst-user={ssh_src_user}"] if ssh_src_user else []
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
@@ -645,7 +650,7 @@ class Job:
                     }
                     monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan, "dst_snapshot_")
                     opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, dst_hostname))
-                    opts += [f"--ssh-dst-user={args.dst_user}"] if args.dst_user else []
+                    opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
                     opts += unknown_args + ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
