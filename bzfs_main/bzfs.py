@@ -1864,6 +1864,7 @@ class Remote:
         if self.ssh_config_file:
             if "ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain the substring 'ssh_config': {self.ssh_config_file}")
+            validate_is_not_symlink(self.ssh_config_file, err_prefix=f"--ssh-{loc}-config-file: ")
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if p.log_params is not None and p.log_params.log_level == "TRACE" else []
