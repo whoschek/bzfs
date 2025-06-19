@@ -332,8 +332,8 @@ class BZFSTestCase(ParametrizedTestCase):
     ) -> Union[bzfs.Job, bzfs_jobrunner.Job]:
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(arguments)
-        src_host = ["--ssh-src-host", "127.0.0.1"]
-        dst_host = ["--ssh-dst-host", "127.0.0.1"]
+        src_host = [] if use_jobrunner else ["--ssh-src-host", "127.0.0.1"]
+        dst_host = [] if use_jobrunner else ["--ssh-dst-host", "127.0.0.1"]
         ssh_dflt_port = "2222" if ssh_program == "hpnssh" else "22"  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
         src_port = ["--ssh-src-port", ssh_dflt_port if port is None else str(port)]
         dst_port = [] if port is None else ["--ssh-dst-port", str(port)]
@@ -350,8 +350,8 @@ class BZFSTestCase(ParametrizedTestCase):
                 and not (platform.platform().startswith("FreeBSD-") or platform.system() == "SunOS")
                 and not ssh_program == "hpnssh"
             ):
-                src_host = ["--ssh-src-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
-                dst_host = ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
+                src_host = [] if use_jobrunner else ["--ssh-src-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
+                dst_host = [] if use_jobrunner else ["--ssh-dst-host", "::1"]  # IPv6 syntax for 127.0.0.1 loopback address
             args += src_host + dst_host + src_port + dst_port
             if params and "min_pipe_transfer_size" in params and int(params["min_pipe_transfer_size"]) == 0:
                 args += src_user
