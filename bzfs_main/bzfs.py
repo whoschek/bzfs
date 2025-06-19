@@ -1554,6 +1554,8 @@ class LogParams:
         else:
             self.log_level = "INFO"
         self.log_config_file = args.log_config_file
+        if self.log_config_file and getattr(args, "no_argument_file", False):
+            die("--log-config-file: Argument file inclusion is disabled")
         self.log_config_vars = dict(var.split(":", 1) for var in args.log_config_var)
         timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.timestamp: str = timestamp
@@ -7295,7 +7297,11 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
 
     log_config_file_str = log_params.log_config_file
     if log_config_file_str.startswith("+"):
-        with open(log_config_file_str[1:], "r", encoding="utf-8") as fd:
+        path = log_config_file_str[1:]
+        basename_stem = Path(path).stem  # stem is basename without file extension ("bzfs_log_config")
+        if not ("bzfs_log_config" in basename_stem and os.path.basename(path).endswith(".json")):
+            die(f"--log-config-file: basename must contain 'bzfs_log_config' and end with '.json': {path}")
+        with open(path, "r", encoding="utf-8") as fd:
             log_config_file_str = fd.read()
 
     def remove_json_comments(config_str: str) -> str:  # not standard but practical
@@ -7426,6 +7432,8 @@ class DatasetPairsAction(argparse.Action):
                 path = value[1:]
                 if getattr(namespace, "no_argument_file", False):
                     parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
+                if "bzfs_argument_file" not in os.path.basename(path):
+                    parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
@@ -7534,6 +7542,8 @@ class FileOrLiteralAction(argparse.Action):
                 path = value[1:]
                 if getattr(namespace, "no_argument_file", False):
                     parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
+                if "bzfs_argument_file" not in os.path.basename(path):
+                    parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
