@@ -362,8 +362,10 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
     for loc in ["src", "dst"]:
-        parser.add_argument(  # reject this arg as jobrunner will auto-generate it; forwarding arg "as-is" would be insecure
+        parser.add_argument(  # reject this arg as jobrunner will auto-generate it
             f"--ssh-{loc}-host", action=RejectArgumentAction, help=argparse.SUPPRESS)
+    parser.add_argument(  # reject this unnecessary arg
+        "--log-config-file", action=RejectArgumentAction, help=argparse.SUPPRESS)
     parser.add_argument(
         "--root-dataset-pairs", required=True, nargs="+", action=bzfs.DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
@@ -504,6 +506,7 @@ class Job:
             return resolve_dataset(dst_hostname, dst_dataset, is_src=False)
 
         lhn = localhostname
+        bzfs_prog_header = [bzfs_prog_name, "--no-argument-file"]
         subjobs: Dict[str, List[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
@@ -517,7 +520,7 @@ class Job:
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
-                subjobs[subjob_name] = [bzfs_prog_name] + opts
+                subjobs[subjob_name] = bzfs_prog_header + opts
 
             if args.replicate:
                 j = 0
@@ -537,7 +540,7 @@ class Job:
                         ]
                         dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                         if len(dataset_pairs) > 0:
-                            subjobs[subjob_name + jpad(j, marker)] = [bzfs_prog_name] + opts + flatten(dataset_pairs)
+                            subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + flatten(dataset_pairs)
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -557,7 +560,7 @@ class Job:
                 )
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
-                subjobs[subjob_name] = [bzfs_prog_name] + opts
+                subjobs[subjob_name] = bzfs_prog_header + opts
 
             if args.prune_src_snapshots:
                 prune_src(["--delete-dst-snapshots"], src_snapshot_plan, "prune-src-snapshots")
@@ -588,7 +591,7 @@ class Job:
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
-                        subjobs[subjob_name + jpad(j, marker)] = [bzfs_prog_name] + opts + flatten(dataset_pairs)
+                        subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
@@ -629,7 +632,7 @@ class Job:
                 opts += unknown_args + ["--"]
                 opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
-                subjobs[subjob_name] = [bzfs_prog_name] + opts
+                subjobs[subjob_name] = bzfs_prog_header + opts
 
             if args.monitor_dst_snapshots:
                 j = 0
@@ -647,7 +650,7 @@ class Job:
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
-                        subjobs[subjob_name + jpad(j, marker)] = [bzfs_prog_name] + opts + flatten(dataset_pairs)
+                        subjobs[subjob_name + jpad(j, marker)] = bzfs_prog_header + opts + flatten(dataset_pairs)
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
