@@ -2117,6 +2117,7 @@ class LocalTestCase(BZFSTestCase):
                         dst_root_dataset,
                         "-v",
                         "-v",
+                        "-v",
                         dry_run=(i == 0),
                     )
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
