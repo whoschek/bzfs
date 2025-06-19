@@ -7301,6 +7301,8 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
         basename_stem = Path(path).stem  # stem is basename without file extension ("bzfs_log_config")
         if not ("bzfs_log_config" in basename_stem and os.path.basename(path).endswith(".json")):
             die(f"--log-config-file: basename must contain 'bzfs_log_config' and end with '.json': {path}")
+        if os.path.islink(path):
+            die(f"--log-config-file: must not be a symlink: {path}")
         with open(path, "r", encoding="utf-8") as fd:
             log_config_file_str = fd.read()
 
@@ -7434,6 +7436,8 @@ class DatasetPairsAction(argparse.Action):
                     parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
+                if os.path.islink(path):
+                    parser.error(f"{err_prefix} must not be a symlink: {path}")
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
@@ -7544,6 +7548,8 @@ class FileOrLiteralAction(argparse.Action):
                     parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
+                if os.path.islink(path):
+                    parser.error(f"{err_prefix} must not be a symlink: {path}")
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
