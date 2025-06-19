@@ -1108,7 +1108,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--verbose", "-v", action="count", default=0,
         help="Print verbose information. This option can be specified multiple times to increase the level of "
-             "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v` "
+             "verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the `-v -v -v` "
              "flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun) are logged such that "
              "they can be inspected, copy-and-pasted into a terminal shell and run manually to help anticipate or "
              "diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines are identified by [E], [W], [I], [D], [T] "
@@ -1867,7 +1867,7 @@ class Remote:
             validate_is_not_symlink(self.ssh_config_file, err_prefix=f"--ssh-{loc}-config-file: ")
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
-            ["-v"] if p.log_params is not None and p.log_params.log_level == "TRACE" else []
+            ["-v"] if p.args.verbose >= 3 else []
         )
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
@@ -3917,7 +3917,7 @@ class Job:
                     log.error("%s", process.stderr.rstrip())
                     die(
                         f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                        f"first, considering diagnostic log file output from running {prog_name} with: -v -v"
+                        f"first, considering diagnostic log file output from running {prog_name} with: -v -v -v"
                     )
             conn.last_refresh_time = time.monotonic_ns()
 
