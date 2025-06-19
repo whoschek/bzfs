@@ -151,9 +151,12 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--dst-snapshot-plan DICT_STRING]
                       [--monitor-snapshot-plan DICT_STRING]
                       [--ssh-src-user STRING] [--ssh-dst-user STRING]
-                      --job-id STRING [--job-run STRING]
-                      [--workers INT[%]] [--work-period-seconds FLOAT]
-                      [--jitter] [--worker-timeout-seconds FLOAT]
+                      [--ssh-src-port INT] [--ssh-dst-port INT]
+                      [--ssh-src-config-file FILE]
+                      [--ssh-dst-config-file FILE] --job-id STRING
+                      [--job-run STRING] [--workers INT[%]]
+                      [--work-period-seconds FLOAT] [--jitter]
+                      [--worker-timeout-seconds FLOAT]
                       [--jobrunner-dryrun]
                       [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
                       [--version] [--help, -h]
@@ -415,6 +418,40 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 **--ssh-dst-user** *STRING*
 
 *  Remote SSH username on dst hosts to connect to (optional). Examples: 'root', 'alice'.
+
+<!-- -->
+
+<div id="--ssh-src-port"></div>
+
+**--ssh-src-port** *INT*
+
+*  Remote SSH port on src host to connect to (optional).
+
+<!-- -->
+
+<div id="--ssh-dst-port"></div>
+
+**--ssh-dst-port** *INT*
+
+*  Remote SSH port on dst host to connect to (optional).
+
+<!-- -->
+
+<div id="--ssh-src-config-file"></div>
+
+**--ssh-src-config-file** *FILE*
+
+*  Path to SSH ssh_config(5) file to connect to src (optional); will be passed into ssh -F CLI.
+    The basename must contain the substring 'bzfs_ssh_config'.
+
+<!-- -->
+
+<div id="--ssh-dst-config-file"></div>
+
+**--ssh-dst-config-file** *FILE*
+
+*  Path to SSH ssh_config(5) file to connect to dst (optional); will be passed into ssh -F CLI.
+    The basename must contain the substring 'bzfs_ssh_config'.
 
 <!-- -->
 
