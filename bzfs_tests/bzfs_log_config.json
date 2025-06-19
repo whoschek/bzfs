@@ -1,4 +1,4 @@
-# This is an example log_config.json file that demonstrates how to configure bzfs logging via the standard
+# This is an example bzfs_log_config.json file that demonstrates how to configure bzfs logging via the standard
 # python logging.config.dictConfig mechanism.
 #
 # For more examples see

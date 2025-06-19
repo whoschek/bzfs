@@ -4702,7 +4702,7 @@ class LocalTestCase(BZFSTestCase):
         if "Ubuntu" not in platform.version():
             self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
         config_str = """
-# This is an example log_config.json file that demonstrates how to configure bzfs logging via the standard
+# This is an example bzfs_log_config.json file that demonstrates how to configure bzfs logging via the standard
 # python logging.config.dictConfig mechanism.
 #
 # For more examples see
@@ -4793,7 +4793,7 @@ class LocalTestCase(BZFSTestCase):
             )
         output_dir = os.path.dirname(os.path.abspath(__file__))
         if os.access(output_dir, os.W_OK):
-            with open(os.path.join(output_dir, "log_config.json"), "w", encoding="utf-8") as fd:
+            with open(os.path.join(output_dir, "bzfs_log_config.json"), "w", encoding="utf-8") as fd:
                 fd.write(config_str.lstrip())
 
     def test_log_config_file_empty(self) -> None:
@@ -4813,7 +4813,7 @@ class LocalTestCase(BZFSTestCase):
         )
 
         # test reading from file instead of string
-        tmpfile_fd, tmpfile = tempfile.mkstemp(prefix="test_bzfs.config_file")
+        tmpfile_fd, tmpfile = tempfile.mkstemp(prefix="test_bzfs_log_config", suffix=".json")
         os.write(tmpfile_fd, config_str.encode("utf-8"))
         os.close(tmpfile_fd)
         try:
