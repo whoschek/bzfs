@@ -2325,6 +2325,8 @@ class Job:
 
             try:
                 log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
+                if self.is_test_mode:
+                    log.log(log_trace, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
                 log_params.params = p
                 with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
@@ -2582,6 +2584,8 @@ class Job:
                 f"max_workers: {self.max_workers[r.location]}, "
                 f"location: {r.location}",
             )
+        if self.is_test_mode:
+            log.log(log_trace, "Validated Param values: %s", pretty_print_formatter(self.params))
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> Tuple[str, bool]:
         p = self.params
@@ -7101,6 +7105,16 @@ def list_formatter(iterable: Iterable, separator: str = " ", lstrip: bool = Fals
     return CustomListFormatter()
 
 
+def pretty_print_formatter(obj_to_format: Any) -> Any:  # For lazy/noop evaluation in disabled log levels
+    class PrettyPrintFormatter:
+        def __str__(self) -> str:
+            import pprint
+
+            return pprint.pformat(vars(obj_to_format))
+
+    return PrettyPrintFormatter()
+
+
 def reset_logger() -> None:
     """Remove and close logging handlers (and close their files) and reset loggers to default state."""
     for log in [logging.getLogger(__name__), logging.getLogger(get_logger_subname())]:
@@ -7340,6 +7354,8 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     if not log_config_file_str.strip().endswith("}"):
         log_config_file_str = log_config_file_str + "\n}"  # lenient JSON parsing
     log_config_file_str = substitute_log_config_vars(log_config_file_str, log_config_vars)
+    # if args is not None and args.verbose >= 2:
+    #     print("[T] Substituted log_config_file_str:\n" + log_config_file_str, flush=True)
     log_config_dict = json.loads(log_config_file_str)
     logging.config.dictConfig(log_config_dict)
     return logging.getLogger(get_logger_subname())
@@ -7430,15 +7446,17 @@ class DatasetPairsAction(argparse.Action):
                     parser.error(f"{err_prefix} must not be a symlink: {path}")
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
-                        for line in fd.read().splitlines():
+                        for i, line in enumerate(fd.read().splitlines()):
                             if line.startswith("#") or not line.strip():
                                 continue  # skip comment lines and empty lines
                             splits = line.split("\t", 1)
                             if len(splits) <= 1:
-                                parser.error("Line must contain tab-separated SRC_DATASET and DST_DATASET: " + line)
+                                parser.error(f"{err_prefix}Line must contain tab-separated SRC_DATASET and DST_DATASET: {i}")
                             src_root_dataset, dst_root_dataset = splits
                             if not src_root_dataset.strip() or not dst_root_dataset.strip():
-                                parser.error("SRC_DATASET and DST_DATASET must not be empty or whitespace-only:" + line)
+                                parser.error(
+                                    f"{err_prefix}SRC_DATASET and DST_DATASET must not be empty or whitespace-only: {i}"
+                                )
                             datasets.append(src_root_dataset)
                             datasets.append(dst_root_dataset)
                 except FileNotFoundError as e:
