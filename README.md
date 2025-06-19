@@ -1681,10 +1681,10 @@ usage: bzfs [-h] [--recursive]
 
 *  Print verbose information. This option can be specified multiple times to increase the level
     of verbosity. To print what ZFS/SSH operation exactly is happening (or would happen), add the
-    `-v -v` flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun) are
-    logged such that they can be inspected, copy-and-pasted into a terminal shell and run manually
-    to help anticipate or diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines are
-    identified by [E], [W], [I], [D], [T] prefixes, respectively.
+    `-v -v -v` flag, maybe along with --dryrun. All ZFS and SSH commands (even with --dryrun)
+    are logged such that they can be inspected, copy-and-pasted into a terminal shell and run
+    manually to help anticipate or diagnose issues. ERROR, WARN, INFO, DEBUG, TRACE output lines
+    are identified by [E], [W], [I], [D], [T] prefixes, respectively.
 
 <!-- -->
 
