@@ -7426,15 +7426,17 @@ class DatasetPairsAction(argparse.Action):
                     parser.error(f"{err_prefix} must not be a symlink: {path}")
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
-                        for line in fd.read().splitlines():
+                        for i, line in enumerate(fd.read().splitlines()):
                             if line.startswith("#") or not line.strip():
                                 continue  # skip comment lines and empty lines
                             splits = line.split("\t", 1)
                             if len(splits) <= 1:
-                                parser.error("Line must contain tab-separated SRC_DATASET and DST_DATASET: " + line)
+                                parser.error(f"{err_prefix}Line must contain tab-separated SRC_DATASET and DST_DATASET: {i}")
                             src_root_dataset, dst_root_dataset = splits
                             if not src_root_dataset.strip() or not dst_root_dataset.strip():
-                                parser.error("SRC_DATASET and DST_DATASET must not be empty or whitespace-only:" + line)
+                                parser.error(
+                                    f"{err_prefix}SRC_DATASET and DST_DATASET must not be empty or whitespace-only: {i}"
+                                )
                             datasets.append(src_root_dataset)
                             datasets.append(dst_root_dataset)
                 except FileNotFoundError as e:
