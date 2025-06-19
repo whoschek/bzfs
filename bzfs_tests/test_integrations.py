@@ -84,7 +84,7 @@ os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
 os.close(zfs_encryption_key_fd)
 keylocation = f"file://{zfs_encryption_key}"
 
-ssh_config_file = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "bzfs_test_ssh_config_file")
+ssh_config_file = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "bzfs_test_ssh_config")
 rng = random.Random(12345)
 has_netcat_prog = shutil.which("nc") is not None
 
@@ -360,8 +360,8 @@ class BZFSTestCase(ParametrizedTestCase):
             raise ValueError("Unknown ssh_mode: " + params["ssh_mode"])
 
         args += [
-            "--ssh-src-config-file=" + os.path.basename(ssh_config_file),
-            "--ssh-dst-config-file=" + os.path.basename(ssh_config_file),
+            "--ssh-src-config-file=" + ssh_config_file,
+            "--ssh-dst-config-file=" + ssh_config_file,
         ]
 
         for arg in args:

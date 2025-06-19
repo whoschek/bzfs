@@ -447,6 +447,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 """)
 
     parser.add_argument(
+        "--no-argument-file", action="store_true",
+        # help="Disable support for reading the names of datasets and snapshots from a file.\n\n")
+        help=argparse.SUPPRESS)
+    parser.add_argument(
         "root_dataset_pairs", nargs="+", action=DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help="SRC_DATASET: "
              "Source ZFS dataset (and its descendants) that will be replicated. Can be a ZFS filesystem or ZFS volume. "
@@ -1249,9 +1253,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-config-file", type=str, action=SaferFileNameAction, metavar="FILE",
-            help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. The path "
-                 "is interpreted to be relative to ~/.ssh/ (and must not escape that directory subtree).\n\n")
+            f"--ssh-{loc}-config-file", type=str, action=SSHConfigFileNameAction, metavar="FILE",
+            help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
+                 "The basename must contain the substring 'ssh_config'.\n\n")
     parser.add_argument(
         "--timeout", default=None, metavar="DURATION",
         # help="Exit the program (or current task with non-zero --daemon-lifetime) with an error after this much time has "
@@ -1855,9 +1859,10 @@ class Remote:
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
-        conf_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
-        self.ssh_config_file: Optional[str] = os.path.join(get_home_directory(), ".ssh", conf_file) if conf_file else None
-
+        self.ssh_config_file: Optional[str] = p.validate_arg(getattr(args, f"ssh_{loc}_config_file"))
+        if self.ssh_config_file:
+            if "ssh_config" not in os.path.basename(self.ssh_config_file):
+                die(f"Basename of --ssh-{loc}-config-file must contain the substring 'ssh_config': {self.ssh_config_file}")
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if p.log_params is not None and p.log_params.log_level == "TRACE" else []
@@ -7413,12 +7418,16 @@ class DatasetPairsAction(argparse.Action):
         option_string: Optional[str] = None,
     ) -> None:
         datasets = []
+        err_prefix = f"{option_string or self.dest}: "
         for value in values:
             if not value.startswith("+"):
                 datasets.append(value)
             else:
+                path = value[1:]
+                if getattr(namespace, "no_argument_file", False):
+                    parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
                 try:
-                    with open(value[1:], "r", encoding="utf-8") as fd:
+                    with open(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
                             if line.startswith("#") or not line.strip():
                                 continue  # skip comment lines and empty lines
@@ -7430,17 +7439,17 @@ class DatasetPairsAction(argparse.Action):
                                 parser.error("SRC_DATASET and DST_DATASET must not be empty or whitespace-only:" + line)
                             datasets.append(src_root_dataset)
                             datasets.append(dst_root_dataset)
-                except FileNotFoundError:
-                    parser.error(f"File not found: {value[1:]}")
+                except FileNotFoundError as e:
+                    parser.error(f"{err_prefix}File not found: {e.filename}")
 
         if len(datasets) % 2 != 0:
-            parser.error(f"Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
+            parser.error(f"{err_prefix}Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
         root_dataset_pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
         setattr(namespace, self.dest, root_dataset_pairs)
 
 
 #############################################################################
-class SaferFileNameAction(argparse.Action):
+class SSHConfigFileNameAction(argparse.Action):
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -7448,10 +7457,11 @@ class SaferFileNameAction(argparse.Action):
         values: Any,
         option_string: Optional[str] = None,
     ) -> None:
-        if ".." in values or values.startswith("/"):
-            parser.error(f"{option_string}: Invalid file name '{values}': must not contain '..' or '\\' or leading '/'.")
+        values = values.strip()
+        if values == "":
+            parser.error(f"{option_string}: Empty string is not valid")
         if any(char in SHELL_CHARS or char.isspace() for char in values):
-            parser.error(f"{option_string}: Invalid file name '{values}': must not whitespace or special chars.")
+            parser.error(f"{option_string}: Invalid file name '{values}': must not contain whitespace or special chars.")
         setattr(namespace, self.dest, values)
 
 
@@ -7516,18 +7526,22 @@ class FileOrLiteralAction(argparse.Action):
         if current_values is None:
             current_values = []
         extra_values = []
+        err_prefix = f"{option_string or self.dest}: "
         for value in values:
             if not value.startswith("+"):
                 extra_values.append(value)
             else:
+                path = value[1:]
+                if getattr(namespace, "no_argument_file", False):
+                    parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
                 try:
-                    with open(value[1:], "r", encoding="utf-8") as fd:
+                    with open(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
                             if line.startswith("#") or not line.strip():
                                 continue  # skip comment lines and empty lines
                             extra_values.append(line)
-                except FileNotFoundError:
-                    parser.error(f"File not found: {value[1:]}")
+                except FileNotFoundError as e:
+                    parser.error(f"{err_prefix}File not found: {e.filename}")
         current_values += extra_values
         setattr(namespace, self.dest, current_values)
         if self.dest in snapshot_regex_filter_names:
