@@ -540,6 +540,19 @@ class TestHelperFunctions(unittest.TestCase):
                 file = os.path.join(file, "x", "nonexisting2")
                 bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
 
+    def test_run_main_with_unexpected_exception(self) -> None:
+        try:
+            args = argparser_parse_args(args=["src", "dst"])
+            log_params = bzfs.LogParams(args)
+            job = bzfs.Job()
+            job.params = bzfs.Params(args, log_params=log_params)
+
+            with patch("time.monotonic_ns", side_effect=ValueError("my value error")):
+                with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+                    job.run_main(args)
+        finally:
+            bzfs.reset_logger()
+
     def test_recv_option_property_names(self) -> None:
         def names(lst: List[str]) -> Set[str]:
             return bzfs.Job().recv_option_property_names(lst)
