@@ -150,10 +150,10 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--src-bookmark-plan DICT_STRING]
                       [--dst-snapshot-plan DICT_STRING]
                       [--monitor-snapshot-plan DICT_STRING]
-                      [--src-user STRING] [--dst-user STRING] --job-id
-                      STRING [--job-run STRING] [--workers INT[%]]
-                      [--work-period-seconds FLOAT] [--jitter]
-                      [--worker-timeout-seconds FLOAT]
+                      [--ssh-src-user STRING] [--ssh-dst-user STRING]
+                      --job-id STRING [--job-run STRING]
+                      [--workers INT[%]] [--work-period-seconds FLOAT]
+                      [--jitter] [--worker-timeout-seconds FLOAT]
                       [--jobrunner-dryrun]
                       [--jobrunner-log-level {CRITICAL,ERROR,WARN,INFO,DEBUG,TRACE}]
                       [--version] [--help, -h]
@@ -402,19 +402,19 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
 
 <!-- -->
 
-<div id="--src-user"></div>
+<div id="--ssh-src-user"></div>
 
-**--src-user** *STRING*
+**--ssh-src-user** *STRING*
 
-*  SSH username on src hosts. Used in pull mode and pull-push mode. Example: 'alice'
+*  Remote SSH username on src hosts to connect to (optional). Examples: 'root', 'alice'.
 
 <!-- -->
 
-<div id="--dst-user"></div>
+<div id="--ssh-dst-user"></div>
 
-**--dst-user** *STRING*
+**--ssh-dst-user** *STRING*
 
-*  SSH username on dst hosts. Used in push mode and pull-push mode. Example: 'root'
+*  Remote SSH username on dst hosts to connect to (optional). Examples: 'root', 'alice'.
 
 <!-- -->
 
