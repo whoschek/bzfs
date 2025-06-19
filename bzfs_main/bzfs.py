@@ -1564,6 +1564,7 @@ class LogParams:
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, default_dir_name)
         if not os.path.basename(log_parent_dir).startswith(default_dir_name):
             die(f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}")
+        validate_is_not_symlink(log_parent_dir, err_prefix="--log-dir: ")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
@@ -7095,6 +7096,16 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
         )
 
 
+def validate_is_not_symlink(path: str, err_prefix: str, parser: Optional[argparse.ArgumentParser] = None) -> None:
+    assert isinstance(path, str)
+    if os.path.islink(path):
+        msg = f"{err_prefix}must not be a symlink: {path}"
+        if parser is not None:
+            parser.error(msg)
+        else:
+            die(msg)
+
+
 def list_formatter(iterable: Iterable, separator: str = " ", lstrip: bool = False) -> Any:
     # For lazy/noop evaluation in disabled log levels
     class CustomListFormatter:
@@ -7307,8 +7318,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
         basename_stem = Path(path).stem  # stem is basename without file extension ("bzfs_log_config")
         if not ("bzfs_log_config" in basename_stem and os.path.basename(path).endswith(".json")):
             die(f"--log-config-file: basename must contain 'bzfs_log_config' and end with '.json': {path}")
-        if os.path.islink(path):
-            die(f"--log-config-file: must not be a symlink: {path}")
+        validate_is_not_symlink(path, err_prefix="--log-config-file: ")
         with open(path, "r", encoding="utf-8") as fd:
             log_config_file_str = fd.read()
 
@@ -7442,8 +7452,7 @@ class DatasetPairsAction(argparse.Action):
                     parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
-                if os.path.islink(path):
-                    parser.error(f"{err_prefix} must not be a symlink: {path}")
+                validate_is_not_symlink(path, err_prefix, parser=parser)
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
                         for i, line in enumerate(fd.read().splitlines()):
@@ -7556,8 +7565,7 @@ class FileOrLiteralAction(argparse.Action):
                     parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
-                if os.path.islink(path):
-                    parser.error(f"{err_prefix} must not be a symlink: {path}")
+                validate_is_not_symlink(path, err_prefix, parser=parser)
                 try:
                     with open(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
