@@ -152,6 +152,7 @@ log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in 
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
 BARRIER_CHAR = "~"
 SHARED = "shared"
@@ -1565,11 +1566,13 @@ class LogParams:
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, default_dir_name)
         if not os.path.basename(log_parent_dir).startswith(default_dir_name):
             die(f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}")
+        if os.path.islink(log_parent_dir):
+            die(f"--log-dir must not be a symlink: {log_parent_dir}")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
-        os.makedirs(log_parent_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
-        os.makedirs(self.log_dir, mode=stat.S_IRWXU, exist_ok=True)
+        os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        os.makedirs(self.log_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
         self.log_file_infix = args.log_file_infix
         self.log_file_suffix = args.log_file_suffix
@@ -1581,15 +1584,15 @@ class LogParams:
         os.close(fd)
         self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
         self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
-        os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+        os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=DIR_PERMISSIONS, exist_ok=True)
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
         current = "current"
         dot_current_dir = os.path.join(log_parent_dir, f".{current}")
         current_dir = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
-        os.makedirs(dot_current_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
-        os.makedirs(current_dir, mode=stat.S_IRWXU, exist_ok=True)
+        os.makedirs(dot_current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        os.makedirs(current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         create_symlink(self.log_file, current_dir, f"{current}.log")
         create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
         create_symlink(self.log_dir, current_dir, f"{current}.dir")
@@ -1866,14 +1869,14 @@ class Remote:
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
-            ["-v"] if p.args.verbose >= 3 else []
+            ["-v"] if args.verbose >= 3 else []
         )
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
         if self.reuse_ssh_connection:
             self.ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs")
             os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
-            os.makedirs(self.ssh_socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+            os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.socket_prefix = "s"
             delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
@@ -2309,7 +2312,7 @@ class Job:
                 log = get_logger(log_params, args, log)
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
-                get_simple_logger(__name__).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
+                get_simple_logger(prog_name).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
                 raise e
 
             aux_args: List[str] = []
@@ -3902,12 +3905,12 @@ class Job:
                 log.log(log_trace, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
             else:  # ssh master is not alive; start a new master:
                 log.log(log_trace, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-                ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 control_persist_secs = self.control_persist_secs
-                if "-v" in ssh_socket_cmd:
+                if "-v" in remote.ssh_extra_opts:
                     # Unfortunately, with `ssh -v` (debug mode), the ssh master won’t background; instead it stays in the
                     # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
                     control_persist_secs = min(control_persist_secs, 1)  # tell ssh to block as briefly as possible (1 sec)
+                ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 ssh_socket_cmd += ["-M", f"-oControlPersist={control_persist_secs}s", remote.ssh_user_host, "exit"]
                 log.log(log_trace, "Executing: %s", list_formatter(ssh_socket_cmd))
                 process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=self.timeout())
