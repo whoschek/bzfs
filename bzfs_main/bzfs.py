@@ -95,6 +95,7 @@ from typing import (
     FrozenSet,
     Generator,
     Generic,
+    IO,
     ItemsView,
     Iterable,
     Iterator,
@@ -114,7 +115,7 @@ from typing import (
     cast,
 )
 
-from bzfs_main.utils import cut
+from bzfs_main.utils import cut, open_nofollow
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -150,6 +151,7 @@ log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway i
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
+FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
 BARRIER_CHAR = "~"
 SHARED = "shared"
@@ -1554,8 +1556,8 @@ class LogParams:
         else:
             self.log_level = "INFO"
         self.log_config_file = args.log_config_file
-        if self.log_config_file and getattr(args, "no_argument_file", False):
-            die("--log-config-file: Argument file inclusion is disabled")
+        if self.log_config_file:
+            validate_no_argument_file(self.log_config_file, args, err_prefix="--log-config-file: ")
         self.log_config_vars = dict(var.split(":", 1) for var in args.log_config_var)
         timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.timestamp: str = timestamp
@@ -1564,7 +1566,6 @@ class LogParams:
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, default_dir_name)
         if not os.path.basename(log_parent_dir).startswith(default_dir_name):
             die(f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}")
-        validate_is_not_symlink(log_parent_dir, err_prefix="--log-dir: ")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
@@ -1864,7 +1865,6 @@ class Remote:
         if self.ssh_config_file:
             if "bzfs_ssh_config" not in os.path.basename(self.ssh_config_file):
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
-            validate_is_not_symlink(self.ssh_config_file, err_prefix=f"--ssh-{loc}-config-file: ")
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
             ["-v"] if p.args.verbose >= 3 else []
@@ -2331,11 +2331,10 @@ class Job:
                     log.log(log_trace, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
                 log_params.params = p
-                with open(log_params.log_file, "a", encoding="utf-8") as log_file_fd:
-                    with contextlib.redirect_stderr(cast(TextIO, Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
-                        lock_permissions = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+                with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
+                    with contextlib.redirect_stderr(cast(IO, Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
                         lock_file = p.lock_file_name()
-                        lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, lock_permissions)
+                        lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, FILE_PERMISSIONS)
                         with xfinally(lambda: os.close(lock_fd)):
                             try:
                                 # Acquire an exclusive lock; will raise an error if lock is already held by another process.
@@ -5080,7 +5079,7 @@ class Job:
         rel_src_or_dst: List[str] = sorted(rel_datasets["src"].union(rel_datasets["dst"]))
 
         log.debug("%s", f"Temporary TSV output file comparing {task} is: {tmp_tsv_file}")
-        with open(tmp_tsv_file, "w", encoding="utf-8") as fd:
+        with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
             # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
             group = itertools.groupby(merge_itr, key=lambda entry: entry[1].key[0])
             self.print_datasets(group, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
@@ -5089,7 +5088,7 @@ class Job:
 
         tsv_file = tsv_file[0 : tsv_file.rindex(".")] + ".rel_datasets_tsv"
         tmp_tsv_file = tsv_file + ".tmp"
-        with open(tmp_tsv_file, "w", encoding="utf-8") as fd:
+        with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
             header = "location rel_dataset src_dataset dst_dataset"
             fd.write(header.replace(" ", "\t") + "\n")
             src_only: Set[str] = rel_datasets["src"].difference(rel_datasets["dst"])
@@ -5992,7 +5991,7 @@ class ProgressReporter:
     def _run(self) -> None:
         log = self.params.log
         try:
-            fds: List[TextIO] = []
+            fds: List[IO] = []
             try:
                 selector = selectors.SelectSelector() if self.use_select else selectors.PollSelector()
                 try:
@@ -6017,7 +6016,7 @@ class ProgressReporter:
         bytes_in_flight: int
         eta: ETA
 
-    def _run_internal(self, fds: List[TextIO], selector: selectors.BaseSelector) -> None:
+    def _run_internal(self, fds: List[IO], selector: selectors.BaseSelector) -> None:
 
         class Sample(NamedTuple):
             sent_bytes: int
@@ -6058,7 +6057,7 @@ class ProgressReporter:
             for pv_log_file in local_file_name_queue:
                 try:
                     Path(pv_log_file).touch()
-                    fd = open(pv_log_file, mode="r", newline="", encoding="utf-8")
+                    fd = open_nofollow(pv_log_file, mode="r", newline="", encoding="utf-8")
                 except FileNotFoundError:  # a third party has somehow deleted the log file or directory
                     with self.lock:
                         self.file_name_set.discard(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
@@ -6255,10 +6254,13 @@ def delete_stale_files(
             pass  # harmless
 
 
-def die(msg: str, exit_code: int = die_status) -> NoReturn:
-    ex = SystemExit(msg)
-    ex.code = exit_code
-    raise ex
+def die(msg: str, exit_code: int = die_status, parser: Optional[argparse.ArgumentParser] = None) -> NoReturn:
+    if parser is None:
+        ex = SystemExit(msg)
+        ex.code = exit_code
+        raise ex
+    else:
+        parser.error(msg)
 
 
 def filter_lines(input_list: Iterable[str], input_set: Set[str]) -> List[str]:
@@ -6562,7 +6564,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
 def tail(file: str, n: int, errors: Optional[str] = None) -> Sequence[str]:
     if not os.path.isfile(file):
         return []
-    with open(file, "r", encoding="utf-8", errors=errors) as fd:
+    with open_nofollow(file, "r", encoding="utf-8", errors=errors) as fd:
         return deque(fd, maxlen=n)
 
 
@@ -6983,7 +6985,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     for file in files:
         if os.path.isfile(file):
             try:
-                with open(file, mode="r", newline="", encoding="utf-8") as fd:
+                with open_nofollow(file, mode="r", newline="", encoding="utf-8") as fd:
                     line = None
                     for line in fd:
                         if line.endswith("\r"):
@@ -7091,14 +7093,11 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
         )
 
 
-def validate_is_not_symlink(path: str, err_prefix: str, parser: Optional[argparse.ArgumentParser] = None) -> None:
-    assert isinstance(path, str)
-    if os.path.islink(path):
-        msg = f"{err_prefix}must not be a symlink: {path}"
-        if parser is not None:
-            parser.error(msg)
-        else:
-            die(msg)
+def validate_no_argument_file(
+    path: str, namespace: argparse.Namespace, err_prefix: str, parser: Optional[argparse.ArgumentParser] = None
+) -> None:
+    if getattr(namespace, "no_argument_file", False):
+        die(f"{err_prefix}Argument file inclusion is disabled: {path}", parser=parser)
 
 
 def list_formatter(iterable: Iterable, separator: str = " ", lstrip: bool = False) -> Any:
@@ -7313,8 +7312,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
         basename_stem = Path(path).stem  # stem is basename without file extension ("bzfs_log_config")
         if not ("bzfs_log_config" in basename_stem and os.path.basename(path).endswith(".json")):
             die(f"--log-config-file: basename must contain 'bzfs_log_config' and end with '.json': {path}")
-        validate_is_not_symlink(path, err_prefix="--log-config-file: ")
-        with open(path, "r", encoding="utf-8") as fd:
+        with open_nofollow(path, "r", encoding="utf-8") as fd:
             log_config_file_str = fd.read()
 
     def remove_json_comments(config_str: str) -> str:  # not standard but practical
@@ -7396,7 +7394,7 @@ class RetryableError(Exception):
 
 #############################################################################
 class Tee:
-    def __init__(self, *files: TextIO) -> None:
+    def __init__(self, *files: IO) -> None:
         self.files = files
 
     def write(self, obj: str) -> None:
@@ -7443,13 +7441,11 @@ class DatasetPairsAction(argparse.Action):
                 datasets.append(value)
             else:
                 path = value[1:]
-                if getattr(namespace, "no_argument_file", False):
-                    parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
+                validate_no_argument_file(path, namespace, err_prefix=err_prefix, parser=parser)
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
-                validate_is_not_symlink(path, err_prefix, parser=parser)
                 try:
-                    with open(path, "r", encoding="utf-8") as fd:
+                    with open_nofollow(path, "r", encoding="utf-8") as fd:
                         for i, line in enumerate(fd.read().splitlines()):
                             if line.startswith("#") or not line.strip():
                                 continue  # skip comment lines and empty lines
@@ -7463,8 +7459,8 @@ class DatasetPairsAction(argparse.Action):
                                 )
                             datasets.append(src_root_dataset)
                             datasets.append(dst_root_dataset)
-                except FileNotFoundError as e:
-                    parser.error(f"{err_prefix}File not found: {e.filename}")
+                except OSError as e:
+                    parser.error(f"{err_prefix}{e}")
 
         if len(datasets) % 2 != 0:
             parser.error(f"{err_prefix}Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
@@ -7556,19 +7552,17 @@ class FileOrLiteralAction(argparse.Action):
                 extra_values.append(value)
             else:
                 path = value[1:]
-                if getattr(namespace, "no_argument_file", False):
-                    parser.error(f"{err_prefix}Argument file inclusion is disabled: {path}")
+                validate_no_argument_file(path, namespace, err_prefix=err_prefix, parser=parser)
                 if "bzfs_argument_file" not in os.path.basename(path):
                     parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
-                validate_is_not_symlink(path, err_prefix, parser=parser)
                 try:
-                    with open(path, "r", encoding="utf-8") as fd:
+                    with open_nofollow(path, "r", encoding="utf-8") as fd:
                         for line in fd.read().splitlines():
                             if line.startswith("#") or not line.strip():
                                 continue  # skip comment lines and empty lines
                             extra_values.append(line)
-                except FileNotFoundError as e:
-                    parser.error(f"{err_prefix}File not found: {e.filename}")
+                except OSError as e:
+                    parser.error(f"{err_prefix}{e}")
         current_values += extra_values
         setattr(namespace, self.dest, current_values)
         if self.dest in snapshot_regex_filter_names:

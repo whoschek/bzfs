@@ -13,14 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import errno
+import os
+import shutil
+import stat
+import tempfile
 import unittest
 
 from bzfs_main import utils
+from bzfs_main.utils import open_nofollow
 
 
 def suite() -> unittest.TestSuite:
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBzfsUtils))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(OpenNoFollowTest))
     return suite
 
 
@@ -49,3 +56,80 @@ class TestBzfsUtils(unittest.TestCase):
         lines = ["a,b,c", "d,e,f"]
         expected = ["a", "d"]
         self.assertEqual(utils.cut(field=1, separator=",", lines=lines), expected)
+
+
+#############################################################################
+class OpenNoFollowTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.mkdtemp()
+        self.real_path = os.path.join(self.tmpdir, "file.txt")
+        with open(self.real_path, "w", encoding="utf-8") as f:
+            f.write("hello")
+        self.symlink_path = os.path.join(self.tmpdir, "link.txt")
+        os.symlink(self.real_path, self.symlink_path)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmpdir)
+
+    def test_read_text(self) -> None:
+        with open_nofollow(self.real_path, "r", encoding="utf-8") as f:
+            data = f.read()
+        self.assertEqual(data, "hello")
+
+    def test_read_binary(self) -> None:
+        with open(self.real_path, "rb") as f:
+            raw = f.read()
+        with open_nofollow(self.real_path, "rb") as f:
+            data = f.read()
+        self.assertEqual(data, raw)
+
+    def test_write_truncate(self) -> None:
+        with open_nofollow(self.real_path, "w", encoding="utf-8") as f:
+            f.write("world")
+        with open(self.real_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "world")
+
+    def test_append(self) -> None:
+        with open_nofollow(self.real_path, "a", encoding="utf-8") as f:
+            f.write(" world")
+        with open(self.real_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "hello world")
+
+    def test_exclusive_create(self) -> None:
+        new_path = os.path.join(self.tmpdir, "new.txt")
+        f = open_nofollow(new_path, "x", encoding="utf-8")
+        f.write("new")
+        f.close()
+        # second open should fail
+        with self.assertRaises(FileExistsError):
+            open_nofollow(new_path, "x")
+
+    def test_plus_mode(self) -> None:
+        with open_nofollow(self.real_path, "r+") as f:
+            content = f.read()
+            self.assertEqual(content, "hello")
+            f.seek(0)
+            f.write("HELLO")
+        with open(self.real_path, "r") as f:
+            self.assertEqual(f.read(), "HELLO")
+
+    def test_symlink_blocked(self) -> None:
+        with self.assertRaises(OSError) as cm:
+            open_nofollow(self.symlink_path, "r")
+        self.assertIn(cm.exception.errno, (errno.ELOOP, errno.EMLINK))
+
+    def test_nonexistent_read(self) -> None:
+        missing = os.path.join(self.tmpdir, "missing.txt")
+        with self.assertRaises(FileNotFoundError):
+            open_nofollow(missing, "r")
+
+    def test_permission_bits(self) -> None:
+        # set umask to zero temporarily so we can observe raw permission bits
+        old_umask = os.umask(0)
+        try:
+            new_path = os.path.join(self.tmpdir, "perm.txt")
+            open_nofollow(new_path, "w", perm=0o600).close()
+            mode = stat.S_IMODE(os.stat(new_path).st_mode)
+            self.assertEqual(mode, 0o600)
+        finally:
+            os.umask(old_umask)
