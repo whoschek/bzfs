@@ -1217,7 +1217,7 @@ class TestHelperFunctions(unittest.TestCase):
                 raise FileNotFoundError(f"File {pv_log_file} disappeared before opening.")
             return open(*args, **kwargs)
 
-        with patch("builtins.open", mock_open):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open):
             reporter.start()
             time.sleep(0.1)  # Give the reporter thread a moment to attempt to open the file
             reporter.stop()
@@ -3161,45 +3161,45 @@ class TestDatasetPairsAction(unittest.TestCase):
             self.parser.parse_args(["--input", "src1"])
 
     def test_file_input(self) -> None:
-        with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
 
     def test_file_input_without_trailing_newline(self) -> None:
-        with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
 
     def test_mixed_input(self) -> None:
-        with patch("builtins.open", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "src0", "dst0", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, [("src0", "dst0"), ("src1", "dst1"), ("src2", "dst2")])
 
     def test_file_skip_comments_and_empty_lines(self) -> None:
-        with patch("builtins.open", mock_open(read_data="\n\n#comment\nsrc1\tdst1\nsrc2\tdst2\n")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="\n\n#comment\nsrc1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
 
     def test_file_skip_stripped_empty_lines(self) -> None:
-        with patch("builtins.open", mock_open(read_data=" \t \nsrc1\tdst1")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data=" \t \nsrc1\tdst1")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, [("src1", "dst1")])
 
     def test_file_missing_tab(self) -> None:
-        with patch("builtins.open", mock_open(read_data="src1\nsrc2")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\nsrc2")):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
 
     def test_file_whitespace_only(self) -> None:
-        with patch("builtins.open", mock_open(read_data=" \tdst1")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data=" \tdst1")):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
 
-        with patch("builtins.open", mock_open(read_data="src1\t ")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\t ")):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
 
-        with patch("builtins.open", side_effect=FileNotFoundError):
+        with patch("bzfs_main.bzfs.open_nofollow", side_effect=FileNotFoundError):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+nonexistent_test_bzfs_argument_file"])
 
@@ -3220,22 +3220,22 @@ class TestFileOrLiteralAction(unittest.TestCase):
         self.assertEqual(args.input, ["literalvalue"])
 
     def test_file_input(self) -> None:
-        with patch("builtins.open", mock_open(read_data="line 1\nline 2  \n")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line 1\nline 2  \n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, ["line 1", "line 2  "])
 
     def test_mixed_input(self) -> None:
-        with patch("builtins.open", mock_open(read_data="line 1\nline 2")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line 1\nline 2")):
             args = self.parser.parse_args(["--input", "literalvalue", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, ["literalvalue", "line 1", "line 2"])
 
     def test_skip_comments_and_empty_lines(self) -> None:
-        with patch("builtins.open", mock_open(read_data="\n\n#comment\nline 1\n\n\nline 2\n")):
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="\n\n#comment\nline 1\n\n\nline 2\n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
             self.assertEqual(args.input, ["line 1", "line 2"])
 
     def test_file_not_found(self) -> None:
-        with patch("builtins.open", side_effect=FileNotFoundError):
+        with patch("bzfs_main.bzfs.open_nofollow", side_effect=FileNotFoundError):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+nonexistent_test_bzfs_argument_file"])
 
