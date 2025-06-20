@@ -12,5 +12,6 @@ runs:
       path: |
         htmlcov
         coverage_report.txt
+        coverage.xml
         .coverage
         badges
