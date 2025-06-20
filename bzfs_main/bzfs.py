@@ -152,6 +152,7 @@ log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in 
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
 BARRIER_CHAR = "~"
 SHARED = "shared"
@@ -1568,8 +1569,8 @@ class LogParams:
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
-        os.makedirs(log_parent_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
-        os.makedirs(self.log_dir, mode=stat.S_IRWXU, exist_ok=True)
+        os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        os.makedirs(self.log_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         self.log_file_prefix = args.log_file_prefix
         self.log_file_infix = args.log_file_infix
         self.log_file_suffix = args.log_file_suffix
@@ -1581,15 +1582,15 @@ class LogParams:
         os.close(fd)
         self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
         self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
-        os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+        os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=DIR_PERMISSIONS, exist_ok=True)
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
         # For parallel usage, ensures there is no time window when the symlinks are inconsistent or do not exist.
         current = "current"
         dot_current_dir = os.path.join(log_parent_dir, f".{current}")
         current_dir = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
-        os.makedirs(dot_current_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
-        os.makedirs(current_dir, mode=stat.S_IRWXU, exist_ok=True)
+        os.makedirs(dot_current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        os.makedirs(current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         create_symlink(self.log_file, current_dir, f"{current}.log")
         create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
         create_symlink(self.log_dir, current_dir, f"{current}.dir")
@@ -1873,7 +1874,7 @@ class Remote:
         if self.reuse_ssh_connection:
             self.ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs")
             os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
-            os.makedirs(self.ssh_socket_dir, mode=stat.S_IRWXU, exist_ok=True)  # aka chmod u=rwx,go=
+            os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
             self.socket_prefix = "s"
             delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
