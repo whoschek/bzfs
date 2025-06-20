@@ -21,5 +21,6 @@ fi
 PYTHONPATH=. python3 -m coverage run --branch --include="bzfs_main/*.py" --omit='bzfs_tests/*.py,*/__init__.py' -m bzfs_tests.test_all
 python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
+python3 -m coverage xml
 
 PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate

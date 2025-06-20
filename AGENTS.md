@@ -14,3 +14,10 @@
   or push it to a save place where you can recover it later in case you get unexpectedly aborted. Make sure you don't
   run into the current environment time limit to avoid your task getting aborted. As you get close to the task time
   limit, wrap it up ASAP even if the task is incomplete, and put together a PR containing the results so far.
+- If the task includes adding unit tests to improve coverage, run the following commands after running unit tests:
+  ```
+  bzfs_test_mode=unit python3 -m coverage run --branch --include="bzfs_main/*.py" --omit='bzfs_tests/*.py,*/__init__.py' -m bzfs_tests.test_all
+  python3 -m coverage xml
+  cat coverage.xml
+  ```
+  To see how coverage has changed, compare the `coverage.xml` file with a prior version of that file.
