@@ -20,6 +20,7 @@ import shutil
 import signal
 import subprocess
 import unittest
+import argparse
 from logging import Logger
 from subprocess import DEVNULL, PIPE
 from typing import Dict, List, Optional, Tuple, Union, cast
@@ -705,7 +706,16 @@ class TestRunSubJob(unittest.TestCase):
 
     def test_nonexisting_cmd(self) -> None:
         with self.assertRaises(FileNotFoundError):
+
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+
+
+class TestRejectArgumentAction(unittest.TestCase):
+    def test_reject_argument(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--foo", action=bzfs_jobrunner.RejectArgumentAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--foo", "bar"])
 
 
 #############################################################################

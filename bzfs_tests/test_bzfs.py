@@ -671,6 +671,12 @@ class TestHelperFunctions(unittest.TestCase):
 
         bzfs.reset_logger()
 
+    def test_log_config_file_basename_check(self) -> None:
+        args = argparser_parse_args(args=["src", "dst", "--log-config-file", "+bad.json"])
+        log_params = bzfs.LogParams(args)
+        with self.assertRaises(SystemExit):
+            bzfs.get_logger(log_params, args)
+
     def test_get_syslog_address(self) -> None:
         udp = socket.SOCK_DGRAM
         tcp = socket.SOCK_STREAM
@@ -3145,6 +3151,34 @@ class TestArgumentParser(unittest.TestCase):
         self.assertEqual(2, e.exception.code)
 
 
+###############################################################################
+class TestRemoteSSHConfigFile(unittest.TestCase):
+
+    def test_basename_validation(self) -> None:
+        with self.assertRaises(SystemExit):
+            args = argparser_parse_args(
+                [
+                    "src",
+                    "dst",
+                    "--ssh-src-config-file",
+                    "bad.conf",
+                ]
+            )
+            bzfs.Params(args)
+
+    def test_basename_ok(self) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--ssh-src-config-file",
+                "bzfs_ssh_config.conf",
+            ]
+        )
+        p = bzfs.Params(args)
+        self.assertEqual(p.src.ssh_config_file, "bzfs_ssh_config.conf")
+
+
 #############################################################################
 class TestDatasetPairsAction(unittest.TestCase):
 
@@ -3207,6 +3241,15 @@ class TestDatasetPairsAction(unittest.TestCase):
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
 
+    def test_file_invalid_basename(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--input", "+bad.txt"])
+
+    def test_argument_file_disabled(self) -> None:
+        self.parser.set_defaults(no_argument_file=True)
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
+
 
 #############################################################################
 class TestFileOrLiteralAction(unittest.TestCase):
@@ -3242,6 +3285,15 @@ class TestFileOrLiteralAction(unittest.TestCase):
     def test_option_not_specified(self) -> None:
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
+
+    def test_file_invalid_basename(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--input", "+bad.txt"])
+
+    def test_argument_file_disabled(self) -> None:
+        self.parser.set_defaults(no_argument_file=True)
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
 
 
 #############################################################################
@@ -3777,6 +3829,12 @@ class SSHConfigFileNameAction(unittest.TestCase):
     def test_filename_with_single_dot_slash(self) -> None:
         self.parser.parse_args(["./file.txt"])
 
+    def test_filename_with_whitespace_or_special_chars(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["bad name"])
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["bad$path"])
+
 
 #############################################################################
 class TestSafeFileNameAction(unittest.TestCase):
@@ -3843,6 +3901,48 @@ class TestSafeDirectoryNameAction(unittest.TestCase):
         parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
         args = parser.parse_args(["--dir", "  valid_directory  "])
         assert args.dir == "valid_directory"
+
+
+###############################################################################
+class TestNonEmptyStringAction(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--val", action=bzfs.NonEmptyStringAction)
+
+    def test_valid_string_is_trimmed(self) -> None:
+        args = self.parser.parse_args(["--val", "  abc  "])
+        self.assertEqual(args.val, "abc")
+
+    def test_empty_string_raises(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--val", "   "])
+
+
+###############################################################################
+class TestValidateNoArgumentFile(unittest.TestCase):
+
+    def test_argument_file_disabled(self) -> None:
+        ns = argparse.Namespace(no_argument_file=True)
+        parser = argparse.ArgumentParser()
+        with self.assertRaises(SystemExit):
+            bzfs.validate_no_argument_file("some", ns, err_prefix="x: ", parser=parser)
+
+
+###############################################################################
+class TestDie(unittest.TestCase):
+
+    def test_die_with_parser(self) -> None:
+        parser = argparse.ArgumentParser()
+        with patch.object(parser, "error", side_effect=SystemExit(2)) as err:
+            with self.assertRaises(SystemExit):
+                bzfs.die("msg", parser=parser)
+            err.assert_called_once_with("msg")
+
+    def test_die_without_parser(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            bzfs.die("msg")
+        self.assertEqual("msg", str(cm.exception))
 
 
 #############################################################################
@@ -5114,6 +5214,58 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
 
 #############################################################################
+
+
+###############################################################################
+class TestRefreshSSHConnection(unittest.TestCase):
+    def test_control_persist_reduced_when_verbose(self) -> None:
+        args = argparser_parse_args(["src", "dst", "-v", "-v", "-v"])
+        job = bzfs.Job()
+        lp = bzfs.LogParams(args)
+        job.params = bzfs.Params(args, log_params=lp, log=bzfs.get_logger(lp, args))
+        conn = bzfs.Connection(job.params.src, 1, 1)
+        conn.last_refresh_time = 0
+
+        def fake_run(
+            cmd: List[str],
+            stdin: Any = None,
+            stdout: Any = None,
+            stderr: Any = None,
+            text: Any = None,
+            timeout: Any = None,
+        ) -> Any:
+            class R:
+                returncode: int
+                stdout: str
+                stderr: str
+
+            r = R()
+            r.returncode = 1 if "-O" in cmd else 0
+            r.stdout = r.stderr = ""
+            return r
+
+        with patch("bzfs_main.bzfs.subprocess_run", side_effect=fake_run) as run:
+            job.refresh_ssh_connection_if_necessary(job.params.src, conn)
+            called_cmd = run.call_args_list[1][0][0]
+            self.assertIn("-oControlPersist=1s", called_cmd)
+
+
+###############################################################################
+class TestRemoteConfCacheTTL(unittest.TestCase):
+    def test_cache_hit_skips_remote_detection(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        job = bzfs.Job()
+        lp = bzfs.LogParams(args)
+        job.params = bzfs.Params(args, log_params=lp, log=bzfs.get_logger(lp, args))
+        pools = bzfs.ConnectionPools(job.params.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
+        item = bzfs.RemoteConfCacheItem(pools, {"ssh": ""}, {"delegation": "on"}, time.monotonic_ns())
+        job.remote_conf_cache[job.params.src.cache_key()] = item
+        with patch.object(job, "detect_zpool_features") as dz, patch.object(job, "detect_available_programs_remote") as dr:
+            job.detect_available_programs()
+            dz.assert_not_called()
+            dr.assert_not_called()
+
+
 class TestPerformance(unittest.TestCase):
 
     def test_close_fds(self) -> None:
