@@ -5141,3 +5141,100 @@ def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
         yield
     except AssertionError as e:
         raise AssertionError(f"SubTest failed with parameters: {params}") from e
+
+
+###############################################################################
+class TestAdditionalCoverage(unittest.TestCase):
+
+    def test_remote_ssh_config_file_requires_prefix(self) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--ssh-src-config-file",
+                "foo.cfg",
+            ]
+        )
+        p = bzfs.Params(args)
+        with self.assertRaises(SystemExit):
+            bzfs.Remote("src", args, p)
+
+    def test_non_empty_string_action_empty(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--name", action=bzfs.NonEmptyStringAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--name", " "])
+
+    def test_ssh_config_filename_action_invalid_chars(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("file", action=bzfs.SSHConfigFileNameAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["foo bar"])
+
+    def test_dataset_pairs_action_invalid_basename(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--input", nargs="+", action=bzfs.DatasetPairsAction)
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src\tdst\n")):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--input", "+bad_file"])
+
+    def test_file_or_literal_action_invalid_basename(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--input", nargs="+", action=bzfs.FileOrLiteralAction)
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line")):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--input", "+bad_file"])
+
+    def test_validate_no_argument_file_raises(self) -> None:
+        parser = argparse.ArgumentParser()
+        ns = argparse.Namespace(no_argument_file=True)
+        with self.assertRaises(SystemExit):
+            bzfs.validate_no_argument_file("afile", ns, err_prefix="e", parser=parser)
+
+    def test_die_with_parser(self) -> None:
+        parser = argparse.ArgumentParser()
+        with self.assertRaises(SystemExit):
+            bzfs.die("boom", parser=parser)
+
+    def test_log_config_file_validation(self) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--log-config-file",
+                "+wrong.txt",
+            ]
+        )
+        log_params = bzfs.LogParams(args)
+        with self.assertRaises(SystemExit):
+            bzfs.get_dict_config_logger(log_params, args)
+
+    def test_refresh_ssh_connection_with_verbose(self) -> None:
+        args = argparser_parse_args(["src", "dst", "-v", "-v", "-v"])
+        p = bzfs.Params(args)
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        conn = bzfs.Connection(p.src, 1, 0)
+        with patch("bzfs_main.bzfs.subprocess_run") as sub_run:
+            sub_run.side_effect = [
+                subprocess.CompletedProcess([], 1, "", ""),
+                subprocess.CompletedProcess([], 0, "", ""),
+            ]
+            job.refresh_ssh_connection_if_necessary(p.src, conn)
+            called = sub_run.call_args_list[1][0][0]
+            self.assertIn("-oControlPersist=1s", called)
+
+    def test_remote_conf_cache_hit_skips_detection(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        pools = bzfs.ConnectionPools(p.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
+        item = bzfs.RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, time.monotonic_ns())
+        job.remote_conf_cache[p.src.cache_key()] = item
+        with patch.object(job, "detect_available_programs_remote") as d1, patch.object(job, "detect_zpool_features") as d2:
+            job.detect_available_programs()
+            d1.assert_not_called()
+            d2.assert_not_called()
