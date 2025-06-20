@@ -296,13 +296,16 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "Analog for the latest snapshot named `prod_<timestamp>_daily`, and so on.\n\n"
              "Note: A duration that is missing or zero (e.g. '0 minutes') indicates that no snapshots shall be checked for "
              "the given snapshot name pattern.\n\n")
-    for loc in ["src", "dst"]:
+    locations = ["src", "dst"]
+    for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-user", default="", metavar="STRING",
             help=f"Remote SSH username on {loc} hosts to connect to (optional). Examples: 'root', 'alice'.\n\n")
+    for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-port", type=int, metavar="INT",
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
+    for loc in locations:
         parser.add_argument(
             f"--ssh-{loc}-config-file", type=str, action=bzfs.SSHConfigFileNameAction, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
