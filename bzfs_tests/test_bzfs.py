@@ -611,6 +611,17 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
         self.assertFalse(os.path.exists(logdir))
 
+    def test_logdir_must_not_be_symlink(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmpdir:
+            target = os.path.join(tmpdir, "target")
+            os.mkdir(target)
+            link_path = os.path.join(tmpdir, "bzfs-logs-link")
+            os.symlink(target, link_path)
+            with self.assertRaises(SystemExit) as cm:
+                bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path]))
+            self.assertEqual(bzfs.die_status, cm.exception.code)
+            self.assertIn("--log-dir must not be a symlink", str(cm.exception))
+
     def test_get_logger_with_cleanup(self) -> None:
         def check(log: Logger, files: Set[str]) -> None:
             files_todo = files.copy()
