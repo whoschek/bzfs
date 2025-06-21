@@ -1566,6 +1566,8 @@ class LogParams:
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, default_dir_name)
         if not os.path.basename(log_parent_dir).startswith(default_dir_name):
             die(f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}")
+        if os.path.islink(log_parent_dir):
+            die(f"--log-dir must not be a symlink: {log_parent_dir}")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
@@ -1867,7 +1869,7 @@ class Remote:
                 die(f"Basename of --ssh-{loc}-config-file must contain substring 'bzfs_ssh_config': {self.ssh_config_file}")
         # disable interactive password prompts and X11 forwarding and pseudo-terminal allocation:
         self.ssh_extra_opts: List[str] = ["-oBatchMode=yes", "-oServerAliveInterval=0", "-x", "-T"] + (
-            ["-v"] if p.args.verbose >= 3 else []
+            ["-v"] if args.verbose >= 3 else []
         )
         self.max_concurrent_ssh_sessions_per_tcp_connection: int = args.max_concurrent_ssh_sessions_per_tcp_connection
         self.reuse_ssh_connection: bool = getenv_bool("reuse_ssh_connection", True)
@@ -3903,12 +3905,12 @@ class Job:
                 log.log(log_trace, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
             else:  # ssh master is not alive; start a new master:
                 log.log(log_trace, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
-                ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 control_persist_secs = self.control_persist_secs
-                if "-v" in ssh_socket_cmd:
+                if "-v" in remote.ssh_extra_opts:
                     # Unfortunately, with `ssh -v` (debug mode), the ssh master won’t background; instead it stays in the
                     # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
                     control_persist_secs = min(control_persist_secs, 1)  # tell ssh to block as briefly as possible (1 sec)
+                ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
                 ssh_socket_cmd += ["-M", f"-oControlPersist={control_persist_secs}s", remote.ssh_user_host, "exit"]
                 log.log(log_trace, "Executing: %s", list_formatter(ssh_socket_cmd))
                 process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=self.timeout())
