@@ -778,3 +778,30 @@ class TestShuffleDict(unittest.TestCase):
 #############################################################################
 def is_solaris_zfs() -> bool:
     return platform.system() == "SunOS"
+
+
+###############################################################################
+class TestMoreCoverage(unittest.TestCase):
+    def test_stats_repr(self) -> None:
+        stats = bzfs_jobrunner.Stats()
+        stats.jobs_all = 10
+        stats.jobs_started = 5
+        stats.jobs_completed = 5
+        stats.jobs_failed = 2
+        stats.jobs_running = 1
+        stats.sum_elapsed_nanos = 1_000_000_000
+        expect = "all:10, started:5=50%, completed:5=50%, failed:2=20%, " "running:1, avg_completion_time:200ms"
+        self.assertEqual(expect, repr(stats))
+
+    def test_dedupe_and_flatten(self) -> None:
+        pairs = [("a", "b"), ("a", "b"), ("c", "d")]
+        self.assertEqual([("a", "b"), ("c", "d")], bzfs_jobrunner.dedupe(pairs))
+        self.assertEqual(["a", "b", "c", "d"], bzfs_jobrunner.flatten([("a", "b"), ("c", "d")]))
+
+    def test_sanitize_and_log_suffix(self) -> None:
+        self.assertEqual("a!b!c!d!e!f", bzfs_jobrunner.sanitize("a b..c/d,e\\f"))
+        suffix = bzfs_jobrunner.log_suffix("l o", "s/p", "d\\h")
+        self.assertEqual(",l!o,s!p,d!h", suffix)
+
+    def test_convert_ipv6(self) -> None:
+        self.assertEqual("fe80||1", bzfs_jobrunner.convert_ipv6("fe80::1"))

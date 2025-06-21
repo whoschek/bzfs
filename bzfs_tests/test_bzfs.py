@@ -5727,7 +5727,7 @@ class TestExtraCoverage(unittest.TestCase):
         self.assertEqual("\"{'a': 1}\"", bzfs.format_dict({"a": 1}))
 
     def test_unixtime_conversion(self) -> None:
-        iso = "2024-01-02T03:04:05"
+        iso = "2024-01-02T03:04:05+00:00"
         unix = bzfs.unixtime_fromisoformat(iso)
         expected = "2024-01-02_03:04:05+00:00"
         self.assertEqual(expected, bzfs.isotime_from_unixtime(unix))
@@ -5742,3 +5742,20 @@ class TestExtraCoverage(unittest.TestCase):
         self.assertEqual("Europe/Vienna", getattr(zone, "key", None))
         with self.assertRaises(ValueError):
             bzfs.get_timezone("bad-tz")
+
+
+class TestMoreCoverageBzfs(unittest.TestCase):
+    def test_percent(self) -> None:
+        self.assertEqual("3=30%", bzfs.percent(3, 10))
+        self.assertEqual("0=NaN%", bzfs.percent(0, 0))
+
+    def test_parse_duration_to_milliseconds(self) -> None:
+        self.assertEqual(5000, bzfs.parse_duration_to_milliseconds("5 seconds"))
+        self.assertEqual(
+            300000,
+            bzfs.parse_duration_to_milliseconds("5 minutes ago", regex_suffix=r"\s*ago"),
+        )
+        with self.assertRaises(ValueError):
+            bzfs.parse_duration_to_milliseconds("foo")
+        with self.assertRaises(SystemExit):
+            bzfs.parse_duration_to_milliseconds("foo", context="ctx")
