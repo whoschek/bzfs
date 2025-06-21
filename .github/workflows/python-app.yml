@@ -40,7 +40,7 @@ on:
         - test_ubuntu_24_04
         - test_ubuntu_22_04
         - test_ubuntu_22_04_zfs_0_8_x
-        - test_freebsd_14_2
+        - test_freebsd_14_3
         - test_freebsd_13_4
         - test_solaris_11_4
         - none
@@ -421,9 +421,9 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_freebsd_14_2:  # currently uses zfs-2.2.6
+  test_freebsd_14_3:  # currently uses zfs-2.2.7
     needs: create_iteration_test_matrix
-    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_2' || contains(github.event.inputs.job_names, 'test_freebsd_14_2')
+    if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_freebsd_14_3' || contains(github.event.inputs.job_names, 'test_freebsd_14_3')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -436,7 +436,7 @@ jobs:
       id: test
       uses: vmactions/freebsd-vm@v1  # see https://github.com/vmactions/freebsd-vm
       with:
-        release: "14.2"
+        release: "14.3"
         envs: "bzfs_test_mode"
         run: |
           ./.github-workflow-scripts/test_freebsd_14_1.sh
@@ -506,7 +506,7 @@ jobs:
       - test_ubuntu_24_04
       - test_ubuntu_22_04
       - test_ubuntu_22_04_zfs_0_8_x
-      - test_freebsd_14_2
+      - test_freebsd_14_3
       - test_freebsd_13_4
       - test_solaris_11_4
     steps:
@@ -544,8 +544,8 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
-          name: coverage-test_freebsd_14_2
-          path: coverage-test_freebsd_14_2
+          name: coverage-test_freebsd_14_3
+          path: coverage-test_freebsd_14_3
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
