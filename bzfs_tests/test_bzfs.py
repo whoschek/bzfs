@@ -72,6 +72,7 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNewSnapshotFilterGroupAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNonEmptyStringAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(SSHConfigFileNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
@@ -81,8 +82,10 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRefreshSSHConnection))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRemoteConfCache))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
@@ -610,6 +613,17 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
         self.assertFalse(os.path.exists(logdir))
 
+    def test_logdir_must_not_be_symlink(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmpdir:
+            target = os.path.join(tmpdir, "target")
+            os.mkdir(target)
+            link_path = os.path.join(tmpdir, "bzfs-logs-link")
+            os.symlink(target, link_path)
+            with self.assertRaises(SystemExit) as cm:
+                bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path]))
+            self.assertEqual(bzfs.die_status, cm.exception.code)
+            self.assertIn("--log-dir must not be a symlink", str(cm.exception))
+
     def test_get_logger_with_cleanup(self) -> None:
         def check(log: Logger, files: Set[str]) -> None:
             files_todo = files.copy()
@@ -684,6 +698,12 @@ class TestHelperFunctions(unittest.TestCase):
         for var in ["noColon", ":noName", "$n:v", "{:v", "}:v", "", "  ", "\t", "a\tb:v", "spa ce:v", '"k":v', "'k':v"]:
             self.assertIsNotNone(bzfs.validate_log_config_variable(var))
 
+    def test_log_config_file_validation(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--log-config-file", "+bad_file_name.txt"])
+        log_params = bzfs.LogParams(args)
+        with self.assertRaises(SystemExit):
+            bzfs.get_dict_config_logger(log_params, args)
+
     def test_has_siblings(self) -> None:
         self.assertFalse(bzfs.has_siblings([]))
         self.assertFalse(bzfs.has_siblings(["a"]))
@@ -724,6 +744,11 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.validate_default_shell("/bin/csh", remote)
         with self.assertRaises(SystemExit):
             bzfs.validate_default_shell("/bin/tcsh", remote)
+
+    def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args)
 
     def test_filter_datasets_with_test_mode_is_false(self) -> None:
         # test with Job.is_test_mode == False for coverage with the assertion therein disabled
@@ -1751,6 +1776,17 @@ class TestHelperFunctions(unittest.TestCase):
         ]
         results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
+
+    def test_validate_no_argument_file_raises(self) -> None:
+        parser = argparse.ArgumentParser()
+        ns = argparse.Namespace(no_argument_file=True)
+        with self.assertRaises(SystemExit):
+            bzfs.validate_no_argument_file("afile", ns, err_prefix="e", parser=parser)
+
+    def test_die_with_parser(self) -> None:
+        parser = argparse.ArgumentParser()
+        with self.assertRaises(SystemExit):
+            bzfs.die("boom", parser=parser)
 
 
 #############################################################################
@@ -3207,6 +3243,11 @@ class TestDatasetPairsAction(unittest.TestCase):
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
 
+    def test_dataset_pairs_action_invalid_basename(self) -> None:
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src\tdst\n")):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+bad_file_name"])
+
 
 #############################################################################
 class TestFileOrLiteralAction(unittest.TestCase):
@@ -3242,6 +3283,11 @@ class TestFileOrLiteralAction(unittest.TestCase):
     def test_option_not_specified(self) -> None:
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
+
+    def test_file_or_literal_action_invalid_basename(self) -> None:
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line")):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+bad_file_name"])
 
 
 #############################################################################
@@ -3741,6 +3787,18 @@ class TestRankRangeAction(unittest.TestCase):
 
 
 #############################################################################
+class TestNonEmptyStringAction(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--name", action=bzfs.NonEmptyStringAction)
+
+    def test_non_empty_string_action_empty(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--name", " "])
+
+
+#############################################################################
 class TestLogConfigVariablesAction(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -3776,6 +3834,10 @@ class SSHConfigFileNameAction(unittest.TestCase):
 
     def test_filename_with_single_dot_slash(self) -> None:
         self.parser.parse_args(["./file.txt"])
+
+    def test_ssh_config_filename_action_invalid_chars(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["foo bar"])
 
 
 #############################################################################
@@ -4302,6 +4364,30 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
     def __repr__(self) -> str:
         with self._lock:
             return str({"capacity": self.capacity, "queue_len": len(self.priority_queue), "queue": self.priority_queue})
+
+
+#############################################################################
+class TestRefreshSSHConnection(unittest.TestCase):
+
+    def test_refresh_ssh_connection_with_verbose(self) -> None:
+        args = argparser_parse_args(["src", "dst", "-v", "-v", "-v"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        p.src.ssh_host = "host"
+        p.src.ssh_user_host = "host"
+        job.params.available_programs["local"] = {"ssh": ""}
+        conn = bzfs.Connection(p.src, 1, 0)
+        with patch("bzfs_main.bzfs.subprocess_run") as sub_run:
+            sub_run.side_effect = [
+                subprocess.CompletedProcess([], 1, "", ""),
+                subprocess.CompletedProcess([], 0, "", ""),
+            ]
+            job.refresh_ssh_connection_if_necessary(p.src, conn)
+            called = sub_run.call_args_list[1][0][0]
+            self.assertIn("-oControlPersist=1s", called)
 
 
 #############################################################################
@@ -5111,6 +5197,57 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         )
         self.assertFalse(failed)
         self.assertListEqual(src_datasets[0:-1], sorted(self.submitted))
+
+
+#############################################################################
+class TestRemoteConfCache(unittest.TestCase):
+
+    def test_remote_conf_cache_hit_skips_detection(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        p.dst = bzfs.Remote("dst", args, p)
+        p.src.ssh_host = "host"
+        p.src.ssh_user_host = "host"
+        p.dst.ssh_host = "host2"
+        p.dst.ssh_user_host = "host2"
+        job.params.available_programs["local"] = {"ssh": ""}
+        pools = bzfs.ConnectionPools(p.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
+        item = bzfs.RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, time.monotonic_ns())
+        job.remote_conf_cache[p.src.cache_key()] = item
+        job.remote_conf_cache[p.dst.cache_key()] = item
+        with patch.object(job, "detect_available_programs_remote") as d1, patch.object(job, "detect_zpool_features") as d2:
+            job.detect_available_programs()
+            d1.assert_not_called()
+            d2.assert_not_called()
+
+    def test_remote_conf_cache_miss_runs_detection(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "10 milliseconds"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        p.dst = bzfs.Remote("dst", args, p)
+        p.src.ssh_host = "host"
+        p.src.ssh_user_host = "host"
+        p.dst.ssh_host = "host2"
+        p.dst.ssh_user_host = "host2"
+        job.params.available_programs["local"] = {"ssh": ""}
+        pools = bzfs.ConnectionPools(p.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
+        expired_ts = time.monotonic_ns() - p.remote_conf_cache_ttl_nanos - 1
+        item = bzfs.RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, expired_ts)
+        job.remote_conf_cache[p.src.cache_key()] = item
+        job.remote_conf_cache[p.dst.cache_key()] = item
+        with patch.object(job, "detect_available_programs_remote") as d1, patch.object(job, "detect_zpool_features") as d2:
+            d1.side_effect = lambda r, programs, host: programs.__setitem__(r.location, {"ssh": ""})
+            d2.side_effect = lambda r: job.params.zpool_features.__setitem__(r.location, {"feat": "on"})
+            job.detect_available_programs()
+            self.assertEqual(d1.call_count, 2)
+            self.assertEqual(d2.call_count, 2)
 
 
 #############################################################################
