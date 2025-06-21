@@ -38,6 +38,9 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobSpawnProcessPerJob))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobInCurrentThread))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJob))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidateSnapshotPlan))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidateMonitorSnapshotPlan))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestShuffleDict))
     return suite
 
 
@@ -713,6 +716,63 @@ class TestRunSubJob(unittest.TestCase):
     def test_nonexisting_cmd(self) -> None:
         with self.assertRaises(FileNotFoundError):
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+
+
+#############################################################################
+class TestValidateSnapshotPlan(unittest.TestCase):
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+
+    def test_validate_snapshot_plan_empty(self) -> None:
+        plan: dict = {}
+        self.assertEqual(plan, self.job.validate_snapshot_plan(plan, "ctx"))
+
+    def test_validate_snapshot_plan_valid(self) -> None:
+        plan = {"org": {"tgt": {"hour": 1}}}
+        self.assertEqual(plan, self.job.validate_snapshot_plan(plan, "ctx"))
+
+    def test_validate_snapshot_plan_invalid_amount(self) -> None:
+        plan = {"org": {"tgt": {"hour": -1}}}
+        with self.assertRaises(SystemExit):
+            self.job.validate_snapshot_plan(plan, "ctx")
+
+
+class TestValidateMonitorSnapshotPlan(unittest.TestCase):
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+
+    def test_validate_monitor_snapshot_plan_empty(self) -> None:
+        plan: dict = {}
+        self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
+
+    def test_validate_monitor_snapshot_plan_valid(self) -> None:
+        plan: Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]] = {
+            "org": {"tgt": {"hour": {"warn": "msg", "max_age": 1}}}
+        }
+        self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
+
+    def test_validate_monitor_snapshot_plan_invalid_value(self) -> None:
+        plan: Dict[str, Dict[str, Dict[str, Dict[str, object]]]] = {"org": {"tgt": {"hour": {"warn": object()}}}}
+        with self.assertRaises(SystemExit):
+            self.job.validate_monitor_snapshot_plan(plan)  # type: ignore[arg-type]
+
+
+class TestShuffleDict(unittest.TestCase):
+    def test_shuffle_dict_preserves_items(self) -> None:
+        d = {"a": 1, "b": 2, "c": 3}
+
+        def fake_shuffle(lst: list) -> None:
+            lst.reverse()
+
+        with patch("random.shuffle", side_effect=fake_shuffle) as mock_shuffle:
+            result = bzfs_jobrunner.shuffle_dict(d)
+            self.assertEqual({"c": 3, "b": 2, "a": 1}, result)
+            mock_shuffle.assert_called_once()
+
+    def test_shuffle_dict_empty(self) -> None:
+        self.assertEqual({}, bzfs_jobrunner.shuffle_dict({}))
 
 
 #############################################################################

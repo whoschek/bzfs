@@ -88,6 +88,7 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRemoteConfCache))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAdditionalCoverage))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestExtraCoverage))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
@@ -5719,3 +5720,25 @@ class TestAdditionalCoverage(unittest.TestCase):
         finally:
             os.remove(path)
             bzfs.reset_logger()
+
+
+class TestExtraCoverage(unittest.TestCase):
+    def test_format_dict(self) -> None:
+        self.assertEqual("\"{'a': 1}\"", bzfs.format_dict({"a": 1}))
+
+    def test_unixtime_conversion(self) -> None:
+        iso = "2024-01-02T03:04:05"
+        unix = bzfs.unixtime_fromisoformat(iso)
+        expected = "2024-01-02_03:04:05+00:00"
+        self.assertEqual(expected, bzfs.isotime_from_unixtime(unix))
+
+    def test_get_timezone_variants(self) -> None:
+        self.assertIsNone(bzfs.get_timezone())
+        self.assertEqual(timezone.utc, bzfs.get_timezone("UTC"))
+        tz = bzfs.get_timezone("+0130")
+        assert tz is not None
+        self.assertEqual(90 * 60, cast(timedelta, tz.utcoffset(None)).total_seconds())
+        zone = bzfs.get_timezone("Europe/Vienna")
+        self.assertEqual("Europe/Vienna", getattr(zone, "key", None))
+        with self.assertRaises(ValueError):
+            bzfs.get_timezone("bad-tz")
