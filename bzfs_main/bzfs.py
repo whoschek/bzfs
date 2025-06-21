@@ -33,7 +33,7 @@
 * Progress reporting for use during `zfs send/recv` data transfers is in class ProgressReporter.
 * Executing a CLI commmand on a local or remote host is in run_ssh_command().
 * Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool.
-* Caching functionality can be found by searching for this regex: .*cach.*
+* Cache functionality can be found by searching for this regex: .*cach.*
 * The parallel processing engine is in itr_ssh_cmd_parallel() and process_datasets_in_parallel_and_fault_tolerant().
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.sh.
 Simply run that script whenever you change or add ArgumentParser help text.
