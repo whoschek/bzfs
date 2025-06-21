@@ -6,10 +6,10 @@
   runs the unit tests. Integration tests rely on ZFS and should not be run in the sandbox.
 - New unit tests should fit into the `test_bzfs.py`/`test_jobrunner.py` framework whereas new integration tests should
   fit into the `test_integrations.py` framework. Make sure that new or changed tests are included in the `suite()`.
-- Code changes should not require additional external python packages or external packages beyond the python packages
+- Code changes should not require additional external Python packages or Unix CLIs beyond the external Python packages
   and standard Unix CLIs that are already installed or used by the current codebase. For example, calling anything in
-  the python standard library is ok. CLI tools like `zfs`, `zpool`, `ssh`, `zstd`, `pv`, `mbuffer`, `ps`, `uname`, Unix
-  coreutils, etc, are already installed and used by the project, thus calling these from python is ok, too.
+  the Python standard library is ok. CLI tools like `zfs`, `zpool`, `ssh`, `zstd`, `pv`, `mbuffer`, `ps`, `uname`, Unix
+  coreutils, etc, are already installed and used by the project, thus calling these from Python is ok, too.
 - If the task includes adding unit tests to improve coverage, run the following commands after running unit tests
   (plus immediately before completing the overall task):
 
@@ -24,6 +24,7 @@
     completing the overall task: Remove any binary files from the output directory of `python3 -m coverage html`,
     rename the resulting cleaned directory to tmp.htmlcov, and finally add that renamed directory as a separate commit.
 - After every N code changes (depending on your time limit), create an intermediate commit and automatically checkpoint
-  or push it to a save place where you can recover it later in case you get unexpectedly aborted. Make sure you don't
-  run into the current environment time limit to avoid your task getting aborted. As you get close to the task time
-  limit, wrap it up ASAP even if the task is incomplete, and put together a PR containing the results so far.
+  or push it to a save place where you can recover it later in case you get unexpectedly aborted or cancelled. Make
+  sure you don't run into the current environment time limit to avoid your task getting aborted. As you get close to
+  the task time limit, wrap it up ASAP even if the task is incomplete, and put together a PR containing the results so
+  far.
