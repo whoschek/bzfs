@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import contextlib
 import io
 import platform
@@ -153,6 +154,12 @@ class TestHelperFunctions(unittest.TestCase):
     def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
         with self.assertRaises(TypeError):
             bzfs_jobrunner.sorted_dict({"a": 1, 2: "two"})
+
+    def test_reject_argument_action(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--secret", action=bzfs_jobrunner.RejectArgumentAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--secret", "x"])
 
 
 #############################################################################
