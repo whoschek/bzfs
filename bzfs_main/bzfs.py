@@ -2312,7 +2312,7 @@ class Job:
                 log = get_logger(log_params, args, log)
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
-                get_simple_logger(__name__).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
+                get_simple_logger(prog_name).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
                 raise e
 
             aux_args: List[str] = []
