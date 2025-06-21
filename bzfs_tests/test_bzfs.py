@@ -2275,7 +2275,7 @@ class TestCurrentDateTime(unittest.TestCase):
     def test_iana_timezone(self) -> None:
         if sys.version_info < (3, 9):
             self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import ZoneInfo  # requires python >= 3.9
+        from zoneinfo import ZoneInfo  # requires python >= 3.9  # type: ignore[import-not-found]
 
         tz_spec = "Asia/Tokyo"
         self.assertIsNotNone(bzfs.current_datetime(tz_spec=tz_spec, now_fn=None))
@@ -2727,7 +2727,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
     def test_timezone_preservation(self) -> None:
         if sys.version_info < (3, 9):
             self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import ZoneInfo  # requires python >= 3.9
+        from zoneinfo import ZoneInfo  # requires python >= 3.9  # type: ignore[import-not-found]
 
         # Create a timezone with DST
         tz = ZoneInfo("America/New_York")
@@ -5530,3 +5530,180 @@ class TestAdditionalCoverage(unittest.TestCase):
         include_regexes = bzfs.compile_regexes(["p.*"])
         exclude_regexes = bzfs.compile_regexes([".*3"])
         self.assertEqual({"p1": "v1"}, job.filter_properties(props, include_regexes, exclude_regexes))
+
+    @patch("time.sleep")
+    def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries",
+                "0",
+                "--retry-min-sleep-secs",
+                "0",
+                "--retry-max-sleep-secs",
+                "0",
+                "--retry-max-elapsed-secs",
+                "1",
+            ]
+        )
+        log_mock = MagicMock(spec=logging.Logger)
+        params = bzfs.Params(args, log=log_mock)
+        job = bzfs.Job()
+        job.params = params
+
+        def fn(*, retry: bzfs.Retry) -> None:
+            raise bzfs.RetryableError("fail") from ValueError("boom")
+
+        with self.assertRaises(ValueError):
+            job.run_with_retries(params.retry_policy, fn)
+        log_mock.warning.assert_not_called()
+
+    @patch("time.sleep")
+    def test_run_with_retries_elapsed_time(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries",
+                "5",
+                "--retry-min-sleep-secs",
+                "0",
+                "--retry-max-sleep-secs",
+                "0",
+                "--retry-max-elapsed-secs",
+                "0",
+            ]
+        )
+        log_mock = MagicMock(spec=logging.Logger)
+        params = bzfs.Params(args, log=log_mock)
+        job = bzfs.Job()
+        job.params = params
+        max_elapsed = params.retry_policy.max_elapsed_nanos
+
+        with patch("time.monotonic_ns", side_effect=[0, max_elapsed + 1]):
+
+            def fn(*, retry: bzfs.Retry) -> None:
+                raise bzfs.RetryableError("fail", no_sleep=True) from ValueError("boom")
+
+            with self.assertRaises(ValueError):
+                job.run_with_retries(params.retry_policy, fn)
+        log_mock.warning.assert_called_once()
+
+    def test_get_default_logger_reuses_existing_handlers(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        lp = bzfs.LogParams(args)
+        sublog = logging.getLogger(bzfs.get_logger_subname())
+        sublog.handlers.clear()
+        log = logging.getLogger(bzfs.__name__)
+        log.handlers.clear()
+        stream_h = logging.StreamHandler(stream=sys.stdout)
+        file_h = logging.FileHandler(lp.log_file, encoding="utf-8")
+        sublog.addHandler(stream_h)
+        sublog.addHandler(file_h)
+        log_result = bzfs.get_default_logger(lp, args)
+        self.assertEqual([], log_result.handlers)
+        stream_h.close()
+        file_h.close()
+
+    @patch("logging.handlers.SysLogHandler")
+    def test_get_default_logger_syslog_warning(self, mock_syslog: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--log-syslog-address",
+                "127.0.0.1:514",
+            ]
+        )
+        args.log_syslog_socktype = "UDP"
+        args.log_syslog_facility = 1
+        args.log_syslog_level = "DEBUG"
+        lp = bzfs.LogParams(args)
+        logging.getLogger(bzfs.get_logger_subname()).handlers.clear()
+        logger = logging.getLogger(bzfs.__name__)
+        logger.handlers.clear()
+        handler = logging.Handler()
+        mock_syslog.return_value = handler
+        with patch.object(logger, "warning") as mock_warning:
+            log = bzfs.get_default_logger(lp, args)
+            mock_syslog.assert_called_once()
+            self.assertIn(handler, log.handlers)
+            mock_warning.assert_called_once()
+
+    def test_get_dict_config_logger_inline_string_with_defaults(self) -> None:
+        config = (
+            '{"version": 1, "handlers": {"h": {"class": "logging.StreamHandler"}}, '
+            '"root": {"level": "${missing:DEBUG}", "handlers": ["h"]}}'
+        )
+        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        lp = bzfs.LogParams(args)
+        with patch("logging.config.dictConfig") as m:
+            bzfs.get_dict_config_logger(lp, args)
+            self.assertEqual("DEBUG", m.call_args[0][0]["root"]["level"])
+
+    def test_get_dict_config_logger_missing_default_raises(self) -> None:
+        config = '{"version": 1, "root": {"level": "${missing}"}}'
+        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        lp = bzfs.LogParams(args)
+        with self.assertRaises(ValueError):
+            bzfs.get_dict_config_logger(lp, args)
+
+    def test_get_dict_config_logger_invalid_name_raises(self) -> None:
+        config = '{"version": 1, "root": {"level": "${bad name:INFO}"}}'
+        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        lp = bzfs.LogParams(args)
+        with self.assertRaises(ValueError):
+            bzfs.get_dict_config_logger(lp, args)
+
+    def test_get_dict_config_logger_invalid_path(self) -> None:
+        with tempfile.NamedTemporaryFile("w", prefix="bad", suffix=".json", delete=False) as f:
+            f.write("{}")
+            path = f.name
+        args = argparser_parse_args(["src", "dst", "--log-config-file", "+" + path])
+        lp = bzfs.LogParams(args)
+        with self.assertRaises(SystemExit):
+            bzfs.get_dict_config_logger(lp, args)
+        os.remove(path)
+
+    def test_filter_snapshots_by_regex_debug(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        log = logging.getLogger("debug_snapshots")
+        log.setLevel(bzfs.log_debug)
+        stream = io.StringIO()
+        log.addHandler(logging.StreamHandler(stream))
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=log)
+        snapshots = [
+            "\tds@a1",
+            "\tds@b2",
+            "\tds@c3",
+            "\tds@other",
+            "\tds#bookmark",
+        ]
+        regexes = (
+            bzfs.compile_regexes(["c3"]),
+            bzfs.compile_regexes(["a1", "c3"]),
+        )
+        result = job.filter_snapshots_by_regex(snapshots, regexes)
+        self.assertEqual(["\tds@a1"], result)
+        log_output = stream.getvalue()
+        self.assertIn("Including b/c snapshot regex", log_output)
+        self.assertIn("Excluding b/c snapshot regex", log_output)
+
+    def test_filter_properties_debug(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        log = logging.getLogger("debug_props")
+        log.setLevel(bzfs.log_debug)
+        stream = io.StringIO()
+        log.addHandler(logging.StreamHandler(stream))
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=log)
+        props: Dict[str, Optional[str]] = {"a1": "v1", "a2": "v2", "skip": "v"}
+        include_regexes = bzfs.compile_regexes(["a.*"])
+        exclude_regexes = bzfs.compile_regexes(["a2"])
+        result = job.filter_properties(props, include_regexes, exclude_regexes)
+        self.assertEqual({"a1": "v1"}, result)
+        log_output = stream.getvalue()
+        self.assertIn("Including b/c property regex", log_output)
+        self.assertIn("Excluding b/c property regex", log_output)
