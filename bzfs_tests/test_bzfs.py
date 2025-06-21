@@ -18,6 +18,7 @@ import contextlib
 import errno
 import io
 import itertools
+import json
 import logging
 import os
 import random
@@ -86,6 +87,7 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRemoteConfCache))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAdditionalCoverage))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
@@ -5253,3 +5255,278 @@ def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
         yield
     except AssertionError as e:
         raise AssertionError(f"SubTest failed with parameters: {params}") from e
+
+
+class TestAdditionalCoverage(unittest.TestCase):
+    def test_logparams_repr(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        lp = bzfs.LogParams(args)
+        rep = repr(lp)
+        self.assertIn("log_file", rep)
+        self.assertIn("log_dir", rep)
+
+    def test_params_verbose_zfs_and_bwlimit(self) -> None:
+        args = argparser_parse_args(["src", "dst", "-v", "-v", "--bwlimit", "20m"])
+        params = bzfs.Params(args)
+        self.assertIn("-v", params.zfs_send_program_opts)
+        self.assertIn("-v", params.zfs_recv_program_opts)
+        self.assertIn("--rate-limit=20m", params.pv_program_opts)
+
+    def test_program_name_injections(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        p1 = bzfs.Params(args, inject_params={"inject_unavailable_ssh": True})
+        self.assertEqual("ssh-xxx", p1.program_name("ssh"))
+        p2 = bzfs.Params(args, inject_params={"inject_failing_ssh": True})
+        self.assertEqual("false", p2.program_name("ssh"))
+
+    def test_unset_matching_env_vars(self) -> None:
+        os.environ["FOO_BAR"] = "x"
+        args = argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
+        log_params = bzfs.LogParams(args)
+        params = bzfs.Params(args, log_params=log_params, log=logging.getLogger())
+        params.unset_matching_env_vars(args)
+        self.assertNotIn("FOO_BAR", os.environ)
+
+    def test_local_ssh_command_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = os.path.join(tmpdir, "bzfs_ssh_config")
+            open(cfg, "w").close()
+            args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", cfg])
+            args.ssh_src_port = 2222
+            p = bzfs.Params(args)
+            r = bzfs.Remote("src", args, p)
+            r.ssh_user_host = "user@host"
+            r.ssh_user = "user"
+            r.ssh_host = "host"
+            cmd = r.local_ssh_command()
+            self.assertEqual(cmd[0], p.ssh_program)
+            self.assertIn("-F", cmd)
+            self.assertIn(cfg, cmd)
+            self.assertIn("-p", cmd)
+            self.assertIn("2222", cmd)
+            self.assertIn("-S", cmd)
+            self.assertEqual("user@host", cmd[-1])
+
+            r.reuse_ssh_connection = False
+            cmd = r.local_ssh_command()
+            self.assertNotIn("-S", cmd)
+
+            args = argparser_parse_args(["src", "dst", "--ssh-program", "-"])
+            p = bzfs.Params(args)
+            r = bzfs.Remote("src", args, p)
+            r.ssh_user_host = "u@h"
+            with self.assertRaises(SystemExit):
+                r.local_ssh_command()
+            r.ssh_user_host = ""
+            self.assertEqual([], r.local_ssh_command())
+
+    def test_params_zfs_recv_program_opt(self) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--zfs-recv-program-opt=-o",
+                "--zfs-recv-program-opt=org.test=value",
+            ]
+        )
+        params = bzfs.Params(args)
+        self.assertIn("-o", params.zfs_recv_program_opts)
+        self.assertIn("org.test=value", params.zfs_recv_program_opts)
+
+    def test_copy_properties_config_repr(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        params = bzfs.Params(args)
+        conf = bzfs.CopyPropertiesConfig("zfs_recv_o", "-o", args, params)
+        rep = repr(conf)
+        self.assertIn("sources", rep)
+        self.assertIn("targets", rep)
+
+    def test_retry_policy_repr(self) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries",
+                "2",
+                "--retry-min-sleep-secs",
+                "0.1",
+                "--retry-max-sleep-secs",
+                "0.5",
+                "--retry-max-elapsed-secs",
+                "1",
+            ]
+        )
+        params = bzfs.Params(args)
+        rp = bzfs.RetryPolicy(args, params)
+        self.assertIn("retries: 2", repr(rp))
+
+    def test_job_shutdown_calls_pool_shutdown(self) -> None:
+        job = bzfs.Job()
+        mock_pool = MagicMock()
+        job.remote_conf_cache = {("k",): bzfs.RemoteConfCacheItem(mock_pool, {}, {})}
+        job.shutdown()
+        mock_pool.shutdown.assert_called_once()
+
+    @patch("bzfs_main.bzfs.argument_parser")
+    @patch("bzfs_main.bzfs.run_main")
+    def test_main_handles_calledprocesserror(self, mock_run_main: MagicMock, mock_arg_parser: MagicMock) -> None:
+        mock_arg_parser.return_value.parse_args.return_value = argparser_parse_args(["src", "dst"])
+        mock_run_main.side_effect = subprocess.CalledProcessError(5, ["cmd"])
+        with self.assertRaises(SystemExit) as ctx:
+            bzfs.main()
+        self.assertEqual(5, ctx.exception.code)
+
+    @patch("bzfs_main.bzfs.Job.run_main")
+    def test_run_main_delegates_to_job(self, mock_run_main: MagicMock) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        bzfs.run_main(args, ["p"])
+        mock_run_main.assert_called_once_with(args, ["p"], None)
+
+    def test_dataset_regexes(self) -> None:
+        args = argparser_parse_args(["tank/src", "tank/dst"])
+        params = bzfs.Params(args)
+        job = bzfs.Job()
+        job.params = params
+        job.params.src.root_dataset = "tank/src"
+        job.params.dst.root_dataset = "tank/dst"
+        result = job.dataset_regexes(
+            [
+                "foo",
+                "bar/",
+                "/tank/src/a",
+                "/tank/dst/b",
+                "/nonexistent",
+                "",
+            ]
+        )
+        self.assertEqual(["foo", "bar", "a", "b", ".*"], result)
+
+    @patch("time.sleep")
+    def test_run_with_retries_success(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries",
+                "2",
+                "--retry-min-sleep-secs",
+                "0",
+                "--retry-max-sleep-secs",
+                "0",
+                "--retry-max-elapsed-secs",
+                "1",
+            ]
+        )
+        params = bzfs.Params(args, log=logging.getLogger())
+        job = bzfs.Job()
+        job.params = params
+        calls: List[int] = []
+
+        def fn(*, retry: bzfs.Retry) -> str:
+            calls.append(retry.count)
+            if retry.count < 2:
+                raise bzfs.RetryableError("fail", no_sleep=(retry.count == 0)) from ValueError("boom")
+            return "ok"
+
+        self.assertEqual("ok", job.run_with_retries(params.retry_policy, fn))
+        self.assertEqual([0, 1, 2], calls)
+
+    @patch("time.sleep")
+    def test_run_with_retries_gives_up(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries",
+                "1",
+                "--retry-min-sleep-secs",
+                "0",
+                "--retry-max-sleep-secs",
+                "0",
+                "--retry-max-elapsed-secs",
+                "1",
+            ]
+        )
+        params = bzfs.Params(args, log=logging.getLogger())
+        job = bzfs.Job()
+        job.params = params
+
+        def fn(*, retry: bzfs.Retry) -> None:
+            raise bzfs.RetryableError("fail", no_sleep=True) from ValueError("boom")
+
+        with self.assertRaises(ValueError):
+            job.run_with_retries(params.retry_policy, fn)
+
+    def test_get_default_logger(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        lp = bzfs.LogParams(args)
+        logging.getLogger(bzfs.get_logger_subname()).handlers.clear()
+        logging.getLogger(bzfs.__name__).handlers.clear()
+        log = bzfs.get_default_logger(lp, args)
+        self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in log.handlers))
+        self.assertTrue(any(isinstance(h, logging.FileHandler) for h in log.handlers))
+
+    @patch("logging.handlers.SysLogHandler")
+    def test_get_default_logger_with_syslog(self, mock_syslog: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--log-syslog-address",
+                "127.0.0.1:514",
+            ]
+        )
+        args.log_syslog_socktype = "UDP"
+        args.log_syslog_facility = 1
+        args.log_syslog_level = "INFO"
+        lp = bzfs.LogParams(args)
+        logging.getLogger(bzfs.get_logger_subname()).handlers.clear()
+        logging.getLogger(bzfs.__name__).handlers.clear()
+        handler = logging.StreamHandler()
+        mock_syslog.return_value = handler
+        log = bzfs.get_default_logger(lp, args)
+        mock_syslog.assert_called_once()
+        self.assertIn(handler, log.handlers)
+
+    def test_get_dict_config_logger(self) -> None:
+        with tempfile.NamedTemporaryFile("w", prefix="bzfs_log_config", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "version": 1,
+                    "handlers": {"h": {"class": "logging.StreamHandler"}},
+                    "root": {"level": "${bzfs.log_level}", "handlers": ["h"]},
+                },
+                f,
+            )
+            path = f.name
+        args = argparser_parse_args(["src", "dst", "--log-config-file", "+" + path])
+        lp = bzfs.LogParams(args)
+        with patch("logging.config.dictConfig") as m:
+            bzfs.get_dict_config_logger(lp, args)
+            self.assertEqual(lp.log_level, m.call_args[0][0]["root"]["level"])
+
+    def test_filter_snapshots_by_regex(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=logging.getLogger())
+        snapshots = [
+            "\tds@a1",
+            "\tds@b2",
+            "\tds@c3",
+            "\tds@keep",
+            "\tds#bookmark",
+        ]
+        regexes = (
+            bzfs.compile_regexes([".*c.*"]),
+            bzfs.compile_regexes(["a.*", "b2"]),
+        )
+        self.assertEqual(["\tds@a1", "\tds@b2"], job.filter_snapshots_by_regex(snapshots, regexes))
+
+    def test_filter_properties(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=logging.getLogger())
+        props: Dict[str, Optional[str]] = {"p1": "v1", "skip": "v", "p3": "v3"}
+        include_regexes = bzfs.compile_regexes(["p.*"])
+        exclude_regexes = bzfs.compile_regexes([".*3"])
+        self.assertEqual({"p1": "v1"}, job.filter_properties(props, include_regexes, exclude_regexes))
