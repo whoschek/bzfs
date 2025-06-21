@@ -5681,3 +5681,58 @@ class TestAdditionalCoverage(unittest.TestCase):
         log_output = stream.getvalue()
         self.assertIn("Including b/c property regex", log_output)
         self.assertIn("Excluding b/c property regex", log_output)
+
+    def test_dataset_regexes_all_branches(self) -> None:
+        args = argparser_parse_args(["tank/src", "tank/dst"])
+        job = bzfs.Job()
+        job.params = bzfs.Params(args)
+        job.params.src.root_dataset = "tank/src"
+        job.params.dst.root_dataset = "tank/dst"
+        datasets = [
+            "/tank/src",
+            "/tank/dst/",
+            "/nonexistent",
+            "foo",
+            "bar/",
+            "/tank/src/a",
+            "/tank/dst//c/",
+            "",
+        ]
+        result = job.dataset_regexes(datasets)
+        self.assertEqual([".*", ".*", "foo", "bar", "a", "/c", ".*"], result)
+
+    def test_remove_json_comments(self) -> None:
+        import types
+
+        inner_code = [
+            c
+            for c in bzfs.get_dict_config_logger.__code__.co_consts
+            if isinstance(c, type(bzfs.get_dict_config_logger.__code__)) and c.co_name == "remove_json_comments"
+        ][0]
+        remove_json_comments = types.FunctionType(inner_code, bzfs.__dict__)
+        config_str = (
+            "#c1\n" "line_without_comment\n" "line_with_trailing_hash_only #\n" "line_with_trailing_comment##tail#\n"
+        )
+        expected = "\nline_without_comment\nline_with_trailing_hash_only #\n" "line_with_trailing_comment#"
+        self.assertEqual(expected, remove_json_comments(config_str))
+
+    def test_get_logger_with_log_config_file(self) -> None:
+        config = (
+            "# comment\n{\n"
+            '  "version": 1, # comment#\n'
+            '  "handlers": {"h": {"class": "logging.StreamHandler", "stream": "ext://sys.stdout"}},\n'
+            '  "loggers": {"%s": {"level": "INFO", "handlers": ["h"]}}\n'
+            "}\n" % bzfs.get_logger_subname()
+        )
+        with tempfile.NamedTemporaryFile("w", prefix="bzfs_log_config", suffix=".json", delete=False) as f:
+            f.write(config)
+            path = f.name
+        try:
+            args = argparser_parse_args(["tank/src", "tank/dst", "--log-config-file", "+" + path])
+            log_params = bzfs.LogParams(args)
+            log = bzfs.get_logger(log_params, args)
+            self.assertIsInstance(log, logging.Logger)
+            self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in log.handlers))
+        finally:
+            os.remove(path)
+            bzfs.reset_logger()
