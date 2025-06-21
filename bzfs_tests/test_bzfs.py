@@ -2275,7 +2275,7 @@ class TestCurrentDateTime(unittest.TestCase):
     def test_iana_timezone(self) -> None:
         if sys.version_info < (3, 9):
             self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import ZoneInfo  # requires python >= 3.9  # type: ignore[import-not-found]
+        from zoneinfo import ZoneInfo  # requires python >= 3.9
 
         tz_spec = "Asia/Tokyo"
         self.assertIsNotNone(bzfs.current_datetime(tz_spec=tz_spec, now_fn=None))
@@ -2727,7 +2727,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
     def test_timezone_preservation(self) -> None:
         if sys.version_info < (3, 9):
             self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import ZoneInfo  # requires python >= 3.9  # type: ignore[import-not-found]
+        from zoneinfo import ZoneInfo  # requires python >= 3.9
 
         # Create a timezone with DST
         tz = ZoneInfo("America/New_York")
@@ -5257,6 +5257,7 @@ def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
         raise AssertionError(f"SubTest failed with parameters: {params}") from e
 
 
+#############################################################################
 class TestAdditionalCoverage(unittest.TestCase):
     def test_logparams_repr(self) -> None:
         args = argparser_parse_args(["src", "dst"])
@@ -5280,12 +5281,12 @@ class TestAdditionalCoverage(unittest.TestCase):
         self.assertEqual("false", p2.program_name("ssh"))
 
     def test_unset_matching_env_vars(self) -> None:
-        os.environ["FOO_BAR"] = "x"
-        args = argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
-        log_params = bzfs.LogParams(args)
-        params = bzfs.Params(args, log_params=log_params, log=logging.getLogger())
-        params.unset_matching_env_vars(args)
-        self.assertNotIn("FOO_BAR", os.environ)
+        with patch.dict(os.environ, {"FOO_BAR": "x"}):
+            args = argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
+            log_params = bzfs.LogParams(args)
+            params = bzfs.Params(args, log_params=log_params, log=logging.getLogger())
+            params.unset_matching_env_vars(args)
+            self.assertNotIn("FOO_BAR", os.environ)
 
     def test_local_ssh_command_variants(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -5321,14 +5322,7 @@ class TestAdditionalCoverage(unittest.TestCase):
             self.assertEqual([], r.local_ssh_command())
 
     def test_params_zfs_recv_program_opt(self) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--zfs-recv-program-opt=-o",
-                "--zfs-recv-program-opt=org.test=value",
-            ]
-        )
+        args = argparser_parse_args(["src", "dst", "--zfs-recv-program-opt=-o", "--zfs-recv-program-opt=org.test=value"])
         params = bzfs.Params(args)
         self.assertIn("-o", params.zfs_recv_program_opts)
         self.assertIn("org.test=value", params.zfs_recv_program_opts)
@@ -5389,16 +5383,7 @@ class TestAdditionalCoverage(unittest.TestCase):
         job.params = params
         job.params.src.root_dataset = "tank/src"
         job.params.dst.root_dataset = "tank/dst"
-        result = job.dataset_regexes(
-            [
-                "foo",
-                "bar/",
-                "/tank/src/a",
-                "/tank/dst/b",
-                "/nonexistent",
-                "",
-            ]
-        )
+        result = job.dataset_regexes(["foo", "bar/", "/tank/src/a", "/tank/dst/b", "/nonexistent", ""])
         self.assertEqual(["foo", "bar", "a", "b", ".*"], result)
 
     @patch("time.sleep")
@@ -5468,14 +5453,7 @@ class TestAdditionalCoverage(unittest.TestCase):
 
     @patch("logging.handlers.SysLogHandler")
     def test_get_default_logger_with_syslog(self, mock_syslog: MagicMock) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--log-syslog-address",
-                "127.0.0.1:514",
-            ]
-        )
+        args = argparser_parse_args(["src", "dst", "--log-syslog-address", "127.0.0.1:514"])
         args.log_syslog_socktype = "UDP"
         args.log_syslog_facility = 1
         args.log_syslog_level = "INFO"
@@ -5499,23 +5477,20 @@ class TestAdditionalCoverage(unittest.TestCase):
                 f,
             )
             path = f.name
-        args = argparser_parse_args(["src", "dst", "--log-config-file", "+" + path])
-        lp = bzfs.LogParams(args)
-        with patch("logging.config.dictConfig") as m:
-            bzfs.get_dict_config_logger(lp, args)
-            self.assertEqual(lp.log_level, m.call_args[0][0]["root"]["level"])
+        try:
+            args = argparser_parse_args(["src", "dst", "--log-config-file", "+" + path])
+            lp = bzfs.LogParams(args)
+            with patch("logging.config.dictConfig") as m:
+                bzfs.get_dict_config_logger(lp, args)
+                self.assertEqual(lp.log_level, m.call_args[0][0]["root"]["level"])
+        finally:
+            os.remove(path)
 
     def test_filter_snapshots_by_regex(self) -> None:
         args = argparser_parse_args(["src", "dst"])
         job = bzfs.Job()
         job.params = bzfs.Params(args, log=logging.getLogger())
-        snapshots = [
-            "\tds@a1",
-            "\tds@b2",
-            "\tds@c3",
-            "\tds@keep",
-            "\tds#bookmark",
-        ]
+        snapshots = ["\tds@a1", "\tds@b2", "\tds@c3", "\tds@keep", "\tds#bookmark"]
         regexes = (
             bzfs.compile_regexes([".*c.*"]),
             bzfs.compile_regexes(["a.*", "b2"]),
@@ -5558,6 +5533,7 @@ class TestAdditionalCoverage(unittest.TestCase):
         with self.assertRaises(ValueError):
             job.run_with_retries(params.retry_policy, fn)
         log_mock.warning.assert_not_called()
+        mock_sleep.assert_not_called()
 
     @patch("time.sleep")
     def test_run_with_retries_elapsed_time(self, mock_sleep: MagicMock) -> None:
@@ -5590,32 +5566,33 @@ class TestAdditionalCoverage(unittest.TestCase):
                 job.run_with_retries(params.retry_policy, fn)
         log_mock.warning.assert_called_once()
 
-    def test_get_default_logger_reuses_existing_handlers(self) -> None:
+    def test_get_default_logger_considers_existing_sublog_handlers(self) -> None:
         args = argparser_parse_args(["src", "dst"])
         lp = bzfs.LogParams(args)
         sublog = logging.getLogger(bzfs.get_logger_subname())
         sublog.handlers.clear()
         log = logging.getLogger(bzfs.__name__)
         log.handlers.clear()
-        stream_h = logging.StreamHandler(stream=sys.stdout)
-        file_h = logging.FileHandler(lp.log_file, encoding="utf-8")
-        sublog.addHandler(stream_h)
-        sublog.addHandler(file_h)
-        log_result = bzfs.get_default_logger(lp, args)
-        self.assertEqual([], log_result.handlers)
-        stream_h.close()
-        file_h.close()
+        stream_h: Optional[logging.StreamHandler] = None
+        file_h: Optional[logging.FileHandler] = None
+        try:
+            stream_h = logging.StreamHandler(stream=sys.stdout)
+            file_h = logging.FileHandler(lp.log_file, encoding="utf-8")
+            sublog.addHandler(stream_h)
+            sublog.addHandler(file_h)
+            log_result = bzfs.get_default_logger(lp, args)
+            self.assertEqual([], log_result.handlers)
+        finally:
+            if stream_h is not None:
+                stream_h.close()
+            if file_h is not None:
+                file_h.close()
+            sublog.handlers.clear()
+            bzfs.reset_logger()
 
     @patch("logging.handlers.SysLogHandler")
     def test_get_default_logger_syslog_warning(self, mock_syslog: MagicMock) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--log-syslog-address",
-                "127.0.0.1:514",
-            ]
-        )
+        args = argparser_parse_args(["src", "dst", "--log-syslog-address", "127.0.0.1:514"])
         args.log_syslog_socktype = "UDP"
         args.log_syslog_facility = 1
         args.log_syslog_level = "DEBUG"
@@ -5625,11 +5602,14 @@ class TestAdditionalCoverage(unittest.TestCase):
         logger.handlers.clear()
         handler = logging.Handler()
         mock_syslog.return_value = handler
-        with patch.object(logger, "warning") as mock_warning:
-            log = bzfs.get_default_logger(lp, args)
-            mock_syslog.assert_called_once()
-            self.assertIn(handler, log.handlers)
-            mock_warning.assert_called_once()
+        try:
+            with patch.object(logger, "warning") as mock_warning:
+                log = bzfs.get_default_logger(lp, args)
+                mock_syslog.assert_called_once()
+                self.assertIn(handler, log.handlers)
+                mock_warning.assert_called_once()
+        finally:
+            bzfs.reset_logger()
 
     def test_get_dict_config_logger_inline_string_with_defaults(self) -> None:
         config = (
@@ -5674,13 +5654,7 @@ class TestAdditionalCoverage(unittest.TestCase):
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
         job.params = bzfs.Params(args, log=log)
-        snapshots = [
-            "\tds@a1",
-            "\tds@b2",
-            "\tds@c3",
-            "\tds@other",
-            "\tds#bookmark",
-        ]
+        snapshots = ["\tds@a1", "\tds@b2", "\tds@c3", "\tds@other", "\tds#bookmark"]
         regexes = (
             bzfs.compile_regexes(["c3"]),
             bzfs.compile_regexes(["a1", "c3"]),
