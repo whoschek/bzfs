@@ -19,6 +19,7 @@ import shutil
 import stat
 import tempfile
 import unittest
+from unittest import mock
 
 from bzfs_main import utils
 from bzfs_main.utils import open_nofollow
@@ -133,3 +134,20 @@ class OpenNoFollowTest(unittest.TestCase):
             self.assertEqual(mode, 0o600)
         finally:
             os.umask(old_umask)
+
+    def test_invalid_empty_mode(self) -> None:
+        with self.assertRaises(ValueError):
+            open_nofollow(self.real_path, "")
+
+    def test_invalid_mode(self) -> None:
+        with self.assertRaises(ValueError):
+            open_nofollow(self.real_path, "z")
+
+    def test_fdopen_failure_closes_fd(self) -> None:
+        err = RuntimeError("fdopen boom")
+        orig_close = os.close
+        with mock.patch("os.fdopen", side_effect=err) as m_fdopen, mock.patch("os.close", side_effect=orig_close) as m_close:
+            with self.assertRaises(RuntimeError):
+                open_nofollow(self.real_path, "r")
+        m_fdopen.assert_called_once()
+        m_close.assert_called_once()
