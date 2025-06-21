@@ -84,7 +84,6 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAdditionalCoverage))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
@@ -696,6 +695,12 @@ class TestHelperFunctions(unittest.TestCase):
         for var in ["noColon", ":noName", "$n:v", "{:v", "}:v", "", "  ", "\t", "a\tb:v", "spa ce:v", '"k":v', "'k':v"]:
             self.assertIsNotNone(bzfs.validate_log_config_variable(var))
 
+    def test_log_config_file_validation(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--log-config-file", "+bad_file_name.txt"])
+        log_params = bzfs.LogParams(args)
+        with self.assertRaises(SystemExit):
+            bzfs.get_dict_config_logger(log_params, args)
+
     def test_has_siblings(self) -> None:
         self.assertFalse(bzfs.has_siblings([]))
         self.assertFalse(bzfs.has_siblings(["a"]))
@@ -736,6 +741,11 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.validate_default_shell("/bin/csh", remote)
         with self.assertRaises(SystemExit):
             bzfs.validate_default_shell("/bin/tcsh", remote)
+
+    def test_remote_ssh_config_file_requires_prefix(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args)
 
     def test_filter_datasets_with_test_mode_is_false(self) -> None:
         # test with Job.is_test_mode == False for coverage with the assertion therein disabled
@@ -1763,6 +1773,17 @@ class TestHelperFunctions(unittest.TestCase):
         ]
         results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
+
+    def test_validate_no_argument_file_raises(self) -> None:
+        parser = argparse.ArgumentParser()
+        ns = argparse.Namespace(no_argument_file=True)
+        with self.assertRaises(SystemExit):
+            bzfs.validate_no_argument_file("afile", ns, err_prefix="e", parser=parser)
+
+    def test_die_with_parser(self) -> None:
+        parser = argparse.ArgumentParser()
+        with self.assertRaises(SystemExit):
+            bzfs.die("boom", parser=parser)
 
 
 #############################################################################
@@ -3219,6 +3240,20 @@ class TestDatasetPairsAction(unittest.TestCase):
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
 
+    def test_file_or_literal_action_invalid_basename(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--input", nargs="+", action=bzfs.FileOrLiteralAction)
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line")):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--input", "+bad_file_name"])
+
+    def test_dataset_pairs_action_invalid_basename(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--input", nargs="+", action=bzfs.DatasetPairsAction)
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src\tdst\n")):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--input", "+bad_file_name"])
+
 
 #############################################################################
 class TestFileOrLiteralAction(unittest.TestCase):
@@ -3753,6 +3788,16 @@ class TestRankRangeAction(unittest.TestCase):
 
 
 #############################################################################
+class TestNonEmptyStringAction(unittest.TestCase):
+
+    def test_non_empty_string_action_empty(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--name", action=bzfs.NonEmptyStringAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--name", " "])
+
+
+#############################################################################
 class TestLogConfigVariablesAction(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -3788,6 +3833,10 @@ class SSHConfigFileNameAction(unittest.TestCase):
 
     def test_filename_with_single_dot_slash(self) -> None:
         self.parser.parse_args(["./file.txt"])
+
+    def test_ssh_config_filename_action_invalid_chars(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["foo bar"])
 
 
 #############################################################################
@@ -4470,6 +4519,30 @@ class TestIncrementalSendSteps(unittest.TestCase):
 
 
 #############################################################################
+class TestRefreshSSHConnection(unittest.TestCase):
+
+    def test_refresh_ssh_connection_with_verbose(self) -> None:
+        args = argparser_parse_args(["src", "dst", "-v", "-v", "-v"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        p.src.ssh_host = "host"
+        p.src.ssh_user_host = "host"
+        job.params.available_programs["local"] = {"ssh": ""}
+        conn = bzfs.Connection(p.src, 1, 0)
+        with patch("bzfs_main.bzfs.subprocess_run") as sub_run:
+            sub_run.side_effect = [
+                subprocess.CompletedProcess([], 1, "", ""),
+                subprocess.CompletedProcess([], 0, "", ""),
+            ]
+            job.refresh_ssh_connection_if_necessary(p.src, conn)
+            called = sub_run.call_args_list[1][0][0]
+            self.assertIn("-oControlPersist=1s", called)
+
+
+#############################################################################
 class TestSmallPriorityQueue(unittest.TestCase):
     def setUp(self) -> None:
         self.pq: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue()
@@ -5126,105 +5199,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
 
 
 #############################################################################
-class TestPerformance(unittest.TestCase):
-
-    def test_close_fds(self) -> None:
-        """see https://bugs.python.org/issue42738
-        and https://github.com/python/cpython/pull/113118/commits/654f63053aee162a6e59fa894b2cd8ee82a33a77"""
-        iters = 2000
-        runs = 3
-        for close_fds in [False, True]:
-            for _ in range(runs):
-                start_time_nanos = time.time_ns()
-                for _ in range(iters):
-                    cmd = ["echo", "hello"]
-                    stdout = subprocess.run(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, close_fds=close_fds
-                    ).stdout
-                    self.assertTrue(stdout)
-                secs = (time.time_ns() - start_time_nanos) / 1000_000_000
-                print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
-
-
-@contextmanager
-def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
-    """Context manager to mimic UnitTest.subTest() but stop on first failure"""
-    try:
-        yield
-    except AssertionError as e:
-        raise AssertionError(f"SubTest failed with parameters: {params}") from e
-
-
-###############################################################################
-class TestAdditionalCoverage(unittest.TestCase):
-
-    def test_remote_ssh_config_file_requires_prefix(self) -> None:
-        args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
-        with self.assertRaises(SystemExit):
-            bzfs.Params(args)
-
-    def test_non_empty_string_action_empty(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--name", action=bzfs.NonEmptyStringAction)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--name", " "])
-
-    def test_ssh_config_filename_action_invalid_chars(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("file", action=bzfs.SSHConfigFileNameAction)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["foo bar"])
-
-    def test_dataset_pairs_action_invalid_basename(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--input", nargs="+", action=bzfs.DatasetPairsAction)
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src\tdst\n")):
-            with self.assertRaises(SystemExit):
-                parser.parse_args(["--input", "+bad_file_name"])
-
-    def test_file_or_literal_action_invalid_basename(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--input", nargs="+", action=bzfs.FileOrLiteralAction)
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line")):
-            with self.assertRaises(SystemExit):
-                parser.parse_args(["--input", "+bad_file_name"])
-
-    def test_validate_no_argument_file_raises(self) -> None:
-        parser = argparse.ArgumentParser()
-        ns = argparse.Namespace(no_argument_file=True)
-        with self.assertRaises(SystemExit):
-            bzfs.validate_no_argument_file("afile", ns, err_prefix="e", parser=parser)
-
-    def test_die_with_parser(self) -> None:
-        parser = argparse.ArgumentParser()
-        with self.assertRaises(SystemExit):
-            bzfs.die("boom", parser=parser)
-
-    def test_log_config_file_validation(self) -> None:
-        args = argparser_parse_args(["src", "dst", "--log-config-file", "+bad_file_name.txt"])
-        log_params = bzfs.LogParams(args)
-        with self.assertRaises(SystemExit):
-            bzfs.get_dict_config_logger(log_params, args)
-
-    def test_refresh_ssh_connection_with_verbose(self) -> None:
-        args = argparser_parse_args(["src", "dst", "-v", "-v", "-v"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
-        job = bzfs.Job()
-        job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        p.src.ssh_host = "host"
-        p.src.ssh_user_host = "host"
-        job.params.available_programs["local"] = {"ssh": ""}
-        conn = bzfs.Connection(p.src, 1, 0)
-        with patch("bzfs_main.bzfs.subprocess_run") as sub_run:
-            sub_run.side_effect = [
-                subprocess.CompletedProcess([], 1, "", ""),
-                subprocess.CompletedProcess([], 0, "", ""),
-            ]
-            job.refresh_ssh_connection_if_necessary(p.src, conn)
-            called = sub_run.call_args_list[1][0][0]
-            self.assertIn("-oControlPersist=1s", called)
+class TestRemoteConfCache(unittest.TestCase):
 
     def test_remote_conf_cache_hit_skips_detection(self) -> None:
         args = argparser_parse_args(["src", "dst"])
@@ -5272,3 +5247,36 @@ class TestAdditionalCoverage(unittest.TestCase):
             job.detect_available_programs()
             self.assertEqual(d1.call_count, 2)
             self.assertEqual(d2.call_count, 2)
+
+
+#############################################################################
+class TestPerformance(unittest.TestCase):
+
+    def test_close_fds(self) -> None:
+        """see https://bugs.python.org/issue42738
+        and https://github.com/python/cpython/pull/113118/commits/654f63053aee162a6e59fa894b2cd8ee82a33a77"""
+        iters = 2000
+        runs = 3
+        for close_fds in [False, True]:
+            for _ in range(runs):
+                start_time_nanos = time.time_ns()
+                for _ in range(iters):
+                    cmd = ["echo", "hello"]
+                    stdout = subprocess.run(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, close_fds=close_fds
+                    ).stdout
+                    self.assertTrue(stdout)
+                secs = (time.time_ns() - start_time_nanos) / 1000_000_000
+                print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
+
+
+@contextmanager
+def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
+    """Context manager to mimic UnitTest.subTest() but stop on first failure"""
+    try:
+        yield
+    except AssertionError as e:
+        raise AssertionError(f"SubTest failed with parameters: {params}") from e
+
+
+###############################################################################
