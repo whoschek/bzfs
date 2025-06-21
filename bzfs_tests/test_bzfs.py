@@ -5733,6 +5733,8 @@ class TestExtraCoverage(unittest.TestCase):
         self.assertEqual(expected, bzfs.isotime_from_unixtime(unix))
 
     def test_get_timezone_variants(self) -> None:
+        if sys.version_info < (3, 9):
+            self.skipTest("ZoneInfo requires python >= 3.9")
         self.assertIsNone(bzfs.get_timezone())
         self.assertEqual(timezone.utc, bzfs.get_timezone("UTC"))
         tz = bzfs.get_timezone("+0130")
