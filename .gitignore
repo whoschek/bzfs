@@ -117,6 +117,9 @@ venv.bak/
 # mypy
 .mypy_cache/
 
+# ruff
+.ruff_cache/
+
 ### Python Patch ###
 .venv/
 
@@ -148,5 +151,5 @@ pip-selfcheck.json
 /.settings
 *.sublime-*
 /.python-version
-
+./patch*
 trained_model.*
