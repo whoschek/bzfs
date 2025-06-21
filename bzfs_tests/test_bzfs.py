@@ -5280,12 +5280,12 @@ class TestAdditionalCoverage(unittest.TestCase):
         self.assertEqual("false", p2.program_name("ssh"))
 
     def test_unset_matching_env_vars(self) -> None:
-        os.environ["FOO_BAR"] = "x"
-        args = argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
-        log_params = bzfs.LogParams(args)
-        params = bzfs.Params(args, log_params=log_params, log=logging.getLogger())
-        params.unset_matching_env_vars(args)
-        self.assertNotIn("FOO_BAR", os.environ)
+        with patch.dict(os.environ, {"FOO_BAR": "x"}):
+            args = argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
+            log_params = bzfs.LogParams(args)
+            params = bzfs.Params(args, log_params=log_params, log=logging.getLogger())
+            params.unset_matching_env_vars(args)
+            self.assertNotIn("FOO_BAR", os.environ)
 
     def test_local_ssh_command_variants(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -5499,11 +5499,14 @@ class TestAdditionalCoverage(unittest.TestCase):
                 f,
             )
             path = f.name
-        args = argparser_parse_args(["src", "dst", "--log-config-file", "+" + path])
-        lp = bzfs.LogParams(args)
-        with patch("logging.config.dictConfig") as m:
-            bzfs.get_dict_config_logger(lp, args)
-            self.assertEqual(lp.log_level, m.call_args[0][0]["root"]["level"])
+        try:
+            args = argparser_parse_args(["src", "dst", "--log-config-file", "+" + path])
+            lp = bzfs.LogParams(args)
+            with patch("logging.config.dictConfig") as m:
+                bzfs.get_dict_config_logger(lp, args)
+                self.assertEqual(lp.log_level, m.call_args[0][0]["root"]["level"])
+        finally:
+            os.remove(path)
 
     def test_filter_snapshots_by_regex(self) -> None:
         args = argparser_parse_args(["src", "dst"])
