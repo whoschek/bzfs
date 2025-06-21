@@ -201,7 +201,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.2
+  test_ubuntu_24_04_zfs_2_3_latest:  # currently uses zfs-2.3.3
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_3_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_3_latest')
     runs-on: ubuntu-24.04
@@ -248,7 +248,7 @@ jobs:
       uses: ./.github/workflows/coverage-upload
 
 
-  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.7
+  test_ubuntu_24_04_zfs_2_2_latest:  # currently uses zfs-2.2.8
     needs: create_iteration_test_matrix
     if: github.event_name == 'pull_request' || github.event.schedule == '5 8 * * *' || inputs.is_external_call || github.event.inputs.run_all_jobs == 'true' || github.event.inputs.job_name == 'test_ubuntu_24_04_zfs_2_2_latest' || contains(github.event.inputs.job_names, 'test_ubuntu_24_04_zfs_2_2_latest')
     runs-on: ubuntu-24.04
@@ -262,8 +262,8 @@ jobs:
     - uses: actions/checkout@v4
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
-        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.2.7
-        sudo add-apt-repository ppa:weiers/openzfs-2.2.7; sudo apt update
+        # see https://launchpad.net/~weiers/+archive/ubuntu/openzfs-2.2.8
+        sudo add-apt-repository ppa:weiers/openzfs-2.2.8; sudo apt update
         sudo apt-get -y install openzfs-zfs-dkms
         zfs --version
     - name: Run common preparation steps for iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
