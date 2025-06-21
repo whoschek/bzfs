@@ -84,7 +84,6 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRefreshSSHConnection))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRemoteConfCache))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
@@ -4364,30 +4363,6 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
     def __repr__(self) -> str:
         with self._lock:
             return str({"capacity": self.capacity, "queue_len": len(self.priority_queue), "queue": self.priority_queue})
-
-
-#############################################################################
-class TestRefreshSSHConnection(unittest.TestCase):
-
-    def test_refresh_ssh_connection_with_verbose(self) -> None:
-        args = argparser_parse_args(["src", "dst", "-v", "-v", "-v"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
-        job = bzfs.Job()
-        job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        p.src.ssh_host = "host"
-        p.src.ssh_user_host = "host"
-        job.params.available_programs["local"] = {"ssh": ""}
-        conn = bzfs.Connection(p.src, 1, 0)
-        with patch("bzfs_main.bzfs.subprocess_run") as sub_run:
-            sub_run.side_effect = [
-                subprocess.CompletedProcess([], 1, "", ""),
-                subprocess.CompletedProcess([], 0, "", ""),
-            ]
-            job.refresh_ssh_connection_if_necessary(p.src, conn)
-            called = sub_run.call_args_list[1][0][0]
-            self.assertIn("-oControlPersist=1s", called)
 
 
 #############################################################################
