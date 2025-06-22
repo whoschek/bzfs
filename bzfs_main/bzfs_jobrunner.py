@@ -20,6 +20,12 @@
 # ///
 
 """
+* Overview of the bzfs_jobrunner.py codebase:
+* The codebase starts with docs, definition of input data and associated argument parsing of CLI options/parameters.
+* Control flow starts in main(), far below ..., which kicks off a "Job".
+* A Job creates zero or more "subjobs" for each local or remote host, via run_main().
+* It executes the subjobs, serially or in parallel, via run_subjobs(), which in turn delegates parallel job coordination to
+  bzfs.process_datasets_in_parallel_and_fault_tolerant().
 * README_bzfs_jobrunner.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via
 update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
 """
