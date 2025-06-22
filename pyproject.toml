@@ -104,14 +104,15 @@ target_version = ["py38", "py39", "py310", "py311", "py312", "py313"]
 [tool.ruff]
 target-version = "py38"
 line-length = 125
+fix = true  # allow safe auto-fixes?
+unsafe-fixes = false  # allow FA100 and similar "unsafe" auto-fixes?
 exclude = [   # toggles to exclude overly strict `ruff` checks of these Python source code directories in development mode:
 #    "bzfs_main",
 #    "bzfs_tests",
 ]
 
-
 [tool.ruff.lint]
-select = ["E", "F", "A", "B"]  # Or use ["ALL"] if you want every check enabled
+select = ["E", "F", "A", "B", "FA"]  # Or use ["ALL"] if you want every check enabled  # "UP006", "UP007", "UP045"
 ignore = [  # toggles to exclude overly strict `ruff` checks in development mode:
 #    "E501",  # Line too long
 #    "E203",  # Whitespace before ':', conflicts with Black
