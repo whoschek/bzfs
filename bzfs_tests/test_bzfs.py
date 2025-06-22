@@ -5746,6 +5746,26 @@ class TestLogging(unittest.TestCase):
         finally:
             os.remove(path)
 
+    def test_log_config_file_with_validation(self) -> None:
+        """Tests that validate_log_config_dict() would prevent an arbitrary code execution vulnerability."""
+        malicious_config = {
+            "version": 1,
+            "handlers": {"safe_handler": {"class": "logging.StreamHandler", "stream": "ext://sys.stdout"}},
+            "root": {"handlers": ["safe_handler", {"()": "os.system", "command": "echo pwned > /dev/null"}]},
+        }
+        malicious_config_str = json.dumps(malicious_config)
+        args = argparser_parse_args(["src", "dst", "--skip-replication", "--log-config-file", malicious_config_str])
+        lp = bzfs.LogParams(args)
+        with patch("os.system") as mock_system:
+            # The fixed code should detect the disallowed callable and exit.
+            with self.assertRaises(SystemExit) as cm:  # get_dict_config_logger() calls die(), which raises SystemExit.
+                bzfs.get_dict_config_logger(lp, args)
+            self.assertEqual(cm.exception.code, bzfs.die_status)
+            self.assertIn("Disallowed callable 'os.system'", str(cm.exception))
+            mock_system.assert_not_called()
+
+        bzfs.validate_log_config_dict(None)  # type: ignore[arg-type]
+
 
 #############################################################################
 class TestPerformance(unittest.TestCase):

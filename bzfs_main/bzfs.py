@@ -7351,6 +7351,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     # if args is not None and args.verbose >= 2:
     #     print("[T] Substituted log_config_file_str:\n" + log_config_file_str, flush=True)
     log_config_dict = json.loads(log_config_file_str)
+    validate_log_config_dict(log_config_dict)
     logging.config.dictConfig(log_config_dict)
     return logging.getLogger(get_logger_subname())
 
@@ -7372,6 +7373,29 @@ def validate_log_config_variable_name(name: str) -> str | None:
     if any(char.isspace() for char in name):
         return "Invalid log config variable name. Name must not contain whitespace: " + name
     return None
+
+
+def validate_log_config_dict(config: dict) -> None:
+    """Recursively scans the logging configuration dictionary to ensure that any instantiated objects via the '()' key are
+    on an approved whitelist. This prevents arbitrary code execution from a malicious config file."""
+    whitelist = {
+        "logging.StreamHandler",
+        "logging.FileHandler",
+        "logging.handlers.SysLogHandler",
+        "socket.SOCK_DGRAM",
+        "socket.SOCK_STREAM",
+        "sys.stdout",
+        "sys.stderr",
+        "bzfs_main.bzfs.get_default_log_formatter",
+    }
+    if isinstance(config, dict):
+        for key, value in config.items():
+            if key == "()" and value not in whitelist:
+                die(f"--log-config-file: Disallowed callable '{value}'. For security, only specific classes are permitted.")
+            validate_log_config_dict(value)
+    elif isinstance(config, list):
+        for item in config:
+            validate_log_config_dict(item)
 
 
 #############################################################################
