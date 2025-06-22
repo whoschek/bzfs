@@ -26,15 +26,17 @@ from bzfs_main import utils
 from bzfs_main.utils import open_nofollow
 
 
+#############################################################################
 def suite() -> unittest.TestSuite:
-    suite = unittest.TestSuite()
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBzfsUtils))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(OpenNoFollowTest))
-    return suite
+    test_cases = [
+        TestUtils,
+        OpenNoFollowTest,
+    ]
+    return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
 #############################################################################
-class TestBzfsUtils(unittest.TestCase):
+class TestUtils(unittest.TestCase):
 
     def test_cut_field1(self) -> None:
         lines = ["a\tb\tc", "d\te\tf"]
