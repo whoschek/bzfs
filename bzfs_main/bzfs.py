@@ -4594,7 +4594,11 @@ class Job:
                 i += 1
                 if i == n or recv_opts[i].strip() in ("-o", "-x"):
                     die(f"Missing value for {stripped} option in --zfs-recv-program-opt(s): {' '.join(recv_opts)}")
-                propnames.add(recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0])
+                if stripped == "-o" and "=" not in recv_opts[i]:
+                    die(f"Missing value for {stripped} name=value pair in --zfs-recv-program-opt(s): {' '.join(recv_opts)}")
+                propname = recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0]
+                validate_zfs_property_name(propname, "--zfs-recv-program-opt(s)")
+                propnames.add(propname)
             i += 1
         return propnames
 
@@ -7053,6 +7057,12 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         or not dataset[0].isalpha()
     ):
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
+
+
+def validate_zfs_property_name(propname: str, input_text: str) -> None:
+    invalid_chars = SHELL_CHARS
+    if not propname or any(c.isspace() or c in invalid_chars for c in propname):
+        die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
 
 
 def validate_user_name(user: str, input_text: str) -> None:
