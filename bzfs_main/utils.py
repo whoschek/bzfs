@@ -13,12 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 import os
 import stat
-from typing import Any, IO, List, Optional
+from typing import Any, IO
 
 
-def cut(field: int = -1, separator: str = "\t", lines: Optional[List[str]] = None) -> List[str]:
+def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) -> list[str]:
     """Retains only column number 'field' in a list of TSV/CSV lines; Analog to Unix 'cut' CLI command."""
     assert lines is not None
     assert isinstance(lines, list)
@@ -35,9 +36,9 @@ def open_nofollow(
     path: str,
     mode: str = "r",
     buffering: int = -1,
-    encoding: Optional[str] = None,
-    errors: Optional[str] = None,
-    newline: Optional[str] = None,
+    encoding: str | None = None,
+    errors: str | None = None,
+    newline: str | None = None,
     *,
     perm: int = stat.S_IRUSR | stat.S_IWUSR,  # rw------- (owner read + write)
     **kwargs: Any,

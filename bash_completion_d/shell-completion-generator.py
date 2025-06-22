@@ -20,10 +20,10 @@ Usage: python3 -m bash_completion_d.shell-completion-generator > /etc/bash_compl
 or     python3 -m bash_completion_d.shell-completion-generator > ~/.bash_completion.d/bzfs-shell-completion
 """
 
+from __future__ import annotations
 import argparse
 import importlib
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
 
 programs = ("bzfs", "bzfs_jobrunner")
 
@@ -37,18 +37,18 @@ def version_line() -> str:
     raise RuntimeError("Version not found in bzfs argument parser.")
 
 
-def harvest(module: str) -> Tuple[str, Set[str], Dict[str, str]]:
+def harvest(module: str) -> tuple[str, set[str], dict[str, str]]:
     """Returns (safe_name, flag_set, value_tokens_map) for a program based on its argument_parser() specs."""
     parser = importlib.import_module("bzfs_main." + module).argument_parser()
     safe = module.replace("-", "_")
-    flags: Set[str] = set()
-    vals: Dict[str, str] = {}
+    flags: set[str] = set()
+    vals: dict[str, str] = {}
     for act in parser._actions:
         if act.help is argparse.SUPPRESS:
             continue
         flags.update(act.option_strings)
         if act.nargs != 0:  # option consumes a value
-            tokens: List[str] = []
+            tokens: list[str] = []
             if act.choices:
                 seq = act.choices.keys() if isinstance(act.choices, dict) else act.choices
                 tokens.extend(map(str, seq))

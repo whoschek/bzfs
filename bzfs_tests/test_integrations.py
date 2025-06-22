@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 import fcntl
 import glob
 import itertools
@@ -33,7 +34,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Iterable, cast
 from unittest.mock import patch
 
 from bzfs_main import bzfs, bzfs_jobrunner
@@ -70,7 +71,7 @@ dst_pool_name = "wb_dest"
 pool_size_bytes_default = 100 * 1024 * 1024
 encryption_algo = "aes-256-gcm"
 afix = ""
-zpool_features: Optional[Dict[str, Dict[str, str]]] = None
+zpool_features: dict[str, dict[str, str]] | None = None
 creation_prefix = "bzfs_test:"
 
 # Global variables populated during setup
@@ -190,12 +191,12 @@ def suite() -> unittest.TestSuite:
 #############################################################################
 class ParametrizedTestCase(unittest.TestCase):
 
-    def __init__(self, methodName: str = "runTest", param: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, methodName: str = "runTest", param: dict[str, Any] | None = None) -> None:
         super().__init__(methodName)
         self.param = param
 
     @staticmethod
-    def parametrize(testcase_klass: type, param: Optional[Dict[str, Any]] = None) -> unittest.TestSuite:
+    def parametrize(testcase_klass: type, param: dict[str, Any] | None = None) -> unittest.TestSuite:
         testloader = unittest.TestLoader()
         testnames = testloader.getTestCaseNames(testcase_klass)
         suite = unittest.TestSuite()
@@ -301,35 +302,35 @@ class BZFSTestCase(ParametrizedTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
     @staticmethod
-    def log_dir_opt() -> List[str]:
+    def log_dir_opt() -> list[str]:
         return ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
 
     def run_bzfs_internal(
         self,
         *arguments: str,
-        dry_run: Optional[bool] = None,
+        dry_run: bool | None = None,
         no_create_bookmark: bool = False,
         no_use_bookmark: bool = False,
         skip_on_error: str = "fail",
         retries: int = 0,
-        expected_status: Union[int, List[int]] = 0,
-        error_injection_triggers: Optional[Dict[str, Counter]] = None,
-        delete_injection_triggers: Optional[Dict[str, Counter]] = None,
-        param_injection_triggers: Optional[Dict[str, Dict[str, bool]]] = None,
-        inject_params: Optional[Dict[str, bool]] = None,
-        max_command_line_bytes: Optional[int] = None,
-        creation_prefix: Optional[str] = None,
-        max_exceptions_to_summarize: Optional[int] = None,
-        max_datasets_per_minibatch_on_list_snaps: Optional[int] = None,
-        control_persist_margin_secs: Optional[int] = None,
-        isatty: Optional[bool] = None,
-        progress_update_intervals: Optional[Tuple[float, float]] = None,
-        use_select: Optional[bool] = None,
+        expected_status: int | list[int] = 0,
+        error_injection_triggers: dict[str, Counter] | None = None,
+        delete_injection_triggers: dict[str, Counter] | None = None,
+        param_injection_triggers: dict[str, dict[str, bool]] | None = None,
+        inject_params: dict[str, bool] | None = None,
+        max_command_line_bytes: int | None = None,
+        creation_prefix: str | None = None,
+        max_exceptions_to_summarize: int | None = None,
+        max_datasets_per_minibatch_on_list_snaps: int | None = None,
+        control_persist_margin_secs: int | None = None,
+        isatty: bool | None = None,
+        progress_update_intervals: tuple[float, float] | None = None,
+        use_select: bool | None = None,
         use_jobrunner: bool = False,
-        spawn_process_per_job: Optional[bool] = None,
-        include_snapshot_plan_excludes_outdated_snapshots: Optional[bool] = None,
+        spawn_process_per_job: bool | None = None,
+        include_snapshot_plan_excludes_outdated_snapshots: bool | None = None,
         cache_snapshots: bool = False,
-    ) -> Union[bzfs.Job, bzfs_jobrunner.Job]:
+    ) -> bzfs.Job | bzfs_jobrunner.Job:
         port = getenv_any("test_ssh_port")  # set this if sshd is on non-standard port: export bzfs_test_ssh_port=12345
         args = list(arguments)
         src_host = [] if use_jobrunner else ["--ssh-src-host", "127.0.0.1"]
@@ -419,7 +420,7 @@ class BZFSTestCase(ParametrizedTestCase):
         args = args + ["--exclude-envvar-regex=EDITOR"]
         args += ["--cache-snapshots=" + str(cache_snapshots).lower()]
 
-        job: Union[bzfs.Job, bzfs_jobrunner.Job]
+        job: bzfs.Job | bzfs_jobrunner.Job
         if use_jobrunner:
             job = bzfs_jobrunner.Job()
             job.is_test_mode = True
@@ -562,7 +563,7 @@ class BZFSTestCase(ParametrizedTestCase):
         assert isinstance(job, bzfs_jobrunner.Job)
         return job
 
-    def assertSnapshotNames(self, dataset: str, expected_names: List[str]) -> None:
+    def assertSnapshotNames(self, dataset: str, expected_names: list[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([snapshot_name(snapshot) for snapshot in snapshots(dataset)])
         expected_names = [fix(name) for name in expected_names]
@@ -572,7 +573,7 @@ class BZFSTestCase(ParametrizedTestCase):
         expected_names = [f"{snapshot_prefix}{i + 1 + offset}" for i in range(0, expected_num_snapshots)]
         self.assertSnapshotNames(dataset, expected_names)
 
-    def assertSnapshotNameRegexes(self, dataset: str, expected_names: List[str]) -> None:
+    def assertSnapshotNameRegexes(self, dataset: str, expected_names: list[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([snapshot_name(snapshot) for snapshot in snapshots(dataset)])
         expected_names = [fix(name) for name in expected_names]
@@ -580,7 +581,7 @@ class BZFSTestCase(ParametrizedTestCase):
         for expected_name, snap_name in zip(expected_names, snap_names):
             self.assertRegex(snap_name, expected_name, f"{expected_names} vs. {snap_names}")
 
-    def assertBookmarkNames(self, dataset: str, expected_names: List[str]) -> None:
+    def assertBookmarkNames(self, dataset: str, expected_names: list[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([bookmark_name(bookmark) for bookmark in bookmarks(dataset)])
         expected_names = [fix(name) for name in expected_names]
@@ -593,7 +594,7 @@ class BZFSTestCase(ParametrizedTestCase):
         return bool(self.param and self.param.get("encrypted_dataset", False))
 
     @staticmethod
-    def properties_with_special_characters() -> Dict[str, str]:
+    def properties_with_special_characters() -> dict[str, str]:
         return {
             "compression": "off",
             "bzfs:prop0": "/tmp/dir with  spaces and $dollar sign-" + str(os.getpid()),
@@ -606,7 +607,7 @@ class BZFSTestCase(ParametrizedTestCase):
             "bzfs:prop7": "/tmp/foo\\bar",
         }
 
-    def generate_recv_resume_token(self, from_snapshot: Optional[str], to_snapshot: str, dst_dataset: str) -> None:
+    def generate_recv_resume_token(self, from_snapshot: str | None, to_snapshot: str, dst_dataset: str) -> None:
         snapshot_opts = to_snapshot if not from_snapshot else f"-i {from_snapshot} {to_snapshot}"
         send = f"sudo -n zfs send --props --raw --compressed -v {snapshot_opts}"
         c = bzfs.inject_dst_pipe_fail_kbytes
@@ -853,7 +854,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
 #############################################################################
 class TestSSHLatency(BZFSTestCase):
 
-    def run_latency_cmd(self, cmd: List[str], *, close_fds: bool = True) -> Tuple[str, str]:
+    def run_latency_cmd(self, cmd: list[str], *, close_fds: bool = True) -> tuple[str, str]:
         PIPE, DEVNULL = subprocess.PIPE, subprocess.DEVNULL
         process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, close_fds=close_fds)
         return process.stdout[0:-1], process.stderr[0:-1]  # omit trailing newline char
@@ -1926,7 +1927,7 @@ class LocalTestCase(BZFSTestCase):
         )
         self.assertSnapshots(dst_root_dataset, 0)
 
-    def run_snapshot_filters(self, filter1: List[str], filter2: List[str], filter3: List[str]) -> None:
+    def run_snapshot_filters(self, filter1: list[str], filter2: list[str], filter3: list[str]) -> None:
         self.run_bzfs(src_root_dataset, dst_root_dataset, *filter1, *filter2, *filter3, creation_prefix=creation_prefix)
 
     def test_snapshot_filter_order_matters(self) -> None:
@@ -2496,7 +2497,7 @@ class LocalTestCase(BZFSTestCase):
             self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
 
     @staticmethod
-    def zfs_recv_x_excludes() -> List[str]:
+    def zfs_recv_x_excludes() -> list[str]:
         if is_solaris_zfs():
             return ["effectivereadlimit", "effectivewritelimit", "encryption", "keysource"]
         else:
@@ -3647,13 +3648,13 @@ class LocalTestCase(BZFSTestCase):
         )
 
     def test_compare_snapshot_lists(self) -> None:
-        def snapshot_list(_job: bzfs.Job, location: str = "") -> List[str]:
+        def snapshot_list(_job: bzfs.Job, location: str = "") -> list[str]:
             log_file = _job.params.log_params.log_file
             tsv_file = glob.glob(log_file[0 : log_file.rindex(".log")] + ".cmp/*.tsv")[0]
             with open(tsv_file, "r", encoding="utf-8") as fd:
                 return [line.strip() for line in fd if line.startswith(location) and not line.startswith("location")]
 
-        def stats(_job: bzfs.Job) -> Tuple[int, int, int]:
+        def stats(_job: bzfs.Job) -> tuple[int, int, int]:
             _lines = snapshot_list(_job)
             _n_src = sum(1 for line in _lines if line.startswith("src"))
             _n_dst = sum(1 for line in _lines if line.startswith("dst"))
@@ -3683,7 +3684,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertEqual(0, n_all)
 
                     self.setup_basic()
-                    cmp_choices: List[str] = []
+                    cmp_choices: list[str] = []
                     for w in range(0, len(bzfs.cmp_choices_items)):
                         cmp_choices += map(lambda c: "+".join(c), itertools.combinations(bzfs.cmp_choices_items, w + 1))
                     for cmp in cmp_choices:
@@ -5517,7 +5518,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_inject_dst_receive_error(self) -> None:
         self.inject_pipe_error("inject_dst_receive_error", expected_error=2)
 
-    def inject_pipe_error(self, flag: str, expected_error: Union[int, List[int]] = 1) -> None:
+    def inject_pipe_error(self, flag: str, expected_error: int | list[int] = 1) -> None:
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -5599,18 +5600,18 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
 
 #############################################################################
-def create_filesystems(path: str, props: Optional[List[str]] = None) -> str:
+def create_filesystems(path: str, props: list[str] | None = None) -> str:
     create_filesystem(src_root_dataset, path, props=props)
     return create_filesystem(dst_root_dataset, path, props=props)
 
 
-def recreate_filesystem(dataset: str, props: Optional[List[str]] = None) -> str:
+def recreate_filesystem(dataset: str, props: list[str] | None = None) -> str:
     if dataset_exists(dataset):
         destroy(dataset, recursive=True)
     return create_filesystem(dataset, props=props)
 
 
-def create_volumes(path: str, props: Optional[List[str]] = None) -> str:
+def create_volumes(path: str, props: list[str] | None = None) -> str:
     create_volume(src_root_dataset, path, size="1M", props=props)
     return create_volume(dst_root_dataset, path, size="1M", props=props)
 
@@ -5651,9 +5652,9 @@ def fix(s: str) -> str:
 
 def natsorted(
     iterable: Iterable[str],
-    key: Optional[Callable[[str], str]] = None,
+    key: Callable[[str], str] | None = None,
     reverse: bool = False,
-) -> List[str]:
+) -> list[str]:
     """
     Returns a new list containing all items from the iterable in ascending order.
     If `key` is specified, it will be used to extract a comparison key from each list element.
@@ -5664,7 +5665,7 @@ def natsorted(
         return sorted(iterable, key=lambda x: natsort_key(key(x)), reverse=reverse)
 
 
-def natsort_key(s: str) -> Tuple[str, int, str]:
+def natsort_key(s: str) -> tuple[str, int, str]:
     """Sorts strings that may contain non-negative integers according to numerical value if any two strings
     have the same non-numeric prefix. Example: s1 < s3 < s10 < s10a < s10b"""
     match = re.fullmatch(r"(\D*)(\d*)(.*)", s)
