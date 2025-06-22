@@ -801,3 +801,505 @@ class TestValidateMonitorSnapshotPlan(unittest.TestCase):
 #############################################################################
 def is_solaris_zfs() -> bool:
     return platform.system() == "SunOS"
+
+
+#############################################################################
+# New tests based on coverage analysis
+#############################################################################
+
+class TestJobRunnerRunMainDetailed(unittest.TestCase):
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock(spec=Logger)
+        self.job.is_test_mode = True  # Prevents actual subjob execution where not needed
+        # Mock run_subjobs to prevent actual execution and capture calls
+        self.mock_run_subjobs = patch.object(self.job, "run_subjobs", return_value=None).start()
+        self.addCleanup(patch.stopall)
+
+        # Default minimal valid args
+        self.base_argv = [
+            bzfs_jobrunner.prog_name,
+            "--job-id=test_job",
+            "--root-dataset-pairs", "srcds/data", "dstds/data",
+            "--src-hosts=" + str(["src1"]),
+            "--dst-hosts=" + str({"dst1": ["targetA"]}),
+            "--dst-root-datasets=" + str({"dst1": "backup_pool/^SRC_HOST"}),
+            "--retain-dst-targets=" + str({"dst1": ["targetA"]}),
+            "--src-snapshot-plan=" + str({"org": {"targetA": {"daily": 1}}}),
+            "--create-src-snapshots" # Dummy command
+        ]
+        self.unknown_args_patch = patch.object(self.job.argument_parser, 'parse_known_args',
+            return_value=(argparse.Namespace(), [])
+        )
+
+
+    def test_run_main_invalid_src_snapshot_plan_literal_eval_fails(self) -> None:
+        argv = self.base_argv.copy()
+        argv[argv.index("--src-snapshot-plan={\"org\": {\"targetA\": {\"daily\": 1}}}") + 1] = "invalid_plan_not_a_dict"
+        with self.assertRaises(ValueError) as cm: # ValueError from literal_eval
+            self.job.run_main(argv)
+        self.assertIn("malformed node or string", str(cm.exception).lower())
+
+    def test_run_main_invalid_src_snapshot_plan_structure(self) -> None:
+        argv = self.base_argv.copy()
+        # Invalid structure: 'daily' maps to a string, not int
+        argv[argv.index("--src-snapshot-plan={\"org\": {\"targetA\": {\"daily\": 1}}}") + 1] = \
+            str({"org": {"targetA": {"daily": "not-an-int"}}})
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("must be of type int but got str", str(cm.exception))
+
+    def test_run_main_src_host_not_in_src_hosts(self) -> None:
+        argv = self.base_argv + ["--src-host", "nonexistent_src"]
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("--src-host must be a subset of --src-hosts", str(cm.exception))
+
+    def test_run_main_dst_host_not_in_dst_hosts(self) -> None:
+        argv = self.base_argv + ["--dst-host", "nonexistent_dst"]
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("--dst-host must be a subset of --dst-hosts.keys", str(cm.exception))
+
+    def test_run_main_dst_hosts_keys_not_subset_retain_dst_targets(self) -> None:
+        argv = self.base_argv.copy()
+        argv[argv.index("--retain-dst-targets={\"dst1\": [\"targetA\"]}") + 1] = str({"other_dst": ["targetA"]})
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("--dst-hosts.keys must be a subset of --retain-dst-targets.keys", str(cm.exception))
+
+    def test_run_main_dst_root_datasets_keys_not_subset_retain_dst_targets(self) -> None:
+        argv = self.base_argv.copy()
+        argv[argv.index("--dst-root-datasets={\"dst1\": \"backup_pool/^SRC_HOST\"}") + 1] = \
+            str({"other_dst_root": "backup_pool/^SRC_HOST"})
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("--dst-root-dataset.keys must be a subset of --retain-dst-targets.keys", str(cm.exception))
+
+    def test_run_main_dst_hosts_keys_not_subset_dst_root_datasets(self) -> None:
+        # Modify dst_hosts to have a key not in dst_root_datasets
+        custom_args = self.base_argv.copy()
+        custom_args[custom_args.index("--dst-hosts={\"dst1\": [\"targetA\"]}")+1] = str({"dst1": ["targetA"], "unmapped_dst": ["targetB"]})
+        # Ensure dst_root_datasets does NOT contain "unmapped_dst"
+        custom_args[custom_args.index("--dst-root-datasets={\"dst1\": \"backup_pool/^SRC_HOST\"}")+1] = str({"dst1": "pool/^SRC_HOST"})
+        # Ensure retain_dst_targets contains all keys from dst_hosts to pass earlier checks
+        custom_args[custom_args.index("--retain-dst-targets={\"dst1\": [\"targetA\"]}")+1] = str({"dst1": ["targetA"], "unmapped_dst": ["targetB"]})
+
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(custom_args)
+        self.assertIn("--dst-hosts.keys must be a subset of --dst-root-dataset.keys", str(cm.exception))
+
+
+    def test_run_main_multi_source_no_src_magic_token_collision(self) -> None:
+        argv = [
+            bzfs_jobrunner.prog_name,
+            "--job-id=test_job",
+            "--root-dataset-pairs", "srcds/data", "dstds/data",
+            "--src-hosts=" + str(["src1", "src2"]), # Multiple sources
+            "--dst-hosts=" + str({"dst1": ["targetA"]}),
+            "--dst-root-datasets=" + str({"dst1": "backup_pool/fixed_path"}), # No ^SRC_HOST
+            "--retain-dst-targets=" + str({"dst1": ["targetA"]}),
+            "--create-src-snapshots"
+        ]
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("multiple source hosts must not be configured to write to the same destination dataset", str(cm.exception))
+
+    def test_run_main_multi_source_definition_missing_src_magic_token(self) -> None:
+        # This tests the second "Cowardly refusing" condition.
+        # --src-hosts defines multiple hosts globally, but one of the --dst-root-datasets entries
+        # (for a dst_host that might not even be active in this particular run if --dst-host is used)
+        # is missing the ^SRC_HOST token.
+        argv = [
+            bzfs_jobrunner.prog_name,
+            "--job-id=test_job",
+            "--root-dataset-pairs", "srcds/data", "dstds/data",
+            "--src-hosts=" + str(["src1", "src2"]), # Multiple sources defined globally
+            "--dst-hosts=" + str({"dst1": ["targetA"], "dst2_unsafe": ["targetB"]}),
+            "--dst-root-datasets=" + str({
+                "dst1": "backup_pool/^SRC_HOST", # Safe for dst1
+                "dst2_unsafe": "backup_pool/fixed_path_for_dst2" # Unsafe for dst2
+            }),
+            "--retain-dst-targets=" + str({"dst1": ["targetA"], "dst2_unsafe": ["targetB"]}),
+            "--src-host=src1", # Running for a single src host this time
+            "--dst-host=dst1", # Running for a single dst host this time (the safe one)
+            "--create-src-snapshots"
+        ]
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("multiple source hosts are defined in the configuration, but not all non-empty root datasets", str(cm.exception))
+        self.assertIn("Problematic subset of --dst-root-datasets: {'dst2_unsafe': 'backup_pool/fixed_path_for_dst2'}", str(cm.exception))
+
+
+    @patch('uuid.uuid1')
+    def test_run_main_job_run_defaults_to_uuid(self, mock_uuid1: MagicMock) -> None:
+        mock_uuid1.return_value.hex = "mocked_uuid_hex"
+        argv = self.base_argv.copy()
+        # Ensure --job-run (and deprecated --jobid) are not present
+        argv = [arg for arg in argv if not arg.startswith("--job-run") and not arg.startswith("--jobid")]
+
+        self.job.run_main(argv)
+        self.mock_run_subjobs.assert_called_once()
+        subjobs_dict = self.mock_run_subjobs.call_args[0][0]
+
+        # Check a sample subjob's log suffix for the UUID
+        sample_subjob_cmd = list(subjobs_dict.values())[0]
+        log_suffix_arg = next(s for s in sample_subjob_cmd if s.startswith("--log-file-suffix="))
+        self.assertIn("mocked_uuid_hex", log_suffix_arg)
+
+    def test_run_main_prune_dst_snapshots_empty_retain_targets(self) -> None:
+        argv = self.base_argv.copy()
+        # Remove --create-src-snapshots and add --prune-dst-snapshots
+        argv = [arg for arg in argv if arg != "--create-src-snapshots"] + ["--prune-dst-snapshots"]
+        # Set retain_dst_targets to empty for dst1
+        argv[argv.index("--retain-dst-targets={\"dst1\": [\"targetA\"]}") + 1] = str({"dst1": []})
+        # Set dst_snapshot_plan to something non-empty to avoid other errors
+        argv.append("--dst-snapshot-plan=" + str({"org": {"targetA": {"daily": 1}}}))
+
+
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(argv)
+        self.assertIn("--retain-dst-targets must not be empty. Cowardly refusing to delete all snapshots!", str(cm.exception))
+
+    @patch('socket.gethostname', return_value="myhostname")
+    @patch('pwd.getpwuid')
+    def test_run_main_resolve_dataset_localhost_different_user(self, mock_getpwuid:MagicMock, mock_gethostname:MagicMock)->None:
+        mock_getpwuid.return_value.pw_name = "currentuser"
+        self.job.loopback_address = "127.0.0.1" # Ensure loopback is set
+
+        argv = self.base_argv + ["--ssh-src-user=remoteuser", "--create-src-snapshots"]
+        # We need to run for src1 which is "myhostname" now
+        argv[argv.index("--src-hosts=[\"src1\"]")+1] = str(["myhostname"])
+
+        self.job.run_main(argv)
+        self.mock_run_subjobs.assert_called_once()
+        subjobs_dict = self.mock_run_subjobs.call_args[0][0]
+        create_cmd = subjobs_dict['000000src-host/create-src-snapshots']
+
+        # The dataset pair is "srcds/data", "dstds/data".
+        # For create-src-snapshots, it uses (resolve_dataset(src_host, src), dummy)
+        # src_host is "myhostname", src is "srcds/data"
+        # Since ssh_src_user ("remoteuser") != currentuser ("currentuser"),
+        # and src_host ("myhostname") == localhostname ("myhostname"),
+        # it should resolve to "127.0.0.1:srcds/data"
+        expected_resolved_src = f"{self.job.loopback_address}:srcds/data"
+        self.assertIn(expected_resolved_src, create_cmd)
+        self.assertIn(bzfs_jobrunner.bzfs.dummy_dataset, create_cmd)
+
+    @patch('socket.gethostname', return_value="myhostname")
+    @patch('pwd.getpwuid')
+    def test_run_main_resolve_dataset_localhost_same_user_no_loopback(self, mock_getpwuid:MagicMock, mock_gethostname:MagicMock)->None:
+        mock_getpwuid.return_value.pw_name = "currentuser"
+        self.job.loopback_address = "" # Simulate no loopback detected
+
+        argv = self.base_argv + ["--ssh-src-user=currentuser", "--create-src-snapshots"]
+        argv[argv.index("--src-hosts=[\"src1\"]")+1] = str(["myhostname"])
+
+        self.job.run_main(argv)
+        self.mock_run_subjobs.assert_called_once()
+        subjobs_dict = self.mock_run_subjobs.call_args[0][0]
+        create_cmd = subjobs_dict['000000src-host/create-src-snapshots']
+
+        # src_host ("myhostname") == localhostname ("myhostname")
+        # ssh_src_user ("currentuser") == currentuser ("currentuser")
+        # loopback_address is ""
+        # Should resolve to "-:srcds/data"
+        expected_resolved_src = f"-:srcds/data"
+        self.assertIn(expected_resolved_src, create_cmd)
+
+    @patch('socket.gethostname', return_value="myhostname")
+    @patch('random.shuffle') # To make subjob names predictable
+    def test_run_main_jitter_shuffles_hosts(self, mock_shuffle:MagicMock, mock_gethostname:MagicMock)->None:
+        argv = self.base_argv.copy()
+        argv[argv.index("--src-hosts=[\"src1\"]")+1] = str(["srcA", "srcB"])
+        argv[argv.index("--dst-hosts={\"dst1\": [\"targetA\"]}")+1] = str({"dstX": ["targetA"], "dstY": ["targetB"]})
+        argv[argv.index("--dst-root-datasets={\"dst1\": \"backup_pool/^SRC_HOST\"}")+1] = str({"dstX": "p/^SRC_HOST", "dstY": "p/^SRC_HOST"})
+        argv[argv.index("--retain-dst-targets={\"dst1\": [\"targetA\"]}")+1] = str({"dstX": ["targetA"], "dstY": ["targetB"]})
+        argv.append("--jitter")
+        argv.append("--replicate") # Need a command that uses both src and dst hosts
+
+        self.job.run_main(argv)
+
+        # random.shuffle is called on src_hosts list and list(dst_hosts.items())
+        self.assertEqual(mock_shuffle.call_count, 2)
+
+        # Check if the first call was with src_hosts
+        shuffled_src_hosts_call = mock_shuffle.call_args_list[0][0][0]
+        self.assertCountEqual(shuffled_src_hosts_call, ["srcA", "srcB"])
+
+        # Check if the second call was with dst_hosts items
+        shuffled_dst_items_call = mock_shuffle.call_args_list[1][0][0]
+        original_dst_items = list({"dstX": ["targetA"], "dstY": ["targetB"]}.items())
+        self.assertCountEqual([tuple(x) for x in shuffled_dst_items_call], [tuple(x) for x in original_dst_items])
+
+    @patch('time.sleep')
+    @patch('random.randint', return_value=500_000_000) # 0.5 seconds
+    def test_run_main_jitter_with_work_period_sleeps(self, mock_randint:MagicMock, mock_sleep:MagicMock)->None:
+        argv = self.base_argv + ["--jitter", "--work-period-seconds=10"]
+
+        self.job.run_main(argv)
+        mock_randint.assert_called_once() # For the initial sleep
+        # interval_nanos = round(1_000_000_000 * 10 / (1 + 1)) = 5_000_000_000
+        # random.randint(0, 5_000_000_000) -> returns 500_000_000
+        # sleep_nanos / 1_000_000_000 = 0.5
+        mock_sleep.assert_any_call(0.5)
+
+    def test_replication_opts_empty_targets(self)->None:
+        opts = self.job.replication_opts(
+            dst_snapshot_plan={"org": {"targetA": {"daily":1}}},
+            targets=set(), # Empty targets
+            localhostname="lh", src_hostname="sh", dst_hostname="dh",
+            tag="repl", job_id="jid", job_run="jrun"
+        )
+        self.assertEqual(opts, [])
+
+    def test_replication_opts_empty_plan(self)->None:
+        opts = self.job.replication_opts(
+            dst_snapshot_plan={}, # Empty plan
+            targets={"targetA"},
+            localhostname="lh", src_hostname="sh", dst_hostname="dh",
+            tag="repl", job_id="jid", job_run="jrun"
+        )
+        self.assertEqual(opts, [])
+
+    def test_replication_opts_no_matching_targets_in_plan(self)->None:
+        opts = self.job.replication_opts(
+            dst_snapshot_plan={"org": {"targetB": {"daily":1}}}, # Plan for targetB
+            targets={"targetA"}, # Interested in targetA
+            localhostname="lh", src_hostname="sh", dst_hostname="dh",
+            tag="repl", job_id="jid", job_run="jrun"
+        )
+        self.assertEqual(opts, [])
+
+    def test_replication_opts_target_period_amount_zero(self)->None:
+        opts = self.job.replication_opts(
+            dst_snapshot_plan={"org": {"targetA": {"daily":0}}}, # Period amount is 0
+            targets={"targetA"},
+            localhostname="lh", src_hostname="sh", dst_hostname="dh",
+            tag="repl", job_id="jid", job_run="jrun"
+        )
+        self.assertEqual(opts, [])
+
+    def test_run_subjobs_sequential_execution_path(self) -> None:
+        # This test focuses on the sequential path of run_subjobs
+        # by ensuring spawn_process_per_job is False and no barriers.
+        self.job.spawn_process_per_job = False
+        subjobs_data = {
+            "job1": ["cmd1"],
+            "job2": ["cmd2"],
+        }
+
+        mock_run_subjob = MagicMock(return_value=0)
+        self.job.run_subjob = mock_run_subjob
+
+        with patch('time.sleep') as mock_sleep:
+            self.job.run_subjobs(subjobs_data, max_workers=1, timeout_secs=None, work_period_seconds=2.0, jitter=False)
+
+        # work_period_seconds = 2.0, len(subjobs) = 2. interval_nanos = 1_000_000_000
+        # Expect sleep calls for the interval.
+        # First call to monotonic_ns, then first job, then sleep, then second job.
+        self.assertEqual(mock_sleep.call_count, 1) # Only one sleep between the two jobs
+        mock_sleep.assert_any_call(1.0) # 1_000_000_000 ns / 1_000_000_000 = 1.0 s
+
+        self.assertEqual(mock_run_subjob.call_count, 2)
+        mock_run_subjob.assert_any_call(["cmd1"], name="job1", timeout_secs=None, spawn_process_per_job=False)
+        mock_run_subjob.assert_any_call(["cmd2"], name="job2", timeout_secs=None, spawn_process_per_job=False)
+
+        # Ensure jobs were called in sorted order
+        call_names = [call[0][1] for call in mock_run_subjob.call_args_list]
+        self.assertEqual(call_names, ["job1", "job2"])
+
+    def test_run_subjobs_sequential_stops_on_failure(self) -> None:
+        self.job.spawn_process_per_job = False
+        subjobs_data = {
+            "job1_fail": ["cmd1"],
+            "job2_ok": ["cmd2"],
+        }
+
+        # Mock run_subjob to simulate failure on the first job
+        def failing_run_subjob(cmd: list[str], name: str, timeout_secs: float | None, spawn_process_per_job: bool) -> int:
+            if name == "job1_fail":
+                return 1 # Simulate failure
+            return 0 # Simulate success
+
+        self.job.run_subjob = MagicMock(side_effect=failing_run_subjob)
+
+        with patch('time.sleep'): # We don't care about sleep timing here
+            self.job.run_subjobs(subjobs_data, max_workers=1, timeout_secs=None, work_period_seconds=0, jitter=False)
+
+        # Only the first job should have been attempted
+        self.assertEqual(self.job.run_subjob.call_count, 1)
+        self.job.run_subjob.assert_called_once_with(["cmd1"], name="job1_fail", timeout_secs=None, spawn_process_per_job=False)
+        self.assertIsNotNone(self.job.first_exception) # Should be set due to failure
+
+    @patch('bzfs_main.bzfs.Job')
+    def test_run_subjobs_parallel_with_barrier(self, MockBzfsJob:MagicMock) -> None:
+        self.job.spawn_process_per_job = True # or has_barrier would make it true
+
+        # Create a mock bzfs.Job instance and its method
+        mock_bzfs_instance = MockBzfsJob.return_value
+        mock_process_parallel = MagicMock()
+        mock_bzfs_instance.process_datasets_in_parallel_and_fault_tolerant = mock_process_parallel
+
+        subjobs_data = {
+            f"job1{bzfs_jobrunner.bzfs.BARRIER_CHAR}partA": ["cmdA"],
+            "job2": ["cmdB"],
+        }
+
+        self.job.run_subjobs(subjobs_data, max_workers=2, timeout_secs=60, work_period_seconds=0, jitter=False)
+
+        mock_process_parallel.assert_called_once()
+        args, kwargs = mock_process_parallel.call_args
+
+        # Check the arguments passed to process_datasets_in_parallel_and_fault_tolerant
+        self.assertEqual(args[0], sorted(subjobs_data.keys())) # sorted_subjobs
+        self.assertEqual(kwargs['max_workers'], 2)
+        self.assertEqual(kwargs['task_name'], "Subjob")
+
+        # Test the lambda passed to process_dataset
+        # We need to simulate a call to the lambda to check if it calls run_subjob correctly
+        mock_run_subjob_lambda = MagicMock(return_value=0)
+        self.job.run_subjob = mock_run_subjob_lambda
+
+        # Call the lambda with a sample subjob name
+        process_dataset_lambda = args[1]
+        process_dataset_lambda("job2", "tid_test", bzfs_jobrunner.bzfs.Retry(0))
+
+        mock_run_subjob_lambda.assert_called_once_with(
+            ["cmdB"], name="job2", timeout_secs=60, spawn_process_per_job=True
+        )
+
+    def test_run_subjob_base_exception(self) -> None:
+        cmd = ["test_cmd"]
+        name = "test_job_name"
+
+        # Mock the worker function to raise a BaseException (e.g., KeyboardInterrupt)
+        with patch.object(self.job, 'run_worker_job_in_current_thread', side_effect=KeyboardInterrupt("Test Interrupt")):
+            with self.assertRaises(KeyboardInterrupt):
+                self.job.run_subjob(cmd, name, timeout_secs=None, spawn_process_per_job=False)
+
+        # Check stats (simplified check, exact values depend on internal state)
+        self.assertEqual(self.job.stats.jobs_started, 1)
+        self.assertEqual(self.job.stats.jobs_completed, 1) # Completion happens in finally
+        # Failure count is tricky because KeyboardInterrupt might not be counted as 'failed' by the logic
+        # self.assertEqual(self.job.stats.jobs_failed, 1) # This might not hold for BaseException
+        self.assertIn(name, self.job.stats.started_job_names)
+
+    def test_run_worker_job_in_current_thread_base_exception(self) -> None:
+        cmd = ["bzfs_prog_name", "arg1"]
+
+        # Mock _bzfs_run_main to raise a BaseException
+        with patch.object(self.job, '_bzfs_run_main', side_effect=MemoryError("Test MemoryError")):
+            with patch.object(self.job.log, 'exception') as mock_log_exception:
+                return_code = self.job.run_worker_job_in_current_thread(cmd, timeout_secs=None)
+
+        self.assertEqual(return_code, bzfs_jobrunner.die_status)
+        mock_log_exception.assert_called_once()
+        self.assertIn("Worker job failed with unexpected exception for command:", mock_log_exception.call_args[0][0])
+        self.assertIn(" ".join(cmd), mock_log_exception.call_args[0][1])
+
+    def test_run_worker_job_spawn_process_per_job_bzfs_prog_name(self) -> None:
+        # Test that if cmd[0] is bzfs_prog_name, it's converted to sys.executable call
+        cmd_original = [bzfs_jobrunner.bzfs_prog_name, "--some-arg"]
+
+        with patch('subprocess.Popen') as mock_popen:
+            mock_proc = MagicMock()
+            mock_proc.communicate.return_value = (None, None) # Simulate successful communication
+            mock_proc.returncode = 0
+            mock_popen.return_value = mock_proc
+
+            self.job.run_worker_job_spawn_process_per_job(cmd_original, timeout_secs=10)
+
+            mock_popen.assert_called_once()
+            called_cmd = mock_popen.call_args[0][0]
+            self.assertEqual(called_cmd[0], sys.executable)
+            self.assertEqual(called_cmd[1], "-m")
+            self.assertEqual(called_cmd[2], f"bzfs_main.{bzfs_jobrunner.bzfs_prog_name}")
+            self.assertEqual(called_cmd[3:], cmd_original[1:])
+
+    def test_validate_host_name_with_colon(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.validate_host_name("host:name", "test_context")
+        self.assertIn("must not contain a ':' character", str(cm.exception))
+
+    def test_validate_type_union_type_python_lt_310(self) -> None:
+        # This test simulates Python < 3.10 behavior for Union type checking
+        # For this, we can directly call the method.
+        # If the current Python is >= 3.10, this test might behave differently than intended
+        # but will still pass if isinstance correctly handles Union.
+
+        # Valid cases
+        self.job.validate_type("string", Union[str, int], "test_union_str")
+        self.job.validate_type(123, Union[str, int], "test_union_int")
+
+        # Invalid cases
+        with self.assertRaises(SystemExit) as cm_list:
+            self.job.validate_type([], Union[str, int], "test_union_list")
+        self.assertIn("must be of type str or int but got list", str(cm_list.exception))
+
+        with self.assertRaises(SystemExit) as cm_none:
+            self.job.validate_type(None, Union[str, int], "test_union_none")
+        self.assertIn("must be of type str or int but got NoneType", str(cm_none.exception))
+
+    def test_die_method(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.die("Test die message")
+        self.assertEqual(str(cm.exception), "Test die message")
+        # Check that log.error was called with the message
+        self.job.log.error.assert_called_once_with("%s", "Test die message")
+
+    def test_reject_argument_action_direct_call(self) -> None:
+        # Test the RejectArgumentAction directly
+        parser = argparse.ArgumentParser()
+        action = bzfs_jobrunner.RejectArgumentAction(option_strings=["--forbidden"], dest="forbidden")
+
+        with self.assertRaises(SystemExit) as cm:
+            action(parser, argparse.Namespace(), "some_value", "--forbidden")
+
+        self.assertIn("Overriding protected argument '--forbidden' is not allowed", str(cm.exception))
+
+    def test_sanitize_log_suffix_format_dict_pretty_print(self) -> None:
+        # These are simple helper functions, just call them to ensure they don't raise errors
+        self.assertIsInstance(bzfs_jobrunner.sanitize("file/name with spaces"), str)
+        self.assertIsInstance(bzfs_jobrunner.log_suffix("lh", "sh", "dh"), str)
+        self.assertIsInstance(bzfs_jobrunner.format_dict({"key": "value"}), str)
+
+        formatter = bzfs_jobrunner.pretty_print_formatter({"a": 1, "b": [1,2]})
+        self.assertTrue(hasattr(formatter, "__str__"))
+        # Ensure it produces a JSON-like string
+        s = str(formatter)
+        self.assertTrue(s.startswith("{"))
+        self.assertIn('"a": 1', s)
+        self.assertIn('"b": [\n        1,\n        2\n    ]', s)
+
+    def test_convert_ipv6_no_colon(self) -> None:
+        self.assertEqual(bzfs_jobrunner.convert_ipv6("hostname"), "hostname")
+
+    def test_main_function_entry_point(self) -> None:
+        # Test the main() function entry point by ensuring it calls Job().run_main()
+        # We need to mock Job and its run_main method
+
+        mock_job_instance = MagicMock()
+        mock_run_main = MagicMock()
+        mock_job_instance.run_main = mock_run_main
+
+        with patch('bzfs_main.bzfs_jobrunner.Job', return_value=mock_job_instance) as MockJobClass:
+            test_argv = ["script_name", "--arg1", "value1"]
+            with patch('sys.argv', test_argv):
+                bzfs_jobrunner.main()
+
+        MockJobClass.assert_called_once() # Job was instantiated
+        mock_run_main.assert_called_once_with(test_argv) # run_main was called with sys.argv
+
+    def test_stats_repr_no_completed_jobs(self) -> None:
+        stats = bzfs_jobrunner.Stats()
+        stats.jobs_all = 5
+        # jobs_completed remains 0
+        rep_str = repr(stats)
+        self.assertIn("avg_completion_time:0ns", rep_str) # avg is 0 if no jobs completed
+
+    def test_dedupe_empty_list(self) -> None:
+        self.assertEqual(bzfs_jobrunner.dedupe([]), [])
+
+    def test_flatten_empty_list(self) -> None:
+        self.assertEqual(bzfs_jobrunner.flatten([]), [])

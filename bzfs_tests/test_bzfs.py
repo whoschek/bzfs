@@ -583,6 +583,357 @@ class TestHelperFunctions(unittest.TestCase):
         finally:
             bzfs.reset_logger()
 
+
+#############################################################################
+# New tests based on coverage analysis (for bzfs.py)
+#############################################################################
+
+class TestBzfsParamsDetailed(unittest.TestCase):
+    def test_params_init_zfs_send_recv_opts_parsing(self) -> None:
+        args_ns = argparser_parse_args([
+            "srcds", "dstds",
+            "--zfs-send-program-opts=--props --foo",
+            "--zfs-recv-program-opts=-u --bar",
+            "--zfs-recv-program-opt=-o", "--zfs-recv-program-opt=myprop=val"
+        ])
+        params = bzfs.Params(args_ns)
+        self.assertIn("--foo", params.zfs_send_program_opts)
+        self.assertIn("--bar", params.zfs_recv_program_opts)
+        self.assertIn("-o", params.zfs_recv_program_opts)
+        self.assertIn("myprop=val", params.zfs_recv_program_opts)
+        self.assertIn("-u", params.zfs_full_recv_opts) # zfs_full_recv_opts should also have them
+
+    @patch.dict(os.environ, {
+        "bzfs_min_pipe_transfer_size": "512",
+        "bzfs_max_datasets_per_batch_on_list_snaps": "100",
+        "bzfs_max_datasets_per_minibatch_on_list_snaps": "10",
+        "bzfs_max_snapshots_per_minibatch_on_delete_snaps": "50",
+        "bzfs_dedicated_tcp_connection_per_zfs_send": "False",
+        "bzfs_isatty": "False",
+        "bzfs_terminal_columns": "80",
+    })
+    def test_params_init_env_vars(self) -> None:
+        args_ns = argparser_parse_args(["srcds", "dstds"])
+        params = bzfs.Params(args_ns, log_params=bzfs.LogParams(args_ns))
+        self.assertEqual(params.min_pipe_transfer_size, 512)
+        self.assertEqual(params.max_datasets_per_batch_on_list_snaps, 100)
+        self.assertEqual(params.max_datasets_per_minibatch_on_list_snaps, 10)
+        self.assertEqual(params.max_snapshots_per_minibatch_on_delete_snaps, 50)
+        self.assertFalse(params.dedicated_tcp_connection_per_zfs_send)
+        self.assertFalse(params.isatty)
+        # terminal_columns is only set if isatty and pv_program != disable_prg and not quiet
+        # so we can't directly test its env var override here without more mocking.
+
+    def test_params_lock_file_name_consistency(self) -> None:
+        args1_ns = argparser_parse_args(["srcds", "dstds", "--recursive"])
+        params1 = bzfs.Params(args1_ns)
+        lock_file1 = params1.lock_file_name()
+
+        args2_ns = argparser_parse_args(["srcds", "dstds", "--recursive"]) # Same relevant args
+        params2 = bzfs.Params(args2_ns)
+        lock_file2 = params2.lock_file_name()
+        self.assertEqual(lock_file1, lock_file2)
+
+        args3_ns = argparser_parse_args(["srcds", "dstds"]) # Different args (no --recursive)
+        params3 = bzfs.Params(args3_ns)
+        lock_file3 = params3.lock_file_name()
+        self.assertNotEqual(lock_file1, lock_file3)
+
+    def test_params_program_name_injection(self) -> None:
+        args_ns = argparser_parse_args(["srcds", "dstds"])
+        params = bzfs.Params(args_ns, inject_params={"inject_unavailable_zfs": True})
+        self.assertEqual(params.program_name("zfs"), "zfs-xxx")
+
+        params_fail = bzfs.Params(args_ns, inject_params={"inject_failing_zfs": True})
+        self.assertEqual(params_fail.program_name("zfs"), "false")
+
+    def test_params_fix_send_opts_edge_cases(self) -> None:
+        self.assertEqual(bzfs.Params.fix_send_opts([]), [])
+        self.assertEqual(bzfs.Params.fix_send_opts(["-v", "-P"]), ["-v", "-P"]) # Should keep valid opts
+        # Test exclusion of -i, -I
+        self.assertEqual(bzfs.Params.fix_send_opts(["-i", "snap1", "-I", "snap2"]), [])
+        self.assertEqual(bzfs.Params.fix_send_opts(["-v", "-i", "s", "arg"]), ["-v", "arg"])
+
+
+class TestBzfsRemoteClass(unittest.TestCase):
+    def setUp(self) -> None:
+        self.args_ns = argparser_parse_args(["srcds", "dstds"])
+        self.params = bzfs.Params(self.args_ns)
+
+    @patch('os.path.join', side_effect=lambda *x: "/".join(x))
+    @patch('bzfs_main.bzfs.get_home_directory', return_value="/home/testuser")
+    @patch('os.makedirs')
+    @patch('bzfs_main.bzfs.delete_stale_files')
+    def test_remote_local_ssh_command_reuse_connection(self, _m1:MagicMock, _m2:MagicMock, _m3:MagicMock, _m4:MagicMock) -> None:
+        remote = bzfs.Remote("src", self.args_ns, self.params)
+        remote.ssh_user_host = "user@host"
+        remote.ssh_host = "host" # Need to set this for socket name generation
+        remote.ssh_user = "user" # Need to set this for socket name generation
+        remote.reuse_ssh_connection = True
+        cmd = remote.local_ssh_command()
+        self.assertIn("-S", cmd)
+        socket_path_index = cmd.index("-S") + 1
+        self.assertTrue(cmd[socket_path_index].startswith("/home/testuser/.ssh/bzfs/s"))
+
+    def test_remote_local_ssh_command_no_reuse(self) -> None:
+        remote = bzfs.Remote("src", self.args_ns, self.params)
+        remote.ssh_user_host = "user@host"
+        remote.reuse_ssh_connection = False # Disable reuse
+        cmd = remote.local_ssh_command()
+        self.assertNotIn("-S", cmd)
+
+    def test_remote_cache_key(self) -> None:
+        remote1 = bzfs.Remote("src", self.args_ns, self.params)
+        remote1.pool = "pool1"
+        remote1.ssh_user_host = "uh1"
+        key1 = remote1.cache_key()
+
+        remote2 = bzfs.Remote("src", self.args_ns, self.params)
+        remote2.pool = "pool1"
+        remote2.ssh_user_host = "uh1"
+        key2 = remote2.cache_key()
+        self.assertEqual(key1, key2)
+
+        remote3 = bzfs.Remote("dst", self.args_ns, self.params) # Different location
+        remote3.pool = "pool1"
+        remote3.ssh_user_host = "uh1"
+        key3 = remote3.cache_key()
+        self.assertNotEqual(key1, key3)
+
+
+class TestBzfsJobErrorHandling(unittest.TestCase):
+    def setUp(self) -> None:
+        self.args_ns = argparser_parse_args(["srcds", "dstds"])
+        self.log_params = bzfs.LogParams(self.args_ns)
+        self.log_mock = MagicMock(spec=Logger)
+        self.params = bzfs.Params(self.args_ns, log_params=self.log_params, log=self.log_mock)
+        self.job = bzfs.Job()
+        self.job.params = self.params
+        # Prevent actual subprocess calls unless specifically testing them
+        patch.object(self.job, 'run_ssh_command', return_value="mocked_output").start()
+        patch.object(self.job, 'try_ssh_command', return_value="mocked_output").start()
+        self.addCleanup(patch.stopall)
+
+    @patch('bzfs_main.bzfs.Job.run_tasks', side_effect=subprocess.CalledProcessError(1, "cmd", stderr="test error"))
+    def test_run_main_handles_calledprocesserror(self, mock_run_tasks: MagicMock) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(self.args_ns, ["script_name"])
+        self.assertEqual(cm.exception.code, 1)
+        self.log_mock.error.assert_any_call("%s%s", "Exiting bzfs with status code 1. Cause: ", mock_run_tasks.side_effect, exc_info=False)
+
+    @patch('bzfs_main.bzfs.Job.run_tasks', side_effect=SystemExit(5))
+    def test_run_main_handles_systemexit(self, mock_run_tasks: MagicMock) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(self.args_ns, ["script_name"])
+        self.assertEqual(cm.exception.code, 5)
+        self.log_mock.error.assert_any_call("%s%s", "Exiting bzfs with status code 5. Cause: ", mock_run_tasks.side_effect, exc_info=False)
+
+    @patch('bzfs_main.bzfs.Job.run_tasks', side_effect=subprocess.TimeoutExpired("cmd", 10))
+    def test_run_main_handles_timeoutexpired(self, mock_run_tasks: MagicMock) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(self.args_ns, ["script_name"])
+        self.assertEqual(cm.exception.code, bzfs.die_status)
+        self.log_mock.error.assert_any_call("%s%s", f"Exiting bzfs with status code {bzfs.die_status}. Cause: ", mock_run_tasks.side_effect, exc_info=False)
+
+    @patch('bzfs_main.bzfs.Job.run_tasks', side_effect=UnicodeDecodeError("utf-8", b"", 0, 1, "test"))
+    def test_run_main_handles_unicodedecodeerror(self, mock_run_tasks: MagicMock) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(self.args_ns, ["script_name"])
+        self.assertEqual(cm.exception.code, bzfs.die_status)
+        self.log_mock.error.assert_any_call("%s%s", f"Exiting bzfs with status code {bzfs.die_status}. Cause: ", mock_run_tasks.side_effect, exc_info=False)
+
+    @patch('bzfs_main.bzfs.Job.run_tasks', side_effect=re.error("test regex error", pattern=".*"))
+    def test_run_main_handles_re_error(self, mock_run_tasks: MagicMock) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(self.args_ns, ["script_name"])
+        self.assertEqual(cm.exception.code, bzfs.die_status)
+        self.log_mock.error.assert_any_call("%s%s", f"Exiting bzfs with status code {bzfs.die_status}. Cause: ", "test regex error within regex '.*'", exc_info=False)
+
+    @patch('bzfs_main.bzfs.Job.run_tasks', side_effect=MemoryError("test memory error"))
+    def test_run_main_handles_baseexception(self, mock_run_tasks: MagicMock) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            self.job.run_main(self.args_ns, ["script_name"])
+        self.assertEqual(cm.exception.code, bzfs.die_status)
+        self.log_mock.error.assert_any_call("%s%s", f"Exiting bzfs with status code {bzfs.die_status}. Cause: ", mock_run_tasks.side_effect, exc_info=True)
+
+    def test_append_exception_max_summarize(self) -> None:
+        self.job.max_exceptions_to_summarize = 2
+        err1 = ValueError("err1")
+        err2 = TypeError("err2")
+        err3 = KeyError("err3")
+
+        self.job.append_exception(err1, "task1", "desc1")
+        self.assertEqual(self.job.all_exceptions_count, 1)
+        self.assertEqual(len(self.job.all_exceptions), 1)
+        self.assertIs(self.job.first_exception, err1)
+
+        self.job.append_exception(err2, "task2", "desc2")
+        self.assertEqual(self.job.all_exceptions_count, 2)
+        self.assertEqual(len(self.job.all_exceptions), 2)
+        self.assertIs(self.job.first_exception, err1) # Should not change
+
+        self.job.append_exception(err3, "task3", "desc3")
+        self.assertEqual(self.job.all_exceptions_count, 3)
+        self.assertEqual(len(self.job.all_exceptions), 2) # Max reached
+        self.assertIs(self.job.first_exception, err1)
+
+    @patch('time.monotonic_ns')
+    @patch('time.sleep')
+    @patch('bzfs_main.bzfs.datetime')
+    def test_sleep_until_next_daemon_iteration(self, mock_datetime: MagicMock, mock_sleep: MagicMock, mock_monotonic_ns: MagicMock) -> None:
+        # Setup
+        self.job.params.daemon_lifetime_nanos = 100 * 1_000_000_000 # 100s
+        self.job.params.create_src_snapshots_config.current_datetime = datetime(2023,1,1,12,0,0, tzinfo=timezone.utc)
+        self.job.params.create_src_snapshots_config.suffix_durations = {"_hourly": (1, "hourly")}
+        self.job.params.create_src_snapshots_config.anchors = bzfs.PeriodAnchors()
+        self.job.progress_reporter = MagicMock(spec=bzfs.ProgressReporter)
+
+        # Scenario 1: Next snapshot event is sooner than daemon lifetime expiry
+        mock_monotonic_ns.side_effect = [
+            0, # Initial time for daemon_stoptime_nanos
+            10 * 1_000_000_000, # Current time when sleep_until_next_daemon_iteration is called
+            (10 * 1_000_000_000) + (30 * 60 * 1_000_000_000) # Time after sleep
+        ]
+        mock_datetime.now.return_value = datetime(2023,1,1,12,30,0, tzinfo=timezone.utc) # current_datetime + 30 mins
+
+        should_continue = self.job.sleep_until_next_daemon_iteration(100 * 1_000_000_000) # daemon_stoptime_nanos
+        self.assertTrue(should_continue)
+        # next_snapshotting_event_dt for hourly from 12:00:00 is 13:00:00.
+        # current_datetime is 12:30:00. Offset is 30 minutes.
+        # daemon_stoptime_nanos - current_time_nanos = 90s
+        # min(90s, 30min) = 90s. So sleep_nanos is 90s.
+        mock_sleep.assert_called_once_with(30*60) # 30 minutes
+
+        # Scenario 2: Daemon lifetime expiry is sooner
+        mock_sleep.reset_mock()
+        mock_monotonic_ns.side_effect = [
+            95 * 1_000_000_000, # Current time, daemon expires in 5s
+            (95 * 1_000_000_000) + (3 * 1_000_000_000) # Time after sleep
+        ]
+        mock_datetime.now.return_value = datetime(2023,1,1,12,59,58, tzinfo=timezone.utc) # Snapshot in 2s
+
+        should_continue = self.job.sleep_until_next_daemon_iteration(100 * 1_000_000_000)
+        self.assertTrue(should_continue)
+        # daemon expires in 5s. Snapshot in 2s. min(5,2) = 2s.
+        mock_sleep.assert_called_once_with(2.0)
+
+        # Scenario 3: Loop should terminate
+        mock_sleep.reset_mock()
+        mock_monotonic_ns.side_effect = [
+            101 * 1_000_000_000 # Current time, daemon already expired
+        ]
+        should_continue = self.job.sleep_until_next_daemon_iteration(100 * 1_000_000_000)
+        self.assertFalse(should_continue)
+        mock_sleep.assert_not_called()
+        self.job.progress_reporter.pause.assert_called()
+
+
+class TestBzfsJobValidateTask(unittest.TestCase):
+    def setUp(self) -> None:
+        self.args_ns = argparser_parse_args(["srcds", "dstds"])
+        self.log_params = bzfs.LogParams(self.args_ns)
+        self.log_mock = MagicMock(spec=Logger)
+        self.params = bzfs.Params(self.args_ns, log_params=self.log_params, log=self.log_mock)
+        self.job = bzfs.Job()
+        self.job.params = self.params
+        self.job.is_test_mode = True # simplify some paths
+
+        # Mock external calls that validate_task depends on
+        patch.object(self.job, 'detect_available_programs', return_value=None).start()
+        patch.object(self.job, 'is_solaris_zfs', return_value=False).start()
+        patch.object(self.job, 'is_zpool_feature_enabled_or_active', return_value=True).start()
+        self.addCleanup(patch.stopall)
+
+    def test_validate_task_src_dst_same_dataset_fails(self) -> None:
+        self.params.src.basis_root_dataset = "pool/data"
+        self.params.dst.basis_root_dataset = "pool/data"
+        with self.assertRaises(SystemExit) as cm:
+            self.job.validate_task()
+        self.assertIn("Source and destination dataset must not be the same", str(cm.exception))
+
+    def test_validate_task_src_dst_overlap_recursive_fails(self) -> None:
+        self.params.recursive = True
+        self.params.src.basis_root_dataset = "pool/data"
+        self.params.dst.basis_root_dataset = "pool/data/backup" # dst is descendant of src
+        with self.assertRaises(SystemExit) as cm:
+            self.job.validate_task()
+        self.assertIn("Source and destination dataset trees must not overlap", str(cm.exception))
+
+        self.params.src.basis_root_dataset = "pool/data/original"
+        self.params.dst.basis_root_dataset = "pool/data" # src is descendant of dst
+        with self.assertRaises(SystemExit) as cm:
+            self.job.validate_task()
+        self.assertIn("Source and destination dataset trees must not overlap", str(cm.exception))
+
+    def test_validate_task_sudo_cmd_logic(self) -> None:
+        # Case 1: Root user, no sudo needed
+        with patch('os.geteuid', return_value=0):
+            self.params.src.basis_ssh_user = "root" # or "" if local
+            self.job.validate_task()
+            self.assertEqual(self.params.src.sudo, "")
+            self.assertFalse(self.params.src.use_zfs_delegation)
+
+        # Case 2: Non-root, privilege elevation enabled, sudo available
+        with patch('os.geteuid', return_value=1000), \
+             patch.object(self.job, 'is_program_available', return_value=True): # sudo is available
+            self.params.enable_privilege_elevation = True
+            self.params.src.basis_ssh_user = "nonroot"
+            self.job.validate_task()
+            self.assertTrue(self.params.src.sudo.startswith(self.params.sudo_program))
+            self.assertFalse(self.params.src.use_zfs_delegation)
+
+        # Case 3: Non-root, privilege elevation enabled, sudo NOT available
+        with patch('os.geteuid', return_value=1000), \
+             patch.object(self.job, 'is_program_available', side_effect=lambda prog, loc: prog != 'sudo'):
+            self.params.enable_privilege_elevation = True
+            self.params.src.basis_ssh_user = "nonroot"
+            with self.assertRaises(SystemExit) as cm:
+                self.job.validate_task()
+            self.assertIn("sudo CLI is not available", str(cm.exception))
+
+        # Case 4: Non-root, privilege elevation disabled (use_zfs_delegation)
+        with patch('os.geteuid', return_value=1000):
+            self.params.enable_privilege_elevation = False
+            self.params.src.basis_ssh_user = "nonroot"
+            self.job.validate_task()
+            self.assertEqual(self.params.src.sudo, "")
+            self.assertTrue(self.params.src.use_zfs_delegation)
+
+    def test_validate_task_include_dataset_regex_compilation(self) -> None:
+        self.params.args.include_dataset = ["/abs/path", "rel/path"]
+        self.params.args.include_dataset_regex = ["^tmp/.*"]
+
+        self.job.validate_task() # This will call compile_regexes
+
+        # Check that p.include_dataset_regexes contains compiled versions
+        self.assertTrue(all(isinstance(item[0], re.Pattern) for item in self.params.include_dataset_regexes))
+        # Expected regexes: r'^abs/path(?:/.*)?', r'^rel/path(?:/.*)?', r'^tmp/.*(?:/.*)?'
+        # The exact patterns can be complex to check directly, focus on count and that they are compiled
+        self.assertEqual(len(self.params.include_dataset_regexes), 3 + 1) # 3 from above + 1 default '.*' if list was empty
+
+    def test_validate_task_empty_include_dataset_regex_defaults_to_match_all(self) -> None:
+        self.params.args.include_dataset = []
+        self.params.args.include_dataset_regex = [] # Empty
+
+        self.job.validate_task()
+
+        self.assertEqual(len(self.params.include_dataset_regexes), 1)
+        self.assertEqual(self.params.include_dataset_regexes[0][0].pattern, ".*")
+        self.assertFalse(self.params.include_dataset_regexes[0][1]) # Not negated
+
+    def test_validate_task_solaris_zfs_adjustments(self) -> None:
+        with patch.object(self.job, 'is_solaris_zfs', return_value=True):
+            self.params.curr_zfs_send_program_opts = ["--props", "--raw", "--compressed"]
+            self.job.validate_task()
+            self.assertIn("-p", self.params.curr_zfs_send_program_opts)
+            self.assertNotIn("--props", self.params.curr_zfs_send_program_opts)
+            self.assertIn("-w", self.params.curr_zfs_send_program_opts)
+            self.assertIn("compress", self.params.curr_zfs_send_program_opts) # from --compressed
+            self.assertNotIn("--raw", self.params.curr_zfs_send_program_opts)
+            self.assertNotIn("--compressed", self.params.curr_zfs_send_program_opts)
+            self.assertEqual(self.params.dry_run_destroy, "")
+            self.assertEqual(self.params.verbose_destroy, "")
+
     def test_recv_option_property_names(self) -> None:
         def names(lst: list[str]) -> set[str]:
             return bzfs.Job().recv_option_property_names(lst)
