@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import contextlib
 import io
 import platform
@@ -37,6 +38,8 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobSpawnProcessPerJob))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobInCurrentThread))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJob))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidateSnapshotPlan))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidateMonitorSnapshotPlan))
     return suite
 
 
@@ -153,6 +156,50 @@ class TestHelperFunctions(unittest.TestCase):
     def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
         with self.assertRaises(TypeError):
             bzfs_jobrunner.sorted_dict({"a": 1, 2: "two"})
+
+    def test_reject_argument_action(self) -> None:
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--secret", action=bzfs_jobrunner.RejectArgumentAction)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--secret", "x"])
+
+    def test_shuffle_dict_preserves_items(self) -> None:
+        d = {"a": 1, "b": 2, "c": 3}
+
+        def fake_shuffle(lst: list) -> None:
+            lst.reverse()
+
+        with patch("random.shuffle", side_effect=fake_shuffle) as mock_shuffle:
+            result = bzfs_jobrunner.shuffle_dict(d)
+            self.assertEqual({"c": 3, "b": 2, "a": 1}, result)
+            mock_shuffle.assert_called_once()
+
+    def test_shuffle_dict_empty(self) -> None:
+        self.assertEqual({}, bzfs_jobrunner.shuffle_dict({}))
+
+    def test_stats_repr(self) -> None:
+        stats = bzfs_jobrunner.Stats()
+        stats.jobs_all = 10
+        stats.jobs_started = 5
+        stats.jobs_completed = 5
+        stats.jobs_failed = 2
+        stats.jobs_running = 1
+        stats.sum_elapsed_nanos = 1_000_000_000
+        expect = "all:10, started:5=50%, completed:5=50%, failed:2=20%, running:1, avg_completion_time:200ms"
+        self.assertEqual(expect, repr(stats))
+
+    def test_dedupe_and_flatten(self) -> None:
+        pairs = [("a", "b"), ("a", "b"), ("c", "d")]
+        self.assertEqual([("a", "b"), ("c", "d")], bzfs_jobrunner.dedupe(pairs))
+        self.assertEqual(["a", "b", "c", "d"], bzfs_jobrunner.flatten([("a", "b"), ("c", "d")]))
+
+    def test_sanitize_and_log_suffix(self) -> None:
+        self.assertEqual("a!b!c!d!e!f", bzfs_jobrunner.sanitize("a b..c/d,e\\f"))
+        suffix = bzfs_jobrunner.log_suffix("l o", "s/p", "d\\h")
+        self.assertEqual(",l!o,s!p,d!h", suffix)
+
+    def test_convert_ipv6(self) -> None:
+        self.assertEqual("fe80||1", bzfs_jobrunner.convert_ipv6("fe80::1"))
 
 
 #############################################################################
@@ -706,6 +753,48 @@ class TestRunSubJob(unittest.TestCase):
     def test_nonexisting_cmd(self) -> None:
         with self.assertRaises(FileNotFoundError):
             self.job.run_subjob(cmd=["sleep_nonexisting_cmd", "1"], name="j0", timeout_secs=None, spawn_process_per_job=True)
+
+
+#############################################################################
+class TestValidateSnapshotPlan(unittest.TestCase):
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+
+    def test_validate_snapshot_plan_empty(self) -> None:
+        plan: dict = {}
+        self.assertEqual(plan, self.job.validate_snapshot_plan(plan, "ctx"))
+
+    def test_validate_snapshot_plan_valid(self) -> None:
+        plan = {"org": {"tgt": {"hour": 1}}}
+        self.assertEqual(plan, self.job.validate_snapshot_plan(plan, "ctx"))
+
+    def test_validate_snapshot_plan_invalid_amount(self) -> None:
+        plan = {"org": {"tgt": {"hour": -1}}}
+        with self.assertRaises(SystemExit):
+            self.job.validate_snapshot_plan(plan, "ctx")
+
+
+#############################################################################
+class TestValidateMonitorSnapshotPlan(unittest.TestCase):
+    def setUp(self) -> None:
+        self.job = bzfs_jobrunner.Job()
+        self.job.log = MagicMock()
+
+    def test_validate_monitor_snapshot_plan_empty(self) -> None:
+        plan: dict = {}
+        self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
+
+    def test_validate_monitor_snapshot_plan_valid(self) -> None:
+        plan: Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]] = {
+            "org": {"tgt": {"hour": {"warn": "msg", "max_age": 1}}}
+        }
+        self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
+
+    def test_validate_monitor_snapshot_plan_invalid_value(self) -> None:
+        plan: Dict[str, Dict[str, Dict[str, Dict[str, object]]]] = {"org": {"tgt": {"hour": {"warn": object()}}}}
+        with self.assertRaises(SystemExit):
+            self.job.validate_monitor_snapshot_plan(plan)  # type: ignore[arg-type]
 
 
 #############################################################################

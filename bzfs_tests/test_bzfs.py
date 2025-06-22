@@ -18,6 +18,7 @@ import contextlib
 import errno
 import io
 import itertools
+import json
 import logging
 import os
 import random
@@ -56,6 +57,8 @@ def suite() -> unittest.TestSuite:
     suite = unittest.TestSuite()
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestXFinally))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAdditionalHelpers))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunWithRetries))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTerminateProcessSubtree))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSubprocessRun))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
@@ -72,6 +75,7 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNewSnapshotFilterGroupAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNonEmptyStringAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(SSHConfigFileNameAction))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
@@ -83,7 +87,9 @@ def suite() -> unittest.TestSuite:
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRemoteConfCache))
     suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
+    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogging))
     # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
     return suite
 
@@ -320,6 +326,29 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["foo", "bar\tbaz"], params.split_args("foo", "bar\tbaz"))
         self.assertEqual(["foo", "bar\nbaz"], params.split_args("foo", "bar\nbaz"))
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
+
+    def test_format_dict(self) -> None:
+        self.assertEqual("\"{'a': 1}\"", bzfs.format_dict({"a": 1}))
+
+    def test_pretty_print_formatter(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
+        self.assertIsNotNone(str(bzfs.pretty_print_formatter(params)))
+
+    def test_percent(self) -> None:
+        self.assertEqual("3=30%", bzfs.percent(3, 10))
+        self.assertEqual("0=NaN%", bzfs.percent(0, 0))
+
+    def test_parse_duration_to_milliseconds(self) -> None:
+        self.assertEqual(5000, bzfs.parse_duration_to_milliseconds("5 seconds"))
+        self.assertEqual(
+            300000,
+            bzfs.parse_duration_to_milliseconds("5 minutes ago", regex_suffix=r"\s*ago"),
+        )
+        with self.assertRaises(ValueError):
+            bzfs.parse_duration_to_milliseconds("foo")
+        with self.assertRaises(SystemExit):
+            bzfs.parse_duration_to_milliseconds("foo", context="ctx")
 
     def test_compile_regexes(self) -> None:
         def _assertFullMatch(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
@@ -610,6 +639,17 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
         self.assertFalse(os.path.exists(logdir))
 
+    def test_logdir_must_not_be_symlink(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmpdir:
+            target = os.path.join(tmpdir, "target")
+            os.mkdir(target)
+            link_path = os.path.join(tmpdir, "bzfs-logs-link")
+            os.symlink(target, link_path)
+            with self.assertRaises(SystemExit) as cm:
+                bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path]))
+            self.assertEqual(bzfs.die_status, cm.exception.code)
+            self.assertIn("--log-dir must not be a symlink", str(cm.exception))
+
     def test_get_logger_with_cleanup(self) -> None:
         def check(log: Logger, files: Set[str]) -> None:
             files_todo = files.copy()
@@ -684,6 +724,12 @@ class TestHelperFunctions(unittest.TestCase):
         for var in ["noColon", ":noName", "$n:v", "{:v", "}:v", "", "  ", "\t", "a\tb:v", "spa ce:v", '"k":v', "'k':v"]:
             self.assertIsNotNone(bzfs.validate_log_config_variable(var))
 
+    def test_log_config_file_validation(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--log-config-file", "+bad_file_name.txt"])
+        log_params = bzfs.LogParams(args)
+        with self.assertRaises(SystemExit):
+            bzfs.get_dict_config_logger(log_params, args)
+
     def test_has_siblings(self) -> None:
         self.assertFalse(bzfs.has_siblings([]))
         self.assertFalse(bzfs.has_siblings(["a"]))
@@ -724,6 +770,11 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.validate_default_shell("/bin/csh", remote)
         with self.assertRaises(SystemExit):
             bzfs.validate_default_shell("/bin/tcsh", remote)
+
+    def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args)
 
     def test_filter_datasets_with_test_mode_is_false(self) -> None:
         # test with Job.is_test_mode == False for coverage with the assertion therein disabled
@@ -1752,6 +1803,17 @@ class TestHelperFunctions(unittest.TestCase):
         results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
 
+    def test_validate_no_argument_file_raises(self) -> None:
+        parser = argparse.ArgumentParser()
+        ns = argparse.Namespace(no_argument_file=True)
+        with self.assertRaises(SystemExit):
+            bzfs.validate_no_argument_file("afile", ns, err_prefix="e", parser=parser)
+
+    def test_die_with_parser(self) -> None:
+        parser = argparse.ArgumentParser()
+        with self.assertRaises(SystemExit):
+            bzfs.die("boom", parser=parser)
+
 
 #############################################################################
 class TestTerminateProcessSubtree(unittest.TestCase):
@@ -1781,6 +1843,296 @@ class TestTerminateProcessSubtree(unittest.TestCase):
         bzfs.terminate_process_subtree(except_current_process=True)
         time.sleep(0.1)
         self.assertIsNotNone(child.poll(), "Child process should be terminated")
+
+
+#############################################################################
+class TestAdditionalHelpers(unittest.TestCase):
+
+    def test_params_verbose_zfs_and_bwlimit(self) -> None:
+        args = argparser_parse_args(["src", "dst", "-v", "-v", "--bwlimit", "20m"])
+        params = bzfs.Params(args)
+        self.assertIn("-v", params.zfs_send_program_opts)
+        self.assertIn("-v", params.zfs_recv_program_opts)
+        self.assertIn("--rate-limit=20m", params.pv_program_opts)
+
+    def test_program_name_injections(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        p1 = bzfs.Params(args, inject_params={"inject_unavailable_ssh": True})
+        self.assertEqual("ssh-xxx", p1.program_name("ssh"))
+        p2 = bzfs.Params(args, inject_params={"inject_failing_ssh": True})
+        self.assertEqual("false", p2.program_name("ssh"))
+
+    def test_unset_matching_env_vars(self) -> None:
+        with patch.dict(os.environ, {"FOO_BAR": "x"}):
+            args = argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
+            params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
+            params.unset_matching_env_vars(args)
+            self.assertNotIn("FOO_BAR", os.environ)
+
+    def test_local_ssh_command_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = os.path.join(tmpdir, "bzfs_ssh_config")
+            Path(cfg).touch()
+            args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", cfg])
+            args.ssh_src_port = 2222
+            p = bzfs.Params(args)
+            r = bzfs.Remote("src", args, p)
+            r.ssh_user_host = "user@host"
+            r.ssh_user = "user"
+            r.ssh_host = "host"
+            cmd = r.local_ssh_command()
+            self.assertEqual(cmd[0], p.ssh_program)
+            self.assertIn("-F", cmd)
+            self.assertIn(cfg, cmd)
+            self.assertIn("-p", cmd)
+            self.assertIn("2222", cmd)
+            self.assertIn("-S", cmd)
+            self.assertEqual("user@host", cmd[-1])
+
+            r.reuse_ssh_connection = False
+            cmd = r.local_ssh_command()
+            self.assertNotIn("-S", cmd)
+
+            args = argparser_parse_args(["src", "dst", "--ssh-program", "-"])
+            p = bzfs.Params(args)
+            r = bzfs.Remote("src", args, p)
+            r.ssh_user_host = "u@h"
+            with self.assertRaises(SystemExit):
+                r.local_ssh_command()  # Cannot talk to remote host because ssh CLI is disabled
+            r.ssh_user_host = ""
+            self.assertEqual([], r.local_ssh_command())
+
+    def test_params_zfs_recv_program_opt(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--zfs-recv-program-opt=-o", "--zfs-recv-program-opt=org.test=value"])
+        params = bzfs.Params(args)
+        self.assertIn("-o", params.zfs_recv_program_opts)
+        self.assertIn("org.test=value", params.zfs_recv_program_opts)
+
+    def test_copy_properties_config_repr(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        params = bzfs.Params(args)
+        conf = bzfs.CopyPropertiesConfig("zfs_recv_o", "-o", args, params)
+        rep = repr(conf)
+        self.assertIn("sources", rep)
+        self.assertIn("targets", rep)
+
+    def test_job_shutdown_calls_pool_shutdown(self) -> None:
+        job = bzfs.Job()
+        mock_pool = MagicMock()
+        job.remote_conf_cache = {("k",): bzfs.RemoteConfCacheItem(mock_pool, {}, {})}
+        job.shutdown()
+        mock_pool.shutdown.assert_called_once()
+
+    @patch("bzfs_main.bzfs.argument_parser")
+    @patch("bzfs_main.bzfs.run_main")
+    def test_main_handles_calledprocesserror(self, mock_run_main: MagicMock, mock_arg_parser: MagicMock) -> None:
+        mock_arg_parser.return_value.parse_args.return_value = argparser_parse_args(["src", "dst"])
+        mock_run_main.side_effect = subprocess.CalledProcessError(returncode=5, cmd=["cmd"])
+        with self.assertRaises(SystemExit) as ctx:
+            bzfs.main()
+        self.assertEqual(5, ctx.exception.code)
+
+    @patch("bzfs_main.bzfs.Job.run_main")
+    def test_run_main_delegates_to_job(self, mock_run_main: MagicMock) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        bzfs.run_main(args=args, sys_argv=["p"])
+        mock_run_main.assert_called_once_with(args, ["p"], None)
+
+    def test_dataset_regexes(self) -> None:
+        args = argparser_parse_args(["tank/src", "tank/dst"])
+        params = bzfs.Params(args)
+        job = bzfs.Job()
+        job.params = params
+        job.params.src.root_dataset = "tank/src"
+        job.params.dst.root_dataset = "tank/dst"
+        datasets = ["foo", "bar/", "/tank/src/a", "/tank/dst/b", "/ignorenonexistent", "baz", ""]
+        result = job.dataset_regexes(datasets)
+        self.assertListEqual(["foo", "bar", "a", "b", "baz", ".*"], result)
+
+    def test_dataset_regexes_all_branches(self) -> None:
+        args = argparser_parse_args(["tank/src", "tank/dst"])
+        job = bzfs.Job()
+        job.params = bzfs.Params(args)
+        job.params.src.root_dataset = "tank/src"
+        job.params.dst.root_dataset = "tank/dst"
+        datasets = ["/tank/src", "/tank/dst/", "/nonexistent", "foo", "bar/", "/tank/src/a", "/tank/dst//c/", ""]
+        result = job.dataset_regexes(datasets)
+        self.assertListEqual([".*", ".*", "foo", "bar", "a", "/c", ".*"], result)
+
+    def test_filter_snapshots_by_regex(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=logging.getLogger())
+        snapshots = ["\tds@a1", "\tds@b2", "\tds@c3", "\tds@keep", "\tds#bookmark"]
+        regexes = (
+            bzfs.compile_regexes([".*c.*"]),
+            bzfs.compile_regexes(["a.*", "b2"]),
+        )
+        self.assertEqual(["\tds@a1", "\tds@b2"], job.filter_snapshots_by_regex(snapshots, regexes))
+
+    def test_filter_snapshots_by_regex_debug(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        log = logging.getLogger("debug_snapshots")
+        log.setLevel(bzfs.log_debug)
+        stream = io.StringIO()
+        log.addHandler(logging.StreamHandler(stream))
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=log)
+        snapshots = ["\tds@a1", "\tds@b2", "\tds@c3", "\tds@other", "\tds#bookmark"]
+        regexes = (
+            bzfs.compile_regexes(["c3"]),
+            bzfs.compile_regexes(["a1", "c3"]),
+        )
+        result = job.filter_snapshots_by_regex(snapshots, regexes)
+        self.assertEqual(["\tds@a1"], result)
+        log_output = stream.getvalue()
+        self.assertIn("Including b/c snapshot regex", log_output)
+        self.assertIn("Excluding b/c snapshot regex", log_output)
+
+    def test_filter_properties(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=logging.getLogger())
+        props: Dict[str, Optional[str]] = {"p1": "v1", "skip": "v", "p3": "v3"}
+        include_regexes = bzfs.compile_regexes(["p.*"])
+        exclude_regexes = bzfs.compile_regexes([".*3"])
+        self.assertEqual({"p1": "v1"}, job.filter_properties(props, include_regexes, exclude_regexes))
+
+    def test_filter_properties_debug(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        log = logging.getLogger("debug_props")
+        log.setLevel(bzfs.log_debug)
+        stream = io.StringIO()
+        log.addHandler(logging.StreamHandler(stream))
+        job = bzfs.Job()
+        job.params = bzfs.Params(args, log=log)
+        props: Dict[str, Optional[str]] = {"a1": "v1", "a2": "v2", "skip": "v"}
+        include_regexes = bzfs.compile_regexes(["a.*"])
+        exclude_regexes = bzfs.compile_regexes(["a2"])
+        result = job.filter_properties(props, include_regexes, exclude_regexes)
+        self.assertEqual({"a1": "v1"}, result)
+        log_output = stream.getvalue()
+        self.assertIn("Including b/c property regex", log_output)
+        self.assertIn("Excluding b/c property regex", log_output)
+
+
+#############################################################################
+class TestRunWithRetries(unittest.TestCase):
+
+    def test_retry_policy_repr(self) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries=2",
+                "--retry-min-sleep-secs=0.1",
+                "--retry-max-sleep-secs=0.5",
+                "--retry-max-elapsed-secs=1",
+            ]
+        )
+        params = bzfs.Params(args)
+        rp = bzfs.RetryPolicy(args, params)
+        self.assertIn("retries: 2", repr(rp))
+
+    @patch("time.sleep")
+    def test_run_with_retries_success(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries=2",
+                "--retry-min-sleep-secs=0",
+                "--retry-max-sleep-secs=0",
+                "--retry-max-elapsed-secs=1",
+            ]
+        )
+        params = bzfs.Params(args, log=logging.getLogger())
+        job = bzfs.Job()
+        job.params = params
+        calls: List[int] = []
+
+        def fn(*, retry: bzfs.Retry) -> str:
+            calls.append(retry.count)
+            if retry.count < 2:
+                raise bzfs.RetryableError("fail", no_sleep=(retry.count == 0)) from ValueError("boom")
+            return "ok"
+
+        self.assertEqual("ok", job.run_with_retries(params.retry_policy, fn))
+        self.assertEqual([0, 1, 2], calls)
+
+    @patch("time.sleep")
+    def test_run_with_retries_gives_up(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries=1",
+                "--retry-min-sleep-secs=0",
+                "--retry-max-sleep-secs=0",
+                "--retry-max-elapsed-secs=1",
+            ]
+        )
+        params = bzfs.Params(args, log=logging.getLogger())
+        job = bzfs.Job()
+        job.params = params
+
+        def fn(*, retry: bzfs.Retry) -> None:
+            raise bzfs.RetryableError("fail", no_sleep=True) from ValueError("boom")
+
+        with self.assertRaises(ValueError):
+            job.run_with_retries(params.retry_policy, fn)
+
+    @patch("time.sleep")
+    def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries=0",
+                "--retry-min-sleep-secs=0",
+                "--retry-max-sleep-secs=0",
+                "--retry-max-elapsed-secs=1",
+            ]
+        )
+        log_mock = MagicMock(spec=logging.Logger)
+        params = bzfs.Params(args, log=log_mock)
+        job = bzfs.Job()
+        job.params = params
+
+        def fn(*, retry: bzfs.Retry) -> None:
+            raise bzfs.RetryableError("fail") from ValueError("boom")
+
+        with self.assertRaises(ValueError):
+            job.run_with_retries(params.retry_policy, fn)
+        log_mock.warning.assert_not_called()
+        mock_sleep.assert_not_called()
+
+    @patch("time.sleep")
+    def test_run_with_retries_elapsed_time(self, mock_sleep: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--retries=5",
+                "--retry-min-sleep-secs=0",
+                "--retry-max-sleep-secs=0",
+                "--retry-max-elapsed-secs=0",
+            ]
+        )
+        log_mock = MagicMock(spec=logging.Logger)
+        params = bzfs.Params(args, log=log_mock)
+        job = bzfs.Job()
+        job.params = params
+        max_elapsed = params.retry_policy.max_elapsed_nanos
+
+        with patch("time.monotonic_ns", side_effect=[0, max_elapsed + 1]):
+
+            def fn(*, retry: bzfs.Retry) -> None:
+                raise bzfs.RetryableError("fail", no_sleep=True) from ValueError("boom")
+
+            with self.assertRaises(ValueError):
+                job.run_with_retries(params.retry_policy, fn)
+        log_mock.warning.assert_called_once()
 
 
 #############################################################################
@@ -1995,7 +2347,8 @@ class TestParseDatasetLocator(unittest.TestCase):
 
 #############################################################################
 class TestReplaceCapturingGroups(unittest.TestCase):
-    def replace_capturing_group(self, regex: str) -> str:
+    @staticmethod
+    def replace_capturing_group(regex: str) -> str:
         return bzfs.replace_capturing_groups_with_non_capturing_groups(regex)
 
     def test_basic_case(self) -> None:
@@ -2262,7 +2615,27 @@ class TestCurrentDateTime(unittest.TestCase):
         with self.assertRaises(ValueError):
             bzfs.current_datetime(tz_spec="0400")
 
+    def test_unixtime_conversion(self) -> None:
+        iso = "2024-01-02T03:04:05+00:00"
+        unix = bzfs.unixtime_fromisoformat(iso)
+        expected = "2024-01-02_03:04:05+00:00"
+        self.assertEqual(expected, bzfs.isotime_from_unixtime(unix))
 
+    def test_get_timezone_variants(self) -> None:
+        if sys.version_info < (3, 9):
+            self.skipTest("ZoneInfo requires python >= 3.9")
+        self.assertIsNone(bzfs.get_timezone())
+        self.assertEqual(timezone.utc, bzfs.get_timezone("UTC"))
+        tz = bzfs.get_timezone("+0130")
+        assert tz is not None
+        self.assertEqual(90 * 60, cast(timedelta, tz.utcoffset(None)).total_seconds())
+        zone = bzfs.get_timezone("Europe/Vienna")
+        self.assertEqual("Europe/Vienna", getattr(zone, "key", None))
+        with self.assertRaises(ValueError):
+            bzfs.get_timezone("bad-tz")
+
+
+#############################################################################
 def round_datetime_up_to_duration_multiple(
     dt: datetime, duration_amount: int, duration_unit: str, anchors: Optional[PeriodAnchors] = None
 ) -> datetime:
@@ -3207,6 +3580,11 @@ class TestDatasetPairsAction(unittest.TestCase):
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
 
+    def test_dataset_pairs_action_invalid_basename(self) -> None:
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src\tdst\n")):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+bad_file_name"])
+
 
 #############################################################################
 class TestFileOrLiteralAction(unittest.TestCase):
@@ -3242,6 +3620,11 @@ class TestFileOrLiteralAction(unittest.TestCase):
     def test_option_not_specified(self) -> None:
         args = self.parser.parse_args([])
         self.assertIsNone(args.input)
+
+    def test_file_or_literal_action_invalid_basename(self) -> None:
+        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line")):
+            with self.assertRaises(SystemExit):
+                self.parser.parse_args(["--input", "+bad_file_name"])
 
 
 #############################################################################
@@ -3741,6 +4124,18 @@ class TestRankRangeAction(unittest.TestCase):
 
 
 #############################################################################
+class TestNonEmptyStringAction(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.parser = argparse.ArgumentParser()
+        self.parser.add_argument("--name", action=bzfs.NonEmptyStringAction)
+
+    def test_non_empty_string_action_empty(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["--name", " "])
+
+
+#############################################################################
 class TestLogConfigVariablesAction(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -3776,6 +4171,10 @@ class SSHConfigFileNameAction(unittest.TestCase):
 
     def test_filename_with_single_dot_slash(self) -> None:
         self.parser.parse_args(["./file.txt"])
+
+    def test_ssh_config_filename_action_invalid_chars(self) -> None:
+        with self.assertRaises(SystemExit):
+            self.parser.parse_args(["foo bar"])
 
 
 #############################################################################
@@ -5111,6 +5510,189 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         )
         self.assertFalse(failed)
         self.assertListEqual(src_datasets[0:-1], sorted(self.submitted))
+
+
+#############################################################################
+class TestRemoteConfCache(unittest.TestCase):
+
+    def test_remote_conf_cache_hit_skips_detection(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        p.dst = bzfs.Remote("dst", args, p)
+        p.src.ssh_host = "host"
+        p.src.ssh_user_host = "host"
+        p.dst.ssh_host = "host2"
+        p.dst.ssh_user_host = "host2"
+        job.params.available_programs["local"] = {"ssh": ""}
+        pools = bzfs.ConnectionPools(p.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
+        item = bzfs.RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, time.monotonic_ns())
+        job.remote_conf_cache[p.src.cache_key()] = item
+        job.remote_conf_cache[p.dst.cache_key()] = item
+        with patch.object(job, "detect_available_programs_remote") as d1, patch.object(job, "detect_zpool_features") as d2:
+            job.detect_available_programs()
+            d1.assert_not_called()
+            d2.assert_not_called()
+
+    def test_remote_conf_cache_miss_runs_detection(self) -> None:
+        args = argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "10 milliseconds"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        p.dst = bzfs.Remote("dst", args, p)
+        p.src.ssh_host = "host"
+        p.src.ssh_user_host = "host"
+        p.dst.ssh_host = "host2"
+        p.dst.ssh_user_host = "host2"
+        job.params.available_programs["local"] = {"ssh": ""}
+        pools = bzfs.ConnectionPools(p.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
+        expired_ts = time.monotonic_ns() - p.remote_conf_cache_ttl_nanos - 1
+        item = bzfs.RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, expired_ts)
+        job.remote_conf_cache[p.src.cache_key()] = item
+        job.remote_conf_cache[p.dst.cache_key()] = item
+        with patch.object(job, "detect_available_programs_remote") as d1, patch.object(job, "detect_zpool_features") as d2:
+            d1.side_effect = lambda r, programs, host: programs.__setitem__(r.location, {"ssh": ""})
+            d2.side_effect = lambda r: job.params.zpool_features.__setitem__(r.location, {"feat": "on"})
+            job.detect_available_programs()
+            self.assertEqual(d1.call_count, 2)
+            self.assertEqual(d2.call_count, 2)
+
+
+#############################################################################
+class TestLogging(unittest.TestCase):
+
+    def test_get_default_logger(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        lp = bzfs.LogParams(args)
+        logging.getLogger(bzfs.get_logger_subname()).handlers.clear()
+        logging.getLogger(bzfs.__name__).handlers.clear()
+        log = bzfs.get_default_logger(lp, args)
+        self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in log.handlers))
+        self.assertTrue(any(isinstance(h, logging.FileHandler) for h in log.handlers))
+
+    def test_get_default_logger_considers_existing_sublog_handlers(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        lp = bzfs.LogParams(args)
+        sublog = logging.getLogger(bzfs.get_logger_subname())
+        sublog.handlers.clear()
+        log = logging.getLogger(bzfs.__name__)
+        log.handlers.clear()
+        stream_h: Optional[logging.StreamHandler] = None
+        file_h: Optional[logging.FileHandler] = None
+        try:
+            stream_h = logging.StreamHandler(stream=sys.stdout)
+            file_h = logging.FileHandler(lp.log_file, encoding="utf-8")
+            sublog.addHandler(stream_h)
+            sublog.addHandler(file_h)
+            log_result = bzfs.get_default_logger(lp, args)
+            self.assertEqual([], log_result.handlers)
+        finally:
+            if stream_h is not None:
+                stream_h.close()
+            if file_h is not None:
+                file_h.close()
+            sublog.handlers.clear()
+            bzfs.reset_logger()
+
+    @patch("logging.handlers.SysLogHandler")
+    def test_get_default_logger_syslog_warning(self, mock_syslog: MagicMock) -> None:
+        args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--log-syslog-address=127.0.0.1:514",
+                "--log-syslog-socktype=UDP",
+                "--log-syslog-facility=1",
+                "--log-syslog-level=DEBUG",
+            ]
+        )
+        lp = bzfs.LogParams(args)
+        self.assertEqual("127.0.0.1:514", args.log_syslog_address)
+        self.assertEqual("UDP", args.log_syslog_socktype)
+        self.assertEqual(1, args.log_syslog_facility)
+        self.assertEqual("DEBUG", args.log_syslog_level)
+        logging.getLogger(bzfs.get_logger_subname()).handlers.clear()
+        logger = logging.getLogger(bzfs.__name__)
+        logger.handlers.clear()
+        handler = logging.Handler()
+        mock_syslog.return_value = handler
+        try:
+            with patch.object(logger, "warning") as mock_warning:
+                log = bzfs.get_default_logger(lp, args)
+                mock_syslog.assert_called_once()
+                self.assertIn(handler, log.handlers)
+                mock_warning.assert_called_once()
+        finally:
+            bzfs.reset_logger()
+
+    def test_remove_json_comments(self) -> None:
+        config_str = (
+            "#c1\n" "line_without_comment\n" "line_with_trailing_hash_only #\n" "line_with_trailing_comment##tail#\n"
+        )
+        expected = "\nline_without_comment\nline_with_trailing_hash_only #\n" "line_with_trailing_comment#"
+        self.assertEqual(expected, bzfs.remove_json_comments(config_str))
+
+    def test_get_dict_config_logger(self) -> None:
+        with tempfile.NamedTemporaryFile("w", prefix="bzfs_log_config", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "version": 1,
+                    "handlers": {"h": {"class": "logging.StreamHandler"}},
+                    "root": {"level": "${bzfs.log_level}", "handlers": ["h"]},
+                },
+                f,
+            )
+            path = f.name
+        try:
+            args = argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
+            lp = bzfs.LogParams(args)
+            with patch("logging.config.dictConfig") as m:
+                bzfs.get_dict_config_logger(lp, args)
+                self.assertEqual(lp.log_level, m.call_args[0][0]["root"]["level"])
+        finally:
+            os.remove(path)
+
+    def test_get_dict_config_logger_inline_string_with_defaults(self) -> None:
+        config = (
+            '{"version": 1, "handlers": {"h": {"class": "logging.StreamHandler"}}, '
+            '"root": {"level": "${missing:DEBUG}", "handlers": ["h"]}}'
+        )
+        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        lp = bzfs.LogParams(args)
+        with patch("logging.config.dictConfig") as m:
+            bzfs.get_dict_config_logger(lp, args)
+            self.assertEqual("DEBUG", m.call_args[0][0]["root"]["level"])
+
+    def test_get_dict_config_logger_missing_default_raises(self) -> None:
+        config = '{"version": 1, "root": {"level": "${missing}"}}'
+        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        lp = bzfs.LogParams(args)
+        with self.assertRaises(ValueError):
+            bzfs.get_dict_config_logger(lp, args)
+
+    def test_get_dict_config_logger_invalid_name_raises(self) -> None:
+        config = '{"version": 1, "root": {"level": "${bad name:INFO}"}}'
+        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        lp = bzfs.LogParams(args)
+        with self.assertRaises(ValueError):
+            bzfs.get_dict_config_logger(lp, args)
+
+    def test_get_dict_config_logger_invalid_path(self) -> None:
+        with tempfile.NamedTemporaryFile("w", prefix="badfilename", suffix=".json", delete=False) as f:
+            f.write("{}")
+            path = f.name
+        try:
+            args = argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
+            lp = bzfs.LogParams(args)
+            with self.assertRaises(SystemExit):
+                bzfs.get_dict_config_logger(lp, args)
+        finally:
+            os.remove(path)
 
 
 #############################################################################
