@@ -2071,7 +2071,7 @@ class LocalTestCase(BZFSTestCase):
         src_foo_a = create_filesystem(src_foo, d2)
         t1 = fix(d2 + "snap")
         take_snapshot(src_foo_a, fix(t1))
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive")
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "-v", "-v", "-v")
         self.assertTrue(dataset_exists(dst_root_dataset + "/" + d1))
         self.assertSnapshotNames(dst_root_dataset + "/" + d1, [s1])
         self.assertTrue(dataset_exists(dst_root_dataset + "/" + d1 + "/" + d2))

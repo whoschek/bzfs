@@ -7293,6 +7293,20 @@ def get_syslog_address(
     return address, socktype
 
 
+def remove_json_comments(config_str: str) -> str:  # not standard but practical
+    lines = []
+    for line in config_str.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            line = ""  # replace comment line with empty line to preserve line numbering
+        elif stripped.endswith("#"):
+            i = line.rfind("#", 0, line.rindex("#"))
+            if i >= 0:
+                line = line[0:i]  # strip line-ending comment
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
     import json
 
@@ -7316,19 +7330,6 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
             die(f"--log-config-file: basename must contain 'bzfs_log_config' and end with '.json': {path}")
         with open_nofollow(path, "r", encoding="utf-8") as fd:
             log_config_file_str = fd.read()
-
-    def remove_json_comments(config_str: str) -> str:  # not standard but practical
-        lines = []
-        for line in config_str.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("#"):
-                line = ""  # replace comment line with empty line to preserve line numbering
-            elif stripped.endswith("#"):
-                i = line.rfind("#", 0, line.rindex("#"))
-                if i >= 0:
-                    line = line[0:i]  # strip line-ending comment
-            lines.append(line)
-        return "\n".join(lines)
 
     def substitute_log_config_vars(config_str: str, log_config_variables: Dict[str, str]) -> str:
         """Substitute ${name[:default]} placeholders within JSON with values from log_config_variables"""
