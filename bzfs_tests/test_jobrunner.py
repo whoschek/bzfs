@@ -31,17 +31,19 @@ from bzfs_main import bzfs_jobrunner
 from bzfs_main.bzfs_jobrunner import die_status
 
 
+#############################################################################
 def suite() -> unittest.TestSuite:
-    suite = unittest.TestSuite()
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidation))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSkipDatasetsWithNonExistingDstPool))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobSpawnProcessPerJob))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJobInCurrentThread))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunSubJob))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidateSnapshotPlan))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestValidateMonitorSnapshotPlan))
-    return suite
+    test_cases = [
+        TestHelperFunctions,
+        TestValidation,
+        TestSkipDatasetsWithNonExistingDstPool,
+        TestRunSubJobSpawnProcessPerJob,
+        TestRunSubJobInCurrentThread,
+        TestRunSubJob,
+        TestValidateSnapshotPlan,
+        TestValidateMonitorSnapshotPlan,
+    ]
+    return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
 #############################################################################

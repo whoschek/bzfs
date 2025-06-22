@@ -54,45 +54,47 @@ is_functional_test = test_mode == "functional"  # run most tests but only in a s
 is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
 
 
+#############################################################################
 def suite() -> unittest.TestSuite:
-    suite = unittest.TestSuite()
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestXFinally))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestHelperFunctions))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestAdditionalHelpers))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRunWithRetries))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTerminateProcessSubtree))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSubprocessRun))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestParseDatasetLocator))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestReplaceCapturingGroups))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFindMatch))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBuildTree))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCurrentDateTime))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRoundDatetimeUpToDurationMultiple))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSmallPriorityQueue))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedBool))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSynchronizedDict))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestArgumentParser))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDatasetPairsAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFileOrLiteralAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNewSnapshotFilterGroupAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTimeRangeAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNonEmptyStringAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogConfigVariablesAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(SSHConfigFileNameAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeFileNameAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSafeDirectoryNameAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckRange))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCheckPercentRange))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPythonVersionCheck))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRankRangeAction))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestConnectionPool))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestItrSSHCmdParallel))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestProcessDatasetsInParallel))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRemoteConfCache))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestIncrementalSendSteps))
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestLogging))
-    # suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestPerformance))
-    return suite
+    test_cases = [
+        TestXFinally,
+        TestHelperFunctions,
+        TestAdditionalHelpers,
+        TestRunWithRetries,
+        TestTerminateProcessSubtree,
+        TestSubprocessRun,
+        TestParseDatasetLocator,
+        TestReplaceCapturingGroups,
+        TestFindMatch,
+        TestBuildTree,
+        TestCurrentDateTime,
+        TestRoundDatetimeUpToDurationMultiple,
+        TestSmallPriorityQueue,
+        TestSynchronizedBool,
+        TestSynchronizedDict,
+        TestArgumentParser,
+        TestDatasetPairsAction,
+        TestFileOrLiteralAction,
+        TestNewSnapshotFilterGroupAction,
+        TestTimeRangeAction,
+        TestNonEmptyStringAction,
+        TestLogConfigVariablesAction,
+        SSHConfigFileNameAction,
+        TestSafeFileNameAction,
+        TestSafeDirectoryNameAction,
+        TestCheckRange,
+        TestCheckPercentRange,
+        TestPythonVersionCheck,
+        TestRankRangeAction,
+        TestConnectionPool,
+        TestItrSSHCmdParallel,
+        TestProcessDatasetsInParallel,
+        TestRemoteConfCache,
+        TestIncrementalSendSteps,
+        TestLogging,
+        # TestPerformance,
+    ]
+    return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
 def argparser_parse_args(args: list[str]) -> argparse.Namespace:
