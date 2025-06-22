@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 import argparse
 import contextlib
 import errno
@@ -38,7 +39,7 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Any, Callable, DefaultDict, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import Any, Callable, Iterator, List, Sequence, Tuple, Union, cast
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
@@ -94,7 +95,7 @@ def suite() -> unittest.TestSuite:
     return suite
 
 
-def argparser_parse_args(args: List[str]) -> argparse.Namespace:
+def argparser_parse_args(args: list[str]) -> argparse.Namespace:
     return bzfs.argument_parser().parse_args(args + ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")])
 
 
@@ -152,15 +153,15 @@ class TestHelperFunctions(unittest.TestCase):
     d = "d"
     a = "a"
 
-    def merge_sorted_iterators(self, src: List[Any], dst: List[Any], choice: str) -> List[Tuple[Any, ...]]:
+    def merge_sorted_iterators(self, src: list[Any], dst: list[Any], choice: str) -> list[tuple[Any, ...]]:
         s, d, a = self.s, self.d, self.a
         return [item for item in bzfs.Job().merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst))]
 
     def assert_merge_sorted_iterators(
         self,
-        expected: List[Tuple[Any, ...]],
-        src: List[Any],
-        dst: List[Any],
+        expected: list[tuple[Any, ...]],
+        src: list[Any],
+        dst: list[Any],
         choice: str = f"{s}+{d}+{a}",
         invert: bool = True,
     ) -> None:
@@ -583,7 +584,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.reset_logger()
 
     def test_recv_option_property_names(self) -> None:
-        def names(lst: List[str]) -> Set[str]:
+        def names(lst: list[str]) -> set[str]:
             return bzfs.Job().recv_option_property_names(lst)
 
         self.assertSetEqual(set(), names([]))
@@ -651,7 +652,7 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertIn("--log-dir must not be a symlink", str(cm.exception))
 
     def test_get_logger_with_cleanup(self) -> None:
-        def check(log: Logger, files: Set[str]) -> None:
+        def check(log: Logger, files: set[str]) -> None:
             files_todo = files.copy()
             for handler in log.handlers:
                 if isinstance(handler, logging.FileHandler):
@@ -1293,8 +1294,8 @@ class TestHelperFunctions(unittest.TestCase):
 
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
-        src_datasets: List[str], basis_src_datasets: List[str]
-    ) -> Optional[List[str]]:
+        src_datasets: list[str], basis_src_datasets: list[str]
+    ) -> list[str] | None:
         # Assumes that src_datasets and basis_src_datasets are both sorted (and thus root_datasets is sorted too)
         src_datasets_set = set(src_datasets)
         root_datasets = bzfs.Job().find_root_datasets(src_datasets)
@@ -1306,7 +1307,7 @@ class TestHelperFunctions(unittest.TestCase):
         return root_datasets
 
     def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self) -> None:
-        def run_filter(src_datasets: List[str], basis_src_datasets: List[str]) -> List[str]:
+        def run_filter(src_datasets: list[str], basis_src_datasets: list[str]) -> list[str]:
             assert set(src_datasets).issubset(set(basis_src_datasets))
             src_datasets = list(sorted(src_datasets))
             basis_src_datasets = list(sorted(basis_src_datasets))
@@ -1638,7 +1639,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
 
     def test_MonitorSnapshotsConfig(self) -> None:
-        def plan(alerts: Dict[str, Any]) -> str:
+        def plan(alerts: dict[str, Any]) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
@@ -1818,7 +1819,7 @@ class TestHelperFunctions(unittest.TestCase):
 #############################################################################
 class TestTerminateProcessSubtree(unittest.TestCase):
     def setUp(self) -> None:
-        self.children: List[subprocess.Popen[Any]] = []
+        self.children: list[subprocess.Popen[Any]] = []
 
     def tearDown(self) -> None:
         for child in self.children:
@@ -1993,7 +1994,7 @@ class TestAdditionalHelpers(unittest.TestCase):
         args = argparser_parse_args(["src", "dst"])
         job = bzfs.Job()
         job.params = bzfs.Params(args, log=logging.getLogger())
-        props: Dict[str, Optional[str]] = {"p1": "v1", "skip": "v", "p3": "v3"}
+        props: dict[str, str | None] = {"p1": "v1", "skip": "v", "p3": "v3"}
         include_regexes = bzfs.compile_regexes(["p.*"])
         exclude_regexes = bzfs.compile_regexes([".*3"])
         self.assertEqual({"p1": "v1"}, job.filter_properties(props, include_regexes, exclude_regexes))
@@ -2006,7 +2007,7 @@ class TestAdditionalHelpers(unittest.TestCase):
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
         job.params = bzfs.Params(args, log=log)
-        props: Dict[str, Optional[str]] = {"a1": "v1", "a2": "v2", "skip": "v"}
+        props: dict[str, str | None] = {"a1": "v1", "a2": "v2", "skip": "v"}
         include_regexes = bzfs.compile_regexes(["a.*"])
         exclude_regexes = bzfs.compile_regexes(["a2"])
         result = job.filter_properties(props, include_regexes, exclude_regexes)
@@ -2049,7 +2050,7 @@ class TestRunWithRetries(unittest.TestCase):
         params = bzfs.Params(args, log=logging.getLogger())
         job = bzfs.Job()
         job.params = params
-        calls: List[int] = []
+        calls: list[int] = []
 
         def fn(*, retry: bzfs.Retry) -> str:
             calls.append(retry.count)
@@ -2400,7 +2401,7 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
 #############################################################################
 class TestBuildTree(unittest.TestCase):
-    def assert_keys_sorted(self, tree: Dict[str, Any]) -> None:
+    def assert_keys_sorted(self, tree: dict[str, Any]) -> None:
         keys = list(tree.keys())
         self.assertEqual(keys, sorted(keys), f"Keys are not sorted: {keys}")
         for value in tree.values():
@@ -2415,40 +2416,40 @@ class TestBuildTree(unittest.TestCase):
         self.assert_keys_sorted(tree)
 
     def test_empty_input(self) -> None:
-        datasets: List[str] = []
+        datasets: list[str] = []
         expected_tree: bzfs.Tree = {}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
 
     def test_single_root(self) -> None:
-        datasets: List[str] = ["pool"]
+        datasets: list[str] = ["pool"]
         expected_tree: bzfs.Tree = {"pool": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_single_branch(self) -> None:
-        datasets: List[str] = ["pool/dataset/sub/child"]
+        datasets: list[str] = ["pool/dataset/sub/child"]
         expected_tree: bzfs.Tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots(self) -> None:
-        datasets: List[str] = ["pool", "otherpool", "anotherpool"]
+        datasets: list[str] = ["pool", "otherpool", "anotherpool"]
         expected_tree: bzfs.Tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_large_dataset(self) -> None:
-        datasets: List[str] = [f"pool/dataset{i}" for i in range(100)]
+        datasets: list[str] = [f"pool/dataset{i}" for i in range(100)]
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(len(tree["pool"]), 100)
         self.assert_keys_sorted(tree)
 
     def test_nested_structure(self) -> None:
-        datasets: List[str] = [
+        datasets: list[str] = [
             "pool/parent",
             "pool/parent/child1",
             "pool/parent/child2",
@@ -2461,42 +2462,42 @@ class TestBuildTree(unittest.TestCase):
         self.assert_keys_sorted(tree)
 
     def test_no_children(self) -> None:
-        datasets: List[str] = ["pool", "otherpool"]
+        datasets: list[str] = ["pool", "otherpool"]
         expected_tree: bzfs.Tree = {"otherpool": {}, "pool": {}}
         tree = bzfs.Job().build_dataset_tree(sorted(datasets))
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_single_level(self) -> None:
-        datasets: List[str] = ["pool", "pool1", "pool2", "pool3"]
+        datasets: list[str] = ["pool", "pool1", "pool2", "pool3"]
         expected_tree: bzfs.Tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_with_hierarchy(self) -> None:
-        datasets: List[str] = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
+        datasets: list[str] = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
         expected_tree: bzfs.Tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_flat(self) -> None:
-        datasets: List[str] = ["root1", "root2", "root3", "root4"]
+        datasets: list[str] = ["root1", "root2", "root3", "root4"]
         expected_tree: bzfs.Tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_multiple_roots_mixed_depth(self) -> None:
-        datasets: List[str] = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
+        datasets: list[str] = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
         expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
         self.assert_keys_sorted(tree)
 
     def test_tree_with_missing_intermediate_nodes(self) -> None:
-        datasets: List[str] = ["a", "a/b/c", "z/2/3"]
+        datasets: list[str] = ["a", "a/b/c", "z/2/3"]
         expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
@@ -2504,7 +2505,7 @@ class TestBuildTree(unittest.TestCase):
 
     def test_tree_with_barriers(self) -> None:
         BR = bzfs.BARRIER_CHAR
-        datasets: List[str] = [
+        datasets: list[str] = [
             "a/b/c",
             "a/b/c/0d",
             "a/b/c/1d",
@@ -2560,7 +2561,7 @@ class TestCurrentDateTime(unittest.TestCase):
     def test_utc_timezone(self) -> None:
         expected = self.fixed_datetime.astimezone(tz=timezone.utc)
 
-        def now_fn(tz: Optional[tzinfo] = None) -> datetime:
+        def now_fn(tz: tzinfo | None = None) -> datetime:
             return self.fixed_datetime.astimezone(tz=tz)
 
         actual = bzfs.current_datetime(tz_spec="UTC", now_fn=now_fn)
@@ -2571,7 +2572,7 @@ class TestCurrentDateTime(unittest.TestCase):
         tz = timezone(timedelta(hours=5, minutes=30))
         expected = self.fixed_datetime.astimezone(tz=tz)
 
-        def now_fn(_: Optional[tzinfo] = None) -> datetime:
+        def now_fn(_: tzinfo | None = None) -> datetime:
             return self.fixed_datetime.astimezone(tz=tz)
 
         actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
@@ -2582,7 +2583,7 @@ class TestCurrentDateTime(unittest.TestCase):
         tz = timezone(timedelta(hours=-4, minutes=-30))
         expected = self.fixed_datetime.astimezone(tz=tz)
 
-        def now_fn(_: Optional[tzinfo] = None) -> datetime:
+        def now_fn(_: tzinfo | None = None) -> datetime:
             return self.fixed_datetime.astimezone(tz=tz)
 
         actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
@@ -2637,7 +2638,7 @@ class TestCurrentDateTime(unittest.TestCase):
 
 #############################################################################
 def round_datetime_up_to_duration_multiple(
-    dt: datetime, duration_amount: int, duration_unit: str, anchors: Optional[PeriodAnchors] = None
+    dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors | None = None
 ) -> datetime:
     anchors = PeriodAnchors() if anchors is None else anchors
     return bzfs.round_datetime_up_to_duration_multiple(dt, duration_amount, duration_unit, anchors=anchors)
@@ -3473,9 +3474,9 @@ class TestFindMatch(unittest.TestCase):
         expected: int,
         lst: Sequence[str],
         condition: Callable[[str], bool],
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        raises: Optional[Union[bool, str, Callable[[], str]]] = False,
+        start: int | None = None,
+        end: int | None = None,
+        raises: bool | str | Callable[[], str] | None = False,
     ) -> None:
         raise_arg = cast(Union[bool, str, Callable[[], str]], raises)
         self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raise_arg))
@@ -3841,14 +3842,14 @@ class TestTimeRangeAction(unittest.TestCase):
 
     @staticmethod
     def filter_snapshots_by_times_and_rank1(
-        snapshots: List[str], timerange: str, ranks: List[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
-    ) -> List[str]:
+        snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
+    ) -> list[str]:
         return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
 
 
 def filter_snapshots_by_times_and_rank(
-    snapshots: List[str], timerange: str, ranks: List[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
-) -> List[str]:
+    snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
+) -> list[str]:
     args = argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks])
     log_params = bzfs.LogParams(args)
     try:
@@ -3924,8 +3925,8 @@ class TestRankRangeAction(unittest.TestCase):
             self.parse_args("oldest99%..latest100%")
 
     def filter_snapshots_by_rank(
-        self, snapshots: List[str], ranks: List[str], timerange: str = "0..0", loglevel: int = logging.DEBUG
-    ) -> List[str]:
+        self, snapshots: list[str], ranks: list[str], timerange: str = "0..0", loglevel: int = logging.DEBUG
+    ) -> list[str]:
         return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
 
     def test_filter_snapshots_by_rank(self) -> None:
@@ -4032,7 +4033,7 @@ class TestRankRangeAction(unittest.TestCase):
         self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
 
     @staticmethod
-    def get_snapshot_filters(cli: List[str]) -> Any:
+    def get_snapshot_filters(cli: list[str]) -> Any:
         args = argparser_parse_args(args=["src", "dst", *cli])
         return bzfs.Params(args).snapshot_filters[0]
 
@@ -4449,7 +4450,7 @@ class TestConnectionPool(unittest.TestCase):
 
     def get_connection(
         self, cpool: bzfs.ConnectionPool, dpool: "SlowButCorrectConnectionPool"
-    ) -> Tuple[bzfs.Connection, bzfs.Connection]:
+    ) -> tuple[bzfs.Connection, bzfs.Connection]:
         conn = cpool.get_connection()
         donn = dpool.get_connection()
         self.assert_equal_connections(conn, donn)
@@ -4675,7 +4676,7 @@ class SlowButCorrectConnectionPool(bzfs.ConnectionPool):  # validate a better im
 
     def __init__(self, remote: Remote, max_concurrent_ssh_sessions_per_tcp_connection: int) -> None:
         super().__init__(remote, max_concurrent_ssh_sessions_per_tcp_connection)
-        self.priority_queue: List[bzfs.Connection] = []  # type: ignore
+        self.priority_queue: list[bzfs.Connection] = []  # type: ignore
 
     def get_connection(self) -> bzfs.Connection:
         with self._lock:
@@ -4717,18 +4718,18 @@ class TestIncrementalSendSteps(unittest.TestCase):
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic3(self) -> None:
-        input_snapshots: List[str] = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
-        expected_results: List[str] = ["d1", "d2", "d3", "d4"]
+        input_snapshots: list[str] = ["h0", "h1", "d1", "d2", "h2", "d3", "d4"]
+        expected_results: list[str] = ["d1", "d2", "d3", "d4"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic4(self) -> None:
-        input_snapshots: List[str] = ["d1"]
-        expected_results: List[str] = ["d1"]
+        input_snapshots: list[str] = ["d1"]
+        expected_results: list[str] = ["d1"]
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_basic5(self) -> None:
-        input_snapshots: List[str] = []
-        expected_results: List[str] = []
+        input_snapshots: list[str] = []
+        expected_results: list[str] = []
         self.validate_incremental_send_steps(input_snapshots, expected_results)
 
     def test_validate_snapshot_series_excluding_hourlies_with_permutations(self) -> None:
@@ -4739,7 +4740,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
     def test_send_step_to_str(self) -> None:
         bzfs.Job().send_step_to_str(("-I", "d@s1", "d@s3"))
 
-    def permute_snapshot_series(self, max_length: int = 9) -> List[DefaultDict[Optional[str], List[str]]]:
+    def permute_snapshot_series(self, max_length: int = 9) -> list[defaultdict[str | None, list[str]]]:
         """
         Simulates a series of hourly and daily snapshots. At the end, makes a backup while excluding hourly
         snapshots from replication. The expectation is that after replication dst contains all daily snapshots
@@ -4758,8 +4759,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
                 steps = "d" * N + "h" * (L - N)
                 # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
                 for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
-                    snaps: DefaultDict[Optional[str], List[str]] = defaultdict(list)
-                    count: DefaultDict[str, int] = defaultdict(int)
+                    snaps: defaultdict[str | None, list[str]] = defaultdict(list)
+                    count: defaultdict[str, int] = defaultdict(int)
                     for char in permutation:
                         count[char] += 1  # tag snapshots with a monotonically increasing number within each category
                         char_count = f"{count[char]:01}" if max_length < 10 else f"{count[char]:02}"  # zero pad number
@@ -4769,7 +4770,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
                     testcases.append(snaps)
         return testcases
 
-    def validate_incremental_send_steps(self, input_snapshots: List[str], expected_results: List[str]) -> None:
+    def validate_incremental_send_steps(self, input_snapshots: list[str], expected_results: list[str]) -> None:
         """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input
         snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
         for is_resume in [False, True]:  # via --no-resume-recv
@@ -4794,11 +4795,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
                         all_to_snapshots += [snapshot[snapshot.find("@") + 1 :] for snapshot in to_snapshots]
                     self.assertListEqual(expected_results[1:], all_to_snapshots)
 
-    def send_step_to_str(self, step: Tuple) -> str:
+    def send_step_to_str(self, step: tuple) -> str:
         # return str(step)
         return str(step[1]) + ("-" if step[0] == "-I" else ":") + str(step[2])
 
-    def apply_incremental_send_steps(self, steps: List[Tuple], input_snapshots: List[str]) -> List[str]:
+    def apply_incremental_send_steps(self, steps: list[tuple], input_snapshots: list[str]) -> list[str]:
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
         Returns the subset of snapshots that have actually been replicated to the destination."""
         output_snapshots = []
@@ -4816,11 +4817,11 @@ class TestIncrementalSendSteps(unittest.TestCase):
 
     def incremental_send_steps1(
         self,
-        input_snapshots: List[str],
+        input_snapshots: list[str],
         src_dataset: str,
         is_resume: bool = False,
         force_convert_I_to_i: bool = False,
-    ) -> List[Tuple]:
+    ) -> list[tuple]:
         origin_src_snapshots_with_guids = []
         guid = 1
         for snapshot in input_snapshots:
@@ -4832,10 +4833,10 @@ class TestIncrementalSendSteps(unittest.TestCase):
 
     def incremental_send_steps2(
         self,
-        origin_src_snapshots_with_guids: List[str],
+        origin_src_snapshots_with_guids: list[str],
         is_resume: bool = False,
         force_convert_I_to_i: bool = False,
-    ) -> List[Tuple]:
+    ) -> list[tuple]:
         guids = []
         input_snapshots = []
         included_guids = set()
@@ -5096,11 +5097,11 @@ class TestSynchronizedDict(unittest.TestCase):
 
 #############################################################################
 # class TestItrSSHCmdParallel(unittest.TestCase)
-def dummy_fn_ordered(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
+def dummy_fn_ordered(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
     return cmd, batch
 
 
-def dummy_fn_unordered(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
+def dummy_fn_unordered(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
     if cmd[0] == "zfslist1":
         time.sleep(0.2)
     elif cmd[0] == "zfslist2":
@@ -5108,13 +5109,13 @@ def dummy_fn_unordered(cmd: List[str], batch: List[str]) -> Tuple[List[str], Lis
     return cmd, batch
 
 
-def dummy_fn_raise(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
+def dummy_fn_raise(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
     if cmd[0] == "fail":
         raise ValueError("Intentional failure")
     return cmd, batch
 
 
-def dummy_fn_race(cmd: List[str], batch: List[str]) -> Tuple[List[str], List[str]]:
+def dummy_fn_race(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
     if cmd[0] == "zfslist1":
         time.sleep(0.3)
     elif cmd[0] == "zfslist2":
@@ -5255,7 +5256,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
         self.job = bzfs.Job()
         self.job.params = p
         self.lock = threading.Lock()
-        self.submitted: List[str] = []
+        self.submitted: list[str] = []
 
     def append_submission(self, dataset: str) -> None:
         with self.lock:
@@ -5306,7 +5307,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        src_datasets: List[str] = []
+        src_datasets: list[str] = []
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
             process_dataset=submit_no_skiptree,  # lambda
@@ -5582,8 +5583,8 @@ class TestLogging(unittest.TestCase):
         sublog.handlers.clear()
         log = logging.getLogger(bzfs.__name__)
         log.handlers.clear()
-        stream_h: Optional[logging.StreamHandler] = None
-        file_h: Optional[logging.FileHandler] = None
+        stream_h: logging.StreamHandler | None = None
+        file_h: logging.FileHandler | None = None
         try:
             stream_h = logging.StreamHandler(stream=sys.stdout)
             file_h = logging.FileHandler(lp.log_file, encoding="utf-8")

@@ -24,6 +24,7 @@
 update_readme.sh. Simply run that script whenever you change or add ArgumentParser help text.
 """
 
+from __future__ import annotations
 import argparse
 import contextlib
 import os
@@ -38,7 +39,7 @@ import uuid
 from ast import literal_eval
 from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, TypeVar, Union
+from typing import Any, Iterable, TypeVar, Union
 
 from bzfs_main import bzfs
 from bzfs_main.bzfs import die_status, log_trace, prog_name as bzfs_prog_name
@@ -394,7 +395,7 @@ def main() -> None:
 
 #############################################################################
 class Job:
-    def __init__(self, log: Optional[Logger] = None) -> None:
+    def __init__(self, log: Logger | None = None) -> None:
         # immutable variables:
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
@@ -404,14 +405,14 @@ class Job:
         self.loopback_address: str = convert_ipv6(detect_loopback_address())
 
         # mutable variables:
-        self.first_exception: Optional[int] = None
+        self.first_exception: int | None = None
         self.stats: Stats = Stats()
-        self.cache_existing_dst_pools: Set[str] = set()
-        self.cache_known_dst_pools: Set[str] = set()
+        self.cache_existing_dst_pools: set[str] = set()
+        self.cache_known_dst_pools: set[str] = set()
 
         self.is_test_mode: bool = False  # for testing only
 
-    def run_main(self, sys_argv: List[str]) -> None:
+    def run_main(self, sys_argv: list[str]) -> None:
         self.first_exception = None
         log = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
@@ -526,7 +527,7 @@ class Job:
 
         lhn = localhostname
         bzfs_prog_header = [bzfs_prog_name, "--no-argument-file"]
-        subjobs: Dict[str, List[str]] = {}
+        subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
 
@@ -569,7 +570,7 @@ class Job:
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
-            def prune_src(opts: List[str], retention_plan: Dict, tag: str) -> None:
+            def prune_src(opts: list[str], retention_plan: dict, tag: str) -> None:
                 opts += [
                     "--skip-replication",
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
@@ -624,7 +625,7 @@ class Job:
                         j += 1
                 subjob_name = update_subjob_name(marker)
 
-            def monitor_snapshots_opts(tag: str, monitor_plan: Dict, logsuffix: str) -> List[str]:
+            def monitor_snapshots_opts(tag: str, monitor_plan: dict, logsuffix: str) -> list[str]:
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
                 opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
                 opts += [f"--log-file-infix={sep}{job_id}"]
@@ -632,9 +633,9 @@ class Job:
                 opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
                 return opts
 
-            def build_monitor_plan(monitor_plan: Dict, snapshot_plan: Dict, cycles_prefix: str) -> Dict:
+            def build_monitor_plan(monitor_plan: dict, snapshot_plan: dict, cycles_prefix: str) -> dict:
 
-                def alert_dicts(alertdict: Dict, cycles: int) -> Dict:
+                def alert_dicts(alertdict: dict, cycles: int) -> dict:
                     latest_dict = alertdict.copy()
                     for prefix in ("src_snapshot_", "dst_snapshot_", ""):
                         latest_dict.pop(f"{prefix}cycles", None)
@@ -702,15 +703,15 @@ class Job:
 
     def replication_opts(
         self,
-        dst_snapshot_plan: Dict[str, Dict[str, Dict[str, int]]],
-        targets: Set[str],
+        dst_snapshot_plan: dict[str, dict[str, dict[str, int]]],
+        targets: set[str],
         localhostname: str,
         src_hostname: str,
         dst_hostname: str,
         tag: str,
         job_id: str,
         job_run: str,
-    ) -> List[str]:
+    ) -> list[str]:
         log = self.log
         log.debug("%s", f"Replicating targets {sorted(targets)} from {src_hostname} to {dst_hostname} ...")
         include_snapshot_plan = {  # only replicate targets that belong to the destination host and are relevant
@@ -738,7 +739,7 @@ class Job:
             opts += [f"--log-file-suffix={sep}{job_run}{log_suffix(localhostname, src_hostname, dst_hostname)}{sep}"]
         return opts
 
-    def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
         """Skip datasets that point to removeable destination drives that are not currently (locally) attached, if any."""
 
         def zpool(dataset: str) -> str:
@@ -773,9 +774,9 @@ class Job:
 
     def run_subjobs(
         self,
-        subjobs: Dict[str, List[str]],
+        subjobs: dict[str, list[str]],
         max_workers: int,
-        timeout_secs: Optional[float],
+        timeout_secs: float | None,
         work_period_seconds: float,
         jitter: bool,
     ) -> None:
@@ -829,8 +830,8 @@ class Job:
         assert jobs_skipped == len(skipped_jobs_dict), msg
 
     def run_subjob(
-        self, cmd: List[str], name: str, timeout_secs: Optional[float], spawn_process_per_job: bool
-    ) -> Optional[int]:  # thread-safe
+        self, cmd: list[str], name: str, timeout_secs: float | None, spawn_process_per_job: bool
+    ) -> int | None:  # thread-safe
         start_time_nanos = time.monotonic_ns()
         returncode = None
         log = self.log
@@ -882,7 +883,7 @@ class Job:
                 assert stats.jobs_started <= stats.jobs_all, msg
             log.info("Progress: %s", msg)
 
-    def run_worker_job_in_current_thread(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
+    def run_worker_job_in_current_thread(self, cmd: list[str], timeout_secs: float | None) -> int | None:
         log = self.log
         if timeout_secs is not None:
             cmd = cmd[0:1] + [f"--timeout={round(1000 * timeout_secs)}milliseconds"] + cmd[1:]
@@ -899,12 +900,12 @@ class Job:
             log.exception("Worker job failed with unexpected exception for command: %s", " ".join(cmd))
             return die_status
 
-    def _bzfs_run_main(self, cmd: List[str]) -> None:
+    def _bzfs_run_main(self, cmd: list[str]) -> None:
         bzfs_job = bzfs.Job()
         bzfs_job.is_test_mode = self.is_test_mode
         bzfs_job.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
 
-    def run_worker_job_spawn_process_per_job(self, cmd: List[str], timeout_secs: Optional[float]) -> Optional[int]:
+    def run_worker_job_spawn_process_per_job(self, cmd: list[str], timeout_secs: float | None) -> int | None:
         log = self.log
         if len(cmd) > 0 and cmd[0] == bzfs_prog_name:
             cmd = [sys.executable, "-m", "bzfs_main." + cmd[0]] + cmd[1:]
@@ -929,14 +930,14 @@ class Job:
                     proc.communicate(timeout=timeout_secs)  # Wait for the subprocess to exit
         return proc.returncode
 
-    def validate_src_hosts(self, src_hosts: List[str]) -> List[str]:
+    def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:
         context = "--src-hosts"
         self.validate_type(src_hosts, list, context)
         for src_hostname in src_hosts:
             self.validate_host_name(src_hostname, context)
         return src_hosts
 
-    def validate_dst_hosts(self, dst_hosts: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    def validate_dst_hosts(self, dst_hosts: dict[str, list[str]]) -> dict[str, list[str]]:
         context = "--dst-hosts"
         self.validate_type(dst_hosts, dict, context)
         for dst_hostname, targets in dst_hosts.items():
@@ -946,7 +947,7 @@ class Job:
                 self.validate_type(target, str, f"{context} target")
         return dst_hosts
 
-    def validate_dst_root_datasets(self, dst_root_datasets: Dict[str, str]) -> Dict[str, str]:
+    def validate_dst_root_datasets(self, dst_root_datasets: dict[str, str]) -> dict[str, str]:
         context = "--dst-root-datasets"
         self.validate_type(dst_root_datasets, dict, context)
         for dst_hostname, dst_root_dataset in dst_root_datasets.items():
@@ -955,8 +956,8 @@ class Job:
         return dst_root_datasets
 
     def validate_snapshot_plan(
-        self, snapshot_plan: Dict[str, Dict[str, Dict[str, int]]], context: str
-    ) -> Dict[str, Dict[str, Dict[str, int]]]:
+        self, snapshot_plan: dict[str, dict[str, dict[str, int]]], context: str
+    ) -> dict[str, dict[str, dict[str, int]]]:
         self.validate_type(snapshot_plan, dict, context)
         for org, target_periods in snapshot_plan.items():
             self.validate_type(org, str, f"{context} org")
@@ -970,9 +971,8 @@ class Job:
         return snapshot_plan
 
     def validate_monitor_snapshot_plan(
-        self,
-        monitor_snapshot_plan: Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]],
-    ) -> Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]]:
+        self, monitor_snapshot_plan: dict[str, dict[str, dict[str, dict[str, str | int]]]]
+    ) -> dict[str, dict[str, dict[str, dict[str, str | int]]]]:
         context = "--monitor-snapshot-plan"
         self.validate_type(monitor_snapshot_plan, dict, context)
         for org, target_periods in monitor_snapshot_plan.items():
@@ -1042,7 +1042,7 @@ class Stats:
         self.jobs_failed: int = 0
         self.jobs_running: int = 0
         self.sum_elapsed_nanos: int = 0
-        self.started_job_names: Set[str] = set()
+        self.started_job_names: set[str] = set()
 
     def __repr__(self) -> str:
         def pct(number: int) -> str:
@@ -1059,21 +1059,17 @@ class RejectArgumentAction(argparse.Action):
     """An argparse Action that immediately fails if it is ever triggered."""
 
     def __call__(
-        self,
-        parser: argparse.ArgumentParser,
-        namespace: argparse.Namespace,
-        values: Any,
-        option_string: Optional[str] = None,
+        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
         parser.error(f"Security: Overriding protected argument '{option_string}' is not allowed.")
 
 
 #############################################################################
-def dedupe(root_dataset_pairs: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+def dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return list(dict.fromkeys(root_dataset_pairs).keys())
 
 
-def flatten(root_dataset_pairs: List[Tuple[str, str]]) -> List[str]:
+def flatten(root_dataset_pairs: list[tuple[str, str]]) -> list[str]:
     return [item for pair in root_dataset_pairs for item in pair]
 
 
@@ -1081,13 +1077,13 @@ K = TypeVar("K")
 V = TypeVar("V")
 
 
-def shuffle_dict(dictionary: Dict[K, V]) -> Dict[K, V]:
+def shuffle_dict(dictionary: dict[K, V]) -> dict[K, V]:
     items = list(dictionary.items())
     random.shuffle(items)
     return dict(items)
 
 
-def sorted_dict(dictionary: Dict[K, V]) -> Dict[K, V]:
+def sorted_dict(dictionary: dict[K, V]) -> dict[K, V]:
     return dict(sorted(dictionary.items()))
 
 
@@ -1102,11 +1098,11 @@ def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     return f"{sep}{sanitize(localhostname)}{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
 
 
-def format_dict(dictionary: Dict[str, Any]) -> str:
+def format_dict(dictionary: dict[str, Any]) -> str:
     return bzfs.format_dict(dictionary)
 
 
-def pretty_print_formatter(dictionary: Dict[str, Any]) -> Any:  # For lazy/noop evaluation in disabled log levels
+def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:  # For lazy/noop evaluation in disabled log levels
     class PrettyPrintFormatter:
         def __str__(self) -> str:
             import json

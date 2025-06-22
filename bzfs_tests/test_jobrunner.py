@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 import argparse
 import contextlib
 import io
@@ -23,7 +24,7 @@ import subprocess
 import unittest
 from logging import Logger
 from subprocess import DEVNULL, PIPE
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Union, cast
 from unittest.mock import patch, MagicMock
 
 from bzfs_main import bzfs_jobrunner
@@ -93,7 +94,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.job.validate_is_subset(["3"], "foo", "x", "y")
 
-    def _make_mock_socket(self, bind_side_effect: Optional[Exception] = None) -> MagicMock:
+    def _make_mock_socket(self, bind_side_effect: Exception | None = None) -> MagicMock:
         sock = MagicMock()
         sock.bind.side_effect = bind_side_effect
         sock.__enter__.return_value = sock
@@ -138,19 +139,19 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(0, e.exception.code)
 
     def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
-        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({})
+        result: dict[str, int] = bzfs_jobrunner.sorted_dict({})
         self.assertEqual(result, {})
 
     def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self) -> None:
-        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({"a": 1})
+        result: dict[str, int] = bzfs_jobrunner.sorted_dict({"a": 1})
         self.assertEqual(result, {"a": 1})
 
     def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self) -> None:
-        result: Dict[str, int] = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
+        result: dict[str, int] = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
         self.assertEqual(result, {"a": 1, "b": 2, "c": 3})
 
     def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self) -> None:
-        result: Dict[int, str] = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
+        result: dict[int, str] = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
         self.assertEqual(result, {1: "one", 2: "two", 3: "three"})
 
     def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
@@ -603,7 +604,7 @@ class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
         self.assertIsNotNone(shutil.which("sh"))
         self.job = bzfs_jobrunner.Job()
 
-    def run_and_capture(self, cmd: List[str], timeout_secs: Optional[float]) -> Tuple[Optional[int], List[str]]:
+    def run_and_capture(self, cmd: list[str], timeout_secs: float | None) -> tuple[int | None, list[str]]:
         """
         Helper: invoke the method, return (exit_code, [all error‑log messages]).
         """
@@ -786,13 +787,13 @@ class TestValidateMonitorSnapshotPlan(unittest.TestCase):
         self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
 
     def test_validate_monitor_snapshot_plan_valid(self) -> None:
-        plan: Dict[str, Dict[str, Dict[str, Dict[str, Union[str, int]]]]] = {
+        plan: dict[str, dict[str, dict[str, dict[str, str | int]]]] = {
             "org": {"tgt": {"hour": {"warn": "msg", "max_age": 1}}}
         }
         self.assertEqual(plan, self.job.validate_monitor_snapshot_plan(plan))
 
     def test_validate_monitor_snapshot_plan_invalid_value(self) -> None:
-        plan: Dict[str, Dict[str, Dict[str, Dict[str, object]]]] = {"org": {"tgt": {"hour": {"warn": object()}}}}
+        plan: dict[str, dict[str, dict[str, dict[str, object]]]] = {"org": {"tgt": {"hour": {"warn": object()}}}}
         with self.assertRaises(SystemExit):
             self.job.validate_monitor_snapshot_plan(plan)  # type: ignore[arg-type]
 

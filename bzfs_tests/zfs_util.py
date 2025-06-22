@@ -13,15 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 import platform
 import re
 import subprocess
-from typing import List, Mapping, Optional, Sequence, Union, cast
+from typing import List, Mapping, Sequence, cast
 
 sudo_cmd = []
 
 
-def set_sudo_cmd(sudo: List[str]) -> None:
+def set_sudo_cmd(sudo: list[str]) -> None:
     global sudo_cmd
     sudo_cmd = sudo
 
@@ -55,11 +56,11 @@ def destroy_snapshots(dataset: str, snapshots: Sequence[str] = ()) -> None:
 
 def create_volume(
     dataset: str,
-    path: Optional[str] = None,
+    path: str | None = None,
     mk_parents: bool = True,
-    size: Optional[Union[int, str]] = None,
-    props: Optional[List[str]] = None,
-    blocksize: Optional[int] = None,
+    size: int | str | None = None,
+    props: list[str] | None = None,
+    blocksize: int | None = None,
     sparse: bool = False,
 ) -> str:
     if props is None:
@@ -85,10 +86,10 @@ def create_volume(
 
 def create_filesystem_simple(
     dataset: str,
-    path: Optional[str] = None,
+    path: str | None = None,
     mk_parents: bool = True,
     no_mount: bool = True,
-    props: Optional[List[str]] = None,
+    props: list[str] | None = None,
 ) -> str:
     if props is None:
         props = []
@@ -111,9 +112,9 @@ zfs_version_is_at_least_2_1_0 = None
 
 def create_filesystem(
     dataset: str,
-    path: Optional[str] = None,
+    path: str | None = None,
     no_mount: bool = True,
-    props: Optional[List[str]] = None,
+    props: list[str] | None = None,
 ) -> str:
     """implies mk_parents=True
     if no_mount=True:
@@ -160,7 +161,7 @@ def create_filesystem(
     return dataset
 
 
-def datasets(dataset: str) -> List[str]:
+def datasets(dataset: str) -> list[str]:
     return cast(List[str], zfs_list([dataset], types=["filesystem", "volume"], max_depth=1))[1:]
 
 
@@ -168,7 +169,7 @@ def take_snapshot(
     dataset: str,
     snapshot_tag: str,
     recursive: bool = False,
-    props: Optional[List[str]] = None,
+    props: list[str] | None = None,
 ) -> str:
     if props is None:
         props = []
@@ -183,7 +184,7 @@ def take_snapshot(
     return snapshot
 
 
-def snapshots(dataset: str, max_depth: Optional[int] = 1) -> List[str]:
+def snapshots(dataset: str, max_depth: int | None = 1) -> list[str]:
     return cast(List[str], zfs_list([dataset], types=["snapshot"], max_depth=max_depth))
 
 
@@ -194,7 +195,7 @@ def create_bookmark(dataset: str, snapshot_tag: str, bookmark_tag: str) -> str:
     return bookmark
 
 
-def bookmarks(dataset: str, max_depth: int = 1) -> List[str]:
+def bookmarks(dataset: str, max_depth: int = 1) -> list[str]:
     return cast(List[str], zfs_list([dataset], types=["bookmark"], max_depth=max_depth))
 
 
@@ -218,14 +219,14 @@ def snapshot_property(snapshot: str, prop: str) -> str:
 
 
 def zfs_list(
-    names: Optional[List[str]] = None,
-    props: Optional[List[str]] = None,
-    types: Optional[List[str]] = None,
-    max_depth: Optional[int] = None,
+    names: list[str] | None = None,
+    props: list[str] | None = None,
+    types: list[str] | None = None,
+    max_depth: int | None = None,
     parsable: bool = True,
-    sort_props: Optional[List[str]] = None,
+    sort_props: list[str] | None = None,
     splitlines: bool = True,
-) -> Union[List[str], str]:
+) -> list[str] | str:
     cmd = ["zfs", "list"]
     if names is None:
         names = []
@@ -263,15 +264,15 @@ def zfs_list(
 
 
 def zfs_get(
-    names: Optional[List[str]] = None,
-    props: Optional[List[str]] = None,
-    types: Optional[List[str]] = None,
-    max_depth: Optional[int] = None,
+    names: list[str] | None = None,
+    props: list[str] | None = None,
+    types: list[str] | None = None,
+    max_depth: int | None = None,
     parsable: bool = True,
-    fields: Optional[List[str]] = None,
-    sources: Optional[List[str]] = None,
+    fields: list[str] | None = None,
+    sources: list[str] | None = None,
     splitlines: bool = True,
-) -> Union[List[str], str]:
+) -> list[str] | str:
     cmd = ["zfs", "get"]
     if names is None:
         names = []
@@ -314,13 +315,13 @@ def zfs_get(
     return run_cmd(cmd, splitlines=splitlines)
 
 
-def zfs_set(names: Optional[List[str]] = None, properties: Optional[Mapping[str, str]] = None) -> None:
+def zfs_set(names: list[str] | None = None, properties: Mapping[str, str] | None = None) -> None:
     if names is None:
         names = []
     if properties is None:
         properties = {}
 
-    def run_zfs_set(props: List[str]) -> None:
+    def run_zfs_set(props: list[str]) -> None:
         cmd = sudo_cmd + ["zfs", "set"]
         for prop in props:
             cmd.append(prop)
@@ -336,8 +337,8 @@ def zfs_set(names: Optional[List[str]] = None, properties: Optional[Mapping[str,
 
 
 def zfs_inherit(
-    names: Optional[List[str]] = None,
-    propname: Optional[str] = None,
+    names: list[str] | None = None,
+    propname: str | None = None,
     recursive: bool = False,
     revert: bool = False,
 ) -> None:
@@ -379,7 +380,7 @@ def build(name: str, check: bool = True) -> str:
     return name
 
 
-def zfs_version() -> Optional[str]:
+def zfs_version() -> str | None:
     """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5"""
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
@@ -416,7 +417,7 @@ def is_solaris_zfs() -> bool:
     return platform.system() == "SunOS"
 
 
-def run_cmd(cmd: Sequence[str], splitlines: bool = True) -> Union[List[str], str]:
+def run_cmd(cmd: Sequence[str], splitlines: bool = True) -> list[str] | str:
     stdout = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True).stdout
     assert stdout is not None
     return stdout.splitlines() if splitlines else stdout[0:-1]  # omit trailing newline char
