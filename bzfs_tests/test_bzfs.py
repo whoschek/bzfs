@@ -598,11 +598,16 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2"]))
         self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-o", "name2=value2", "-F"]))
         self.assertSetEqual({"name1", "name2"}, names(["-v", "-o", "name1=value1", "-n", "-o", "name2=value2", "-F"]))
-        self.assertSetEqual({"name1"}, names(["-o", "name1"]))
-        self.assertSetEqual({""}, names(["-o", "=value1"]))
-        self.assertSetEqual({""}, names(["-o", ""]))
-        self.assertSetEqual({"=value1"}, names(["-x", "=value1"]))
-        self.assertSetEqual({""}, names(["-x", ""]))
+        with self.assertRaises(SystemExit):
+            names(["-o", "name1"])
+        with self.assertRaises(SystemExit):
+            names(["-o", "=value1"])
+        with self.assertRaises(SystemExit):
+            names(["-o", ""])
+        with self.assertRaises(SystemExit):
+            names(["-x", "=value1"])
+        with self.assertRaises(SystemExit):
+            names(["-x", ""])
         with self.assertRaises(SystemExit):
             names(["-o"])
         with self.assertRaises(SystemExit):
