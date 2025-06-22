@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 import os
 import platform
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 ROOT_DIR = "badges"
 
@@ -71,12 +71,12 @@ def merge_versions(input_dir: str, natsort: bool = False) -> str:
     return " | ".join(versions)
 
 
-def sort_versions(version_list: List[str]) -> List[str]:
+def sort_versions(version_list: list[str]) -> list[str]:
 
-    def is_valid_version(version: str) -> Optional[re.Match]:  # is in the form x.y.z ?
+    def is_valid_version(version: str) -> re.Match | None:  # is in the form x.y.z ?
         return re.match(r"^\d+(\.\d+){0,2}$", version)
 
-    def version_key(version: str) -> List[int]:  # Split version into components and convert to integers
+    def version_key(version: str) -> list[int]:  # Split version into components and convert to integers
         return [int(part) for part in version.split(".")]
 
     valid_versions = [v for v in version_list if is_valid_version(v)]

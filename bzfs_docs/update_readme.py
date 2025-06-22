@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
 import os
 import re
 import subprocess
@@ -57,7 +58,7 @@ def main() -> None:
     subprocess.run(cmd, check=True)
 
     # Step 3: Clean up generated markdown file
-    with open(tmp_manpage_md_path, "r", encoding="utf-8") as file:
+    with open(tmp_manpage_md_path, encoding="utf-8") as file:
         content = file.read()
 
     triple_backticks = "\\`\\`\\`"
@@ -103,7 +104,7 @@ def main() -> None:
     # Step 4b: replace text between '<!-- DESCRIPTION BEGIN -->' and '<!-- END DESCRIPTION SECTION -->' in README.md
     begin_desc_readme_tag = "<!-- BEGIN DESCRIPTION SECTION -->"
     end_desc_readme_tag = "<!-- END DESCRIPTION SECTION -->"
-    with open(readme_file, "r", encoding="utf-8") as f:
+    with open(readme_file, encoding="utf-8") as f:
         readme = f.readlines()
     begin_desc_readme_idx = find_match(
         readme,
