@@ -3,11 +3,16 @@
 set -e
 cd $(dirname $(realpath "$0"))
 
-tmp_venv=venv-argparse-manpage  # bzfs_main.* must be part of the venv for `argparse-manpage` to work correctly
-rm -rf $tmp_venv
-python3 -m venv $tmp_venv
-source $tmp_venv/bin/activate
-pip install -e '.[dev]'
+# bzfs_main.* must be part of a venv for `argparse-manpage` to work correctly
+tmp_venv=venv-argparse-manpage
+if [ -d venv ]; then
+  source venv/bin/activate
+else
+  rm -rf $tmp_venv
+  python3 -m venv $tmp_venv
+  source $tmp_venv/bin/activate
+  pip install -e '.[dev]'
+fi
 
 python3 -m bzfs_docs.update_readme bzfs_main.bzfs README.md
 python3 -m bzfs_docs.update_readme bzfs_main.bzfs_jobrunner README_bzfs_jobrunner.md
