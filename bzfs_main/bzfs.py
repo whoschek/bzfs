@@ -1262,7 +1262,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=argparse.SUPPRESS)
     threads_default = 100  # percent
     parser.add_argument(
-        "--threads", min=1, default=(threads_default, True), action=CheckPercentRange, metavar="INT[%]",
+        "--threads", min=1, max=1600, default=(threads_default, True), action=CheckPercentRange, metavar="INT[%]",
         help="The maximum number of threads to use for parallel operations; can be given as a positive integer, "
              f"optionally followed by the %% percent character (min: %(min)s, default: {threads_default}%%). Percentages "
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many threads as "
