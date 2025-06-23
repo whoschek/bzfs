@@ -164,6 +164,14 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parser.parse_args(["--secret", "x"])
 
+    def test_inapplicable_cli_option(self) -> None:
+        opts = ["--create-src-snapshots", "--job-id=myid", "--root-dataset-pairs", "src", "dst"]
+        parser = bzfs_jobrunner.argument_parser()
+        parser.parse_args(opts)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--delete-dst-snapshots"] + opts)
+
     def test_shuffle_dict_preserves_items(self) -> None:
         d = {"a": 1, "b": 2, "c": 3}
 

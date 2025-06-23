@@ -317,8 +317,6 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             f"--ssh-{loc}-config-file", type=str, action=bzfs.SSHConfigFileNameAction, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
                  "The basename must contain the substring 'bzfs_ssh_config'.\n\n")
-        parser.add_argument(  # reject this arg as jobrunner will auto-generate it
-            f"--ssh-{loc}-host", action=RejectArgumentAction, help=argparse.SUPPRESS)
     parser.add_argument(
         "--src-user", default="", metavar="STRING",
         help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-src-user
@@ -384,8 +382,16 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--daemon-monitor-snapshots-frequency", default="minutely", metavar="STRING",
         help="Specifies how often the bzfs daemon shall monitor snapshot age if --daemon-lifetime is nonzero.\n\n")
-    parser.add_argument(  # reject this unnecessary arg
-        "--log-config-file", action=RejectArgumentAction, help=argparse.SUPPRESS)
+    bad_opts = ["--daemon-frequency", "--include-dataset", "--include-snapshot-plan", "--create-src-snapshots-plan",
+                "--skip-replication", "--monitor-snapshots",
+                "--log-file-prefix", "--log-file-infix", "--log-file-suffix", "--log-config-file", "--log-config-var",
+                "--delete-dst-datasets", "--delete-dst-snapshots", "--delete-dst-snapshots-except",
+                "--delete-dst-snapshots-except-plan", "--delete-empty-dst-datasets",
+                "--timeout"]
+    for loc in locations:
+        bad_opts += [f"--ssh-{loc}-host"]  # reject this arg as jobrunner will auto-generate it
+    for bad_opt in bad_opts:
+        parser.add_argument(bad_opt, action=RejectArgumentAction, nargs=0, help=argparse.SUPPRESS)
     parser.add_argument(
         "--root-dataset-pairs", required=True, nargs="+", action=bzfs.DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
@@ -532,7 +538,7 @@ class Job:
             return resolve_dataset(dst_hostname, dst_dataset, is_src=False)
 
         lhn = localhostname
-        bzfs_prog_header = [bzfs_prog_name, "--no-argument-file"]
+        bzfs_prog_header = [bzfs_prog_name, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
@@ -545,7 +551,7 @@ class Job:
                 opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
                 opts += [f"--ssh-src-port={ssh_src_port}"] if ssh_src_port else []
                 opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
-                opts += unknown_args + ["--"]
+                opts += ["--"]
                 opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
                 subjobs[subjob_name] = bzfs_prog_header + opts
@@ -565,7 +571,7 @@ class Job:
                         opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
                         opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
                         opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
-                        opts += unknown_args + ["--"]
+                        opts += ["--"]
                         dataset_pairs = [
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
                             for src, dst in args.root_dataset_pairs
@@ -588,7 +594,7 @@ class Job:
                 opts += [f"--ssh-dst-user={ssh_src_user}"] if ssh_src_user else []
                 opts += [f"--ssh-dst-port={ssh_src_port}"] if ssh_src_port else []
                 opts += [f"--ssh-dst-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
-                opts += unknown_args + ["--"]
+                opts += ["--"]
                 opts += flatten(
                     dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])  # noqa: B023
                 )
@@ -623,7 +629,7 @@ class Job:
                     opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
                     opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
                     opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
-                    opts += unknown_args + ["--"]
+                    opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
@@ -667,7 +673,7 @@ class Job:
                 opts += [f"--ssh-dst-user={ssh_src_user}"] if ssh_src_user else []
                 opts += [f"--ssh-dst-port={ssh_src_port}"] if ssh_src_port else []
                 opts += [f"--ssh-dst-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
-                opts += unknown_args + ["--"]
+                opts += ["--"]
                 opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
                 subjobs[subjob_name] = bzfs_prog_header + opts
@@ -686,7 +692,7 @@ class Job:
                     opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
                     opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
                     opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
-                    opts += unknown_args + ["--"]
+                    opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
                     if len(dataset_pairs) > 0:
