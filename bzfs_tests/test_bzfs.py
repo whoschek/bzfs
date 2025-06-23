@@ -2018,6 +2018,55 @@ class TestAdditionalHelpers(unittest.TestCase):
         self.assertIn("Including b/c property regex", log_output)
         self.assertIn("Excluding b/c property regex", log_output)
 
+    def test_pv_program_opts_disallows_dangerous_options(self) -> None:
+        """Confirms that initialization fails if --pv-program-opts contains the forbidden -f or --log-file options."""
+        # Test Case 1: The short-form option '-f' should be rejected.
+        malicious_opts_short = "--bytes -f /etc/hosts"
+        args_short = argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_short}"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args_short)
+
+        # Test Case 2: The long-form option '--log-file' should be rejected.
+        malicious_opts_long = "--progress --log-file /etc/shadow"
+        args_long = argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_long}"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args_long)
+
+        # Test Case 3: A valid set of options should instantiate successfully.
+        valid_opts = "--bytes --progress --rate"
+        args_valid = argparser_parse_args(["src", "dst", f"--pv-program-opts={valid_opts}"])
+
+        # This should not raise an exception.
+        params_valid = bzfs.Params(args_valid)
+        self.assertIn("--rate", params_valid.pv_program_opts)
+
+    def test_compression_program_opts_disallows_dangerous_options(self) -> None:
+        malicious_opts_short = "-o /etc/hosts"
+        args_short = argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_short}"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args_short)
+
+        malicious_opts_long = "--output-file /etc/hosts"
+        args_long = argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_long}"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args_long)
+
+        valid_opts = "-9"
+        args_valid = argparser_parse_args(["src", "dst", f"--compression-program-opts={valid_opts}"])
+        params_valid = bzfs.Params(args_valid)
+        self.assertIn("-9", params_valid.compression_program_opts)
+
+    def test_mbuffer_program_opts_disallows_dangerous_options(self) -> None:
+        malicious_opts = "-o /etc/hosts"
+        args_short = argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={malicious_opts}"])
+        with self.assertRaises(SystemExit):
+            bzfs.Params(args_short)
+
+        valid_opts = "-q"
+        args_valid = argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={valid_opts}"])
+        params_valid = bzfs.Params(args_valid)
+        self.assertIn("-q", params_valid.mbuffer_program_opts)
+
 
 #############################################################################
 class TestRunWithRetries(unittest.TestCase):

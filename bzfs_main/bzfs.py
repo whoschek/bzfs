@@ -1697,13 +1697,19 @@ class Params:
 
         self.compression_program: str = self.program_name(args.compression_program)
         self.compression_program_opts: list[str] = self.split_args(args.compression_program_opts)
+        if "-o" in self.compression_program_opts or "--output-file" in self.compression_program_opts:
+            die("--compression-program-opts: -o and --output-file are disallowed for security reasons.")
         self.getconf_program: str = self.program_name("getconf")  # print number of CPUs on POSIX except Solaris
         self.psrinfo_program: str = self.program_name("psrinfo")  # print number of CPUs on Solaris
         self.mbuffer_program: str = self.program_name(args.mbuffer_program)
         self.mbuffer_program_opts: list[str] = self.split_args(args.mbuffer_program_opts)
+        if "-o" in self.mbuffer_program_opts:
+            die("--mbuffer-program-opts: -o is disallowed for security reasons.")
         self.ps_program: str = self.program_name(args.ps_program)
         self.pv_program: str = self.program_name(args.pv_program)
         self.pv_program_opts: list[str] = self.split_args(args.pv_program_opts)
+        if "-f" in self.pv_program_opts or "--log-file" in self.pv_program_opts:
+            die("--pv-program-opts: -f and --log-file are disallowed for security reasons.")
         self.isatty: bool = getenv_bool("isatty", True)
         if args.bwlimit:
             self.pv_program_opts += [f"--rate-limit={self.validate_arg_str(args.bwlimit)}"]
@@ -3755,7 +3761,7 @@ class Job:
             and (p.src.is_nonlocal or p.dst.is_nonlocal)
             and self.is_program_available("zstd", loc)
         ):
-            return shlex.join([p.compression_program] + p.compression_program_opts)
+            return shlex.join([p.compression_program, "-c"] + p.compression_program_opts)
         else:
             return "cat"
 
