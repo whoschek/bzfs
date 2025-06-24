@@ -16,16 +16,11 @@
  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  KIND, either express or implied.  See the License for the
  specific language governing permissions and limitations
- under the License.
--->
-
+ under the License.-->
 # Periodic Jobs with bzfs_jobrunner
-
 - [Introduction](#Introduction)
 - [Man Page](#Man-Page)
-
 # Introduction
-
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
 This program is a convenience wrapper around [bzfs](README.md) that simplifies periodic ZFS
@@ -128,16 +123,12 @@ daemons but this is benign as these new processes immediately exit with a messag
 "Exiting as same previous periodic job is still running without completion yet"
 
 <!-- END DESCRIPTION SECTION -->
-
-
 <!-- FINE TO EDIT -->
-
 # Man Page
-
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN HELP OVERVIEW SECTION -->
 ```
-usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
+usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
                       [--prune-src-snapshots] [--prune-src-bookmarks]
                       [--prune-dst-snapshots]
                       [--monitor-src-snapshots]
@@ -164,8 +155,7 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate ]
                       [--daemon-prune-src-frequency STRING]
                       [--daemon-prune-dst-frequency STRING]
                       [--daemon-monitor-snapshots-frequency STRING]
-                      --root-dataset-pairs SRC_DATASET DST_DATASET
-                      [SRC_DATASET DST_DATASET ...]
+                      --root-dataset-pairs SRC_DATASET DST_DATASET [SRC_DATASET DST_DATASET ...]
 ```
 <!-- END HELP OVERVIEW SECTION -->
 

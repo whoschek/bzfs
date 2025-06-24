@@ -502,7 +502,6 @@ class Job:
         self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.geteuid()).pw_name
         assert username
-        dummy: str = bzfs.dummy_dataset
 
         def zero_pad(number: int, width: int = 6) -> str:
             return f"{number:0{width}d}"  # pad number with leading '0' chars to the given width
@@ -537,6 +536,7 @@ class Job:
             dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
             return resolve_dataset(dst_hostname, dst_dataset, is_src=False)
 
+        dummy: str = bzfs.dummy_dataset
         lhn = localhostname
         bzfs_prog_header = [bzfs_prog_name, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
@@ -770,8 +770,7 @@ class Job:
             sp = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True)
             if sp.returncode not in (0, 1):  # 1 means dataset not found
                 self.die(f"Unexpected error {sp.returncode} on checking for existing local dst pools: {sp.stderr.strip()}")
-            existing_pools = set(sp.stdout.splitlines())
-            existing_pools = {"-:" + pool for pool in existing_pools}
+            existing_pools = {"-:" + pool for pool in sp.stdout.splitlines()}
             self.cache_existing_dst_pools.update(existing_pools)  # union
         unknown_remote_dst_pools = unknown_dst_pools.difference(unknown_local_dst_pools)
         self.cache_existing_dst_pools.update(unknown_remote_dst_pools)  # union
@@ -1081,7 +1080,10 @@ def dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
     return list(dict.fromkeys(root_dataset_pairs).keys())
 
 
-def flatten(root_dataset_pairs: list[tuple[str, str]]) -> list[str]:
+T = TypeVar("T")
+
+
+def flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
     return [item for pair in root_dataset_pairs for item in pair]
 
 

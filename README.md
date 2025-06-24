@@ -16,9 +16,7 @@
  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  KIND, either express or implied.  See the License for the
  specific language governing permissions and limitations
- under the License.
--->
-
+ under the License.-->
 # bzfs
 [![Build](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml/badge.svg)](https://github.com/whoschek/bzfs/actions/workflows/python-app.yml)
 [![Coverage](https://whoschek.github.io/bzfs/badges/coverage-badge.svg)](https://whoschek.github.io/bzfs/coverage/)
@@ -29,7 +27,6 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-
 - [Introduction](#Introduction)
 - [Periodic Jobs with bzfs_jobrunner](#Periodic-Jobs-with-bzfs_jobrunner)
 - [Quickstart](#Quickstart)
@@ -39,9 +36,7 @@
 - [Unit Testing on GitHub](#Unit-Testing-on-GitHub)
 - [Unit Testing Locally](#Unit-Testing-Locally)
 - [Man Page](#Man-Page)
-
 # Introduction
-
 <!-- DO NOT EDIT (This section was auto-generated from ArgumentParser help text as the source of "truth", via update_readme.sh) -->
 <!-- BEGIN DESCRIPTION SECTION -->
 *bzfs is a backup command line tool that reliably replicates ZFS snapshots from a (local or

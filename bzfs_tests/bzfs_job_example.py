@@ -50,15 +50,15 @@ if len(unknown_args) == 0:
     print(
         "ERROR: Missing command. Usage: " + sys.argv[0] + " --create-src-snapshots|--replicate|--prune-src-snapshots|"
         "--prune-src-bookmarks|--prune-dst-snapshots|--monitor-src-snapshots|--monitor-dst-snapshots",
-        sys.stderr,
+        file=sys.stderr,
     )
     sys.exit(5)
 
 
 # Source and destination datasets that will be managed, in the form of one or more (src, dst) pairs, excluding
 # usernames and excluding hostnames, which will all be auto-appended later:
-# root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # replicate from tank1 to dst
-root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # replicate from tank1 to tank2
+# root_dataset_pairs = ["tank1/foo/bar", "boo/bar", "tank1/baz", "baz"]  # i.e. tank1/foo/bar --> boo/bar, tank1/baz --> baz
+root_dataset_pairs = ["tank1/foo/bar", "tank2/boo/bar"]  # i.e. replicate from tank1/foo/bar to tank2/boo/bar
 
 
 # Include descendant datasets, i.e. datasets within the dataset tree, including children, children of children, etc.
@@ -357,4 +357,5 @@ cmd += ["--jitter"] if jitter else []
 cmd += [f"--worker-timeout-seconds={worker_timeout_seconds}"] if worker_timeout_seconds is not None else []
 cmd += extra_args + unknown_args
 cmd += ["--root-dataset-pairs"] + root_dataset_pairs
+# print(" ".join(cmd))
 sys.exit(subprocess.run(cmd, input=f"{src_hosts}", text=True).returncode)
