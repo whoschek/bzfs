@@ -275,6 +275,8 @@ extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-'
 # extra_args += ["--zfs-recv-program-opts=-u"]  # this is already the default anyway
 # extra_args += ["--zfs-recv-program-opts=-u -o canmount=noauto -o readonly=on -x keylocation -x keyformat -x encryption"]
 # extra_args += ["--zfs-recv-program-opts="]  # run 'zfs receive' without options
+# extra_args += ["--preserve-properties", "mountpoint", "overlay", "sharenfs", "sharesmb", "exec", "setuid", "devices",
+#                "encryption", "keyformat", "keylocation", "volsize"]
 # extra_args += ["--force-rollback-to-latest-snapshot"]
 # extra_args += ["--force-rollback-to-latest-common-snapshot"]
 # extra_args += ["--force"]

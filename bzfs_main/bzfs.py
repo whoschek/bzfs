@@ -795,6 +795,19 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--zfs-recv-program-opt=-o "
              "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n")
     parser.add_argument(
+        "--preserve-properties", action=NonEmptyStringAction, nargs="+", default=[], metavar="STRING",
+        help="On replication, preserve the current value of ZFS properties with the given names on the destination "
+             "datasets. The destination ignores the property value it 'zfs receive's from the source if the property name "
+             "matches one of the given blacklist values. This prevents a compromised or untrusted source from overwriting "
+             "security‑critical properties on the destination. The default is to preserve none, i.e. an empty blacklist.\n\n"
+             "Example blacklist that protects against dangerous overwrites: "
+             "mountpoint overlay sharenfs sharesmb exec setuid devices encryption keyformat keylocation volsize\n\n"
+             "See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and "
+             "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x\n\n"
+             "Note: --preserve-properties uses the 'zfs recv -x' option and is therefore only reliable on OpenZFS >= 2.2 "
+             "(see https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or if "
+             "'zfs send --props' is not used.\n\n")
+    parser.add_argument(
         "--force-rollback-to-latest-snapshot", action="store_true",
         help="Before replication, rollback the destination dataset to its most recent destination snapshot (if there "
              "is one), via 'zfs rollback', just in case the destination dataset was modified since its most recent "
@@ -1650,7 +1663,10 @@ class Params:
         zfs_recv_program_opts: list[str] = self.split_args(args.zfs_recv_program_opts)
         for extra_opt in args.zfs_recv_program_opt:
             zfs_recv_program_opts.append(self.validate_arg_str(extra_opt, allow_all=True))
-        self.zfs_recv_program_opts: list[str] = self.fix_recv_opts(zfs_recv_program_opts)
+        preserve_properties = [validate_property_name(name, "--preserve-properties") for name in args.preserve_properties]
+        zfs_recv_program_opts, zfs_recv_x_names = self.fix_recv_opts(zfs_recv_program_opts, frozenset(preserve_properties))
+        self.zfs_recv_program_opts: list[str] = zfs_recv_program_opts
+        self.zfs_recv_x_names: list[str] = zfs_recv_x_names
         if self.verbose_zfs:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
@@ -1793,9 +1809,13 @@ class Params:
                 die(f"Option must not contain a single quote or double quote or dollar or backtick character: {opt}")
 
     @staticmethod
-    def fix_recv_opts(opts: list[str]) -> list[str]:
+    def fix_recv_opts(opts: list[str], preserve_properties: frozenset[str]) -> tuple[list[str], list[str]]:
         return fix_send_recv_opts(
-            opts, exclude_long_opts={"--dryrun"}, exclude_short_opts="n", include_arg_opts={"-o", "-x"}
+            opts,
+            exclude_long_opts={"--dryrun"},
+            exclude_short_opts="n",
+            include_arg_opts={"-o", "-x"},
+            preserve_properties=preserve_properties,
         )
 
     @staticmethod
@@ -1806,7 +1826,7 @@ class Params:
             exclude_short_opts="den",
             include_arg_opts={"-X", "--exclude", "--redact"},
             exclude_arg_opts=frozenset({"-i", "-I"}),
-        )
+        )[0]
 
     def program_name(self, program: str) -> str:
         """For testing: helps simulate errors caused by external programs."""
@@ -4546,7 +4566,16 @@ class Job:
         params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
         p = self.params
         set_opts = []
+        x_names = p.zfs_recv_x_names
+        x_names_set = set(x_names)
         ox_names = p.zfs_recv_ox_names.copy()
+        if self.is_program_available(zfs_version_is_at_least_2_2_0, p.dst.location):
+            # workaround for https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff
+            # 'zfs recv -x foo' on zfs < 2.2 errors out if the 'foo' property isn't contained in the send stream
+            for propname in x_names:
+                recv_opts.append("-x")
+                recv_opts.append(propname)
+            ox_names.update(x_names)  # union
         for config in [p.zfs_recv_o_config, p.zfs_recv_x_config, p.zfs_set_config]:
             if len(config.include_regexes) == 0:
                 continue  # this is the default - it's an instant noop
@@ -4568,7 +4597,7 @@ class Job:
                     raise RetryableError("Subprocess failed") from e
                 for propname in sorted(props.keys()):
                     if config is p.zfs_recv_o_config:
-                        if propname not in ox_names:
+                        if not (propname in ox_names or propname in x_names_set):
                             recv_opts.append("-o")
                             recv_opts.append(f"{propname}={props[propname]}")
                             ox_names.add(propname)
@@ -4597,7 +4626,7 @@ class Job:
                 if stripped == "-o" and "=" not in recv_opts[i]:
                     die(f"Missing value for {stripped} name=value pair in --zfs-recv-program-opt(s): {' '.join(recv_opts)}")
                 propname = recv_opts[i] if stripped == "-x" else recv_opts[i].split("=", 1)[0]
-                validate_zfs_property_name(propname, "--zfs-recv-program-opt(s)")
+                validate_property_name(propname, "--zfs-recv-program-opt(s)")
                 propnames.add(propname)
             i += 1
         return propnames
@@ -6187,10 +6216,12 @@ def fix_send_recv_opts(
     exclude_short_opts: str,
     include_arg_opts: set[str],
     exclude_arg_opts: frozenset[str] = frozenset(),
-) -> list[str]:
+    preserve_properties: frozenset[str] = frozenset(),
+) -> tuple[list[str], list[str]]:
     """These opts are instead managed via bzfs CLI args --dryrun, etc."""
     assert "-" not in exclude_short_opts
     results = []
+    x_names = set(preserve_properties)
     i = 0
     n = len(opts)
     while i < n:
@@ -6202,6 +6233,10 @@ def fix_send_recv_opts(
         elif opt in include_arg_opts:  # example: {"-o", "-x"}
             results.append(opt)
             if i < n:
+                if opt == "-o" and "=" in opts[i] and opts[i].split("=", 1)[0] in preserve_properties:
+                    die(f"--preserve-properties: Disallowed ZFS property found in --zfs-recv-program-opt(s): -o {opts[i]}")
+                if opt == "-x":
+                    x_names.discard(opts[i])
                 results.append(opts[i])
                 i += 1
         elif opt not in exclude_long_opts:  # example: {"--dryrun", "--verbose"}
@@ -6211,7 +6246,7 @@ def fix_send_recv_opts(
                 if opt == "-":
                     continue
             results.append(opt)
-    return results
+    return results, sorted(x_names)
 
 
 def fix_solaris_raw_mode(lst: list[str]) -> list[str]:
@@ -7059,10 +7094,11 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
         die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
 
 
-def validate_zfs_property_name(propname: str, input_text: str) -> None:
+def validate_property_name(propname: str, input_text: str) -> str:
     invalid_chars = SHELL_CHARS
     if not propname or any(c.isspace() or c in invalid_chars for c in propname):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
+    return propname
 
 
 def validate_user_name(user: str, input_text: str) -> None:

@@ -425,21 +425,21 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_fix_send_recv_opts(self) -> None:
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
-        self.assertEqual([], params.fix_recv_opts(["-n"]))
-        self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"]))
-        self.assertEqual([""], params.fix_recv_opts([""]))
-        self.assertEqual([], params.fix_recv_opts([]))
-        self.assertEqual(["-"], params.fix_recv_opts(["-"]))
-        self.assertEqual(["-h"], params.fix_recv_opts(["-hn"]))
-        self.assertEqual(["-h"], params.fix_recv_opts(["-nh"]))
-        self.assertEqual(["--Fvhn"], params.fix_recv_opts(["--Fvhn"]))
-        self.assertEqual(["foo"], params.fix_recv_opts(["foo"]))
-        self.assertEqual(["v", "n", "F"], params.fix_recv_opts(["v", "n", "F"]))
-        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n"]))
-        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n", "-n"]))
-        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun"]))
-        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun", "-n"]))
-        self.assertEqual(["-x"], params.fix_recv_opts(["-x"]))
+        self.assertEqual([], params.fix_recv_opts(["-n"], frozenset())[0])
+        self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"], frozenset())[0])
+        self.assertEqual([""], params.fix_recv_opts([""], frozenset())[0])
+        self.assertEqual([], params.fix_recv_opts([], frozenset())[0])
+        self.assertEqual(["-"], params.fix_recv_opts(["-"], frozenset())[0])
+        self.assertEqual(["-h"], params.fix_recv_opts(["-hn"], frozenset())[0])
+        self.assertEqual(["-h"], params.fix_recv_opts(["-nh"], frozenset())[0])
+        self.assertEqual(["--Fvhn"], params.fix_recv_opts(["--Fvhn"], frozenset())[0])
+        self.assertEqual(["foo"], params.fix_recv_opts(["foo"], frozenset())[0])
+        self.assertEqual(["v", "n", "F"], params.fix_recv_opts(["v", "n", "F"], frozenset())[0])
+        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n"], frozenset())[0])
+        self.assertEqual(["-o", "-n"], params.fix_recv_opts(["-o", "-n", "-n"], frozenset())[0])
+        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun"], frozenset())[0])
+        self.assertEqual(["-x", "--dryrun"], params.fix_recv_opts(["-x", "--dryrun", "-n"], frozenset())[0])
+        self.assertEqual(["-x"], params.fix_recv_opts(["-x"], frozenset())[0])
 
         self.assertEqual([], params.fix_send_opts(["-n"]))
         self.assertEqual([], params.fix_send_opts(["--dryrun", "-n", "-ed"]))
@@ -449,6 +449,18 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(
             ["--exclude", "d1,d2", "--redact", "b1"], params.fix_send_opts(["--exclude", "d1,d2", "--redact", "b1"])
         )
+
+    def test_fix_recv_opts_with_preserve_properties(self) -> None:
+        mp = "mountpoint"
+        cr = "createtxg"
+        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        with self.assertRaises(SystemExit):
+            params.fix_recv_opts(["-n", "-o", f"{mp}=foo"], frozenset([mp]))
+        self.assertEqual(([], [mp]), params.fix_recv_opts(["-n"], frozenset([mp])))
+        self.assertEqual((["-u", mp], [mp]), params.fix_recv_opts(["-n", "-u", mp], frozenset([mp])))
+        self.assertEqual((["-x", mp], []), params.fix_recv_opts(["-n", "-x", mp], frozenset([mp])))
+        self.assertEqual((["-x", mp, "-x", cr], []), params.fix_recv_opts(["-n", "-x", mp, "-x", cr], frozenset([mp])))
+        self.assertEqual(([], [cr, mp]), params.fix_recv_opts([], frozenset([mp, cr])))
 
     def test_xprint(self) -> None:
         log = logging.getLogger()

@@ -604,6 +604,7 @@ usage: bzfs [-h] [--recursive]
             [--zfs-send-program-opts STRING]
             [--zfs-recv-program-opts STRING]
             [--zfs-recv-program-opt STRING]
+            [--preserve-properties STRING [STRING ...]]
             [--force-rollback-to-latest-snapshot]
             [--force-rollback-to-latest-common-snapshot] [--force]
             [--force-destroy-dependents] [--force-unmount]
@@ -1197,6 +1198,29 @@ usage: bzfs [-h] [--recursive]
     receive' CLI. The value can contain spaces and is not split. This option can be specified
     multiple times. Example: `--zfs-recv-program-opt=-o
     --zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`
+
+<!-- -->
+
+<div id="--preserve-properties"></div>
+
+**--preserve-properties** *STRING [STRING ...]*
+
+*  On replication, preserve the current value of ZFS properties with the given names on the
+    destination datasets. The destination ignores the property value it 'zfs receive's from the
+    source if the property name matches one of the given blacklist values. This prevents a
+    compromised or untrusted source from overwriting security‑critical properties on the
+    destination. The default is to preserve none, i.e. an empty blacklist.
+
+    Example blacklist that protects against dangerous overwrites: mountpoint overlay sharenfs
+    sharesmb exec setuid devices encryption keyformat keylocation volsize
+
+    See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and
+    https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x
+
+    Note: --preserve-properties uses the 'zfs recv -x' option and is therefore only reliable on
+    OpenZFS >= 2.2 (see
+    https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or if 'zfs
+    send --props' is not used.
 
 <!-- -->
 
