@@ -2079,7 +2079,7 @@ usage: bzfs [-h] [--recursive]
 
 *  Path to the log output directory on local host (optional). Default: $HOME/bzfs-logs. The
     logger that is used by default writes log files there, in addition to the console. The
-    basename of --log-dir must start with the prefix 'bzfs-logs' as this helps prevent
+    basename of --log-dir must contain the substring 'bzfs-logs' as this helps prevent
     accidents. The current.dir symlink always points to the subdirectory containing the most
     recent log file. The current.log symlink always points to the most recent log file. The
     current.pv symlink always points to the most recent data transfer monitoring log. Run `tail

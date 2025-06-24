@@ -96,7 +96,9 @@ def suite() -> unittest.TestSuite:
 
 
 def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-    return bzfs.argument_parser().parse_args(args + ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")])
+    return bzfs.argument_parser().parse_args(
+        args + ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
+    )
 
 
 #############################################################################
@@ -628,7 +630,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_logdir_basename_prefix(self) -> None:
         """Basename of --log-dir must start with prefix 'bzfs-logs'"""
-        logdir = os.path.join(bzfs.get_home_directory(), "bzfs-logs-tmp")
+        logdir = os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-tmp")
         try:
             bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
             self.assertTrue(os.path.exists(logdir))
@@ -644,7 +646,7 @@ class TestHelperFunctions(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmpdir:
             target = os.path.join(tmpdir, "target")
             os.mkdir(target)
-            link_path = os.path.join(tmpdir, "bzfs-logs-link")
+            link_path = os.path.join(tmpdir, bzfs.log_dir_default + "-link")
             os.symlink(target, link_path)
             with self.assertRaises(SystemExit) as cm:
                 bzfs.LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path]))

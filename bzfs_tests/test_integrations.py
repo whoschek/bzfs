@@ -303,7 +303,7 @@ class BZFSTestCase(ParametrizedTestCase):
 
     @staticmethod
     def log_dir_opt() -> list[str]:
-        return ["--log-dir", os.path.join(bzfs.get_home_directory(), "bzfs-logs-test")]
+        return ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
 
     def run_bzfs_internal(
         self,

@@ -126,6 +126,7 @@ if sys.version_info < min_python_version:
     print(f"ERROR: {prog_name} requires Python version >= {'.'.join(map(str, min_python_version))}!")
     sys.exit(die_status)
 exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
+log_dir_default = prog_name + "-logs"
 create_src_snapshots_prefix_dflt = prog_name + "_"
 create_src_snapshots_suffix_dflt = "_adhoc"
 time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
@@ -1360,9 +1361,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=hlp("zpool") + msg)
     parser.add_argument(
         "--log-dir", type=str, action=SafeDirectoryNameAction, metavar="DIR",
-        help=f"Path to the log output directory on local host (optional). Default: $HOME/{prog_name}-logs. The logger "
+        help=f"Path to the log output directory on local host (optional). Default: $HOME/{log_dir_default}. The logger "
              "that is used by default writes log files there, in addition to the console. The basename of --log-dir must "
-             f"start with the prefix '{prog_name}-logs' as this helps prevent accidents. The current.dir symlink "
+             f"contain the substring '{log_dir_default}' as this helps prevent accidents. The current.dir symlink "
              "always points to the subdirectory containing the most recent log file. The current.log symlink "
              "always points to the most recent log file. The current.pv symlink always points to the most recent "
              "data transfer monitoring log. Run `tail --follow=name --max-unchanged-stats=1` on both symlinks to "
@@ -1558,10 +1559,9 @@ class LogParams:
         timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.timestamp: str = timestamp
         self.home_dir: str = get_home_directory()
-        default_dir_name = prog_name + "-logs"
-        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, default_dir_name)
-        if not os.path.basename(log_parent_dir).startswith(default_dir_name):
-            die(f"Basename of --log-dir must start with prefix '{default_dir_name}', but got: {log_parent_dir}")
+        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, log_dir_default)
+        if log_dir_default not in os.path.basename(log_parent_dir):
+            die(f"Basename of --log-dir must contain the substring '{log_dir_default}', but got: {log_parent_dir}")
         if os.path.islink(log_parent_dir):
             die(f"--log-dir must not be a symlink: {log_parent_dir}")
         sep = "_" if args.log_subdir == "daily" else ":"
