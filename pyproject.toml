@@ -112,7 +112,7 @@ exclude = [   # toggles to exclude overly strict `ruff` checks of these Python s
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "A", "B", "FA"]  # Or use ["ALL"] if you want every check enabled  # "UP006", "UP007", "UP045"
+select = ["E", "F", "A", "B", "FA", "S"]  # Or use ["ALL"] if you want every check enabled  # "UP006", "UP007", "UP045"
 ignore = [  # toggles to exclude overly strict `ruff` checks in development mode:
 #    "E501",  # Line too long
 #    "E203",  # Whitespace before ':', conflicts with Black
@@ -132,7 +132,14 @@ ignore = [  # toggles to exclude overly strict `ruff` checks in development mode
 #    "B904",  # Raise exception with from err (except clause)
 #    "B011",  # Do not use assert False
 #    "A003"  # Class attribute is shadowing a Python builtin
+    "S101",  # Use of assert detected (harmless)
+    "S404",  # import subprocess  (use of subprocess is intended)
+    "S603",  # Use of subprocess without shell=True (this use is intended)
+    "S608",  # string-built SQL (false positive)
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"bzfs_tests/**/*" = ["S"]
 
 [tool.mypy]
 python_version = "3.8"

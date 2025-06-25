@@ -35,7 +35,7 @@ def main() -> None:
         if version is None:
             # Example: "11.4" for solaris
             try:
-                version = subprocess.run(["uname", "-v"], stdout=subprocess.PIPE, text=True, check=True).stdout
+                version = subprocess.run(["uname", "-v"], stdout=subprocess.PIPE, text=True, check=True).stdout  # noqa: S607
                 version = version.strip().split()[0]
             except subprocess.CalledProcessError:
                 version = "2.3.0"

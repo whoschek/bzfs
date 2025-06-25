@@ -52,8 +52,8 @@ from bzfs_main.bzfs import die_status, log_trace, prog_name as bzfs_prog_name
 
 # constants:
 prog_name = "bzfs_jobrunner"
-src_magic_substitution_token = "^SRC_HOST"
-dst_magic_substitution_token = "^DST_HOST"
+src_magic_substitution_token = "^SRC_HOST"  # noqa: S105
+dst_magic_substitution_token = "^DST_HOST"  # noqa: S105
 sep = ","
 
 
@@ -798,7 +798,7 @@ class Job:
         interval_nanos = 0 if len(subjobs) == 0 else round(1_000_000_000 * max(0.0, work_period_seconds) / num_intervals)
         assert interval_nanos >= 0
         if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
-            sleep_nanos = random.randint(0, interval_nanos)
+            sleep_nanos = random.randint(0, interval_nanos)  # noqa: S311
             log.info("Jitter: Delaying job start time by sleeping for %s ...", bzfs.human_readable_duration(sleep_nanos))
             time.sleep(sleep_nanos / 1_000_000_000)  # seconds
         sorted_subjobs = sorted(subjobs.keys())

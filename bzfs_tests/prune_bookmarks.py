@@ -69,7 +69,7 @@ def main() -> None:
                 msg = "Would delete" if args.dryrun else "Deleting"
                 print(f"{msg} {kind}: {bookmark} ...")
                 if not args.dryrun:
-                    subprocess.run(["sudo", "zfs", "destroy", bookmark], check=True)
+                    subprocess.run(["sudo", "zfs", "destroy", bookmark], check=True)  # noqa: S607
     print("Success. Goodbye!")
 
 

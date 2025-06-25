@@ -3745,7 +3745,7 @@ class Job:
         if self.dst_dataset_exists[dst_dataset]:
             cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
             recv_resume_token = self.run_ssh_command(p.dst, log_trace, cmd=cmd).rstrip()
-            if recv_resume_token == "-" or not recv_resume_token:
+            if recv_resume_token == "-" or not recv_resume_token:  # noqa: S105
                 recv_resume_token = None
             else:
                 send_resume_opts += ["-n"] if p.dry_run else []
