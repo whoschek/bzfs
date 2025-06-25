@@ -444,7 +444,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
 --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
 --exclude-dataset-regex '(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*'```
-""")
+""")  # noqa: S608
 
     parser.add_argument(
         "--no-argument-file", action="store_true",
@@ -8190,7 +8190,7 @@ class _XFinally(contextlib.AbstractContextManager):
     def __init__(self, cleanup: Callable[[], None]) -> None:
         self._cleanup = cleanup  # Zero‑argument callable executed after the `with` block exits.
 
-    def __exit__(  # type: ignore  # need to ignore on python <= 3.8
+    def __exit__(  # type: ignore[exit-return]  # need to ignore on python <= 3.8
         self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: types.TracebackType | None
     ) -> bool:
         try:

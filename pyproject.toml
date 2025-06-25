@@ -109,37 +109,54 @@ unsafe-fixes = false  # allow FA100 and similar "unsafe" auto-fixes?
 exclude = [   # toggles to exclude overly strict `ruff` checks of these Python source code directories in development mode:
 #    "bzfs_main",
 #    "bzfs_tests",
+#    ".github-workflow-scripts",
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "A", "B", "FA", "S"]  # Or use ["ALL"] if you want every check enabled  # "UP006", "UP007", "UP045"
+select = [  # see https://docs.astral.sh/ruff/rules/
+    "A",    # builtins
+    "B",    # bugbear
+    "CPY",  # copyright
+    "E",    # pycodestyle error
+    "EXE",  # shebang
+    "F",    # pyflakes
+    "FA",   # forward annotations
+    "PGH",  # pygrep-hooks
+    "S",    # bandit
+#    "UP006",  # pyupgrade
+#    "UP007",  # pyupgrade
+#    "UP045",  # pyupgrade
+    "YTT",  # flake8-2020
+]
+
 ignore = [  # toggles to exclude overly strict `ruff` checks in development mode:
-#    "E501",  # Line too long
+#    "A003"  # Class attribute is shadowing a Python builtin
+#    "B005",  # Using .strip() with multi-character strings
+#    "B006",  # Do not use mutable data structures for argument defaults
+#    "B007",  # Loop control variable not used within the loop body
+#    "B008",  # Do not perform function calls in argument defaults
+#    "B011",  # Do not use assert False
+#    "B018",  # Found useless expression (typically typo/logic)
+#    "B904",  # Raise exception with from err (except clause)
 #    "E203",  # Whitespace before ':', conflicts with Black
+#    "E402",  # Module level import not at top of file
+#    "E501",  # Line too long
+#    "E722",  # Do not use bare 'except'
+#    "E731",  # Do not assign a lambda expression, use a def
+#    "E741",  # Do not use ambiguous variable names like 'l', 'O', 'I'
 #    "F401",  # Module imported but unused
 #    "F403",  # 'from module import *' used
 #    "F405",  # Name may be undefined from import *
 #    "F841",  # Local variable assigned but never used
-#    "E402",  # Module level import not at top of file
-#    "E722",  # Do not use bare 'except'
-#    "E731",  # Do not assign a lambda expression, use a def
-#    "E741",  # Do not use ambiguous variable names like 'l', 'O', 'I'
-#    "B008",  # Do not perform function calls in argument defaults
-#    "B006",  # Do not use mutable data structures for argument defaults
-#    "B007",  # Loop control variable not used within the loop body
-#    "B018",  # Found useless expression (typically typo/logic)
-#    "B005",  # Using .strip() with multi-character strings
-#    "B904",  # Raise exception with from err (except clause)
-#    "B011",  # Do not use assert False
-#    "A003"  # Class attribute is shadowing a Python builtin
     "S101",  # Use of assert detected (harmless)
-    "S404",  # import subprocess  (use of subprocess is intended)
     "S603",  # Use of subprocess without shell=True (this use is intended)
-    "S608",  # string-built SQL (false positive)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"bzfs_tests/**/*" = ["S"]
+"bzfs_tests/**/*" = [
+    "PGH003",  # pygrep-hooks blanket-type-ignore
+    "S",       # bandit
+]
 
 [tool.mypy]
 python_version = "3.8"
@@ -149,6 +166,7 @@ warn_return_any = true
 warn_unused_ignores = true
 #ignore_errors = true  #  big toggle to exclude all `mypy` checks in development mode
 disable_error_code = [  # toggles to exclude overly strict `mypy` checks in development mode:
+#    see https://mypy.readthedocs.io/en/stable/error_code_list.html#error-code-list
 #    "assignment",
 #    "attr-defined",
 #    "name-defined",
