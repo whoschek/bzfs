@@ -161,3 +161,13 @@ disable_error_code = [  # toggles to exclude overly strict `mypy` checks in deve
 #    "index",
 #    "call-arg",
 ]
+
+[tool.bandit]
+#tests = ["B610"]  # big toggle to exclude all `bandit` security checks in development mode
+skips = [
+    "B101",  # Use of assert detected (harmless)
+    "B404",  # Consider possible security implications associated with the subprocess module
+    "B603",  # Test for use of subprocess without shell equals true
+    "B608",  # Possible SQL injection vector through string-based query construction (false positive)
+    "CWE",   # subprocess call
+]

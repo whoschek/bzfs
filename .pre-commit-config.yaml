@@ -39,7 +39,7 @@ repos:
     rev: v0.12.0
     hooks:
       - id: ruff-check  # Run linter to check if there are problems in the Python source code
-      # config options like `target-version` live in pyproject.toml
+        # config options like `target-version` live in pyproject.toml
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.16.1
     hooks:
@@ -50,4 +50,12 @@ repos:
     rev: 25.1.0  # bump version number occasionally with autoupdate
     hooks:
       - id: black  # Run Python code formatter
-      # style options like `line_length` live in pyproject.toml
+        # style options like `line_length` live in pyproject.toml
+  # - repo: https://github.com/PyCQA/bandit
+  #   rev: 1.8.5
+  #   hooks:
+  #     - id: bandit  # Finds common security issues in Python code
+  #       exclude: ^(\.git|bzfs_docs|bzfs_tests|tmp).*$
+  #       args: ["-c", "pyproject.toml"]
+  #       additional_dependencies: ["bandit[toml]"]
+  #       # options like `skips` live in pyproject.toml
