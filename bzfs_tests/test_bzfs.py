@@ -73,6 +73,7 @@ def suite() -> unittest.TestSuite:
         TestSynchronizedBool,
         TestSynchronizedDict,
         TestArgumentParser,
+        TestAddRecvPropertyOptions,
         TestDatasetPairsAction,
         TestFileOrLiteralAction,
         TestNewSnapshotFilterGroupAction,
@@ -3588,6 +3589,37 @@ class TestArgumentParser(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
             parser.parse_args(["src_dataset", "src_dataset", "--zfs-program="])
         self.assertEqual(2, e.exception.code)
+
+
+###############################################################################
+class TestAddRecvPropertyOptions(unittest.TestCase):
+
+    def setUp(self) -> None:
+        args = argparser_parse_args(["src", "dst"])
+        self.p = bzfs.Params(args)
+        self.p.src = bzfs.Remote("src", args, self.p)
+        self.p.dst = bzfs.Remote("dst", args, self.p)
+        self.p.zfs_recv_x_names = ["xprop1", "xprop2"]
+        self.p.zfs_recv_ox_names = {"existing"}
+        self.job = bzfs.Job()
+        self.job.params = self.p
+
+    def test_appends_x_options_when_supported(self) -> None:
+        recv_opts: list[str] = []
+        with patch.object(self.job, "is_program_available", return_value=True):
+            result_opts, set_opts = self.job.add_recv_property_options(True, recv_opts, "ds", {})
+        self.assertEqual(["-x", "xprop1", "-x", "xprop2"], result_opts)
+        self.assertEqual([], set_opts)
+        # original zfs_recv_ox_names remains unchanged
+        self.assertEqual({"existing"}, self.p.zfs_recv_ox_names)
+
+    def test_skips_x_options_when_not_supported(self) -> None:
+        recv_opts: list[str] = []
+        with patch.object(self.job, "is_program_available", return_value=False):
+            result_opts, set_opts = self.job.add_recv_property_options(True, recv_opts, "ds", {})
+        self.assertEqual([], result_opts)
+        self.assertEqual([], set_opts)
+        self.assertEqual({"existing"}, self.p.zfs_recv_ox_names)
 
 
 #############################################################################
