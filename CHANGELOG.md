@@ -19,12 +19,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs_jobrunner] Added option to customize number of cycles in monitor_snapshot_plan.
 - [bzfs_jobrunner] Added '[bzfs_jobrunner]' tag to log messages.
 - [bzfs_jobrunner] Added more input validation.
+- [bzfs_jobrunner] Added `--ssh-{src|dst}-port` and `--ssh-{src|dst}-config-file` CLI options.
 - [bzfs_jobrunner] Replaced the  `--jobid` CLI option with `--job-run` and added the (required) `--job-id` CLI option,
   which is forwarded to bzfs. The old `--jobid` option will continue to work as-is for now, in deprecated status, but
   the old name will be completely removed in a future release.
 - [bzfs_jobrunner] There's no need anymore to specify an argument to `--replicate`. For the time being the corresponding
   mode argument remains available in deprecated status but is actually ignored. The argument will be removed in a
   future release.
+- [bzfs_jobrunner] Renamed `--src-user` and `--dst-user` to `--ssh-src-user` and `--ssh-dst-user`. The old names will
+  continue to work as-is for now, in deprecated status, but the old names will be completely removed in a future
+  release.
 - [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
 - [bzfs] Also support `--delete-dst-snapshots-except` if source is not a dummy.
 - [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old
@@ -41,11 +45,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] [perf] Create bookmarks in parallel.
 - [bzfs] Fixed progress reporting when using 'pv' with French locale and other international locales.
 - [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
+- [bzfs] [security] Added `--preserve-properties` CLI option which preserves the current value of ZFS properties with
+  the given names on the destination datasets on replication.
+- [bzfs] [security] Removed CLI options `--ssh-{src|dst}-private-key`, `--ssh-{src|dst}-extra-opt(s)`, `--ssh-cipher`,
+  as it is safer to specify these options via `--ssh-{src|dst}-config-file` in the ssh client config file.
+- [bzfs] [security] Enhanced validation of CLI options.
+- [bzfs] [security] Tightly constrain name of helper programs.
+- [bzfs] [security] Refuse to follow symlinks.
+- [bzfs] [security] Only give permissions to access log dirs to the Unix user (not the Unix group).
+- [bzfs] [security] To help with debugging ssh issues, enable `ssh -v` mode when using `bzfs -v -v -v` mode.
+- [bzfs] [security] Capped max number of threads to help guard against DoS.
 - Added [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs) link to an AI that can
   answer questions about the bzfs codebase.
 - Use standard python module imports throughout to improve ease of use of the codebase. Installation via pip remains
   unchanged. Optional system installation from the git repo is now done by adding symlinks to the startup shell
   script, [like so](README.md#Installation).
+- Run nightly tests also on zfs-2.2.8 and zfs-2.3.3
+- Run nightly tests also on FreeBSD-14.3
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.11.0...v1.12.0
 
 ## [1.11.0] - March 26, 2025
