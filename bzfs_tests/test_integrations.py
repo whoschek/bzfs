@@ -4982,6 +4982,17 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, job.num_cache_misses)
 
     def test_jobrunner_flat_simple(self) -> None:
+
+        def is_ipv6_loopback_possible() -> bool:
+            """Detects if a loopback connection over IPv6 is possible."""
+            try:
+                addr = "::1"
+                with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
+                    s.bind((addr, 0))
+                return True
+            except BaseException:
+                return False
+
         def run_jobrunner(*args: str, **kwargs: Any) -> bzfs_jobrunner.Job:
             return self.run_bzfs_jobrunner(
                 *args,
@@ -4999,15 +5010,15 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 self.assertSnapshots(src_root_dataset, 0)
-
+                loopback = "::1" if "Ubuntu" in platform.version() and is_ipv6_loopback_possible() else "localhost"
                 delay_secs = bzfs.time_threshold_secs
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
                 dst_hosts_pull = {localhostname: ["", "onsite"]}
                 dst_hosts_pull_bad = {localhostname: ["xxxxonsite"]}
-                dst_hosts_push = {"localhost": ["onsite"], "127.0.0.1": ["onsite"]}
-                dst_hosts_push_bad = {"localhost": ["xxxonsite"]}
-                dst_root_datasets = {localhostname: "", "localhost": "", "127.0.0.1": ""}
+                dst_hosts_push = {loopback: ["onsite"], "127.0.0.1": ["onsite"]}
+                dst_hosts_push_bad = {loopback: ["xxxonsite"]}
+                dst_root_datasets = {localhostname: "", loopback: "", "127.0.0.1": ""}
                 retain_dst_targets = dst_hosts_pull.copy()
                 retain_dst_targets.update(dst_hosts_push)
                 src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}

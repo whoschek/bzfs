@@ -408,7 +408,7 @@ class Job:
         self.log: Logger = log if log is not None else bzfs.get_simple_logger(prog_name)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
-        self.loopback_address: str = convert_ipv6(detect_loopback_address())
+        self.loopback_address: str = detect_loopback_address()
 
         # mutable variables:
         self.first_exception: int | None = None
@@ -521,6 +521,7 @@ class Job:
             ssh_user = ssh_user if ssh_user else username
             lb = self.loopback_address
             hostname = hostname if hostname != localhostname else (lb if lb else hostname) if username != ssh_user else "-"
+            hostname = convert_ipv6(hostname)
             return f"{hostname}:{dataset}"
 
         def resolve_dst_dataset(dst_hostname: str, dst_dataset: str) -> str:
@@ -1006,7 +1007,7 @@ class Job:
 
     def validate_host_name(self, hostname: str, context: str) -> None:
         self.validate_non_empty_string(hostname, f"{context} hostname")
-        bzfs.validate_host_name(hostname, context, extra_invalid_chars=":")
+        bzfs.validate_host_name(hostname, context)
 
     def validate_non_empty_string(self, value: str, name: str) -> None:
         self.validate_type(value, str, name)
