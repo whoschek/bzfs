@@ -7073,7 +7073,7 @@ def validate_user_name(user: str, input_text: str) -> None:
 
 def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = "") -> None:
     invalid_chars = SHELL_CHARS + "/" + extra_invalid_chars
-    if host and (".." in host or any(c.isspace() or c in invalid_chars for c in host)):
+    if host and (host.startswith("-") or ".." in host or any(c.isspace() or c in invalid_chars for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 

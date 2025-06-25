@@ -5005,9 +5005,9 @@ class LocalTestCase(BZFSTestCase):
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
                 dst_hosts_pull = {localhostname: ["", "onsite"]}
                 dst_hosts_pull_bad = {localhostname: ["xxxxonsite"]}
-                dst_hosts_push = {"-": ["onsite"], "127.0.0.1": ["onsite"]}
-                dst_hosts_push_bad = {"-": ["xxxonsite"]}
-                dst_root_datasets = {localhostname: "", "-": "", "127.0.0.1": ""}
+                dst_hosts_push = {"localhost": ["onsite"], "127.0.0.1": ["onsite"]}
+                dst_hosts_push_bad = {"localhost": ["xxxonsite"]}
+                dst_root_datasets = {localhostname: "", "localhost": "", "127.0.0.1": ""}
                 retain_dst_targets = dst_hosts_pull.copy()
                 retain_dst_targets.update(dst_hosts_push)
                 src_snapshot_plan = {"z": {"onsite": {"millisecondly": 1, "daily": 0}}}
@@ -5257,7 +5257,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # push replication does nothing if target isn't mapped to destination host:
-                run_jobrunner("--replicate=push", *push_args_bad)
+                run_jobrunner("--replicate=push", "--workers=1", *push_args_bad)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
@@ -5281,7 +5281,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
                 # push replicate successfully from src to dst:
-                run_jobrunner("--replicate=push", *push_args)
+                run_jobrunner("--replicate=push", "--workers=1", *push_args)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
                 self.assertEqual(2, len(bookmarks(src_root_dataset)))
                 self.assertEqual(2, len(snapshots(dst_root_dataset)))
@@ -5349,7 +5349,7 @@ class LocalTestCase(BZFSTestCase):
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
                 dst_hosts_pull = {localhostname: ["onsite", ""]}
-                # dst_root_datasets = {localhostname: "", "-": ""}
+                # dst_root_datasets = {localhostname: "", "localhost": ""}
                 dst_root_datasets = {localhostname: ""}
                 src_snapshot_plan = {"z": {"onsite": {"yearly": 1, "daily": 0}}}
                 dst_snapshot_plan = {"z": {"": {"yearly": 1, "daily": 0}}}

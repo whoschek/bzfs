@@ -2340,6 +2340,7 @@ class TestParseDatasetLocator(unittest.TestCase):
         self.run_test("user@localhost:tank1/foo/bar", "user", "localhost", "tank1/foo/bar", "user@localhost", False)
         self.run_test("host.local:tank1/foo/bar", "", "host.local", "tank1/foo/bar", "host.local", False)
         self.run_test("host.local:tank1/foo/bar", "", "host.local", "tank1/foo/bar", "host.local", False)
+        self.run_test("-host.local:tank1/foo/bar", "", "-host.local", "tank1/foo/bar", "-host.local", True)
         self.run_test("user@host:", "user", "host", "", "user@host", True)
         self.run_test("@host:tank1/foo/bar", "", "host", "tank1/foo/bar", "host", False)
         self.run_test("@host:tank1/foo/bar", "", "host", "tank1/foo/bar", "host", False)
