@@ -5,45 +5,47 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [1.12.0] - TBD
 
 - [bzfs_jobrunner] Added ability to [bzfs_jobrunner](README_bzfs_jobrunner.md) to replicate across N source hosts and M
-destination hosts, using the same single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
-For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
-hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts. It also
-simplifies low latency replication from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
+  destination hosts, using the same single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script. For example, this
+  simplifies the deployment of an efficient geo-replicated backup service where each of the M destination hosts is
+  located in a separate geographic region and pulls replicas from (the same set of) N source hosts. It also simplifies
+  low latency replication from a primary to a secondary or to M read replicas, or backup to removable drives, etc.
 - [bzfs_jobrunner] Added example for how to force the use of a separate destination root dataset per source host.
 - [bzfs_jobrunner] Added name of localhost to log file name suffix.
 - [bzfs_jobrunner] Also log subjobs that were skipped (because a prior subjob failed).
 - [bzfs_jobrunner] Added `--jobrunner-dryrun` and `--jobrunner-log-level` CLI options.
-- [bzfs_jobrunner] Added `--jitter` CLI option to randomize job start time and host order to avoid potential thundering herd
-problems in large distributed systems.
+- [bzfs_jobrunner] Added `--jitter` CLI option to randomize job start time and host order to avoid potential thundering
+  herd problems in large distributed systems.
 - [bzfs_jobrunner] Added timeout parameter.
 - [bzfs_jobrunner] Added option to customize number of cycles in monitor_snapshot_plan.
 - [bzfs_jobrunner] Added '[bzfs_jobrunner]' tag to log messages.
 - [bzfs_jobrunner] Added more input validation.
-- [bzfs_jobrunner] Replaced the  `--jobid` CLI option with `--job-run` and added the (required) `--job-id` CLI option, which
-is forwarded to bzfs. The old `--jobid` option will continue to work as-is for now, in deprecated status, but the old name
-will be completely removed in a future release.
-- [bzfs_jobrunner] There's no need anymore to specify an argument to `--replicate`. For the time being the corresponding mode
-argument remains available in deprecated status but is actually ignored. The argument will be removed in a future release.
+- [bzfs_jobrunner] Replaced the  `--jobid` CLI option with `--job-run` and added the (required) `--job-id` CLI option,
+  which is forwarded to bzfs. The old `--jobid` option will continue to work as-is for now, in deprecated status, but
+  the old name will be completely removed in a future release.
+- [bzfs_jobrunner] There's no need anymore to specify an argument to `--replicate`. For the time being the corresponding
+  mode argument remains available in deprecated status but is actually ignored. The argument will be removed in a
+  future release.
 - [bzfs_jobrunner] Promoted `bzfs_jobrunner` from work-in-progress to stable status.
 - [bzfs] Also support `--delete-dst-snapshots-except` if source is not a dummy.
-- [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old flag
-will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in a future
-release.
+- [bzfs] Replaced `--create-src-snapshots-enable-snapshots-changed-cache` CLI option with `--cache-snapshots`. The old
+  flag will remain available in deprecated state for the time being (yet has no effect anymore), and will be removed in
+  a future release.
 - [bzfs] [perf] Made `--cache-snapshots` also boost the performance of replication and `--monitor-snapshots`.
-- [bzfs] Replaced the `--no-create-bookmarks` CLI option with `--create-bookmarks=none` and added `--create-bookmarks=many`
-(the default) and `--create-bookmarks=all`. The old `--no-create-bookmarks` will continue to work as-is for now, in
-deprecated status, but the old name will be completely removed in a future release.
+- [bzfs] Replaced the `--no-create-bookmarks` CLI option with `--create-bookmarks=none` and added
+  `--create-bookmarks=many` (the default) and `--create-bookmarks=all`. The old `--no-create-bookmarks` will continue
+  to work as-is for now, in deprecated status, but the old name will be completely removed in a future release.
 - [bzfs] Log more detailed diagnostics on `--monitor-snapshots`.
-- [bzfs] Added a bash completion script such that typing bzfs SPACE TAB or bzfs_jobrunner TAB will auto-complete all flags.
+- [bzfs] Added a bash completion script such that typing bzfs SPACE TAB or bzfs_jobrunner TAB will auto-complete all
+  flags.
 - [bzfs] [perf] Auto-disable mbuffer and compression-on-the-wire if replicating over the loopback address.
 - [bzfs] [perf] Create bookmarks in parallel.
 - [bzfs] Fixed progress reporting when using 'pv' with French locale and other international locales.
 - [bzfs] On SIGTERM, send signal also to descendant processes to also terminate descendants.
-- Added [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs) link to an AI that can answer
-questions about the bzfs codebase.
-- Use standard python module imports throughout to improve ease of use of the codebase.
-Installation via pip remains unchanged. Optional system installation from the git repo is now done by adding symlinks to the
-startup shell script, [like so](README.md#Installation).
+- Added [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs) link to an AI that can
+  answer questions about the bzfs codebase.
+- Use standard python module imports throughout to improve ease of use of the codebase. Installation via pip remains
+  unchanged. Optional system installation from the git repo is now done by adding symlinks to the startup shell
+  script, [like so](README.md#Installation).
 - For the full list of changes, see https://github.com/whoschek/bzfs/compare/v1.11.0...v1.12.0
 
 ## [1.11.0] - March 26, 2025
