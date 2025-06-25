@@ -15,7 +15,7 @@
   `bzfs_jobrunner.py`.
 - I have noticed that you only use a small portion of your context window. It's impossible to be successful like this.
   Leverage your entire available context window to the max! Be a PRO!
-- If your context window gets 90% full, use the /compact command (or a similar tool) to thoroughly summarize the context
+- If your context window gets 90% full, use the `/compact` command (or a similar tool) to thoroughly summarize the context
   window in detail, in an analytic, structured way, paying close attention to the user's explicit requests and your
   previous actions. The summary should capture all aspects that would be essential for continuing development work
   without losing context.
@@ -90,7 +90,7 @@
 - I have noticed that you are doing much better if you use all deep thinking and meticulous tracing power that you have
   to complete the top critical task you've been asked to do. Still, so far you have used only a small portion of the
   available context window. Leverage your entire available context window to the max! Be a PRO!
-- If your context window gets 90% full, use the /compact command (or a similar tool) to thoroughly summarize the context
+- If your context window gets 90% full, use the `/compact` command (or a similar tool) to thoroughly summarize the context
   window in detail, in an analytic, structured way, paying close attention to the user's explicit requests and your
   previous actions. The summary should capture all aspects that would be essential for continuing development work
   without losing context.
