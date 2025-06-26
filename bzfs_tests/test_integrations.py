@@ -246,14 +246,14 @@ class BZFSTestCase(ParametrizedTestCase):
         private_key_file = "id_rsa" if platform.system() == "Linux" else "testid_rsa"
         private_key_file = os.path.join(os.path.dirname(ssh_config_file), private_key_file)
         fallback = "Fallback=no\n" if ssh_program == "hpnssh" else ""  # see https://www.psc.edu/hpn-ssh-home/hpn-readme/
-        with open(ssh_config_file, "w") as fd:
+        with open(ssh_config_file, "w", encoding="utf-8") as fd:
             fd.write(f"IdentityFile {private_key_file}\nStrictHostKeyChecking=no\n{fallback}Include /etc/ssh/ssh_config\n")
         os.chmod(ssh_config_file, mode=stat.S_IRWXU)  # chmod u=rwx,go=
 
     # zpool list -o name|grep '^wb_'|xargs -n 1 -r --verbose zpool destroy; rm -fr /tmp/tmp* /run/user/$UID/bzfs/
     def tearDown(self) -> None:
         Path(ssh_config_file).unlink(missing_ok=True)
-        pass  # tear down is deferred to next setup for easier debugging
+        # tear down is deferred to next setup for easier debugging
 
     def tearDownAndSetup(self) -> None:  # noqa: N802
         self.tearDown()
@@ -573,7 +573,7 @@ class BZFSTestCase(ParametrizedTestCase):
     def assert_snapshots(
         self, dataset: str, expected_num_snapshots: int, snapshot_prefix: str = "", offset: int = 0
     ) -> None:
-        expected_names = [f"{snapshot_prefix}{i + 1 + offset}" for i in range(0, expected_num_snapshots)]
+        expected_names = [f"{snapshot_prefix}{i + 1 + offset}" for i in range(expected_num_snapshots)]
         self.assert_snapshot_names(dataset, expected_names)
 
     def assert_snapshot_name_regexes(self, dataset: str, expected_names: list[str]) -> None:
@@ -880,7 +880,7 @@ class TestSSHLatency(BZFSTestCase):
             ssh_opts_list += src_private_key2
         ssh_opts = " ".join(ssh_opts_list)
 
-        for mode in range(0, 2):
+        for mode in range(2):
             with stop_on_failure_subtest(i=mode):
                 control_persist = 2 if mode == 0 else 2  # noqa: RUF034  # seconds
                 master_cmd = p.split_args(f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit")
@@ -946,7 +946,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_snapshotting_flat_simple(self) -> None:
         destroy(dst_root_dataset, recursive=True)
         self.assert_snapshots(src_root_dataset, 0)
-        for i in range(0, 6):
+        for i in range(6):
             with stop_on_failure_subtest(i=i):
                 localperiods = {"yearly": 1, "adhoc": 1}
                 localperiods["secondly" if i != 4 else "daily"] = 1
@@ -1004,10 +1004,10 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_snapshotting_recursive_simple(self) -> None:
         q = 0
-        for m in range(0, 2):
-            for k in range(0, 2):
-                for j in range(0, 2):  # noqa: B007
-                    for i in range(0, 2):
+        for m in range(2):
+            for k in range(2):
+                for j in range(2):  # noqa: B007
+                    for i in range(2):
                         self.tearDownAndSetup()
                         self.setup_basic()
                         create_filesystem(src_root_dataset, "boo")
@@ -1016,7 +1016,7 @@ class LocalTestCase(BZFSTestCase):
                         self.assert_snapshots(src_root_dataset, n, "s")
                         self.assert_snapshots(src_root_dataset + "/boo", 0)
                         self.assert_snapshots(src_root_dataset + "/foo/b", 0)
-                        for b in range(0, 3):  # noqa: B007
+                        for b in range(3):  # noqa: B007
                             with stop_on_failure_subtest(i=q):
                                 q += 1
                                 self.run_bzfs(
@@ -1055,7 +1055,7 @@ class LocalTestCase(BZFSTestCase):
         n = 3
         self.assert_snapshots(src_root_dataset, n, "s")
         self.assert_snapshots(src_root_dataset + "/foo/b", 0)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -1087,7 +1087,7 @@ class LocalTestCase(BZFSTestCase):
         n = 3
         self.assert_snapshots(src_root_dataset, n, "s")
         self.assert_snapshots(src_root_dataset + "/foo/b", 0)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -1119,7 +1119,7 @@ class LocalTestCase(BZFSTestCase):
         n = 3
         self.assert_snapshots(src_root_dataset, n, "s")
         self.assert_snapshots(src_root_dataset + "/foo/b", 0)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -1157,7 +1157,7 @@ class LocalTestCase(BZFSTestCase):
         sys.stdout.flush()
         create_filesystem(src_root_dataset, "xxx")
         start_time_nanos = time.time_ns()
-        for i in range(0, n):
+        for i in range(n):
             create_filesystem(src_root_dataset, f"foo{i}")
         print(f"Creating {n} filesystems took {bzfs.human_readable_duration(time.time_ns() - start_time_nanos)}")
         start_time_nanos = time.time_ns()
@@ -1198,7 +1198,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_snapshotting_flat_empty(self) -> None:
         destroy(dst_root_dataset, recursive=True)
         self.assert_snapshots(src_root_dataset, 0)
-        for i in range(0, 1):
+        for i in range(1):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -1533,7 +1533,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_flat_simple(self) -> None:
         self.setup_basic()
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 if i <= 1:
                     job = self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
@@ -1558,7 +1558,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_flat_simple_with_progress_reporter(self) -> None:
         for pv_program in ["pv", bzfs.disable_prg]:
-            for i in range(0, 3):
+            for i in range(3):
                 with stop_on_failure_subtest(i=i):
                     self.tearDownAndSetup()
                     n = 10
@@ -1619,7 +1619,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.setup_basic(volume=volume)
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", dry_run=(i == 0))
                 if i == 0:
@@ -1650,7 +1650,7 @@ class LocalTestCase(BZFSTestCase):
             threads if (platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS") else threads // 2
         )  # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU on non-Linux
         self.setup_basic_woo(w=w, q=q)
-        for i in range(0, 1):
+        for i in range(1):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -1685,13 +1685,13 @@ class LocalTestCase(BZFSTestCase):
             destroy(child, recursive=True)
         for snapshot in snapshots(src_pool) + snapshots(dst_pool):
             destroy(snapshot)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0))
                 self.assert_snapshots(dst_pool, 0, "p")  # nothing has changed
 
         take_snapshot(src_pool, fix("p1"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 if i > 0 and self.is_no_privilege_elevation():  # maybe related: https://github.com/openzfs/zfs/issues/10461
                     self.skipTest("'cannot unmount '/wb_dest': permission denied' error on zfs receive -F -u wb_dest")
@@ -1704,7 +1704,7 @@ class LocalTestCase(BZFSTestCase):
         for snapshot in snapshots(dst_pool):
             destroy(snapshot)
         take_snapshot(dst_pool, fix("q1"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, "--force", "--force-once", dry_run=(i == 0))
                 if i == 0:
@@ -1717,19 +1717,19 @@ class LocalTestCase(BZFSTestCase):
             destroy(child, recursive=True)
         for snapshot in snapshots(src_pool) + snapshots(dst_pool):
             destroy(snapshot)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0))
                 self.assert_snapshots(dst_pool, 0)  # nothing has changed
 
         destroy_pool(dst_pool)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0), expected_status=die_status)
                 self.assertFalse(dataset_exists(dst_pool))
 
         destroy_pool(src_pool)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0), expected_status=die_status)
                 self.assertFalse(dataset_exists(src_pool))
@@ -1738,7 +1738,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
         self.setup_basic()
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo/a", dst_root_dataset + "/foo/a", dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
@@ -1750,7 +1750,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_replication_flat_no_snapshot_dont_create_parents(self) -> None:
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
         self.setup_basic()
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo/b", dst_root_dataset + "/foo/b", dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
@@ -1758,7 +1758,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_replication_flat_simple_with_dry_run_no_send(self) -> None:
         self.setup_basic()
         self.assertTrue(dataset_exists(dst_root_dataset))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 dry_run_no_send = ["--dryrun=send"] if i == 0 else []
                 self.run_bzfs(src_root_dataset, dst_root_dataset, *dry_run_no_send)
@@ -1768,7 +1768,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_flat_nothing_todo(self) -> None:
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
@@ -1777,7 +1777,7 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_replication_without_source(self) -> None:
         destroy(src_root_dataset, recursive=True)
         recreate_filesystem(dst_root_dataset)
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0), expected_status=die_status)
                 self.assertTrue(dataset_exists(dst_root_dataset))
@@ -1785,14 +1785,14 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_flat_simple_with_skip_parent(self) -> None:
         self.setup_basic()
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-parent", dry_run=(i == 0))
                 self.assert_snapshots(src_root_dataset, 3, "s")
                 self.assertTrue(dataset_exists(dst_root_dataset))
                 self.assert_snapshots(dst_root_dataset, 0)
 
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-parent", "--delete-dst-datasets", dry_run=(i == 0))
                 self.assert_snapshots(src_root_dataset, 3, "s")
@@ -1804,7 +1804,7 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic_woo()
         destroy(dst_root_dataset, recursive=True)
         self.assertFalse(dataset_exists(dst_root_dataset))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-parent", "--recursive", dry_run=(i == 0))
                 self.assert_snapshots(src_root_dataset, 3, "s")
@@ -1817,7 +1817,7 @@ class LocalTestCase(BZFSTestCase):
 
         destroy(dst_root_dataset, recursive=True)
         self.assertFalse(dataset_exists(dst_root_dataset))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -2030,7 +2030,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_nostream(self) -> None:
         self.setup_basic()
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-stream", dry_run=(i == 0))
                 if i == 0:
@@ -2039,7 +2039,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assert_snapshot_names(dst_root_dataset, ["s3"])
 
         take_snapshot(src_root_dataset, fix("s4"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-stream", dry_run=(i == 0))
                 if i == 0:
@@ -2049,7 +2049,7 @@ class LocalTestCase(BZFSTestCase):
 
         take_snapshot(src_root_dataset, fix("s5"))
         take_snapshot(src_root_dataset, fix("s6"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-stream", dry_run=(i == 0))
                 if i == 0:
@@ -2115,7 +2115,7 @@ class LocalTestCase(BZFSTestCase):
         old_value = os.environ.get(param_name)
         try:
             os.environ[param_name] = "False"
-            for i in range(0, 2):
+            for i in range(2):
                 with stop_on_failure_subtest(i=i):
                     self.run_bzfs(
                         src_root_dataset,
@@ -2140,7 +2140,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_replication_flat_simple_with_multiple_root_datasets_with_skip_on_error(self) -> None:
         self.setup_basic()
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "_nonexistingdataset1",
@@ -2166,7 +2166,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.setup_basic(volume=volume)
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 src_datasets = zfs_list([src_root_dataset], types=["filesystem", "volume"], max_depth=None)
                 dst_datasets = [
@@ -2198,7 +2198,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
         self.setup_basic()
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 extra_opt = ""
                 if is_zpool_feature_enabled_or_active("src", "feature@large_blocks"):
@@ -2238,7 +2238,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(moo, fix("m1"))
         zoo = create_filesystem(src_root_dataset, "zoo")
         take_snapshot(zoo, fix("z1"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -2293,7 +2293,7 @@ class LocalTestCase(BZFSTestCase):
         zfs_set([src_root_dataset + "/moo"], sync_true)
         zfs_set([src_root_dataset + "/zoo"], sync_true_empty)
         zfs_set([src_root_dataset + "/xoo"], sync_host_match)
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -2335,7 +2335,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, counter["zfs_list_exclude_property"])
 
     def test_basic_replication_recursive_with_skip_on_error(self) -> None:
-        for j in range(0, 3):
+        for j in range(3):
             self.tearDownAndSetup()
             src_user1 = create_filesystem(src_root_dataset, "user1")
             src_user1_foo = create_filesystem(src_user1, "foo")
@@ -2356,7 +2356,7 @@ class LocalTestCase(BZFSTestCase):
 
             if j == 0:
                 # test skip_on_error='tree'
-                for i in range(0, 2):
+                for i in range(2):
                     with stop_on_failure_subtest(i=i):
                         self.run_bzfs(
                             src_root_dataset,
@@ -2459,7 +2459,7 @@ class LocalTestCase(BZFSTestCase):
     def test_zfs_set_via_recv_o(self) -> None:
         if self.is_no_privilege_elevation():
             self.skipTest("setting properties via zfs receive -o needs extra permissions")
-        for i in range(0, 5):
+        for i in range(5):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -2510,7 +2510,7 @@ class LocalTestCase(BZFSTestCase):
     def test_zfs_recv_include_regex(self) -> None:
         if self.is_no_privilege_elevation():
             self.skipTest("setting properties via zfs receive -o needs extra permissions")
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.tearDownAndSetup()
                 self.setup_basic()
@@ -2572,7 +2572,7 @@ class LocalTestCase(BZFSTestCase):
     def test_preserve_recordsize(self) -> None:
         if self.is_no_privilege_elevation():
             self.skipTest("setting properties via zfs receive -o needs extra permissions")
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.tearDownAndSetup()
                 self.setup_basic()
@@ -2616,7 +2616,7 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic()
         params = bzfs.Params(bzfs.argument_parser().parse_args(args=[src_root_dataset, dst_root_dataset]))
         lock_file = params.lock_file_name()
-        with open(lock_file, "w") as lock_file_fd:
+        with open(lock_file, "w", encoding="utf-8") as lock_file_fd:
             # Acquire an exclusive lock; will raise an error if the lock is already held by another process.
             # The (advisory) lock is auto-released when the process terminates or the file descriptor is closed.
             self.assertTrue(os.path.exists(lock_file))
@@ -2833,8 +2833,8 @@ class LocalTestCase(BZFSTestCase):
     def test_basic_replication_flat_with_bookmarks0(self) -> None:
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
-        for j in range(0, 2):
-            for i in range(0, 3):
+        for j in range(2):
+            for i in range(3):
                 with stop_on_failure_subtest(i=j * 3 + i):
                     self.tearDownAndSetup()
                     if j == 0:
@@ -2871,7 +2871,7 @@ class LocalTestCase(BZFSTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
                 if i == 0:
@@ -2884,7 +2884,7 @@ class LocalTestCase(BZFSTestCase):
         # delete snapshot, which will cause no problem as we still have its bookmark
         destroy(snapshots(src_root_dataset)[0])
         self.assert_snapshot_names(src_root_dataset, [])
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-missing-snapshots=fail", dry_run=(i == 0))
                 self.assert_snapshot_names(dst_root_dataset, ["d1"])  # nothing has changed
@@ -2892,7 +2892,7 @@ class LocalTestCase(BZFSTestCase):
 
         # take another snapshot and replicate it without problems as we still have the bookmark
         take_snapshot(src_root_dataset, fix("d2"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-missing-snapshots=fail", dry_run=(i == 0))
                 if i == 0:
@@ -2906,7 +2906,7 @@ class LocalTestCase(BZFSTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
                 if i == 0:
@@ -2920,7 +2920,7 @@ class LocalTestCase(BZFSTestCase):
         cmd = sudo_cmd + ["zfs", "rename", snapshots(src_root_dataset)[0], snapshots(src_root_dataset)[0] + "h"]
         run_cmd(cmd)
 
-        for i in range(0, 2):
+        for i in range(2):
             # replicate while excluding the rename snapshot
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
@@ -2935,7 +2935,7 @@ class LocalTestCase(BZFSTestCase):
 
         # take another snapshot and replicate it without problems as we still have the bookmark
         take_snapshot(src_root_dataset, fix("d2"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -2955,7 +2955,7 @@ class LocalTestCase(BZFSTestCase):
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, no_create_bookmark=True, dry_run=(i == 0))
                 if i == 0:
@@ -2988,7 +2988,7 @@ class LocalTestCase(BZFSTestCase):
 
         # take another snapshot and replicate it without problems as we still have the bookmark
         take_snapshot(src_root_dataset, fix("d2"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -3014,7 +3014,7 @@ class LocalTestCase(BZFSTestCase):
         create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag)
 
         self.assert_bookmark_names(src_root_dataset, ["d1"])
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
                 if i == 0:
@@ -3030,7 +3030,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
         self.setup_basic()
         src_foo = build(src_root_dataset + "/foo")
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
@@ -3046,7 +3046,7 @@ class LocalTestCase(BZFSTestCase):
         # on src take some snapshots
         take_snapshot(src_foo, fix("t4"))
         take_snapshot(src_foo, fix("t5"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
@@ -3061,7 +3061,7 @@ class LocalTestCase(BZFSTestCase):
 
         # on src take another snapshot
         take_snapshot(src_foo, fix("t6"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
@@ -3077,7 +3077,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(dst_foo, fix("t7"))
         take_snapshot(dst_foo, fix("t8"))
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3089,7 +3089,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
 
         # resolve conflict via dst rollback to most recent common snapshot
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3111,7 +3111,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertNotEqual(src_guid, dst_guid)
         take_snapshot(dst_foo, fix("t8"))
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3126,7 +3126,7 @@ class LocalTestCase(BZFSTestCase):
                 )  # nothing has changed on dst
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3151,7 +3151,7 @@ class LocalTestCase(BZFSTestCase):
         # on src delete some snapshots are older than most recent common snap, which is normal and won't cause changes to dst
         destroy(snapshots(src_foo)[0])
         destroy(snapshots(src_foo)[2])
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
@@ -3173,7 +3173,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_foo, fix("t11"))
         self.assert_snapshots(src_root_dataset + "/foo", 3, "t", offset=8)
         # Conflict: no common snapshot was found.
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3186,7 +3186,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
         # resolve conflict via deleting all dst snapshots prior to replication
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 if i > 0 and self.is_encryption_mode():
                     # potential workaround?: rerun once with -R --skip-missing added to zfs_send_program_opts
@@ -3209,7 +3209,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assert_snapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
 
         # no change on src means replication is a noop:
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
@@ -3218,7 +3218,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assert_snapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
 
         # no change on src means replication is a noop:
-        for i in range(0, 2):
+        for i in range(2):
             # rollback dst to most recent snapshot
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
@@ -3247,7 +3247,7 @@ class LocalTestCase(BZFSTestCase):
             take_snapshot(src_foo, fix("t2"))
             take_snapshot(src_foo, fix("t3"))
 
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
@@ -3263,7 +3263,7 @@ class LocalTestCase(BZFSTestCase):
         # on src take some snapshots
         take_snapshot(src_foo, fix("t4"))
         take_snapshot(src_foo, fix("t5"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
@@ -3278,7 +3278,7 @@ class LocalTestCase(BZFSTestCase):
 
         # on src take another snapshot
         take_snapshot(src_foo, fix("t6"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
@@ -3294,7 +3294,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(dst_foo, fix("t7"))
         take_snapshot(dst_foo, fix("t8"))
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=die_status
@@ -3303,7 +3303,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
 
         # resolve conflict via dst rollback to most recent common snapshot
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3327,7 +3327,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertNotEqual(src_guid, dst_guid)
         take_snapshot(dst_foo, fix("t8"))
         # Conflict: Most recent destination snapshot is more recent than most recent common snapshot
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=die_status
@@ -3339,7 +3339,7 @@ class LocalTestCase(BZFSTestCase):
                 self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3365,7 +3365,7 @@ class LocalTestCase(BZFSTestCase):
         # on src delete some snapshots are older than most recent common snap, which is normal and won't cause changes to dst
         destroy(snapshots(src_foo)[0])
         destroy(snapshots(src_foo)[2])
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset, 0)
@@ -3385,7 +3385,7 @@ class LocalTestCase(BZFSTestCase):
             destroy(snap)
         # No Conflict: no common snapshot was found, but we found a (common) bookmark that can be used instead
         # so replication is a noop and won't fail:
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
@@ -3400,7 +3400,7 @@ class LocalTestCase(BZFSTestCase):
 
         # No Conflict: no common snapshot was found, but we found a (common) bookmark that can be used instead
         # so replication will succeed:
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 if not volume:
@@ -3415,7 +3415,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t11"])
 
         # no change on src means replication is a noop:
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 self.assert_snapshot_names(
@@ -3429,7 +3429,7 @@ class LocalTestCase(BZFSTestCase):
         destroy(natsorted(bookmarks(src_foo), key=lambda b: b)[-1])  # destroy t11
         self.assert_snapshot_names(src_root_dataset + "/foo", ["t9", "t10"])
         self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=die_status
@@ -3441,7 +3441,7 @@ class LocalTestCase(BZFSTestCase):
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
         take_snapshot(src_foo, fix("t12"))
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo",
@@ -3481,7 +3481,7 @@ class LocalTestCase(BZFSTestCase):
         self.create_resumable_snapshots(1, n)
         prev_token = None
         max_iters = 20
-        for _ in range(0, max_iters):
+        for _ in range(max_iters):
             self.run_bzfs(
                 src_root_dataset,
                 dst_root_dataset,
@@ -3503,7 +3503,7 @@ class LocalTestCase(BZFSTestCase):
     def test_send_full_no_resume_recv_with_resume_token_present(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -3522,7 +3522,7 @@ class LocalTestCase(BZFSTestCase):
     def test_send_incr_no_resume_recv_with_resume_token_present(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -3546,7 +3546,7 @@ class LocalTestCase(BZFSTestCase):
     def test_send_incr_resume_recv(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
-        for i in range(0, 4):
+        for i in range(4):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -3597,7 +3597,7 @@ class LocalTestCase(BZFSTestCase):
     def test_send_full_resume_recv(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
-        for i in range(0, 4):
+        for i in range(4):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -3659,13 +3659,13 @@ class LocalTestCase(BZFSTestCase):
                 return [line.strip() for line in fd if line.startswith(location) and not line.startswith("location")]
 
         def stats(_job: bzfs.Job) -> tuple[int, int, int]:
-            _lines = snapshot_list(_job)
-            _n_src = sum(1 for line in _lines if line.startswith("src"))
-            _n_dst = sum(1 for line in _lines if line.startswith("dst"))
-            _n_all = sum(1 for line in _lines if line.startswith("all"))
-            return _n_src, _n_dst, _n_all
+            lines_ = snapshot_list(_job)
+            n_src_ = sum(1 for line in lines_ if line.startswith("src"))
+            n_dst_ = sum(1 for line in lines_ if line.startswith("dst"))
+            n_all_ = sum(1 for line in lines_ if line.startswith("all"))
+            return n_src_, n_dst_, n_all_
 
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 param_name = bzfs.env_var_prefix + "max_datasets_per_batch_on_list_snaps"
                 old_value = os.environ.get(param_name)
@@ -3689,7 +3689,7 @@ class LocalTestCase(BZFSTestCase):
 
                     self.setup_basic()
                     cmp_choices: list[str] = []
-                    for w in range(0, len(bzfs.cmp_choices_items)):
+                    for w in range(len(bzfs.cmp_choices_items)):
                         cmp_choices += map(lambda c: "+".join(c), itertools.combinations(bzfs.cmp_choices_items, w + 1))
                     for cmp in cmp_choices:
                         job = self.run_bzfs(
@@ -3909,7 +3909,7 @@ class LocalTestCase(BZFSTestCase):
     def test_delete_dst_datasets_with_missing_src_root(self) -> None:
         destroy(src_root_dataset, recursive=True)
         recreate_filesystem(dst_root_dataset)
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
@@ -3925,7 +3925,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_delete_dst_datasets_recursive_with_dummy_src(self) -> None:
         self.setup_basic_with_recursive_replication_done()
-        for i in range(0, 3):
+        for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     bzfs.dummy_dataset,
@@ -4211,8 +4211,8 @@ class LocalTestCase(BZFSTestCase):
 
     def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self) -> None:
         self.setup_basic()
-        for j in range(0, 2):
-            for i in range(0, 3):
+        for j in range(2):
+            for i in range(3):
                 with stop_on_failure_subtest(i=j * 3 + i):
                     destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
                     destroy_snapshots(dst_root_dataset, snapshots(dst_root_dataset))
@@ -4244,7 +4244,7 @@ class LocalTestCase(BZFSTestCase):
                         self.assert_snapshot_names(dst_root_dataset, [])
 
     def test_delete_dst_snapshots_flat(self) -> None:
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -4293,7 +4293,7 @@ class LocalTestCase(BZFSTestCase):
     def test_delete_dst_bookmarks_flat(self) -> None:
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
-        for i in range(0, 1):
+        for i in range(1):
             with stop_on_failure_subtest(i=i):
                 if i > 0:
                     self.tearDownAndSetup()
@@ -4395,7 +4395,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_delete_dst_snapshots_recursive_with_dummy(self) -> None:
         self.setup_basic_with_recursive_replication_done()
-        for i in range(0, 2):
+        for i in range(2):
             self.run_bzfs(
                 bzfs.dummy_dataset,
                 dst_root_dataset,
@@ -4413,7 +4413,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_delete_dst_snapshots_recursive_with_delete_empty_dst_datasets_with_dummy(self) -> None:
         self.setup_basic_with_recursive_replication_done()
-        for i in range(0, 3):
+        for i in range(3):
             self.run_bzfs(
                 bzfs.dummy_dataset,
                 dst_root_dataset,
@@ -4672,7 +4672,7 @@ class LocalTestCase(BZFSTestCase):
     def test_syslog(self) -> None:
         if "Ubuntu" not in platform.version():
             self.skipTest("It is sufficient to only test this on Ubuntu where syslog paths are well known")
-        for i in range(0, 2):
+        for i in range(2):
             if i > 0:
                 self.tearDownAndSetup()
             with stop_on_failure_subtest(i=i):
@@ -4786,7 +4786,7 @@ class LocalTestCase(BZFSTestCase):
     }
 }
         """
-        for i in range(0, 2):
+        for i in range(2):
             if i > 0:
                 self.tearDownAndSetup()
             log_file_prefix = "custom-" if i == 0 else ""
@@ -5535,7 +5535,7 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
 
     def inject_pipe_error(self, flag: str, expected_error: int | list[int] = 1) -> None:
         self.setup_basic()
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 inject_params = {}
                 if i == 0:
@@ -5632,7 +5632,6 @@ def create_volumes(path: str, props: list[str] | None = None) -> str:
 
 
 def detect_zpool_features(location: str, pool: str) -> None:
-    global zpool_features
     assert zpool_features is not None
     cmd = "zpool get -Hp -o property,value all".split(" ") + [pool]
     lines = run_cmd(cmd)

@@ -688,7 +688,7 @@ class TestHelperFunctions(unittest.TestCase):
         log_params = bzfs.LogParams(args)
         log = bzfs.get_logger(log_params, args, root_logger)
         self.assertTrue(log is root_logger)
-        log.info(prefix + "aaa1")
+        log.info(f"{prefix}aaa1")
 
         args = argparser_parse_args(args=["src", "dst"])
         log_params = bzfs.LogParams(args)
@@ -1016,7 +1016,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_count_num_bytes_transferred_by_zfs_send(self) -> None:
         self.assertEqual(0, bzfs.count_num_bytes_transferred_by_zfs_send("/tmp/nonexisting_bzfs_test_file"))
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 pv1_fd, pv1 = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
                 os.write(pv1_fd, ": 800B foo".encode("utf-8"))
@@ -1126,7 +1126,7 @@ class TestHelperFunctions(unittest.TestCase):
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         curr_time_nanos = 123
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 reporter = bzfs.ProgressReporter(p, use_select=False, progress_update_intervals=None)
                 eta = bzfs.ProgressReporter.TransferStat.ETA(timestamp_nanos=0, seq_nr=0, line_tail="")
@@ -1180,13 +1180,13 @@ class TestHelperFunctions(unittest.TestCase):
         try:
             # Write initial lines to the file using the write file descriptor
             initial_lines = ["line1\n", "line2\n"]
-            with open(temp_file_fd_write, "w") as fd_write:
+            with open(temp_file_fd_write, "w", encoding="utf-8") as fd_write:
                 for line in initial_lines:
                     fd_write.write(line)
                 # fd_write is closed here, but temp_file_path is still valid.
 
             # Open the file for reading and keep this file descriptor (fd_read) open for the duration of the iterator's life.
-            with open(temp_file_path, "r") as fd_read:  # fd_read will remain open
+            with open(temp_file_path, "r", encoding="utf-8") as fd_read:  # fd_read will remain open
                 iter_fd = iter(fd_read)  # Create the iterator on the open fd_read
 
                 # Consume all lines from iter_fd
@@ -1203,7 +1203,7 @@ class TestHelperFunctions(unittest.TestCase):
                 # The original fd_read is still open and iter_fd is tied to it.
                 appended_lines = ["line3_appended\n", "line4_appended\n"]
                 # Open for append - this is a *different* file descriptor instance, but it operates on the same file on disk.
-                with open(temp_file_path, "a") as f_append:
+                with open(temp_file_path, "a", encoding="utf-8") as f_append:
                     for line in appended_lines:
                         f_append.write(line)
 
@@ -2866,14 +2866,14 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
     def test_hours_non_boundary2(self) -> None:
         """Rounding up to the next hour when dt is not on an hour boundary."""
         dt = datetime(2025, 2, 11, 0, 5, 1, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(**{"hourly_minute": 59}))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(hourly_minute=59))
         expected = dt.replace(minute=59, second=0, microsecond=0) + timedelta(hours=0)
         self.assertEqual(expected, result)
 
     def test_hours_non_boundary3(self) -> None:
         """Rounding up to the next hour when dt is not on an hour boundary."""
         dt = datetime(2025, 2, 11, 2, 5, 1, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(**{"hourly_minute": 59}))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "hourly", PeriodAnchors(hourly_minute=59))
         expected = dt.replace(minute=59, second=0, microsecond=0) + timedelta(hours=0)
         self.assertEqual(expected, result)
 
@@ -2893,7 +2893,7 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
     def test_days_non_boundary2(self) -> None:
         """Rounding up to the next day when dt is not on a day boundary."""
         dt = datetime(2025, 2, 11, 1, 59, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "daily", PeriodAnchors(**{"daily_hour": 2}))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "daily", PeriodAnchors(daily_hour=2))
         expected = dt.replace(hour=2, minute=0, second=0, microsecond=0) + timedelta(days=0)
         self.assertEqual(expected, result)
 
@@ -4711,11 +4711,11 @@ class TestConnectionPool(unittest.TestCase):
     def test_return_sequence(self) -> None:
         maxsessions = 10
         items = 10
-        for j in range(0, 3):
+        for j in range(3):
             cpool = bzfs.ConnectionPool(self.src, maxsessions)
             dpool = SlowButCorrectConnectionPool(self.src2, maxsessions)
             rng = random.Random(12345)
-            conns = [self.get_connection(cpool, dpool) for _ in range(0, items)]
+            conns = [self.get_connection(cpool, dpool) for _ in range(items)]
             while conns:
                 i = rng.randint(0, len(conns) - 1) if j == 0 else 0 if j == 1 else len(conns) - 1
                 conn, donn = conns.pop(i)
@@ -4731,7 +4731,7 @@ class TestConnectionPool(unittest.TestCase):
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
         for maxsessions in range(1, 10 + 1):
-            for items in range(0, 64 + 1):
+            for items in range(64 + 1):
                 counter1a = itertools.count()
                 counter1b = itertools.count()
                 self.src.local_ssh_command = lambda counter=counter1a: [str(next(counter))]  # type: ignore
@@ -4742,10 +4742,10 @@ class TestConnectionPool(unittest.TestCase):
                 rng = random.Random(12345)
                 conns = []
                 try:
-                    for _ in range(0, items):
+                    for _ in range(items):
                         conns.append(self.get_connection(cpool, dpool))
                     item = -1
-                    for step in range(0, num_steps):
+                    for step in range(num_steps):
                         if is_logging:
                             log.log(loglevel, f"itr maxsessions: {maxsessions}, items: {items}, step: {step}")
                             log.log(loglevel, f"clen: {len(cpool.priority_queue)}, cpool: {cpool.priority_queue}")
@@ -4861,8 +4861,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
         """
         assert max_length >= 0
         testcases = []
-        for L in range(0, max_length + 1):  # noqa: N806
-            for N in range(0, L + 1):  # noqa: N806
+        for L in range(max_length + 1):  # noqa: N806
+            for N in range(L + 1):  # noqa: N806
                 steps = "d" * N + "h" * (L - N)
                 # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
                 for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
@@ -5374,7 +5374,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.setUp()
                 src_datasets = ["a1", "a1/b1", "a2"]
@@ -5395,7 +5395,7 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return False
 
-        for i in range(0, 2):
+        for i in range(2):
             with stop_on_failure_subtest(i=i):
                 self.setUp()
                 src_datasets = ["a1", "a1/b1", "a2"]
@@ -5746,7 +5746,7 @@ class TestLogging(unittest.TestCase):
         self.assertEqual(expected, bzfs.remove_json_comments(config_str))
 
     def test_get_dict_config_logger(self) -> None:
-        with tempfile.NamedTemporaryFile("w", prefix="bzfs_log_config", suffix=".json", delete=False) as f:
+        with tempfile.NamedTemporaryFile("w", prefix="bzfs_log_config", suffix=".json", delete=False, encoding="utf-8") as f:
             json.dump(
                 {
                     "version": 1,
@@ -5791,7 +5791,7 @@ class TestLogging(unittest.TestCase):
             bzfs.get_dict_config_logger(lp, args)
 
     def test_get_dict_config_logger_invalid_path(self) -> None:
-        with tempfile.NamedTemporaryFile("w", prefix="badfilename", suffix=".json", delete=False) as f:
+        with tempfile.NamedTemporaryFile("w", prefix="badfilename", suffix=".json", delete=False, encoding="utf-8") as f:
             f.write("{}")
             path = f.name
         try:

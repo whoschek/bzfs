@@ -114,7 +114,7 @@ class OpenNoFollowTest(unittest.TestCase):
             self.assertEqual(content, "hello")
             f.seek(0)
             f.write("HELLO")
-        with open(self.real_path, "r") as f:
+        with open(self.real_path, "r", encoding="utf-8") as f:
             self.assertEqual(f.read(), "HELLO")
 
     def test_symlink_blocked(self) -> None:

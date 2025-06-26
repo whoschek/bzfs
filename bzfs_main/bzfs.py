@@ -144,7 +144,7 @@ cmp_choices_items = ("src", "dst", "all")
 inject_dst_pipe_fail_kbytes = 400
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
-log_stderr = (logging.INFO + logging.WARN) // 2  # custom log level is halfway in between
+log_stderr = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
@@ -1055,7 +1055,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=argparse.SUPPRESS)
     cmp_choices_dflt = "+".join(cmp_choices_items)
     cmp_choices: list[str] = []
-    for i in range(0, len(cmp_choices_items)):
+    for i in range(len(cmp_choices_items)):
         cmp_choices += map(lambda item: "+".join(item), itertools.combinations(cmp_choices_items, i + 1))
     parser.add_argument(
         "--compare-snapshot-lists", choices=cmp_choices, default="", const=cmp_choices_dflt, nargs="?",
@@ -1361,7 +1361,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         default="--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M",
         help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n")
     parser.add_argument(
-        "--shell-program", default="sh",  choices=["sh", disable_prg],
+        "--shell-program", default="sh", choices=["sh", disable_prg],
         help=hlp("sh") + msg)
     parser.add_argument(
         "--ssh-program", default="ssh", choices=["ssh", "hpnssh", disable_prg],
@@ -1479,11 +1479,11 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             f"{period.title()} period anchors", "Use these options to customize when snapshots that happen "
             f"every N {label} are scheduled to be created on the source by the --create-src-snapshots option.")
         for f in [f for f in dataclasses.fields(PeriodAnchors) if f.name.startswith(period + "_")]:
-            _min = f.metadata.get("min")
-            _max = f.metadata.get("max")
+            min_ = f.metadata.get("min")
+            max_ = f.metadata.get("max")
             anchor_group.add_argument(
-                "--" + f.name, type=int, min=_min, max=_max, default=f.default, action=CheckRange, metavar="INT",
-                help=f"{f.metadata.get('help')} ({_min} ≤ x ≤ {_max}, default: %(default)s).\n\n")
+                "--" + f.name, type=int, min=min_, max=max_, default=f.default, action=CheckRange, metavar="INT",
+                help=f"{f.metadata.get('help')} ({min_} ≤ x ≤ {max_}, default: %(default)s).\n\n")
 
     for option_name, flag in zfs_recv_groups.items():
         grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
@@ -2125,7 +2125,7 @@ class CreateSrcSnapshotConfig:
         def suffix_key(suffix: str) -> tuple[int, str]:
             duration_amount, duration_unit = suffix_durations[suffix]
             duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
-            if suffix.endswith("hourly") or suffix.endswith("minutely") or suffix.endswith("secondly"):
+            if suffix.endswith(("hourly", "minutely", "secondly")):
                 if duration_milliseconds != 0 and 86400 * 1000 % duration_milliseconds != 0:
                     die(
                         "Invalid --create-src-snapshots-plan: Period duration should be a divisor of 86400 seconds "
@@ -2573,7 +2573,7 @@ class Job:
             p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=suffix),
         )
         if len(p.include_dataset_regexes) == 0:
-            p.include_dataset_regexes = [(re.compile(".*"), False)]
+            p.include_dataset_regexes = [(re.compile(r".*"), False)]
 
         self.detect_available_programs()
 
@@ -2904,7 +2904,7 @@ class Job:
             # snapshots for ancestors of excluded datasets. The second run computes the real orphans.
             btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
             dst_datasets_having_snapshots: set[str] = set()
-            for run in range(0, 2):
+            for run in range(2):
                 orphans: set[str] = set()
                 for dst_dataset in reversed(dst_datasets):
                     if children[dst_dataset].issubset(orphans):
@@ -3291,9 +3291,9 @@ class Job:
                 """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously
                 used for 'zfs list -s ...'"""
                 for _line in reversed(snapshots_with_guids):
-                    _guid, _snapshot = _line.split("\t", 1)
-                    if _guid in intersect_guids:
-                        return _guid, _snapshot  # can be a snapshot or bookmark
+                    guid_, snapshot_ = _line.split("\t", 1)
+                    if guid_ in intersect_guids:
+                        return guid_, snapshot_  # can be a snapshot or bookmark
                 return None, ""
 
             latest_common_guid, latest_common_src_snapshot = latest_common_snapshot(
@@ -3518,10 +3518,10 @@ class Job:
         recv_cmd_str = shlex.join(recv_cmd)
 
         if self.is_program_available("zstd", "src") and self.is_program_available("zstd", "dst"):
-            _compress_cmd = self.compress_cmd("src", size_estimate_bytes)
-            _decompress_cmd = self.decompress_cmd("dst", size_estimate_bytes)
+            compress_cmd_ = self.compress_cmd("src", size_estimate_bytes)
+            decompress_cmd_ = self.decompress_cmd("dst", size_estimate_bytes)
         else:  # no compression is used if source and destination do not both support compression
-            _compress_cmd, _decompress_cmd = "cat", "cat"
+            compress_cmd_, decompress_cmd_ = "cat", "cat"
 
         recordsize = abs(int(self.src_properties[src_dataset]["recordsize"]))
         src_buffer = self.mbuffer_cmd("src", size_estimate_bytes, recordsize)
@@ -3535,7 +3535,7 @@ class Job:
             pv_src_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)
         elif p.dst.ssh_user_host == "":
             pv_dst_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)
-        elif _compress_cmd == "cat":
+        elif compress_cmd_ == "cat":
             pv_loc_cmd = self.pv_cmd("local", size_estimate_bytes, size_estimate_human)  # compression disabled
         else:
             # pull-push mode with compression enabled: reporting "percent complete" isn't straightforward because
@@ -3551,8 +3551,8 @@ class Job:
             src_pipe = f"{src_pipe} | base64"  # for testing; forward garbled bytes
         if pv_src_cmd != "" and pv_src_cmd != "cat":
             src_pipe = f"{src_pipe} | {pv_src_cmd}"
-        if _compress_cmd != "cat":
-            src_pipe = f"{src_pipe} | {_compress_cmd}"
+        if compress_cmd_ != "cat":
+            src_pipe = f"{src_pipe} | {compress_cmd_}"
         if src_buffer != "cat":
             src_pipe = f"{src_pipe} | {src_buffer}"
         if src_pipe.startswith(" |"):
@@ -3583,8 +3583,8 @@ class Job:
         dst_pipe = ""
         if dst_buffer != "cat":
             dst_pipe = f"{dst_buffer}"
-        if _decompress_cmd != "cat":
-            dst_pipe = f"{dst_pipe} | {_decompress_cmd}"
+        if decompress_cmd_ != "cat":
+            dst_pipe = f"{dst_pipe} | {decompress_cmd_}"
         if pv_dst_cmd != "" and pv_dst_cmd != "cat":
             dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
         if self.inject_params.get("inject_dst_pipe_fail", False):
@@ -4719,8 +4719,8 @@ class Job:
         labels = []
         config_labels: list[SnapshotLabel] = config.snapshot_labels()
         for label in config_labels:
-            _duration_amount, _duration_unit = config.suffix_durations[label.suffix]
-            if _duration_amount == 0 or config.create_src_snapshots_even_if_not_due:
+            duration_amount_, duration_unit_ = config.suffix_durations[label.suffix]
+            if duration_amount_ == 0 or config.create_src_snapshots_even_if_not_due:
                 datasets_to_snapshot[label] = sorted_datasets  # take snapshot regardless of creation time of existing snaps
             else:
                 labels.append(label)
@@ -6653,7 +6653,7 @@ def set_last_modification_time(
     cache file by a different, more up-to-date bzfs process."""
     unixtime_in_secs = (unixtime_in_secs, unixtime_in_secs) if isinstance(unixtime_in_secs, int) else unixtime_in_secs
     if not os_path_exists(path):
-        with open(path, "a"):
+        with open(path, "ab"):
             pass
     elif if_more_recent and unixtime_in_secs[1] <= round(os_stat(path).st_mtime):
         return
@@ -7129,7 +7129,7 @@ def validate_port(port: str | int, message: str) -> None:
 
 
 def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
-    if path_to_default_shell.endswith("/csh") or path_to_default_shell.endswith("/tcsh"):
+    if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
             f"Cowardly refusing to proceed because {prog_name} is not compatible with csh-style quoting of special "
@@ -7251,17 +7251,17 @@ log_level_prefixes = {
 
 
 def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = None) -> logging.Formatter:
-    _level_prefixes = log_level_prefixes
-    _log_stderr = log_stderr
-    _log_stdout = log_stdout
+    level_prefixes_ = log_level_prefixes
+    log_stderr_ = log_stderr
+    log_stdout_ = log_stdout
     terminal_cols = [0 if log_params is None else None]  # 'None' indicates "configure value later"
 
     class DefaultLogFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
             levelno = record.levelno
-            if levelno != _log_stderr and levelno != _log_stdout:  # emit stdout and stderr "as-is" (no formatting)
+            if levelno != log_stderr_ and levelno != log_stdout_:  # emit stdout and stderr "as-is" (no formatting)
                 timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
-                ts_level = f"{timestamp} {_level_prefixes.get(levelno, '')} "
+                ts_level = f"{timestamp} {level_prefixes_.get(levelno, '')} "
                 msg = record.msg
                 i = msg.find("%s")
                 msg = ts_level + msg

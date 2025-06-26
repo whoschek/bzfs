@@ -49,7 +49,7 @@ def main() -> None:
     tmp_manpage_md_path = os.path.join(tempfile.gettempdir(), "manpage.md")
 
     # Step 1: Generate manpage
-    with open(tmp_manpage1_path, "w") as fd:
+    with open(tmp_manpage1_path, "w", encoding="utf-8") as fd:
         cmd = ["argparse-manpage", "--module", bzfs_module, "--function", "argument_parser"]
         subprocess.run(cmd, check=True, stdout=fd)
 
