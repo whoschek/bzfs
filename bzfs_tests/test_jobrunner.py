@@ -227,7 +227,7 @@ class TestValidation(unittest.TestCase):
             "--root-dataset-pairs",
             "tank/data",
             "backup/data",
-            "--src-hosts=" + str(["srcA", "srcB"]),
+            "--src-hosts=" + str(["src1", "src2"]),
             "--dst-hosts=" + str({"dstX": ["target", ""]}),
             "--dst-root-datasets=" + str({"dstX": ""}),
             "--retain-dst-targets=" + str({"dstX": ["target", ""]}),
@@ -236,17 +236,17 @@ class TestValidation(unittest.TestCase):
         expect_msg = "source hosts must not be configured to write to the same destination dataset"
 
         # Scenario 1: Run for srcA only, should pass.
-        argv_srcA = base_argv + ["--src-host", "srcA"]
-        with patch("sys.argv", argv_srcA):
+        argv_src1 = base_argv + ["--src-host", "src1"]
+        with patch("sys.argv", argv_src1):
             with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
-                job.run_main(argv_srcA)  # Should not raise SystemExit
+                job.run_main(argv_src1)  # Should not raise SystemExit
                 mock_run_subjobs.assert_called_once()
 
         # Scenario 1: Run for srcB only, should pass.
-        argv_srcB = base_argv + ["--src-host", "srcB"]
-        with patch("sys.argv", argv_srcA):
+        argv_src2 = base_argv + ["--src-host", "src2"]
+        with patch("sys.argv", argv_src1):
             with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
-                job.run_main(argv_srcB)  # Should not raise SystemExit
+                job.run_main(argv_src2)  # Should not raise SystemExit
                 mock_run_subjobs.assert_called_once()
 
         # Scenario 3: Run for both (no --src-host filter), should fail.
@@ -270,7 +270,7 @@ class TestValidation(unittest.TestCase):
             "--root-dataset-pairs",
             "tank/data",
             "backup/data",
-            "--src-hosts=" + str(["srcA", "srcB"]),
+            "--src-hosts=" + str(["src1", "src2"]),
             "--dst-hosts=" + str({"dstX": ["target"]}),
             "--dst-root-datasets=" + str({"dstX": "pool/backup_^SRC_HOST", "dstY": ""}),  # Correctly uses ^SRC_HOST
             "--retain-dst-targets=" + str({"dstX": ["target"], "dstY": ["target"]}),
@@ -280,9 +280,9 @@ class TestValidation(unittest.TestCase):
         # Mock the actual subjob execution to prevent it from running fully
         with patch.object(job, "run_subjobs", return_value=None) as mock_run_subjobs:
             # Scenario 1: Run for srcA only. Should pass validation.
-            argv_srcA_safe = base_argv_safe + ["--src-host", "srcA"]
-            with patch("sys.argv", argv_srcA_safe):
-                job.run_main(argv_srcA_safe)  # Should not raise SystemExit due to validation
+            argv_src1_safe = base_argv_safe + ["--src-host", "src1"]
+            with patch("sys.argv", argv_src1_safe):
+                job.run_main(argv_src1_safe)  # Should not raise SystemExit due to validation
                 mock_run_subjobs.assert_called_once()  # Ensure it proceeded past validation
 
             mock_run_subjobs.reset_mock()
@@ -307,7 +307,7 @@ class TestValidation(unittest.TestCase):
             "--root-dataset-pairs",
             "tank/data",
             "backup/data",
-            "--src-hosts=" + str(["srcA", "srcB"]),
+            "--src-hosts=" + str(["src1", "src2"]),
             "--dst-hosts=" + str({"dstX": ["target"]}),
             "--dst-root-datasets=" + str({"dstX": "pool/^SRC_HOST", "dstZ": "pool/fixed"}),  # incorrectly uses ^SRC_HOST
             "--retain-dst-targets=" + str({"dstX": ["target"], "dstZ": ["target"]}),
@@ -316,18 +316,18 @@ class TestValidation(unittest.TestCase):
         expect_msg = "but not all non-empty root datasets in --dst-root-datasets contain the '^SRC_HOST' substitution token"
 
         # Scenario 1: Run for srcA only, should fail.
-        argv_srcA = base_argv + ["--src-host", "srcA"]
-        with patch("sys.argv", argv_srcA):
+        argv_src1 = base_argv + ["--src-host", "src1"]
+        with patch("sys.argv", argv_src1):
             with self.assertRaises(SystemExit) as cm:
-                job.run_main(argv_srcA)
+                job.run_main(argv_src1)
             self.assertEqual(die_status, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
 
         # Scenario 2: Run for srcB only, should fail.
-        argv_srcB = base_argv + ["--src-host", "srcB"]
-        with patch("sys.argv", argv_srcB):
+        argv_src2 = base_argv + ["--src-host", "src2"]
+        with patch("sys.argv", argv_src2):
             with self.assertRaises(SystemExit) as cm:
-                job.run_main(argv_srcB)
+                job.run_main(argv_src2)
             self.assertEqual(die_status, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
 

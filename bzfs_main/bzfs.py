@@ -4425,7 +4425,9 @@ class Job:
     def incremental_send_steps_wrapper(
         self, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
     ) -> list[tuple[str, str, str, list[str]]]:
-        force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool("no_force_convert_I_to_i", True)
+        force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool(  # noqa: N806
+            "no_force_convert_I_to_i", True
+        )
         # force_convert_I_to_i == True implies that:
         # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
         # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
@@ -4433,7 +4435,11 @@ class Job:
 
     @staticmethod
     def incremental_send_steps(
-        src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool, force_convert_I_to_i: bool
+        src_snapshots: list[str],
+        src_guids: list[str],
+        included_guids: set[str],
+        is_resume: bool,
+        force_convert_I_to_i: bool,  # noqa: N803
     ) -> list[tuple[str, str, str, list[str]]]:
         """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
         include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*

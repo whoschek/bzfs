@@ -192,7 +192,7 @@ def suite() -> unittest.TestSuite:
 #############################################################################
 class ParametrizedTestCase(unittest.TestCase):
 
-    def __init__(self, methodName: str = "runTest", param: dict[str, Any] | None = None) -> None:
+    def __init__(self, methodName: str = "runTest", param: dict[str, Any] | None = None) -> None:  # noqa: N803
         super().__init__(methodName)
         self.param = param
 
@@ -255,7 +255,7 @@ class BZFSTestCase(ParametrizedTestCase):
         Path(ssh_config_file).unlink(missing_ok=True)
         pass  # tear down is deferred to next setup for easier debugging
 
-    def tearDownAndSetup(self) -> None:
+    def tearDownAndSetup(self) -> None:  # noqa: N802
         self.tearDown()
         self.setUp()
 
@@ -297,9 +297,9 @@ class BZFSTestCase(ParametrizedTestCase):
     def setup_basic_with_recursive_replication_done(self) -> None:
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive")
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
     @staticmethod
@@ -564,17 +564,19 @@ class BZFSTestCase(ParametrizedTestCase):
         assert isinstance(job, bzfs_jobrunner.Job)
         return job
 
-    def assertSnapshotNames(self, dataset: str, expected_names: list[str]) -> None:
+    def assert_snapshot_names(self, dataset: str, expected_names: list[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([snapshot_name(snapshot) for snapshot in snapshots(dataset)])
         expected_names = [fix(name) for name in expected_names]
         self.assertListEqual(expected_names, snap_names)
 
-    def assertSnapshots(self, dataset: str, expected_num_snapshots: int, snapshot_prefix: str = "", offset: int = 0) -> None:
+    def assert_snapshots(
+        self, dataset: str, expected_num_snapshots: int, snapshot_prefix: str = "", offset: int = 0
+    ) -> None:
         expected_names = [f"{snapshot_prefix}{i + 1 + offset}" for i in range(0, expected_num_snapshots)]
-        self.assertSnapshotNames(dataset, expected_names)
+        self.assert_snapshot_names(dataset, expected_names)
 
-    def assertSnapshotNameRegexes(self, dataset: str, expected_names: list[str]) -> None:
+    def assert_snapshot_name_regexes(self, dataset: str, expected_names: list[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([snapshot_name(snapshot) for snapshot in snapshots(dataset)])
         expected_names = [fix(name) for name in expected_names]
@@ -582,7 +584,7 @@ class BZFSTestCase(ParametrizedTestCase):
         for expected_name, snap_name in zip(expected_names, snap_names):
             self.assertRegex(snap_name, expected_name, f"{expected_names} vs. {snap_names}")
 
-    def assertBookmarkNames(self, dataset: str, expected_names: list[str]) -> None:
+    def assert_bookmark_names(self, dataset: str, expected_names: list[str]) -> None:
         dataset = build(dataset)
         snap_names = natsorted([bookmark_name(bookmark) for bookmark in bookmarks(dataset)])
         expected_names = [fix(name) for name in expected_names]
@@ -740,7 +742,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         for snapshot in testcase[None]:
             take_snapshot(src_foo, snapshot)
         self.run_bzfs(src_foo, dst_foo, "--quiet", "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
-        self.assertSnapshotNames(dst_foo, expected_results)
+        self.assert_snapshot_names(dst_foo, expected_results)
 
         self.tearDownAndSetup()
         src_foo = create_filesystem(src_root_dataset, "foo")
@@ -749,9 +751,9 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         src_snapshot = f"{src_foo}@{expected_results[0]}"
         cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
-        self.assertSnapshotNames(dst_foo, [expected_results[0]])
+        self.assert_snapshot_names(dst_foo, [expected_results[0]])
         self.run_bzfs(src_foo, dst_foo, "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
-        self.assertSnapshotNames(dst_foo, expected_results)
+        self.assert_snapshot_names(dst_foo, expected_results)
 
         self.tearDownAndSetup()
         src_foo = create_filesystem(src_root_dataset, "foo")
@@ -760,17 +762,17 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         src_snapshot = f"{src_foo}@{expected_results[0]}"
         cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
-        self.assertSnapshotNames(dst_foo, [expected_results[0]])
+        self.assert_snapshot_names(dst_foo, [expected_results[0]])
         if are_bookmarks_enabled("src"):
             create_bookmark(src_foo, expected_results[0], expected_results[0])
             destroy(src_snapshot)
             self.run_bzfs(src_foo, dst_foo, "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
-            self.assertSnapshotNames(dst_foo, expected_results)
+            self.assert_snapshot_names(dst_foo, expected_results)
             src_snapshot2 = f"{src_foo}@{expected_results[-1]}"
             destroy(src_snapshot2)  # no problem because bookmark still exists
             take_snapshot(src_foo, "d99")
             self.run_bzfs(src_foo, dst_foo, "--include-snapshot-regex", "d.*", "--exclude-snapshot-regex", "h.*")
-            self.assertSnapshotNames(dst_foo, expected_results + ["d99"])
+            self.assert_snapshot_names(dst_foo, expected_results + ["d99"])
 
         self.tearDownAndSetup()
         src_foo = create_filesystem(src_root_dataset, "foo")
@@ -779,7 +781,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
         cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
-        self.assertSnapshotNames(dst_foo, [expected_results[1]])
+        self.assert_snapshot_names(dst_foo, [expected_results[1]])
         self.run_bzfs(
             src_foo,
             dst_foo,
@@ -789,7 +791,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
             "--exclude-snapshot-regex",
             "h.*",
         )
-        self.assertSnapshotNames(dst_foo, expected_results[1:])
+        self.assert_snapshot_names(dst_foo, expected_results[1:])
 
         self.tearDownAndSetup()
         src_foo = create_filesystem(src_root_dataset, "foo")
@@ -798,7 +800,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
         cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
-        self.assertSnapshotNames(dst_foo, [expected_results[1]])
+        self.assert_snapshot_names(dst_foo, [expected_results[1]])
         self.run_bzfs(
             src_foo,
             dst_foo,
@@ -807,7 +809,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
             "--exclude-snapshot-regex",
             ".*",
         )
-        self.assertSnapshotNames(dst_foo, [])
+        self.assert_snapshot_names(dst_foo, [])
 
         self.tearDownAndSetup()
         src_foo = create_filesystem(src_root_dataset, "foo")
@@ -816,7 +818,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
         src_snapshot = f"{src_foo}@{expected_results[1]}"  # Note: [1]
         cmd = f"sudo -n zfs send {src_snapshot} | sudo zfs receive -F -u {dst_foo}"  # full zfs send
         subprocess.run(cmd, text=True, check=True, shell=True)
-        self.assertSnapshotNames(dst_foo, [expected_results[1]])
+        self.assert_snapshot_names(dst_foo, [expected_results[1]])
         self.run_bzfs(
             src_foo,
             dst_foo,
@@ -825,7 +827,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
             "--include-snapshot-regex",
             "!.*",
         )
-        self.assertSnapshotNames(dst_foo, [])
+        self.assert_snapshot_names(dst_foo, [])
 
     def test_snapshot_series_excluding_hourlies_with_permutations(self) -> None:
         for testcase in TestIncrementalSendSteps().permute_snapshot_series(5):
@@ -847,7 +849,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
                 "h.*",
             )
             if len(expected_results) > 0:
-                self.assertSnapshotNames(dst_foo, expected_results)
+                self.assert_snapshot_names(dst_foo, expected_results)
             else:
                 self.assertFalse(dataset_exists(dst_foo))
 
@@ -943,7 +945,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_snapshotting_flat_simple(self) -> None:
         destroy(dst_root_dataset, recursive=True)
-        self.assertSnapshots(src_root_dataset, 0)
+        self.assert_snapshots(src_root_dataset, 0)
         for i in range(0, 6):
             with stop_on_failure_subtest(i=i):
                 localperiods = {"yearly": 1, "adhoc": 1}
@@ -959,18 +961,18 @@ class LocalTestCase(BZFSTestCase):
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
                 if i == 0:
-                    self.assertSnapshots(src_root_dataset, 0)
+                    self.assert_snapshots(src_root_dataset, 0)
                 elif i == 1:
-                    self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_adhoc", "s1.*_secondly", "s1.*_yearly"])
+                    self.assert_snapshot_name_regexes(src_root_dataset, ["s1.*_adhoc", "s1.*_secondly", "s1.*_yearly"])
                     time.sleep(1.1)
                 elif i == 2:
-                    self.assertSnapshotNameRegexes(
+                    self.assert_snapshot_name_regexes(
                         src_root_dataset, ["s1.*_adhoc", "s1.*_secondly", "s1.*_yearly", "s1.*_adhoc", "s1.*_secondly"]
                     )
                     time.sleep(1.1)
                     take_snapshot(src_root_dataset, fix("x1"))
                 elif i == 3:
-                    self.assertSnapshotNameRegexes(
+                    self.assert_snapshot_name_regexes(
                         src_root_dataset,
                         [
                             "s1.*_adhoc",
@@ -984,7 +986,7 @@ class LocalTestCase(BZFSTestCase):
                         ],
                     )
                 else:
-                    self.assertSnapshotNameRegexes(
+                    self.assert_snapshot_name_regexes(
                         src_root_dataset,
                         [
                             "s1.*_adhoc",
@@ -1011,9 +1013,9 @@ class LocalTestCase(BZFSTestCase):
                         create_filesystem(src_root_dataset, "boo")
                         create_filesystem(src_root_dataset, "xoo")
                         n = 3
-                        self.assertSnapshots(src_root_dataset, n, "s")
-                        self.assertSnapshots(src_root_dataset + "/boo", 0)
-                        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+                        self.assert_snapshots(src_root_dataset, n, "s")
+                        self.assert_snapshots(src_root_dataset + "/boo", 0)
+                        self.assert_snapshots(src_root_dataset + "/foo/b", 0)
                         for b in range(0, 3):  # noqa: B007
                             with stop_on_failure_subtest(i=q):
                                 q += 1
@@ -1051,8 +1053,8 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic()
         destroy(dst_root_dataset, recursive=True)
         n = 3
-        self.assertSnapshots(src_root_dataset, n, "s")
-        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+        self.assert_snapshots(src_root_dataset, n, "s")
+        self.assert_snapshots(src_root_dataset + "/foo/b", 0)
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
@@ -1083,8 +1085,8 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic()
         destroy(dst_root_dataset, recursive=True)
         n = 3
-        self.assertSnapshots(src_root_dataset, n, "s")
-        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+        self.assert_snapshots(src_root_dataset, n, "s")
+        self.assert_snapshots(src_root_dataset + "/foo/b", 0)
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
@@ -1115,8 +1117,8 @@ class LocalTestCase(BZFSTestCase):
         self.setup_basic()
         destroy(dst_root_dataset, recursive=True)
         n = 3
-        self.assertSnapshots(src_root_dataset, n, "s")
-        self.assertSnapshots(src_root_dataset + "/foo/b", 0)
+        self.assert_snapshots(src_root_dataset, n, "s")
+        self.assert_snapshots(src_root_dataset + "/foo/b", 0)
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
@@ -1195,7 +1197,7 @@ class LocalTestCase(BZFSTestCase):
 
     def test_basic_snapshotting_flat_empty(self) -> None:
         destroy(dst_root_dataset, recursive=True)
-        self.assertSnapshots(src_root_dataset, 0)
+        self.assert_snapshots(src_root_dataset, 0)
         for i in range(0, 1):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
@@ -1207,7 +1209,7 @@ class LocalTestCase(BZFSTestCase):
                     "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"secondly": 1}}}),
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset))
-                self.assertSnapshots(src_root_dataset, 0)
+                self.assert_snapshots(src_root_dataset, 0)
 
     def test_basic_snapshotting_flat_non_existing_root(self) -> None:
         destroy(src_root_dataset, recursive=True)
@@ -1232,7 +1234,7 @@ class LocalTestCase(BZFSTestCase):
             "--create-src-snapshots",
             "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"hourly": 1}}}),
         )
-        self.assertSnapshotNameRegexes(src_root_dataset, ["s1.*_hourly", "s1.*_daily", "s1.*_hourly"])
+        self.assert_snapshot_name_regexes(src_root_dataset, ["s1.*_hourly", "s1.*_daily", "s1.*_hourly"])
 
     def test_basic_snapshotting_flat_daemon(self) -> None:
         if self.param and self.param.get("ssh_mode", "local") not in ["local"]:
@@ -1248,12 +1250,12 @@ class LocalTestCase(BZFSTestCase):
         )
         expected = ["s1.*_secondly", "s1.*_secondly", "s1.*_secondly"]
         try:
-            self.assertSnapshotNameRegexes(src_root_dataset, expected)
-            self.assertSnapshotNameRegexes(dst_root_dataset, expected)
+            self.assert_snapshot_name_regexes(src_root_dataset, expected)
+            self.assert_snapshot_name_regexes(dst_root_dataset, expected)
         except AssertionError:  # harmless
             expected = ["s1.*_secondly", "s1.*_secondly"]
-            self.assertSnapshotNameRegexes(src_root_dataset, expected)
-            self.assertSnapshotNameRegexes(dst_root_dataset, expected)
+            self.assert_snapshot_name_regexes(src_root_dataset, expected)
+            self.assert_snapshot_name_regexes(dst_root_dataset, expected)
 
     def test_daemon_frequency(self) -> None:
         self.setup_basic()
@@ -1283,7 +1285,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:01_secondly")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_daily")
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--include-snapshot-plan", str({"s1": {"onsite": {}}}))
-        self.assertSnapshotNames(dst_root_dataset, [])
+        self.assert_snapshot_names(dst_root_dataset, [])
 
         time.sleep(1.1)
         self.run_bzfs(
@@ -1292,7 +1294,7 @@ class LocalTestCase(BZFSTestCase):
             "--include-snapshot-plan",
             str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s1_onsite_2024-01-01_00:00:01_secondly"])
+        self.assert_snapshot_names(dst_root_dataset, ["s1_onsite_2024-01-01_00:00:01_secondly"])
 
     def test_include_snapshots_plan_without_excludes_outdated_snapshots(self) -> None:
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
@@ -1306,7 +1308,7 @@ class LocalTestCase(BZFSTestCase):
             str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
             include_snapshot_plan_excludes_outdated_snapshots=False,
         )
-        self.assertSnapshotNames(
+        self.assert_snapshot_names(
             dst_root_dataset, ["s1_onsite_2024-01-01_00:00:00_secondly", "s1_onsite_2024-01-01_00:00:01_secondly"]
         )
 
@@ -1319,7 +1321,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_daily")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-02_00:00:00_daily")
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-03_00:00:00_daily")
-        self.assertSnapshotNameRegexes(
+        self.assert_snapshot_name_regexes(
             src_root_dataset,
             [
                 "s1.*_daily",
@@ -1339,7 +1341,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 1, "hourly": 1, "minutely": 0}}}),
         )
-        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly"])
+        self.assert_snapshot_names(src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly"])
 
         # multiple --delete-dst-snapshots-except-plan expressions are UNIONized:
         take_snapshot(src_root_dataset, "s2_onsite_2024-01-01_00:02:00_secondly")
@@ -1353,7 +1355,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-plan",
             str({"s2": {"onsite": {"secondly": 1}}}),
         )
-        self.assertSnapshotNames(
+        self.assert_snapshot_names(
             src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly", "s2_onsite_2024-01-01_00:02:00_secondly"]
         )
 
@@ -1365,7 +1367,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 0, "hourly": 1}}}),
         )
-        self.assertSnapshotNames(src_root_dataset, [])
+        self.assert_snapshot_names(src_root_dataset, [])
 
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-04_00:00:00_adhoc")
         self.run_bzfs(
@@ -1376,7 +1378,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 1, "adhoc": 1}}}),  # adhoc is retained despite no time period
         )
-        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
+        self.assert_snapshot_names(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
 
         self.run_bzfs(
             bzfs.dummy_dataset,
@@ -1386,7 +1388,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"adhoc": 0}}}),  # zero amount
         )
-        self.assertSnapshotNames(src_root_dataset, [])
+        self.assert_snapshot_names(src_root_dataset, [])
 
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-04_00:00:00_adhoc")
         self.run_bzfs(
@@ -1398,7 +1400,7 @@ class LocalTestCase(BZFSTestCase):
             str({}),  # error out on empty dict as deleting all snapshots is likely a pilot error rather than intended
             expected_status=2,
         )
-        self.assertSnapshotNames(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
+        self.assert_snapshot_names(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
 
         self.run_bzfs(
             bzfs.dummy_dataset,
@@ -1419,7 +1421,9 @@ class LocalTestCase(BZFSTestCase):
         # Add extra snapshots only to destination
         take_snapshot(dst_root_dataset, fix("d_extra_hourly"))
         take_snapshot(dst_root_dataset, fix("d_extra_daily"))
-        self.assertSnapshotNames(dst_root_dataset, ["d_extra_daily", "d_extra_hourly", "s1_hourly", "s2_daily", "s3_weekly"])
+        self.assert_snapshot_names(
+            dst_root_dataset, ["d_extra_daily", "d_extra_hourly", "s1_hourly", "s2_daily", "s3_weekly"]
+        )
 
         # Policy: Retain dailies. Mode: delete-except. Check with source.
         # Means: Keep snapshots on DST if (they are daily AND on SRC). Delete all others.
@@ -1431,7 +1435,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except",
             "--include-snapshot-regex=.*_daily",  # Policy: retain dailies
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
+        self.assert_snapshot_names(dst_root_dataset, ["s2_daily"])
 
     def test_delete_dst_snapshots_except_with_dummy_source0(self) -> None:
         take_snapshot(dst_root_dataset, fix("s1_hourly"))
@@ -1448,7 +1452,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except",
             "--include-snapshot-regex=.*_daily",  # Policy: retain dailies
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s2_daily"])
+        self.assert_snapshot_names(dst_root_dataset, ["s2_daily"])
 
     def test_delete_dst_snapshots_except_with_dummy_source1(self) -> None:
         if self.is_no_privilege_elevation():
@@ -1461,7 +1465,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-02_00:00:00_millisecondly")
         time.sleep(1.1)
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-03_00:00:00_millisecondly")
-        self.assertSnapshotNameRegexes(
+        self.assert_snapshot_name_regexes(
             src_root_dataset,
             [
                 "s1.*_millisecondly",
@@ -1480,7 +1484,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 1, "millisecondly": 1}}}),
         )
-        self.assertSnapshotNames(
+        self.assert_snapshot_names(
             src_root_dataset, ["s1_onsite_2024-01-01_00:02:00_secondly", "s1_onsite_2024-01-03_00:00:00_millisecondly"]
         )
 
@@ -1495,7 +1499,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-02_00:00:00_millisecondly")
         time.sleep(1.1)
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-03_00:00:00_millisecondly")
-        self.assertSnapshotNameRegexes(
+        self.assert_snapshot_name_regexes(
             src_root_dataset,
             [
                 "s1.*_millisecondly",
@@ -1515,7 +1519,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-except-plan",
             str({"s1": {"onsite": {"secondly": 1, "millisecondly": 1}}}),
         )
-        self.assertSnapshotNameRegexes(
+        self.assert_snapshot_name_regexes(
             src_root_dataset,
             [
                 "s1.*_millisecondly",
@@ -1537,9 +1541,9 @@ class LocalTestCase(BZFSTestCase):
                     job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--quiet", dry_run=(i == 0))
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
                 for loc in ["local", "src", "dst"]:
                     if loc != "local":
                         self.assertTrue(job.is_program_available("zfs", loc))
@@ -1567,20 +1571,20 @@ class LocalTestCase(BZFSTestCase):
                         use_select=(i % 2 == 1),
                         progress_update_intervals=(0.01, 0.015),
                     )
-                    self.assertSnapshots(dst_root_dataset, n, "s")
+                    self.assert_snapshots(dst_root_dataset, n, "s")
 
     def test_progress_reporter_validation(self) -> None:
         self.setup_basic()
 
         # --pv-program-opts must contain one of --bytes or --bits for progress metrics to function
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--pv-program-opts=", expected_status=die_status)
-        self.assertSnapshots(dst_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset, 0)
 
         # --pv-program-opts must contain --eta for progress report line to function
         self.run_bzfs(
             src_root_dataset, dst_root_dataset, "--pv-program-opts=--bytes", isatty=True, expected_status=die_status
         )
-        self.assertSnapshots(dst_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset, 0)
 
         # --pv-program-opts must contain --eta --fineta --average-rate for progress report line to function
         self.run_bzfs(
@@ -1590,7 +1594,7 @@ class LocalTestCase(BZFSTestCase):
             isatty=True,
             expected_status=die_status,
         )
-        self.assertSnapshots(dst_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset, 0)
 
         # --pv-program-opts must contain --eta --fineta --average-rate for progress report line to function
         self.run_bzfs(
@@ -1600,13 +1604,13 @@ class LocalTestCase(BZFSTestCase):
             isatty=True,
             expected_status=die_status,
         )
-        self.assertSnapshots(dst_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset, 0)
 
         # normal config passes
         self.run_bzfs(
             src_root_dataset, dst_root_dataset, "--pv-program-opts=--bytes --eta --fineta --average-rate", isatty=True
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_recursive1_with_volume(self) -> None:
         self.test_basic_replication_recursive1(volume=True)
@@ -1619,12 +1623,12 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
                     compression_prop = dataset_property(dst_root_dataset + "/foo", "compression")
@@ -1656,14 +1660,14 @@ class LocalTestCase(BZFSTestCase):
                     f"--max-concurrent-ssh-sessions-per-tcp-connection={maxsessions}",
                     "--mbuffer-program-opts=-q -m 16M",
                 )
-                self.assertSnapshots(dst_root_dataset, 3, "s")
-                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                self.assert_snapshots(dst_root_dataset, 3, "s")
+                self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
                 for j in range(w):
-                    self.assertSnapshots(dst_root_dataset + f"/woo{j}", 3, "w")
+                    self.assert_snapshots(dst_root_dataset + f"/woo{j}", 3, "w")
                     for k in range(q):
-                        self.assertSnapshots(dst_root_dataset + f"/woo{j}/qoo{k}", 3, "q")
+                        self.assert_snapshots(dst_root_dataset + f"/woo{j}/qoo{k}", 3, "q")
                 if i == 0 and are_bookmarks_enabled("src") and not self.is_no_privilege_elevation():
                     self.run_bzfs(
                         bzfs.dummy_dataset,
@@ -1672,9 +1676,9 @@ class LocalTestCase(BZFSTestCase):
                         "--recursive",
                         "--delete-dst-snapshots=bookmarks",
                     )
-                    self.assertBookmarkNames(src_root_dataset, [])
-                    self.assertBookmarkNames(src_root_dataset + "/foo", [])
-                    self.assertBookmarkNames(src_root_dataset + "/foo/a", [])
+                    self.assert_bookmark_names(src_root_dataset, [])
+                    self.assert_bookmark_names(src_root_dataset + "/foo", [])
+                    self.assert_bookmark_names(src_root_dataset + "/foo/a", [])
 
     def test_basic_replication_flat_pool(self) -> None:
         for child in datasets(src_pool) + datasets(dst_pool):
@@ -1684,7 +1688,7 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0))
-                self.assertSnapshots(dst_pool, 0, "p")  # nothing has changed
+                self.assert_snapshots(dst_pool, 0, "p")  # nothing has changed
 
         take_snapshot(src_pool, fix("p1"))
         for i in range(0, 2):
@@ -1693,9 +1697,9 @@ class LocalTestCase(BZFSTestCase):
                     self.skipTest("'cannot unmount '/wb_dest': permission denied' error on zfs receive -F -u wb_dest")
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshots(dst_pool, 0, "p")  # nothing has changed
+                    self.assert_snapshots(dst_pool, 0, "p")  # nothing has changed
                 else:
-                    self.assertSnapshots(dst_pool, 1, "p")
+                    self.assert_snapshots(dst_pool, 1, "p")
 
         for snapshot in snapshots(dst_pool):
             destroy(snapshot)
@@ -1704,9 +1708,9 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, "--force", "--force-once", dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshots(dst_pool, 1, "q")
+                    self.assert_snapshots(dst_pool, 1, "q")
                 else:
-                    self.assertSnapshots(dst_pool, 1, "p")
+                    self.assert_snapshots(dst_pool, 1, "p")
 
     def test_basic_replication_missing_pools(self) -> None:
         for child in datasets(src_pool) + datasets(dst_pool):
@@ -1716,7 +1720,7 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_pool, dst_pool, dry_run=(i == 0))
-                self.assertSnapshots(dst_pool, 0)  # nothing has changed
+                self.assert_snapshots(dst_pool, 0)  # nothing has changed
 
         destroy_pool(dst_pool)
         for i in range(0, 2):
@@ -1741,7 +1745,7 @@ class LocalTestCase(BZFSTestCase):
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_basic_replication_flat_no_snapshot_dont_create_parents(self) -> None:
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
@@ -1759,15 +1763,15 @@ class LocalTestCase(BZFSTestCase):
                 dry_run_no_send = ["--dryrun=send"] if i == 0 else []
                 self.run_bzfs(src_root_dataset, dst_root_dataset, *dry_run_no_send)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_flat_nothing_todo(self) -> None:
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
 
     def test_basic_replication_without_source(self) -> None:
@@ -1777,23 +1781,23 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0), expected_status=die_status)
                 self.assertTrue(dataset_exists(dst_root_dataset))
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
 
     def test_basic_replication_flat_simple_with_skip_parent(self) -> None:
         self.setup_basic()
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-parent", dry_run=(i == 0))
-                self.assertSnapshots(src_root_dataset, 3, "s")
+                self.assert_snapshots(src_root_dataset, 3, "s")
                 self.assertTrue(dataset_exists(dst_root_dataset))
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
 
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-parent", "--delete-dst-datasets", dry_run=(i == 0))
-                self.assertSnapshots(src_root_dataset, 3, "s")
+                self.assert_snapshots(src_root_dataset, 3, "s")
                 self.assertTrue(dataset_exists(dst_root_dataset))
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
 
     def test_basic_replication_recursive_with_skip_parent(self) -> None:
         self.setup_basic()
@@ -1803,13 +1807,13 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-parent", "--recursive", dry_run=(i == 0))
-                self.assertSnapshots(src_root_dataset, 3, "s")
+                self.assert_snapshots(src_root_dataset, 3, "s")
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset))
                 else:
-                    self.assertSnapshots(dst_root_dataset, 0)
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                    self.assertSnapshots(dst_root_dataset + "/woo0", 3, "w")
+                    self.assert_snapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_snapshots(dst_root_dataset + "/woo0", 3, "w")
 
         destroy(dst_root_dataset, recursive=True)
         self.assertFalse(dataset_exists(dst_root_dataset))
@@ -1825,13 +1829,13 @@ class LocalTestCase(BZFSTestCase):
                     "--log-file-suffix=-daily",
                     dry_run=(i == 0),
                 )
-                self.assertSnapshots(src_root_dataset, 3, "s")
+                self.assert_snapshots(src_root_dataset, 3, "s")
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset))
                 else:
-                    self.assertSnapshots(dst_root_dataset, 0)
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                    self.assertSnapshots(dst_root_dataset + "/woo0", 3, "w")
+                    self.assert_snapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_snapshots(dst_root_dataset + "/woo0", 3, "w")
 
     def test_last_replicated_cache_with_no_sleep(self) -> None:
         destroy(dst_root_dataset, recursive=True)
@@ -1870,7 +1874,7 @@ class LocalTestCase(BZFSTestCase):
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_include_snapshot_time_range_empty(self) -> None:
         self.setup_basic()
@@ -1879,7 +1883,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
         )
-        self.assertSnapshots(dst_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset, 0)
 
     def test_include_snapshot_time_range_full_with_existing_nonempty_dst(self) -> None:
         self.setup_basic()
@@ -1890,7 +1894,7 @@ class LocalTestCase(BZFSTestCase):
             dst_root_dataset,
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_include_snapshot_time_range_full_with_existing_nonempty_dst_no_use_bookmark(self) -> None:
         self.setup_basic()
@@ -1902,7 +1906,7 @@ class LocalTestCase(BZFSTestCase):
             "--no-use-bookmark",
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_include_snapshot_rank_range_full(self) -> None:
         self.setup_basic()
@@ -1914,7 +1918,7 @@ class LocalTestCase(BZFSTestCase):
             "latest0%..latest100%",
         )
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_include_snapshot_rank_range_empty(self) -> None:
         self.setup_basic()
@@ -1925,7 +1929,7 @@ class LocalTestCase(BZFSTestCase):
             "0..0",
             "latest0%..latest0%",
         )
-        self.assertSnapshots(dst_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset, 0)
 
     def run_snapshot_filters(self, filter1: list[str], filter2: list[str], filter3: list[str]) -> None:
         self.run_bzfs(src_root_dataset, dst_root_dataset, *filter1, *filter2, *filter3, creation_prefix=creation_prefix)
@@ -1944,7 +1948,7 @@ class LocalTestCase(BZFSTestCase):
         if dataset_exists(dst_root_dataset):
             destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(regex_filter, times_filter, ranks_filter)
-        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
+        self.assert_snapshot_names(dst_root_dataset, ["2024-01-03d"])
 
         if dataset_exists(dst_root_dataset):
             destroy(dst_root_dataset, recursive=True)
@@ -1959,12 +1963,12 @@ class LocalTestCase(BZFSTestCase):
         if dataset_exists(dst_root_dataset):
             destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(times_filter, regex_filter, ranks_filter)
-        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
+        self.assert_snapshot_names(dst_root_dataset, ["2024-01-03d"])
 
         if dataset_exists(dst_root_dataset):
             destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(times_filter, ranks_filter, regex_filter)
-        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
+        self.assert_snapshot_names(dst_root_dataset, ["2024-01-03d"])
 
     def test_snapshot_filter_regexes_dont_merge_across_groups(self) -> None:
         for snap in ["2024-01-01d", "2024-01-02d", "2024-01-03h", "2024-01-04dt"]:
@@ -1983,7 +1987,7 @@ class LocalTestCase(BZFSTestCase):
         if dataset_exists(dst_root_dataset):
             destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(regex_filter_daily, regex_filter_test, ranks_filter)
-        self.assertSnapshotNames(dst_root_dataset, ["2024-01-01d"])
+        self.assert_snapshot_names(dst_root_dataset, ["2024-01-01d"])
 
     def test_snapshot_filter_ranks_dont_merge_across_groups(self) -> None:
         for snap in ["2024-01-01d", "2024-01-02h", "2024-01-03d", "2024-01-04dt"]:
@@ -2002,7 +2006,7 @@ class LocalTestCase(BZFSTestCase):
         if dataset_exists(dst_root_dataset):
             destroy(dst_root_dataset, recursive=True)
         self.run_snapshot_filters(ranks_filter1, regex_filter_daily, ranks_filter2)
-        self.assertSnapshotNames(dst_root_dataset, ["2024-01-03d"])
+        self.assert_snapshot_names(dst_root_dataset, ["2024-01-03d"])
 
     def test_snapshot_filter_groups(self) -> None:
         for snap in ["2024-01-01d", "2024-01-02h", "2024-01-03d", "2024-01-04dt"]:
@@ -2022,7 +2026,7 @@ class LocalTestCase(BZFSTestCase):
         if dataset_exists(dst_root_dataset):
             destroy(dst_root_dataset, recursive=True)
         self.run_bzfs(src_root_dataset, dst_root_dataset, *snapshot_filter, creation_prefix=creation_prefix)
-        self.assertSnapshotNames(dst_root_dataset, ["2024-01-01d", "2024-01-02h", "2024-01-04dt"])
+        self.assert_snapshot_names(dst_root_dataset, ["2024-01-01d", "2024-01-02h", "2024-01-04dt"])
 
     def test_nostream(self) -> None:
         self.setup_basic()
@@ -2030,18 +2034,18 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-stream", dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["s3"])
+                    self.assert_snapshot_names(dst_root_dataset, ["s3"])
 
         take_snapshot(src_root_dataset, fix("s4"))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-stream", dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshotNames(dst_root_dataset, ["s3"])
+                    self.assert_snapshot_names(dst_root_dataset, ["s3"])
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["s3", "s4"])
+                    self.assert_snapshot_names(dst_root_dataset, ["s3", "s4"])
 
         take_snapshot(src_root_dataset, fix("s5"))
         take_snapshot(src_root_dataset, fix("s6"))
@@ -2049,9 +2053,9 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-stream", dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshotNames(dst_root_dataset, ["s3", "s4"])
+                    self.assert_snapshot_names(dst_root_dataset, ["s3", "s4"])
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["s3", "s4", "s6"])
+                    self.assert_snapshot_names(dst_root_dataset, ["s3", "s4", "s6"])
 
     def test_basic_replication_with_no_datasets_1(self) -> None:
         self.setup_basic()
@@ -2074,14 +2078,14 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_foo_a, fix(t1))
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "-v", "-v", "-v")
         self.assertTrue(dataset_exists(dst_root_dataset + "/" + d1))
-        self.assertSnapshotNames(dst_root_dataset + "/" + d1, [s1])
+        self.assert_snapshot_names(dst_root_dataset + "/" + d1, [s1])
         self.assertTrue(dataset_exists(dst_root_dataset + "/" + d1 + "/" + d2))
-        self.assertSnapshotNames(dst_root_dataset + "/" + d1 + "/" + d2, [t1])
+        self.assert_snapshot_names(dst_root_dataset + "/" + d1 + "/" + d2, [t1])
 
     def test_basic_replication_flat_simple_with_timeout_infinity(self) -> None:
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--timeout=1000seconds")
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_flat_simple_with_timeout_zero(self) -> None:
         self.setup_basic()
@@ -2098,7 +2102,7 @@ class LocalTestCase(BZFSTestCase):
         try:
             os.environ[param_name] = "foo"
             self.run_bzfs(src_root_dataset, dst_root_dataset)
-            self.assertSnapshots(dst_root_dataset, 3, "s")
+            self.assert_snapshots(dst_root_dataset, 3, "s")
         finally:
             if old_value is None:
                 os.environ.pop(param_name, None)
@@ -2125,9 +2129,9 @@ class LocalTestCase(BZFSTestCase):
                     )
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                     if i == 0:
-                        self.assertSnapshots(dst_root_dataset, 0)
+                        self.assert_snapshots(dst_root_dataset, 0)
                     else:
-                        self.assertSnapshots(dst_root_dataset, 3, "s")
+                        self.assert_snapshots(dst_root_dataset, 3, "s")
         finally:
             if old_value is None:
                 os.environ.pop(param_name, None)
@@ -2154,9 +2158,9 @@ class LocalTestCase(BZFSTestCase):
                 )
                 self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_flat_with_multiple_root_datasets_converted_from_recursive(self, volume: bool = False) -> None:
         self.assertTrue(dataset_exists(dst_root_dataset))
@@ -2171,12 +2175,12 @@ class LocalTestCase(BZFSTestCase):
                 opts = [elem for pair in zip(src_datasets, dst_datasets) for elem in pair]
                 self.run_bzfs(*opts, dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
                     compression_prop = dataset_property(dst_root_dataset + "/foo", "compression")
@@ -2218,7 +2222,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
                 else:
                     foo_a = dst_root_dataset + "/foo/a"
-                    self.assertSnapshots(foo_a, 3, "u")
+                    self.assert_snapshots(foo_a, 3, "u")
                     for name, value in props.items():
                         self.assertEqual(value, dataset_property(foo_a, name))
 
@@ -2256,11 +2260,11 @@ class LocalTestCase(BZFSTestCase):
                 self.assertFalse(dataset_exists(dst_root_dataset + "/goo"))
                 self.assertFalse(dataset_exists(dst_root_dataset + "/boo"))
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
-                    self.assertSnapshots(dst_root_dataset + "/moo", 1, "m")
-                    self.assertSnapshots(dst_root_dataset + "/zoo", 1, "z")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset + "/moo", 1, "m")
+                    self.assert_snapshots(dst_root_dataset + "/zoo", 1, "z")
 
     def test_basic_replication_recursive_with_exclude_property(self) -> None:
         self.assertTrue(dataset_exists(dst_root_dataset))
@@ -2303,12 +2307,12 @@ class LocalTestCase(BZFSTestCase):
                 self.assertFalse(dataset_exists(dst_root_dataset + "/goo"))
                 self.assertFalse(dataset_exists(dst_root_dataset + "/boo"))
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
-                    self.assertSnapshots(dst_root_dataset + "/moo", 1, "m")
-                    self.assertSnapshots(dst_root_dataset + "/zoo", 1, "z")
-                    self.assertSnapshots(dst_root_dataset + "/xoo", 1, "x")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset + "/moo", 1, "m")
+                    self.assert_snapshots(dst_root_dataset + "/zoo", 1, "z")
+                    self.assert_snapshots(dst_root_dataset + "/xoo", 1, "x")
 
     def test_basic_replication_recursive_with_exclude_property_with_injected_dataset_deletes(self) -> None:
         self.setup_basic()
@@ -2366,12 +2370,12 @@ class LocalTestCase(BZFSTestCase):
                         if i == 0:
                             self.assertFalse(dataset_exists(dst_user1_foo))
                             self.assertFalse(dataset_exists(dst_user2))
-                            self.assertSnapshots(dst_user1, 1, "U")
+                            self.assert_snapshots(dst_user1, 1, "U")
                         else:
-                            self.assertSnapshots(dst_user1, 1, "U")
+                            self.assert_snapshots(dst_user1, 1, "U")
                             self.assertFalse(dataset_exists(dst_user1_foo))
-                            self.assertSnapshots(dst_user2, 1, "v")
-                            self.assertSnapshots(dst_user2_bar, 1, "b")
+                            self.assert_snapshots(dst_user2, 1, "v")
+                            self.assert_snapshots(dst_user2_bar, 1, "b")
             elif j == 1:
                 # test skip_on_error='dataset'
                 self.run_bzfs(
@@ -2383,10 +2387,10 @@ class LocalTestCase(BZFSTestCase):
                     skip_on_error="dataset",
                     expected_status=die_status,
                 )
-                self.assertSnapshots(dst_user1, 1, "U")
-                self.assertSnapshots(dst_user1_foo, 1, "f")
-                self.assertSnapshots(dst_user2, 1, "v")
-                self.assertSnapshots(dst_user2_bar, 1, "b")
+                self.assert_snapshots(dst_user1, 1, "U")
+                self.assert_snapshots(dst_user1_foo, 1, "f")
+                self.assert_snapshots(dst_user2, 1, "v")
+                self.assert_snapshots(dst_user2_bar, 1, "b")
             else:
                 # skip_on_error = 'dataset' with a non-existing destination dataset
                 destroy(dst_user1, recursive=True)
@@ -2405,14 +2409,14 @@ class LocalTestCase(BZFSTestCase):
                 )
                 self.assertEqual(0, counter["full_zfs_send"])
                 self.assertFalse(dataset_exists(dst_user1))
-                self.assertSnapshots(dst_user2, 1, "v")
-                self.assertSnapshots(dst_user2_bar, 1, "b")
+                self.assert_snapshots(dst_user2, 1, "v")
+                self.assert_snapshots(dst_user2_bar, 1, "b")
 
     def test_basic_replication_flat_simple_using_main(self) -> None:
         self.setup_basic()
         with patch("sys.argv", ["bzfs.py", src_root_dataset, dst_root_dataset] + self.log_dir_opt()):
             bzfs.main()
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
 
         with self.assertRaises(SystemExit) as e:
             with patch("sys.argv", ["bzfs.py", "nonexisting_dataset", dst_root_dataset] + self.log_dir_opt()):
@@ -2531,7 +2535,7 @@ class LocalTestCase(BZFSTestCase):
                     "include_bzfs.*",
                     *self.zfs_recv_x_excludes(),
                 )
-                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
                 for name, value in included_props.items():
                     self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
                 for name, _ in excluded_props.items():
@@ -2559,7 +2563,7 @@ class LocalTestCase(BZFSTestCase):
             "xxxxxx",
             *self.zfs_recv_x_excludes(),
         )
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
         for name, value in included_props.items():
             self.assertEqual(value, dataset_property(dst_root_dataset + "/foo", name))
         for name, _ in excluded_props.items():
@@ -2701,8 +2705,8 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             no_create_bookmark=True,
         )
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset, 0, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset, 0, "s")
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
@@ -2710,9 +2714,9 @@ class LocalTestCase(BZFSTestCase):
             "--f1",
             no_create_bookmark=True,
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
     def test_no_common_snapshot_with_conflicting_dst_snapshot(self) -> None:
@@ -2723,8 +2727,8 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             no_create_bookmark=True,
         )
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset, 0, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset, 0, "s")
         take_snapshot(dst_root_dataset, fix("w1"))
         self.run_bzfs(
             src_root_dataset,
@@ -2732,7 +2736,7 @@ class LocalTestCase(BZFSTestCase):
             no_create_bookmark=True,
             expected_status=die_status,
         )
-        self.assertSnapshots(dst_root_dataset, 1, "w")
+        self.assert_snapshots(dst_root_dataset, 1, "w")
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
@@ -2740,9 +2744,9 @@ class LocalTestCase(BZFSTestCase):
             "--f1",
             no_create_bookmark=True,
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
     def test_basic_replication_with_injected_dataset_deletes(self) -> None:
@@ -2785,7 +2789,7 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, counter["full_zfs_send"])
         self.assertEqual(0, counter["incr_zfs_send"])
         if expected_status == 0:
-            self.assertSnapshots(dst_root_dataset, 3, "s")
+            self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_basic_replication_flat_simple_with_retryable_run_tasks_error(self) -> None:
         self.setup_basic()
@@ -2821,9 +2825,9 @@ class LocalTestCase(BZFSTestCase):
             "--recursive",
             "--force-unmount",
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
     def test_basic_replication_flat_with_bookmarks0(self) -> None:
@@ -2850,18 +2854,18 @@ class LocalTestCase(BZFSTestCase):
                         dry_run=(i == 0),
                     )
                     if i == 0:
-                        self.assertSnapshotNames(src_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
-                        self.assertSnapshotNames(dst_root_dataset, [])
-                        self.assertBookmarkNames(src_root_dataset, [])
+                        self.assert_snapshot_names(src_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+                        self.assert_snapshot_names(dst_root_dataset, [])
+                        self.assert_bookmark_names(src_root_dataset, [])
                     elif i == 1:
-                        self.assertSnapshotNames(dst_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+                        self.assert_snapshot_names(dst_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
                         if j == 0:
-                            self.assertBookmarkNames(src_root_dataset, ["a_minutely", "d_daily"])
+                            self.assert_bookmark_names(src_root_dataset, ["a_minutely", "d_daily"])
                         else:
-                            self.assertBookmarkNames(src_root_dataset, ["a_minutely", "c_minutely", "d_daily"])
+                            self.assert_bookmark_names(src_root_dataset, ["a_minutely", "c_minutely", "d_daily"])
                     else:
-                        self.assertSnapshotNames(dst_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
-                        self.assertBookmarkNames(src_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+                        self.assert_snapshot_names(dst_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
+                        self.assert_bookmark_names(src_root_dataset, ["a_minutely", "b_minutely", "c_minutely", "d_daily"])
 
     def test_xbasic_replication_flat_with_bookmarks1(self) -> None:
         if not are_bookmarks_enabled("src"):
@@ -2871,20 +2875,20 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshotNames(src_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, [])
+                    self.assert_snapshot_names(src_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, [])
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, ["d1"])
+                    self.assert_snapshot_names(dst_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, ["d1"])
 
         # delete snapshot, which will cause no problem as we still have its bookmark
         destroy(snapshots(src_root_dataset)[0])
-        self.assertSnapshotNames(src_root_dataset, [])
+        self.assert_snapshot_names(src_root_dataset, [])
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-missing-snapshots=fail", dry_run=(i == 0))
-                self.assertSnapshotNames(dst_root_dataset, ["d1"])  # nothing has changed
-                self.assertBookmarkNames(src_root_dataset, ["d1"])  # nothing has changed
+                self.assert_snapshot_names(dst_root_dataset, ["d1"])  # nothing has changed
+                self.assert_bookmark_names(src_root_dataset, ["d1"])  # nothing has changed
 
         # take another snapshot and replicate it without problems as we still have the bookmark
         take_snapshot(src_root_dataset, fix("d2"))
@@ -2892,11 +2896,11 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-missing-snapshots=fail", dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1"])  # nothing has changed
-                    self.assertBookmarkNames(src_root_dataset, ["d1"])  # nothing has changed
+                    self.assert_snapshot_names(dst_root_dataset, ["d1"])  # nothing has changed
+                    self.assert_bookmark_names(src_root_dataset, ["d1"])  # nothing has changed
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1", "d2"])
-                    self.assertBookmarkNames(src_root_dataset, ["d1", "d2"])
+                    self.assert_snapshot_names(dst_root_dataset, ["d1", "d2"])
+                    self.assert_bookmark_names(src_root_dataset, ["d1", "d2"])
 
     def test_basic_replication_flat_with_bookmarks2(self) -> None:
         if not are_bookmarks_enabled("src"):
@@ -2906,11 +2910,11 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshotNames(src_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, [])
+                    self.assert_snapshot_names(src_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, [])
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, ["d1"])
+                    self.assert_snapshot_names(dst_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, ["d1"])
 
         # rename snapshot, which will cause no problem as we still have its bookmark
         cmd = sudo_cmd + ["zfs", "rename", snapshots(src_root_dataset)[0], snapshots(src_root_dataset)[0] + "h"]
@@ -2926,8 +2930,8 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-missing-snapshots=fail",
                     dry_run=(i == 0),
                 )
-                self.assertSnapshotNames(dst_root_dataset, ["d1"])  # nothing has changed
-                self.assertBookmarkNames(src_root_dataset, ["d1"])  # nothing has changed
+                self.assert_snapshot_names(dst_root_dataset, ["d1"])  # nothing has changed
+                self.assert_bookmark_names(src_root_dataset, ["d1"])  # nothing has changed
 
         # take another snapshot and replicate it without problems as we still have the bookmark
         take_snapshot(src_root_dataset, fix("d2"))
@@ -2941,11 +2945,11 @@ class LocalTestCase(BZFSTestCase):
                     dry_run=(i == 0),
                 )
                 if i == 0:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1"])  # nothing has changed
-                    self.assertBookmarkNames(src_root_dataset, ["d1"])  # nothing has changed
+                    self.assert_snapshot_names(dst_root_dataset, ["d1"])  # nothing has changed
+                    self.assert_bookmark_names(src_root_dataset, ["d1"])  # nothing has changed
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1", "d2"])
-                    self.assertBookmarkNames(src_root_dataset, ["d1", "d2"])
+                    self.assert_snapshot_names(dst_root_dataset, ["d1", "d2"])
+                    self.assert_bookmark_names(src_root_dataset, ["d1", "d2"])
 
     def test_basic_replication_flat_with_bookmarks3(self) -> None:
         if not are_bookmarks_enabled("src"):
@@ -2955,19 +2959,19 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, no_create_bookmark=True, dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshotNames(src_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, [])
+                    self.assert_snapshot_names(src_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, [])
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, [])
+                    self.assert_snapshot_names(dst_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, [])
         snapshot_tag = snapshots(src_root_dataset)[0].split("@", 1)[1]
         create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag + "h")
         create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag)
-        self.assertBookmarkNames(src_root_dataset, ["d1", "d1h"])
+        self.assert_bookmark_names(src_root_dataset, ["d1", "d1h"])
 
         # delete snapshot, which will cause no problem as we still have its bookmark
         destroy(snapshots(src_root_dataset)[0])
-        self.assertSnapshotNames(src_root_dataset, [])
+        self.assert_snapshot_names(src_root_dataset, [])
 
         for i in range(1, 2):
             # replicate while excluding hourly snapshots
@@ -2979,8 +2983,8 @@ class LocalTestCase(BZFSTestCase):
                     "--skip-missing-snapshots=fail",
                     dry_run=(i == 0),
                 )
-                self.assertSnapshotNames(dst_root_dataset, ["d1"])  # nothing has changed
-                self.assertBookmarkNames(src_root_dataset, ["d1", "d1h"])  # nothing has changed
+                self.assert_snapshot_names(dst_root_dataset, ["d1"])  # nothing has changed
+                self.assert_bookmark_names(src_root_dataset, ["d1", "d1h"])  # nothing has changed
 
         # take another snapshot and replicate it without problems as we still have the bookmark
         take_snapshot(src_root_dataset, fix("d2"))
@@ -2994,11 +2998,11 @@ class LocalTestCase(BZFSTestCase):
                     dry_run=(i == 0),
                 )
                 if i == 0:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1"])  # nothing has changed
-                    self.assertBookmarkNames(src_root_dataset, ["d1", "d1h"])  # nothing has changed
+                    self.assert_snapshot_names(dst_root_dataset, ["d1"])  # nothing has changed
+                    self.assert_bookmark_names(src_root_dataset, ["d1", "d1h"])  # nothing has changed
                 else:
-                    self.assertSnapshotNames(dst_root_dataset, ["d1", "d2"])
-                    self.assertBookmarkNames(src_root_dataset, ["d1", "d1h", "d2"])
+                    self.assert_snapshot_names(dst_root_dataset, ["d1", "d2"])
+                    self.assert_bookmark_names(src_root_dataset, ["d1", "d1h", "d2"])
 
     def test_basic_replication_flat_with_bookmarks_already_exists(self) -> None:
         """check that run_bzfs works as usual even if the bookmark already exists"""
@@ -3009,18 +3013,18 @@ class LocalTestCase(BZFSTestCase):
 
         create_bookmark(src_root_dataset, snapshot_tag, snapshot_tag)
 
-        self.assertBookmarkNames(src_root_dataset, ["d1"])
+        self.assert_bookmark_names(src_root_dataset, ["d1"])
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset, dst_root_dataset, dry_run=(i == 0))
                 if i == 0:
-                    self.assertSnapshotNames(src_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, ["d1"])
-                    self.assertSnapshotNames(dst_root_dataset, [])
+                    self.assert_snapshot_names(src_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, ["d1"])
+                    self.assert_snapshot_names(dst_root_dataset, [])
                 else:
-                    self.assertSnapshotNames(src_root_dataset, ["d1"])
-                    self.assertBookmarkNames(src_root_dataset, ["d1"])
-                    self.assertSnapshotNames(dst_root_dataset, ["d1"])
+                    self.assert_snapshot_names(src_root_dataset, ["d1"])
+                    self.assert_bookmark_names(src_root_dataset, ["d1"])
+                    self.assert_snapshot_names(dst_root_dataset, ["d1"])
 
     def test_complex_replication_flat_with_no_create_bookmark(self) -> None:
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
@@ -3031,11 +3035,11 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
 
@@ -3047,13 +3051,13 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 5, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 5, "t")
 
         # on src take another snapshot
         take_snapshot(src_foo, fix("t6"))
@@ -3062,11 +3066,11 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 5, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 5, "t")
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 6, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 6, "t")
 
         # on dst (rather than src) take some snapshots, which is asking for trouble...
         dst_foo = build(dst_root_dataset + "/foo")
@@ -3082,7 +3086,7 @@ class LocalTestCase(BZFSTestCase):
                     no_create_bookmark=True,
                     expected_status=die_status,
                 )
-                self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
 
         # resolve conflict via dst rollback to most recent common snapshot
         for i in range(0, 3):
@@ -3094,11 +3098,11 @@ class LocalTestCase(BZFSTestCase):
                     "--force-once",
                     dry_run=(i == 0),
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                    self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 6, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 6, "t")
 
         # on src and dst, take some snapshots, which is asking for trouble again...
         src_guid = snapshot_property(take_snapshot(src_foo, fix("t7")), "guid")
@@ -3116,7 +3120,7 @@ class LocalTestCase(BZFSTestCase):
                     no_create_bookmark=True,
                     expected_status=die_status,
                 )
-                self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # unchanged
+                self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # unchanged
                 self.assertEqual(
                     dst_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                 )  # nothing has changed on dst
@@ -3132,14 +3136,14 @@ class LocalTestCase(BZFSTestCase):
                     dry_run=(i == 0),
                     no_create_bookmark=True,
                 )  # resolve conflict via dst rollback
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # unchanged
+                    self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # unchanged
                     self.assertEqual(
                         dst_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                     )  # nothing has changed on dst
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
                     self.assertEqual(
                         src_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                     )  # now they are true replicas
@@ -3152,14 +3156,14 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
-                self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")
+                self.assert_snapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
 
         # replicate a child dataset
         self.run_bzfs(src_root_dataset + "/foo/a", dst_root_dataset + "/foo/a", no_create_bookmark=True)
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
-        self.assertSnapshots(dst_root_dataset, 0)
-        self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 0)
+        self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
 
         # on src delete all snapshots so now there is no common snapshot anymore, which is trouble...
         for snap in snapshots(src_foo):
@@ -3167,7 +3171,7 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_foo, fix("t9"))
         take_snapshot(src_foo, fix("t10"))
         take_snapshot(src_foo, fix("t11"))
-        self.assertSnapshots(src_root_dataset + "/foo", 3, "t", offset=8)
+        self.assert_snapshots(src_root_dataset + "/foo", 3, "t", offset=8)
         # Conflict: no common snapshot was found.
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
@@ -3178,8 +3182,8 @@ class LocalTestCase(BZFSTestCase):
                     no_create_bookmark=True,
                     expected_status=die_status,
                 )
-                self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
-                self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
+                self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
         # resolve conflict via deleting all dst snapshots prior to replication
         for i in range(0, 3):
@@ -3197,12 +3201,12 @@ class LocalTestCase(BZFSTestCase):
                     dry_run=(i == 0),
                     no_create_bookmark=True,
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
-                self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                self.assert_snapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")  # nothing changed
+                    self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")  # nothing changed
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
 
         # no change on src means replication is a noop:
         for i in range(0, 2):
@@ -3210,8 +3214,8 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), no_create_bookmark=True
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
-                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
+                self.assert_snapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
 
         # no change on src means replication is a noop:
         for i in range(0, 2):
@@ -3224,8 +3228,8 @@ class LocalTestCase(BZFSTestCase):
                     dry_run=(i == 0),
                     no_create_bookmark=True,
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
-                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
+                self.assert_snapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset + "/foo", 3, "t", offset=8)
 
     def test_complex_replication_flat_use_bookmarks_with_volume(self) -> None:
         self.test_complex_replication_flat_use_bookmarks(volume=True)
@@ -3246,13 +3250,13 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo"))
-                    self.assertBookmarkNames(src_root_dataset + "/foo", [])
+                    self.assert_bookmark_names(src_root_dataset + "/foo", [])
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3"])
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
 
@@ -3262,28 +3266,28 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3"])
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 5, "t")
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 5, "t")
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5"])
 
         # on src take another snapshot
         take_snapshot(src_foo, fix("t6"))
         for i in range(0, 3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 5, "t")
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 5, "t")
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5"])
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 6, "t")
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 6, "t")
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
 
         # on dst (rather than src) take some snapshots, which is asking for trouble...
         dst_foo = build(dst_root_dataset + "/foo")
@@ -3295,8 +3299,8 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=die_status
                 )
-                self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
-                self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
+                self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
 
         # resolve conflict via dst rollback to most recent common snapshot
         for i in range(0, 3):
@@ -3308,13 +3312,13 @@ class LocalTestCase(BZFSTestCase):
                     "--force-once",
                     dry_run=(i == 0),
                 )
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 6, "t")
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 6, "t")
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
 
         # on src and dst, take some snapshots, which is asking for trouble again...
         src_guid = snapshot_property(take_snapshot(src_foo, fix("t7")), "guid")
@@ -3328,11 +3332,11 @@ class LocalTestCase(BZFSTestCase):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=die_status
                 )
-                self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
                 self.assertEqual(
                     dst_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                 )  # nothing has changed on dst
-                self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
+                self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
         for i in range(0, 3):
@@ -3344,19 +3348,19 @@ class LocalTestCase(BZFSTestCase):
                     "--force-once",
                     dry_run=(i == 0),
                 )  # resolve conflict via dst rollback
-                self.assertSnapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset, 0)
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
+                    self.assert_snapshots(dst_root_dataset + "/foo", 8, "t")  # nothing has changed on dst
                     self.assertEqual(
                         dst_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                     )  # nothing has changed on dst
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6"])
                 else:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")
+                    self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
                     self.assertEqual(
                         src_guid, snapshot_property(snapshots(build(dst_root_dataset + "/foo"))[6], "guid")
                     )  # now they are true replicas
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
 
         # on src delete some snapshots are older than most recent common snap, which is normal and won't cause changes to dst
         destroy(snapshots(src_foo)[0])
@@ -3364,16 +3368,16 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset, 0)
-                self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")
-                self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
+                self.assert_snapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
+                self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
 
         # replicate a child dataset
         if not volume:
             self.run_bzfs(src_root_dataset + "/foo/a", dst_root_dataset + "/foo/a")
-            self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
-            self.assertBookmarkNames(src_root_dataset + "/foo/a", ["u1", "u3"])
-            self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")
+            self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
+            self.assert_bookmark_names(src_root_dataset + "/foo/a", ["u1", "u3"])
+            self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")
 
         # on src delete all snapshots so now there is no common snapshot anymore,
         # which isn't actually trouble because we have bookmarks for them...
@@ -3384,15 +3388,15 @@ class LocalTestCase(BZFSTestCase):
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
-                self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
-                self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
+                self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
+                self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
                 if not volume:
-                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
         take_snapshot(src_foo, fix("t9"))
         take_snapshot(src_foo, fix("t10"))
         take_snapshot(src_foo, fix("t11"))
-        self.assertSnapshots(src_root_dataset + "/foo", 3, "t", offset=8)
+        self.assert_snapshots(src_root_dataset + "/foo", 3, "t", offset=8)
 
         # No Conflict: no common snapshot was found, but we found a (common) bookmark that can be used instead
         # so replication will succeed:
@@ -3400,40 +3404,40 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
                 if not volume:
-                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
+                    self.assert_snapshots(dst_root_dataset + "/foo", 7, "t")  # nothing has changed on dst
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
                 else:
-                    self.assertSnapshotNames(
+                    self.assert_snapshot_names(
                         dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t11"]
                     )
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t11"])
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t11"])
 
         # no change on src means replication is a noop:
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0))
-                self.assertSnapshotNames(
+                self.assert_snapshot_names(
                     dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t11"]
                 )
-                self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t11"])
+                self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t11"])
 
         # on src delete the most recent snapshot and its bookmark, which is trouble as now src has nothing
         # in common anymore with the most recent dst snapshot:
         destroy(natsorted(snapshots(src_foo), key=lambda s: s)[-1])  # destroy t11
         destroy(natsorted(bookmarks(src_foo), key=lambda b: b)[-1])  # destroy t11
-        self.assertSnapshotNames(src_root_dataset + "/foo", ["t9", "t10"])
-        self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
+        self.assert_snapshot_names(src_root_dataset + "/foo", ["t9", "t10"])
+        self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])
         for i in range(0, 2):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset + "/foo", dst_root_dataset + "/foo", dry_run=(i == 0), expected_status=die_status
                 )
-                self.assertSnapshotNames(
+                self.assert_snapshot_names(
                     dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t11"]
                 )  # nothing has changed
-                self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])  # nothing has changed
+                self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"])  # nothing has changed
 
         # resolve conflict via dst rollback to most recent common snapshot prior to replicating
         take_snapshot(src_foo, fix("t12"))
@@ -3446,19 +3450,19 @@ class LocalTestCase(BZFSTestCase):
                     dry_run=(i == 0),
                 )
                 if not volume:
-                    self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                    self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
                 if i == 0:
-                    self.assertSnapshotNames(
+                    self.assert_snapshot_names(
                         dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t11"]
                     )  # nothing has changed
-                    self.assertBookmarkNames(
+                    self.assert_bookmark_names(
                         src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7"]
                     )  # nothing has changed
                 else:
-                    self.assertSnapshotNames(
+                    self.assert_snapshot_names(
                         dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t12"]
                     )  # nothing has changed
-                    self.assertBookmarkNames(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t12"])
+                    self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t12"])
 
     @staticmethod
     def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024) -> None:
@@ -3493,7 +3497,7 @@ class LocalTestCase(BZFSTestCase):
             prev_token = curr_token
         print(f"iterations to fully replicate all snapshots: {max_iters}")
         self.assert_receive_resume_token(dst_root_dataset, exists=False)
-        self.assertSnapshots(dst_root_dataset, n - 1, "s")
+        self.assert_snapshots(dst_root_dataset, n - 1, "s")
         self.assertGreater(max_iters, 2)
 
     def test_send_full_no_resume_recv_with_resume_token_present(self) -> None:
@@ -3505,15 +3509,15 @@ class LocalTestCase(BZFSTestCase):
                     self.tearDownAndSetup()
                 self.create_resumable_snapshots(1, 4)
                 self.generate_recv_resume_token(None, src_root_dataset + "@s1", dst_root_dataset)
-                self.assertSnapshots(dst_root_dataset, 0, "s")
+                self.assert_snapshots(dst_root_dataset, 0, "s")
                 if i == 0:
                     self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=1)
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
                 else:
                     self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0, expected_status=1)
-                    self.assertSnapshots(dst_root_dataset, 0, "s")
+                    self.assert_snapshots(dst_root_dataset, 0, "s")
                     self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0)
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_send_incr_no_resume_recv_with_resume_token_present(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
@@ -3525,19 +3529,19 @@ class LocalTestCase(BZFSTestCase):
                 self.create_resumable_snapshots(1, 2)
                 self.run_bzfs(src_root_dataset, dst_root_dataset)
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
-                self.assertSnapshots(dst_root_dataset, 1, "s")
+                self.assert_snapshots(dst_root_dataset, 1, "s")
                 n = 4
                 self.create_resumable_snapshots(2, n)
                 self.generate_recv_resume_token(src_root_dataset + "@s1", src_root_dataset + "@s3", dst_root_dataset)
-                self.assertSnapshots(dst_root_dataset, 1, "s")
+                self.assert_snapshots(dst_root_dataset, 1, "s")
                 if i == 0:
                     self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=1)
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
                 else:
                     self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0, expected_status=1)
-                    self.assertSnapshots(dst_root_dataset, 1, "s")
+                    self.assert_snapshots(dst_root_dataset, 1, "s")
                     self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-resume-recv", retries=0)
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_send_incr_resume_recv(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
@@ -3549,7 +3553,7 @@ class LocalTestCase(BZFSTestCase):
                 self.create_resumable_snapshots(1, 2)
                 self.run_bzfs(src_root_dataset, dst_root_dataset)
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
-                self.assertSnapshots(dst_root_dataset, 1, "s")
+                self.assert_snapshots(dst_root_dataset, 1, "s")
                 for bookmark in bookmarks(src_root_dataset):
                     destroy(bookmark)
                 n = 4
@@ -3574,7 +3578,7 @@ class LocalTestCase(BZFSTestCase):
                         inject_params={"inject_dst_pipe_fail": True},
                     )
                     self.assert_receive_resume_token(dst_root_dataset, exists=True)
-                    self.assertSnapshots(dst_root_dataset, 1, "s")
+                    self.assert_snapshots(dst_root_dataset, 1, "s")
                     if i == 1:
                         self.run_bzfs(src_root_dataset, dst_root_dataset)
                     else:
@@ -3583,12 +3587,12 @@ class LocalTestCase(BZFSTestCase):
                         if i == 2:
                             self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=255)
                             self.assert_receive_resume_token(dst_root_dataset, exists=False)
-                            self.assertSnapshots(dst_root_dataset, 1, "s")
+                            self.assert_snapshots(dst_root_dataset, 1, "s")
                             self.run_bzfs(src_root_dataset, dst_root_dataset)
                         else:
                             self.run_bzfs(src_root_dataset, dst_root_dataset, retries=1)
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
-                self.assertSnapshots(dst_root_dataset, n - 1, "s")
+                self.assert_snapshots(dst_root_dataset, n - 1, "s")
 
     def test_send_full_resume_recv(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
@@ -3620,7 +3624,7 @@ class LocalTestCase(BZFSTestCase):
                     )
                     self.assert_receive_resume_token(dst_root_dataset, exists=True)
                     self.assertTrue(dataset_exists(dst_root_dataset))
-                    self.assertSnapshots(dst_root_dataset, 0, "s")
+                    self.assert_snapshots(dst_root_dataset, 0, "s")
                     if i == 1:
                         self.run_bzfs(src_root_dataset, dst_root_dataset)
                     else:
@@ -3635,7 +3639,7 @@ class LocalTestCase(BZFSTestCase):
                         else:
                             self.run_bzfs(src_root_dataset, dst_root_dataset, retries=1)
                 self.assert_receive_resume_token(dst_root_dataset, exists=False)
-                self.assertSnapshots(dst_root_dataset, 1, "s")
+                self.assert_snapshots(dst_root_dataset, 1, "s")
 
     def test_compare_snapshot_lists_with_nonexisting_source(self) -> None:
         destroy(src_root_dataset, recursive=True)
@@ -4200,10 +4204,10 @@ class LocalTestCase(BZFSTestCase):
     def test_delete_dst_bookmarks_flat_with_replication(self) -> None:
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--delete-dst-snapshots=bookmarks")
-        self.assertSnapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
         if are_bookmarks_enabled("src") and not self.is_no_privilege_elevation():
             self.run_bzfs(bzfs.dummy_dataset, src_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
-            self.assertBookmarkNames(src_root_dataset, [])
+            self.assert_bookmark_names(src_root_dataset, [])
 
     def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self) -> None:
         self.setup_basic()
@@ -4219,7 +4223,7 @@ class LocalTestCase(BZFSTestCase):
                     take_snapshot(src_root_dataset, fix("s2"))
                     take_snapshot(src_root_dataset, fix("s3"))
                     self.run_bzfs(src_root_dataset, dst_root_dataset)
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
                     if i > 0:
                         destroy_snapshots(src_root_dataset, snapshots(src_root_dataset))
                     if i > 1 and are_bookmarks_enabled("src"):
@@ -4230,14 +4234,14 @@ class LocalTestCase(BZFSTestCase):
                         src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots", *crosscheck
                     )
                     if i == 0:
-                        self.assertSnapshots(dst_root_dataset, 3, "s")
+                        self.assert_snapshots(dst_root_dataset, 3, "s")
                     elif i == 1:
                         if j == 0 and are_bookmarks_enabled("src"):
-                            self.assertSnapshotNames(dst_root_dataset, ["s1", "s3"])
+                            self.assert_snapshot_names(dst_root_dataset, ["s1", "s3"])
                         else:
-                            self.assertSnapshotNames(dst_root_dataset, [])
+                            self.assert_snapshot_names(dst_root_dataset, [])
                     else:
-                        self.assertSnapshotNames(dst_root_dataset, [])
+                        self.assert_snapshot_names(dst_root_dataset, [])
 
     def test_delete_dst_snapshots_flat(self) -> None:
         for i in range(0, 2):
@@ -4260,9 +4264,9 @@ class LocalTestCase(BZFSTestCase):
                     "--delete-dst-snapshots-no-crosscheck",
                     max_command_line_bytes=max_bytes,
                 )
-                self.assertSnapshotNames(dst_root_dataset, ["s2"])
-                self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-                self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+                self.assert_snapshot_names(dst_root_dataset, ["s2"])
+                self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+                self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
         if are_bookmarks_enabled("src"):
             tag0 = snapshot_name(snapshots(src_root_dataset)[0])
@@ -4301,15 +4305,15 @@ class LocalTestCase(BZFSTestCase):
                 create_bookmark(dst_root_dataset, tag1, tag1)
                 tag2 = snapshot_name(snapshots(src_root_dataset)[2])
                 create_bookmark(dst_root_dataset, tag2, tag2)
-                self.assertBookmarkNames(src_root_dataset, ["s1", "s3"])
-                self.assertBookmarkNames(dst_root_dataset, ["s1", "s2", "s3"])
+                self.assert_bookmark_names(src_root_dataset, ["s1", "s3"])
+                self.assert_bookmark_names(dst_root_dataset, ["s1", "s2", "s3"])
                 for snapshot in snapshots(src_root_dataset) + snapshots(dst_root_dataset):
                     destroy(snapshot)
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
-                self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
+                self.assert_bookmark_names(dst_root_dataset, ["s1", "s3"])
 
                 self.run_bzfs(src_root_dataset, dst_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
-                self.assertBookmarkNames(dst_root_dataset, ["s1", "s3"])
+                self.assert_bookmark_names(dst_root_dataset, ["s1", "s3"])
 
                 for bookmark in bookmarks(src_root_dataset):
                     destroy(bookmark)
@@ -4320,7 +4324,7 @@ class LocalTestCase(BZFSTestCase):
                     "--delete-dst-snapshots=bookmarks",
                     "--delete-empty-dst-datasets",
                 )
-                self.assertBookmarkNames(dst_root_dataset, [])
+                self.assert_bookmark_names(dst_root_dataset, [])
                 self.assertTrue(dataset_exists(dst_root_dataset))
 
                 self.run_bzfs(
@@ -4345,7 +4349,7 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s2"])
+        self.assert_snapshot_names(dst_root_dataset, ["s2"])
 
     def test_delete_dst_snapshots_recursive(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4363,10 +4367,10 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots",
             "--delete-dst-snapshots-no-crosscheck",
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s2"])
-        self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
+        self.assert_snapshot_names(dst_root_dataset, ["s2"])
+        self.assert_snapshot_names(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertTrue(dataset_exists(dst_root_dataset + "/foo/a"))
-        self.assertSnapshotNames(dst_root_dataset + "/foo/a", [])
+        self.assert_snapshot_names(dst_root_dataset + "/foo/a", [])
 
     def test_delete_dst_snapshots_recursive_with_delete_empty_dst_datasets(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4385,8 +4389,8 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-no-crosscheck",
             "--delete-empty-dst-datasets",
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s2"])
-        self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1", "t3"])
+        self.assert_snapshot_names(dst_root_dataset, ["s2"])
+        self.assert_snapshot_names(dst_root_dataset + "/foo", ["t1", "t3"])
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/a"))
 
     def test_delete_dst_snapshots_recursive_with_dummy(self) -> None:
@@ -4401,11 +4405,11 @@ class LocalTestCase(BZFSTestCase):
                 dry_run=(i == 0),
             )
             if i == 0:
-                self.assertSnapshots(dst_root_dataset, 3, "s")
+                self.assert_snapshots(dst_root_dataset, 3, "s")
             else:
-                self.assertSnapshots(dst_root_dataset, 0)
-                self.assertSnapshots(dst_root_dataset + "/foo", 0)
-                self.assertSnapshots(dst_root_dataset + "/foo/a", 0)
+                self.assert_snapshots(dst_root_dataset, 0)
+                self.assert_snapshots(dst_root_dataset + "/foo", 0)
+                self.assert_snapshots(dst_root_dataset + "/foo/a", 0)
 
     def test_delete_dst_snapshots_recursive_with_delete_empty_dst_datasets_with_dummy(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4421,7 +4425,7 @@ class LocalTestCase(BZFSTestCase):
                 dry_run=(i == 0),
             )
             if i == 0:
-                self.assertSnapshots(dst_root_dataset, 3, "s")
+                self.assert_snapshots(dst_root_dataset, 3, "s")
             else:
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
@@ -4480,10 +4484,10 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset, fix("s1"))
         take_snapshot(src_root_dataset, fix("s2"))
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--no-use-bookmark", no_create_bookmark=True)
-        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.assert_snapshots(dst_root_dataset, 2, "s")
         self.create_resumable_snapshots(3, 4)
         self.generate_recv_resume_token(src_root_dataset + "@s2", src_root_dataset + "@s3", dst_root_dataset)
-        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.assert_snapshots(dst_root_dataset, 2, "s")
         destroy_snapshots(src_root_dataset, snapshots(src_root_dataset)[1:2])
         self.run_bzfs(
             src_root_dataset,
@@ -4493,17 +4497,17 @@ class LocalTestCase(BZFSTestCase):
             "--no-create-bookmark",
             retries=1,
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s1", "s3"])
+        self.assert_snapshot_names(dst_root_dataset, ["s1", "s3"])
 
     def test_delete_dst_snapshots_flat_with_injected_recv_token1(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
             self.skipTest("No recv resume zfs feature is available")
         take_snapshot(src_root_dataset, fix("s1"))
         self.run_bzfs(src_root_dataset, dst_root_dataset)
-        self.assertSnapshots(dst_root_dataset, 1, "s")
+        self.assert_snapshots(dst_root_dataset, 1, "s")
         self.create_resumable_snapshots(2, 3)
         self.generate_recv_resume_token(src_root_dataset + "@s1", src_root_dataset + "@s2", dst_root_dataset)
-        self.assertSnapshots(dst_root_dataset, 1, "s")
+        self.assert_snapshots(dst_root_dataset, 1, "s")
         self.run_bzfs(
             "dummy",
             dst_root_dataset,
@@ -4512,9 +4516,9 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-no-crosscheck",
             retries=1,
         )
-        self.assertSnapshots(dst_root_dataset, 0, "s")
+        self.assert_snapshots(dst_root_dataset, 0, "s")
         self.run_bzfs(src_root_dataset, dst_root_dataset)
-        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.assert_snapshots(dst_root_dataset, 2, "s")
 
     def test_delete_dst_snapshots_flat_with_injected_recv_token2(self) -> None:
         if not is_zpool_recv_resume_feature_enabled_or_active():
@@ -4522,10 +4526,10 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset, fix("s1"))
         take_snapshot(src_root_dataset, fix("s2"))
         self.run_bzfs(src_root_dataset, dst_root_dataset)
-        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.assert_snapshots(dst_root_dataset, 2, "s")
         self.create_resumable_snapshots(3, 5)
         self.generate_recv_resume_token(src_root_dataset + "@s2", src_root_dataset + "@s3", dst_root_dataset)
-        self.assertSnapshots(dst_root_dataset, 2, "s")
+        self.assert_snapshots(dst_root_dataset, 2, "s")
         self.run_bzfs(
             "dummy",
             dst_root_dataset,
@@ -4535,9 +4539,9 @@ class LocalTestCase(BZFSTestCase):
             "--include-snapshot-regex=s2",
             retries=1,
         )
-        self.assertSnapshots(dst_root_dataset, 1, "s")
+        self.assert_snapshots(dst_root_dataset, 1, "s")
         self.run_bzfs(src_root_dataset, dst_root_dataset)
-        self.assertSnapshots(dst_root_dataset, 4, "s")
+        self.assert_snapshots(dst_root_dataset, 4, "s")
 
     def test_delete_dst_snapshots_flat_with_time_range_full(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4555,9 +4559,9 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-no-crosscheck",
             "--include-snapshot-times-and-ranks=60secs ago..2999-01-01",
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s2"])
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshot_names(dst_root_dataset, ["s2"])
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_delete_dst_snapshots_flat_with_time_range_empty(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4575,9 +4579,9 @@ class LocalTestCase(BZFSTestCase):
             "--delete-dst-snapshots-no-crosscheck",
             "--include-snapshot-times-and-ranks=2999-01-01..2999-01-01",
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_delete_dst_snapshots_with_excludes_flat_nothing_todo(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4590,9 +4594,9 @@ class LocalTestCase(BZFSTestCase):
             "--exclude-snapshot-regex",
             "xxxx*",
         )
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_delete_dst_snapshots_with_excludes_flat(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4609,9 +4613,9 @@ class LocalTestCase(BZFSTestCase):
             "--exclude-snapshot-regex",
             r"!.*s[1-2]+.*",
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s3"])
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshot_names(dst_root_dataset, ["s3"])
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_delete_dst_snapshots_with_excludes_recursive(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4634,9 +4638,9 @@ class LocalTestCase(BZFSTestCase):
             "--exclude-snapshot-regex",
             ".*u.*",
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s1", "s2"])
-        self.assertSnapshotNames(dst_root_dataset + "/foo", ["t1"])
-        self.assertSnapshotNames(dst_root_dataset + "/foo/a", ["u1", "u2", "u3"])
+        self.assert_snapshot_names(dst_root_dataset, ["s1", "s2"])
+        self.assert_snapshot_names(dst_root_dataset + "/foo", ["t1"])
+        self.assert_snapshot_names(dst_root_dataset + "/foo/a", ["u1", "u2", "u3"])
 
     def test_delete_dst_snapshots_with_excludes_recursive_and_excluding_dataset_regex(self) -> None:
         self.setup_basic_with_recursive_replication_done()
@@ -4661,9 +4665,9 @@ class LocalTestCase(BZFSTestCase):
             "--exclude-snapshot-regex",
             ".*u1.*",
         )
-        self.assertSnapshotNames(dst_root_dataset, ["s1", "s2"])
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshot_names(dst_root_dataset, ["s1", "s2"])
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
 
     def test_syslog(self) -> None:
         if "Ubuntu" not in platform.version():
@@ -4897,13 +4901,13 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(1, job.num_cache_misses)
 
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo1", 1, "s")
         self.assertEqual(0, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
         time.sleep(delay_secs)
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo1", 1, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
@@ -4911,20 +4915,20 @@ class LocalTestCase(BZFSTestCase):
         take_snapshot(src_root_dataset + "/foo2", fix("s1"))
         time.sleep(delay_secs)
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
         time.sleep(delay_secs)
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(2, job.num_cache_hits)
         self.assertEqual(0, job.num_cache_misses)
 
         take_snapshot(src_root_dataset + "/foo1", fix("s2"))
         time.sleep(delay_secs)
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo1", 2, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo1", 2, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
@@ -4934,10 +4938,10 @@ class LocalTestCase(BZFSTestCase):
         self.assertEqual(0, job.num_cache_misses)
 
         destroy_snapshots(dst_root_dataset + "/foo1", snapshots(dst_root_dataset + "/foo1")[1:])
-        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo1", 1, "s")
         time.sleep(delay_secs)
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo1", 2, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo1", 2, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
@@ -4957,8 +4961,8 @@ class LocalTestCase(BZFSTestCase):
         create_filesystem(src_root_dataset, "foo2")
         take_snapshot(src_root_dataset + "/foo2", fix("s1"))
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(0, job.num_cache_hits)
         self.assertEqual(2, job.num_cache_misses)
 
@@ -4971,8 +4975,8 @@ class LocalTestCase(BZFSTestCase):
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo2"))
         time.sleep(delay_secs)
         job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", "--skip-parent", cache_snapshots=True)
-        self.assertSnapshots(dst_root_dataset + "/foo1", 1, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo2", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo1", 1, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo2", 1, "s")
         self.assertEqual(1, job.num_cache_hits)
         self.assertEqual(1, job.num_cache_misses)
 
@@ -5009,7 +5013,7 @@ class LocalTestCase(BZFSTestCase):
             cache_snapshots = spawn_process_per_job is None
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
-                self.assertSnapshots(src_root_dataset, 0)
+                self.assert_snapshots(src_root_dataset, 0)
                 loopback = "::1" if "Ubuntu" in platform.version() and is_ipv6_loopback_possible() else "localhost"
                 delay_secs = bzfs.time_threshold_secs
                 localhostname = socket.gethostname()
@@ -5355,7 +5359,7 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 destroy(dst_root_dataset, recursive=True)
-                self.assertSnapshots(src_root_dataset, 0)
+                self.assert_snapshots(src_root_dataset, 0)
 
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)
@@ -5386,7 +5390,7 @@ class LocalTestCase(BZFSTestCase):
 
                 # next iteration: create a src snapshot with non-empty target
                 run_jobrunner("--create-src-snapshots", *pull_args)
-                self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
+                self.assert_snapshot_name_regexes(src_root_dataset, ["z_onsite.*_yearly"])
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
                 # next iteration: create a src snapshot with empty target
@@ -5394,13 +5398,13 @@ class LocalTestCase(BZFSTestCase):
                 pull_args_empty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
                 pull_args_empty += [f"--src-snapshot-plan={src_snapshot_plan_empty}"]
                 run_jobrunner("--create-src-snapshots", *pull_args_empty)
-                self.assertSnapshotNameRegexes(src_root_dataset, ["z_(?!onsite).*_yearly", "z_onsite.*_yearly"])
+                self.assert_snapshot_name_regexes(src_root_dataset, ["z_(?!onsite).*_yearly", "z_onsite.*_yearly"])
                 self.assertFalse(dataset_exists(dst_root_dataset))
 
                 # replicate empty targets from src to dst:
                 run_jobrunner("--replicate=pull", *pull_args_empty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
-                self.assertSnapshotNameRegexes(dst_root_dataset, ["z_(?!onsite).*_yearly"])
+                self.assert_snapshot_name_regexes(dst_root_dataset, ["z_(?!onsite).*_yearly"])
 
                 # with empty dst, replicate non-empty targets from src to dst
                 destroy(dst_root_dataset, recursive=True)
@@ -5409,14 +5413,14 @@ class LocalTestCase(BZFSTestCase):
                 pull_args_nonempty += [f"--dst-snapshot-plan={dst_snapshot_plan_nonempty}"]
                 run_jobrunner("--replicate=pull", *pull_args_nonempty)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
-                self.assertSnapshotNameRegexes(dst_root_dataset, ["z_onsite_.*_yearly"])
+                self.assert_snapshot_name_regexes(dst_root_dataset, ["z_onsite_.*_yearly"])
 
                 # only retain src snapshots with non-empty target:
                 src_snapshot_plan_nonempty = {"z": {"onsite": {"yearly": 1}}}
                 pull_args_nonempty = [arg for arg in pull_args if not arg.startswith("--src-snapshot-plan=")]
                 pull_args_nonempty += [f"--src-snapshot-plan={src_snapshot_plan_nonempty}"]
                 run_jobrunner("--prune-src-snapshots", *pull_args_nonempty)
-                self.assertSnapshotNameRegexes(src_root_dataset, ["z_onsite.*_yearly"])
+                self.assert_snapshot_name_regexes(src_root_dataset, ["z_onsite.*_yearly"])
 
                 # only retain src snapshots with empty target:
                 src_snapshot_plan_empty = {"z": {"": {"yearly": 1}}}
@@ -5462,7 +5466,7 @@ class MinimalRemoteTestCase(BZFSTestCase):
             expected_status=expected_error,
         )
         if expected_error != 0:
-            self.assertSnapshots(dst_root_dataset, 0)
+            self.assert_snapshots(dst_root_dataset, 0)
 
     def inject_unavailable_program(self, *flags: str, expected_error: int = 0) -> None:
         self.setup_basic()
@@ -5471,9 +5475,9 @@ class MinimalRemoteTestCase(BZFSTestCase):
             inject_params[flag] = True
         self.run_bzfs(src_root_dataset, dst_root_dataset, expected_status=expected_error, inject_params=inject_params)
         if expected_error != 0:
-            self.assertSnapshots(dst_root_dataset, 0)
+            self.assert_snapshots(dst_root_dataset, 0)
         else:
-            self.assertSnapshots(dst_root_dataset, 3, "s")
+            self.assert_snapshots(dst_root_dataset, 3, "s")
 
 
 #############################################################################
@@ -5543,9 +5547,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
                     inject_params=inject_params,
                 )
                 if i == 0:
-                    self.assertSnapshots(dst_root_dataset, 0)
+                    self.assert_snapshots(dst_root_dataset, 0)
                 else:
-                    self.assertSnapshots(dst_root_dataset, 3, "s")
+                    self.assert_snapshots(dst_root_dataset, 3, "s")
 
     def test_inject_unavailable_mbuffer(self) -> None:
         self.inject_unavailable_program("inject_unavailable_mbuffer")
@@ -5604,9 +5608,9 @@ class FullRemoteTestCase(MinimalRemoteTestCase):
     def test_ssh_master_check_keeps_tcp_connection_alive_with_replication_recursive(self) -> None:
         self.setup_basic()
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--recursive", control_persist_margin_secs=2**64)
-        self.assertSnapshots(dst_root_dataset, 3, "s")
-        self.assertSnapshots(dst_root_dataset + "/foo", 3, "t")
-        self.assertSnapshots(dst_root_dataset + "/foo/a", 3, "u")
+        self.assert_snapshots(dst_root_dataset, 3, "s")
+        self.assert_snapshots(dst_root_dataset + "/foo", 3, "t")
+        self.assert_snapshots(dst_root_dataset + "/foo/a", 3, "u")
         self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
 

@@ -357,36 +357,36 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.parse_duration_to_milliseconds("foo", context="ctx")
 
     def test_compile_regexes(self) -> None:
-        def _assertFullMatch(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
+        def _assert_full_match(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
             match = bzfs.compile_regexes([regex], suffix=re_suffix)[0][0].fullmatch(text)
             if expected:
                 self.assertTrue(match)
             else:
                 self.assertFalse(match)
 
-        def assertFullMatch(text: str, regex: str, re_suffix: str = "") -> None:
-            _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=True)
+        def assert_full_match(text: str, regex: str, re_suffix: str = "") -> None:
+            _assert_full_match(text=text, regex=regex, re_suffix=re_suffix, expected=True)
 
-        def assertNotFullMatch(text: str, regex: str, re_suffix: str = "") -> None:
-            _assertFullMatch(text=text, regex=regex, re_suffix=re_suffix, expected=False)
+        def assert_not_full_match(text: str, regex: str, re_suffix: str = "") -> None:
+            _assert_full_match(text=text, regex=regex, re_suffix=re_suffix, expected=False)
 
         re_suffix = bzfs.Job().re_suffix
-        assertFullMatch("foo", "foo")
-        assertNotFullMatch("xfoo", "foo")
-        assertNotFullMatch("fooy", "foo")
-        assertNotFullMatch("foo/bar", "foo")
-        assertFullMatch("foo", "foo$")
-        assertFullMatch("foo", ".*")
-        assertFullMatch("foo/bar", ".*")
-        assertFullMatch("foo", ".*", re_suffix)
-        assertFullMatch("foo/bar", ".*", re_suffix)
-        assertFullMatch("foo", "foo", re_suffix)
-        assertFullMatch("foo/bar", "foo", re_suffix)
-        assertFullMatch("foo/bar/baz", "foo", re_suffix)
-        assertFullMatch("foo", "foo$", re_suffix)
-        assertFullMatch("foo$", "foo\\$", re_suffix)
-        assertFullMatch("foo", "!foo", re_suffix)
-        assertFullMatch("foo", "!foo")
+        assert_full_match("foo", "foo")
+        assert_not_full_match("xfoo", "foo")
+        assert_not_full_match("fooy", "foo")
+        assert_not_full_match("foo/bar", "foo")
+        assert_full_match("foo", "foo$")
+        assert_full_match("foo", ".*")
+        assert_full_match("foo/bar", ".*")
+        assert_full_match("foo", ".*", re_suffix)
+        assert_full_match("foo/bar", ".*", re_suffix)
+        assert_full_match("foo", "foo", re_suffix)
+        assert_full_match("foo/bar", "foo", re_suffix)
+        assert_full_match("foo/bar/baz", "foo", re_suffix)
+        assert_full_match("foo", "foo$", re_suffix)
+        assert_full_match("foo$", "foo\\$", re_suffix)
+        assert_full_match("foo", "!foo", re_suffix)
+        assert_full_match("foo", "!foo")
         with self.assertRaises(re.error):
             bzfs.compile_regexes(["fo$o"], re_suffix)
 
@@ -578,7 +578,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=True)
             self.assertEqual(1001, round(os.stat(file).st_mtime))
 
-    def test_set_last_modification_time_with_FileNotFoundError(self) -> None:
+    def test_set_last_modification_time_with_file_not_found_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             file = os.path.join(tmpdir, "foo")
             with patch("bzfs_main.bzfs.os_utime", side_effect=FileNotFoundError):
@@ -1452,7 +1452,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(xperiods.suffix_milliseconds["secondly"], xperiods.label_milliseconds("foo_secondly"))
         self.assertEqual(xperiods.suffix_milliseconds["millisecondly"], xperiods.label_milliseconds("foo_millisecondly"))
 
-    def test_CreateSrcSnapshotConfig(self) -> None:
+    def test_CreateSrcSnapshotConfig(self) -> None:  # noqa: N802
         params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
         good_args = bzfs.argument_parser().parse_args(
             [
@@ -1660,7 +1660,7 @@ class TestHelperFunctions(unittest.TestCase):
         with self.assertRaises(SystemExit):
             bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
 
-    def test_MonitorSnapshotsConfig(self) -> None:
+    def test_MonitorSnapshotsConfig(self) -> None:  # noqa: N802
         def plan(alerts: dict[str, Any]) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
@@ -2576,17 +2576,17 @@ class TestBuildTree(unittest.TestCase):
         self.assert_keys_sorted(tree)
 
     def test_tree_with_barriers(self) -> None:
-        BR = bzfs.BARRIER_CHAR
+        br = bzfs.BARRIER_CHAR
         datasets: list[str] = [
             "a/b/c",
             "a/b/c/0d",
             "a/b/c/1d",
-            f"a/b/c/{BR}/prune",
-            f"a/b/c/{BR}/prune/monitor",
-            f"a/b/c/{BR}/{BR}/done",
+            f"a/b/c/{br}/prune",
+            f"a/b/c/{br}/prune/monitor",
+            f"a/b/c/{br}/{br}/done",
         ]
         expected_tree: bzfs.Tree = {
-            "a": {"b": {"c": {"0d": {}, "1d": {}, BR: {"prune": {"monitor": {}}, BR: {"done": {}}}}}}
+            "a": {"b": {"c": {"0d": {}, "1d": {}, br: {"prune": {"monitor": {}}, br: {"done": {}}}}}}
         }
         tree = bzfs.Job().build_dataset_tree(datasets)
         self.assertEqual(tree, expected_tree)
@@ -4622,7 +4622,7 @@ class TestConnectionPool(unittest.TestCase):
         cpool.shutdown("bar")
         cpool.return_connection(conn3)
 
-    def test_multiple_TCP_connections(self) -> None:
+    def test_multiple_tcp_connections(self) -> None:
         capacity = 2
         cpool = bzfs.ConnectionPool(self.remote, capacity)
 
@@ -4857,8 +4857,8 @@ class TestIncrementalSendSteps(unittest.TestCase):
         """
         assert max_length >= 0
         testcases = []
-        for L in range(0, max_length + 1):
-            for N in range(0, L + 1):
+        for L in range(0, max_length + 1):  # noqa: N806
+            for N in range(0, L + 1):  # noqa: N806
                 steps = "d" * N + "h" * (L - N)
                 # compute a permutation of several 'd' and 'h' chars that represents the snapshot series
                 for permutation in sorted(set(itertools.permutations(steps, len(steps)))):
@@ -4878,7 +4878,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
         for is_resume in [False, True]:  # via --no-resume-recv
             for src_dataset in ["", "s@"]:
-                for force_convert_I_to_i in [False, True]:
+                for force_convert_I_to_i in [False, True]:  # noqa: N806
                     steps = self.incremental_send_steps1(
                         input_snapshots,
                         src_dataset=src_dataset,
@@ -4923,7 +4923,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         input_snapshots: list[str],
         src_dataset: str,
         is_resume: bool = False,
-        force_convert_I_to_i: bool = False,
+        force_convert_I_to_i: bool = False,  # noqa: N803
     ) -> list[tuple]:
         origin_src_snapshots_with_guids = []
         guid = 1
@@ -4938,7 +4938,7 @@ class TestIncrementalSendSteps(unittest.TestCase):
         self,
         origin_src_snapshots_with_guids: list[str],
         is_resume: bool = False,
-        force_convert_I_to_i: bool = False,
+        force_convert_I_to_i: bool = False,  # noqa: N803
     ) -> list[tuple]:
         guids = []
         input_snapshots = []
@@ -5482,8 +5482,8 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        BR = bzfs.BARRIER_CHAR
-        src_datasets = ["a/b/c", "a/b/c/0d", "a/b/c/1d", f"a/b/c/{BR}/prune", f"a/b/c/{BR}/prune/monitor"]
+        br = bzfs.BARRIER_CHAR
+        src_datasets = ["a/b/c", "a/b/c/0d", "a/b/c/1d", f"a/b/c/{br}/prune", f"a/b/c/{br}/prune/monitor"]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
             process_dataset=submit_no_skiptree,  # lambda
@@ -5499,8 +5499,8 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return dataset != "a/b/c/0d"
 
-        BR = bzfs.BARRIER_CHAR
-        src_datasets = ["a/b/c", "a/b/c/0d", "a/b/c/1d", f"a/b/c/{BR}/prune", f"a/b/c/{BR}/prune/monitor"]
+        br = bzfs.BARRIER_CHAR
+        src_datasets = ["a/b/c", "a/b/c/0d", "a/b/c/1d", f"a/b/c/{br}/prune", f"a/b/c/{br}/prune/monitor"]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
             process_dataset=submit_with_skiptree,  # lambda
@@ -5548,14 +5548,14 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        BR = bzfs.BARRIER_CHAR
+        br = bzfs.BARRIER_CHAR
         src_datasets = [
             "a/b/c",
             "a/b/c/0d",
             "a/b/c/1d",
-            f"a/b/c/{BR}/prune",
-            f"a/b/c/{BR}/prune/monitor",
-            f"a/b/c/{BR}/{BR}/done",
+            f"a/b/c/{br}/prune",
+            f"a/b/c/{br}/prune/monitor",
+            f"a/b/c/{br}/{br}/done",
         ]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
@@ -5572,14 +5572,14 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        BR = bzfs.BARRIER_CHAR
+        br = bzfs.BARRIER_CHAR
         src_datasets = [
             "a/b/c",
             "a/b/c/0d",
             "a/b/c/1d",
-            f"a/b/c/{BR}/prune",
-            f"a/b/c/{BR}/prune/monitor",
-            f"a/b/c/{BR}/{BR}/{BR}/{BR}/done",
+            f"a/b/c/{br}/prune",
+            f"a/b/c/{br}/prune/monitor",
+            f"a/b/c/{br}/{br}/{br}/{br}/done",
         ]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,
@@ -5596,14 +5596,14 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
             self.append_submission(dataset)
             return True
 
-        BR = bzfs.BARRIER_CHAR
+        br = bzfs.BARRIER_CHAR
         src_datasets = [
             "a/b/c",
             "a/b/c/0d",
             "a/b/c/1d",
-            f"a/b/c/{BR}/prune",
-            f"a/b/c/{BR}/prune/monitor",
-            f"a/b/c/{BR}/{BR}/{BR}/{BR}",
+            f"a/b/c/{br}/prune",
+            f"a/b/c/{br}/prune/monitor",
+            f"a/b/c/{br}/{br}/{br}/{br}",
         ]
         failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
             src_datasets,

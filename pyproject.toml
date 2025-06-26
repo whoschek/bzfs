@@ -126,6 +126,7 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "EXE",  # shebang
     "F",    # pyflakes
     "FA",   # forward annotations
+    "N8",   # naming, snake case
     "PGH",  # pygrep-hooks
     "RUF",  # ruff-specifc rules
     "S",    # bandit
