@@ -6708,6 +6708,7 @@ def current_datetime(
 def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
     """Returns the given timezone, or the local timezone if the timezone spec is absent. The optional timezone spec is of
     the form "UTC" or "+HH:MM" or "-HH:MM" for fixed UTC offsets."""
+    tz: tzinfo | None
     if tz_spec is None:
         tz = None  # i.e. local timezone
     elif tz_spec == "UTC":

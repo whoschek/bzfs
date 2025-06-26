@@ -2670,7 +2670,11 @@ class TestCurrentDateTime(unittest.TestCase):
         self.assertIsNotNone(bzfs.current_datetime(tz_spec=tz_spec, now_fn=None))
         tz = ZoneInfo(tz_spec)  # Standard IANA timezone. Example: "Europe/Vienna"
         expected = self.fixed_datetime.astimezone(tz=tz)
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=lambda _=None: self.fixed_datetime.astimezone(tz=tz))
+
+        def now_fn(_: tzinfo | None = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
         self.assertEqual(expected, actual)
 
         fmt = "%Y-%m-%dT%H:%M:%S%z"
