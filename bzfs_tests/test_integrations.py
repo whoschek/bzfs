@@ -34,6 +34,7 @@ import traceback
 import unittest
 from collections import Counter
 from pathlib import Path
+from subprocess import DEVNULL, PIPE
 from typing import Any, Callable, Iterable, cast
 from unittest.mock import patch
 
@@ -613,7 +614,7 @@ class BZFSTestCase(ParametrizedTestCase):
         c = bzfs.inject_dst_pipe_fail_kbytes
         cmd = ["sh", "-c", f"{send} | dd bs=1024 count={c} 2>/dev/null | sudo zfs receive -v -F -u -s {dst_dataset}"]
         try:
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            subprocess.run(cmd, stdout=PIPE, stderr=PIPE, text=True, check=True)
         except subprocess.CalledProcessError as e:
             print(f"generate_recv_resume_token stdout: {e.stdout}")
             self.assertIn("Partially received snapshot is saved", e.stderr)
@@ -855,7 +856,6 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
 class TestSSHLatency(BZFSTestCase):
 
     def run_latency_cmd(self, cmd: list[str], *, close_fds: bool = True) -> tuple[str, str]:
-        PIPE, DEVNULL = subprocess.PIPE, subprocess.DEVNULL
         process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, close_fds=close_fds)
         return process.stdout[0:-1], process.stderr[0:-1]  # omit trailing newline char
 
