@@ -43,7 +43,7 @@ def open_nofollow(
     perm: int = stat.S_IRUSR | stat.S_IWUSR,  # rw------- (owner read + write)
     **kwargs: Any,
 ) -> IO:
-    """Behaves exactly like built‑in open(), except that it refuses to follow symlinks, i.e. raises OSError with
+    """Behaves exactly like built-in open(), except that it refuses to follow symlinks, i.e. raises OSError with
     errno.ELOOP/EMLINK if basename of path is a symlink."""
     if not mode:
         raise ValueError("Must have exactly one of create/read/write/append mode and at most one plus")

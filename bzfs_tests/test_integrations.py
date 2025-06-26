@@ -880,7 +880,7 @@ class TestSSHLatency(BZFSTestCase):
 
         for mode in range(0, 2):
             with stop_on_failure_subtest(i=mode):
-                control_persist = 2 if mode == 0 else 2  # seconds
+                control_persist = 2 if mode == 0 else 2  # noqa: RUF034  # seconds
                 master_cmd = p.split_args(f"{ssh_program} {ssh_opts} -M -oControlPersist={control_persist}s 127.0.0.1 exit")
                 check_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O check 127.0.0.1")
                 echo_cmd = "echo hello"

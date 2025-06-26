@@ -615,9 +615,7 @@ class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
         self.job = bzfs_jobrunner.Job()
 
     def run_and_capture(self, cmd: list[str], timeout_secs: float | None) -> tuple[int | None, list[str]]:
-        """
-        Helper: invoke the method, return (exit_code, [all error‑log messages]).
-        """
+        """Helper: invoke the method, return (exit_code, [all error-log messages])."""
         with patch.object(self.job.log, "error") as mock_error:
             code = self.job.run_worker_job_spawn_process_per_job(cmd, timeout_secs=timeout_secs)
             logs = [cast(str, call.args[1]) for call in mock_error.call_args_list]
@@ -636,7 +634,7 @@ class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
         self.assertListEqual([], logs)
 
     def test_nonzero_exit(self) -> None:
-        """Non‑zero exit code is propagated, no errors logged."""
+        """Non-zero exit code is propagated, no errors logged."""
         code, logs = self.run_and_capture(["sh", "-c", "exit 3"], timeout_secs=1.0)
         self.assertEqual(3, code)
         self.assertListEqual([], logs)
@@ -658,7 +656,7 @@ class TestRunSubJobSpawnProcessPerJob(unittest.TestCase):
         )
 
     def test_timeout_kill(self) -> None:
-        """SIGTERM ignored→SIGKILL path: return code and kill‐log present."""
+        """SIGTERM ignored->SIGKILL path: return code and kill-log present."""
         code, logs = self.run_and_capture(["sh", "-c", 'trap "" TERM; sleep 1'], timeout_secs=0.1)
         self.assertEqual(-signal.SIGKILL, code)
         self.assertTrue(

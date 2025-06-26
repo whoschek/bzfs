@@ -1203,7 +1203,7 @@ usage: bzfs [-h] [--recursive]
 *  On replication, preserve the current value of ZFS properties with the given names on the
     destination datasets. The destination ignores the property value it 'zfs receive's from the
     source if the property name matches one of the given blacklist values. This prevents a
-    compromised or untrusted source from overwriting security‑critical properties on the
+    compromised or untrusted source from overwriting security-critical properties on the
     destination. The default is to preserve none, i.e. an empty blacklist.
 
     Example blacklist that protects against dangerous overwrites: mountpoint overlay sharenfs

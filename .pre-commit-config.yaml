@@ -22,8 +22,6 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: check-executables-have-shebangs  # Check that non-binary executables have a proper shebang
-      - id: check-shebang-scripts-are-executable  # Check that scripts with shebangs are executable
       - id: check-symlinks  # Check for symlinks that do not point to anything
       - id: check-yaml  # Attempt to load all yaml files to verify syntax
       - id: check-toml
@@ -34,7 +32,6 @@ repos:
         args: [--fix=lf]  # Replace line endings with linefeed
       - id: trailing-whitespace  # Remove whitespace from the end of lines
       - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
-      - id: debug-statements  # Check for debugger imports and py37+ breakpoint() calls in python source
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.0
     hooks:

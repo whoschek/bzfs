@@ -799,7 +799,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="On replication, preserve the current value of ZFS properties with the given names on the destination "
              "datasets. The destination ignores the property value it 'zfs receive's from the source if the property name "
              "matches one of the given blacklist values. This prevents a compromised or untrusted source from overwriting "
-             "security‑critical properties on the destination. The default is to preserve none, i.e. an empty blacklist.\n\n"
+             "security-critical properties on the destination. The default is to preserve none, i.e. an empty blacklist.\n\n"
              "Example blacklist that protects against dangerous overwrites: "
              "mountpoint overlay sharenfs sharesmb exec setuid devices encryption keyformat keylocation volsize\n\n"
              "See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and "
@@ -3927,7 +3927,7 @@ class Job:
                 log.log(log_trace, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
                 control_persist_secs = self.control_persist_secs
                 if "-v" in remote.ssh_extra_opts:
-                    # Unfortunately, with `ssh -v` (debug mode), the ssh master won’t background; instead it stays in the
+                    # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
                     # foreground and blocks until the ControlPersist timer expires (90 secs). To make progress earlier we ...
                     control_persist_secs = min(control_persist_secs, 1)  # tell ssh to block as briefly as possible (1 sec)
                 ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
@@ -5242,11 +5242,11 @@ class Job:
                 log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
 
         class TreeNodeMutableAttributes:
-            __slots__ = ("pending", "barrier")  # uses more compact memory layout than __dict__
+            __slots__ = ("barrier", "pending")  # uses more compact memory layout than __dict__
 
             def __init__(self) -> None:
-                self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
                 self.barrier: TreeNode | None = None  # zero or one barrier TreeNode waiting for this node to complete
+                self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
 
         class TreeNode(NamedTuple):
             # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
@@ -6986,7 +6986,7 @@ def pid_exists(pid: int) -> bool | None:
     return True
 
 
-arabic_decimal_separator = "\u066b"  # "٫"
+arabic_decimal_separator = "\u066b"  # "٫"  # noqa: RUF003
 pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
 
 
@@ -7957,7 +7957,7 @@ class LogConfigVariablesAction(argparse.Action):
 # (-infinity, b) --> sup=b
 # fmt: off
 class CheckRange(argparse.Action):
-    ops = {'inf': operator.gt,
+    ops = {'inf': operator.gt,  # noqa: RUF012
            'min': operator.ge,
            'sup': operator.lt,
            'max': operator.le}
@@ -8188,7 +8188,7 @@ class SynchronizedDict(Generic[K, V]):
 #############################################################################
 class _XFinally(contextlib.AbstractContextManager):
     def __init__(self, cleanup: Callable[[], None]) -> None:
-        self._cleanup = cleanup  # Zero‑argument callable executed after the `with` block exits.
+        self._cleanup = cleanup  # Zero-argument callable executed after the `with` block exits.
 
     def __exit__(  # type: ignore[exit-return]  # need to ignore on python <= 3.8
         self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: types.TracebackType | None
@@ -8223,8 +8223,8 @@ def xfinally(cleanup: Callable[[], None]) -> _XFinally:
 
     `_XFinally` preserves exception priority:
 
-    * Body raises, cleanup succeeds --> original body exception is re‑raised.
-    * Body raises, cleanup also raises --> re‑raises body exception; cleanup exception is linked via ``__context__``.
+    * Body raises, cleanup succeeds --> original body exception is re-raised.
+    * Body raises, cleanup also raises --> re-raises body exception; cleanup exception is linked via ``__context__``.
     * Body succeeds, cleanup raises --> cleanup exception propagates normally.
 
     Example:

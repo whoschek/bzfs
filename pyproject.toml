@@ -127,7 +127,9 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "F",    # pyflakes
     "FA",   # forward annotations
     "PGH",  # pygrep-hooks
+    "RUF",  # ruff-specifc rules
     "S",    # bandit
+    "T100", # Check for debugger imports and breakpoint() calls
 #    "UP006",  # pyupgrade
 #    "UP007",  # pyupgrade
 #    "UP045",  # pyupgrade
@@ -135,7 +137,7 @@ select = [  # see https://docs.astral.sh/ruff/rules/
 ]
 
 ignore = [  # toggles to exclude overly strict `ruff` checks in development mode:
-#    "A003"  # Class attribute is shadowing a Python builtin
+#    "A003"   # Class attribute is shadowing a Python builtin
 #    "B005",  # Using .strip() with multi-character strings
 #    "B006",  # Do not use mutable data structures for argument defaults
 #    "B007",  # Loop control variable not used within the loop body
@@ -153,8 +155,9 @@ ignore = [  # toggles to exclude overly strict `ruff` checks in development mode
 #    "F403",  # 'from module import *' used
 #    "F405",  # Name may be undefined from import *
 #    "F841",  # Local variable assigned but never used
-    "S101",  # Use of assert detected (harmless)
-    "S603",  # Use of subprocess without shell=True (this use is intended)
+    "RUF005", # collection-literal-concatenation
+    "S101",   # Use of assert detected (harmless)
+    "S603",   # Use of subprocess without shell=True (this use is intended)
 ]
 
 [tool.ruff.lint.per-file-ignores]
