@@ -12,15 +12,19 @@ if [ "$(uname -s)" = "FreeBSD" ]; then
   echo "Running on FreeBSD"
 elif [ "$(uname -s)" = "SunOS" ]; then
   echo "Running on SunOS"
-else
+  python3 -m ensurepip --upgrade
+  python3 -m pip install 'coverage[toml]'
+elif [ "$(which coverage 2> /dev/null)" = "" ]; then
   python3 -m pip install --upgrade pip
-  python3 -m pip install --upgrade "coverage==7.*"
+  python3 -m pip install --upgrade "coverage[toml]>=7.6"
 fi
 
 # see https://coverage.readthedocs.io/
-PYTHONPATH=. python3 -m coverage run --branch --include="bzfs_main/*.py" --omit='bzfs_tests/*.py,*/__init__.py' -m bzfs_tests.test_all
+PYTHONPATH=. python3 -m coverage run -m bzfs_tests.test_all
 python3 -m coverage report | tee coverage_report.txt
 python3 -m coverage html
 python3 -m coverage xml
 
-PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
+if [ "$(which zfs 2> /dev/null)" != "" ]; then
+  PYTHONPATH=. .github-workflow-scripts/generate_badges.py generate
+fi

@@ -97,6 +97,11 @@ include = ["bzfs_main/**", "bzfs_tests/**"]
 path = "bzfs_main/bzfs.py"
 pattern = "^__version__ = ['\"](?P<version>[^'\"]+)['\"]$"
 
+[tool.coverage.run]  # see https://coverage.readthedocs.io/
+branch = true
+include = ["bzfs_main/*.py"]
+omit = ["bzfs_tests/*.py", "*/__init__.py"]
+
 [tool.black]
 line_length = 125
 target_version = ["py38", "py39", "py310", "py311", "py312", "py313"]
