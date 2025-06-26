@@ -3823,7 +3823,8 @@ class Job:
             pv_program_opts = [p.pv_program] + p.pv_program_opts
             if self.progress_update_intervals is not None:  # for testing
                 pv_program_opts += [f"--interval={self.progress_update_intervals[0]}"]
-            pv_program_opts += ["--force", f"--name={size_estimate_human}"] + ([size] if size else [])
+            pv_program_opts += ["--force", f"--name={size_estimate_human}"]
+            pv_program_opts += [size] if size else []
             return f"LC_ALL=C {shlex.join(pv_program_opts)} 2>> {shlex.quote(pv_log_file)}"
         else:
             return "cat"
