@@ -57,6 +57,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - [bzfs] [security] Capped max number of threads to help guard against DoS.
 - Added [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/whoschek/bzfs) link to an AI that can
   answer questions about the bzfs codebase.
+- Added instructions for AI Agents.
 - Use standard python module imports throughout to improve ease of use of the codebase. Installation via pip remains
   unchanged. Optional system installation from the git repo is now done by adding symlinks to the startup shell
   script, [like so](README.md#Installation).
