@@ -536,8 +536,9 @@ class Job:
             assert root_dataset is not None, dst_hostname  # f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
             root_dataset = root_dataset.replace(src_magic_substitution_token, src_host)
             root_dataset = root_dataset.replace(dst_magic_substitution_token, dst_hostname)
-            dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
-            return resolve_dataset(dst_hostname, dst_dataset, is_src=False)
+            resolved_dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
+            bzfs.validate_dataset_name(resolved_dst_dataset, dst_dataset)
+            return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
         dummy: str = bzfs.dummy_dataset
         lhn = localhostname
