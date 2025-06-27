@@ -502,6 +502,9 @@ class Job:
         self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.geteuid()).pw_name
         assert username
+        localhost_ids: set[str] = {"localhost", "127.0.0.1", "::1", socket.gethostname()}  # ::1 is IPv6 loopback address
+        localhost_ids.update(self.get_localhost_ips())  # union
+        localhost_ids.add(localhostname)
 
         def zero_pad(number: int, width: int = 6) -> str:
             return f"{number:0{width}d}"  # pad number with leading '0' chars to the given width
@@ -524,7 +527,8 @@ class Job:
             ssh_user = ssh_src_user if is_src else ssh_dst_user
             ssh_user = ssh_user if ssh_user else username
             lb = self.loopback_address
-            hostname = hostname if hostname != localhostname else (lb if lb else hostname) if username != ssh_user else "-"
+            lhi = localhost_ids
+            hostname = hostname if hostname not in lhi else (lb if lb else hostname) if username != ssh_user else "-"
             hostname = convert_ipv6(hostname)
             return f"{hostname}:{dataset}"
 
@@ -1041,6 +1045,17 @@ class Job:
     def die(self, msg: str) -> None:
         self.log.error("%s", msg)
         bzfs.die(msg)
+
+    def get_localhost_ips(self) -> set[str]:
+        """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces,
+        without depending on name resolution."""
+        if sys.platform == "linux":
+            try:
+                proc = subprocess.run(["hostname", "-I"], stdin=DEVNULL, stdout=PIPE, text=True, check=True)  # noqa: S607
+                return {ip for ip in proc.stdout.strip().split() if ip}
+            except BaseException as e:
+                self.log.warning("Cannot run 'hostname -I' on localhost: %s", e)
+        return set()
 
 
 #############################################################################
