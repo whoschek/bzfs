@@ -74,6 +74,7 @@ def suite() -> unittest.TestSuite:
         TestSynchronizedDict,
         TestArgumentParser,
         TestAddRecvPropertyOptions,
+        TestPreservePropertiesValidation,
         TestDatasetPairsAction,
         TestFileOrLiteralAction,
         TestNewSnapshotFilterGroupAction,
@@ -3692,6 +3693,82 @@ class TestDatasetPairsAction(unittest.TestCase):
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src\tdst\n")):
             with self.assertRaises(SystemExit):
                 self.parser.parse_args(["--input", "+bad_file_name"])
+
+
+#############################################################################
+class TestPreservePropertiesValidation(unittest.TestCase):
+    def setUp(self) -> None:
+        self.args = argparser_parse_args(
+            [
+                "src",
+                "dst",
+                "--preserve-properties",
+                "recordsize",
+                "--zfs-send-program-opts=--props --raw --compressed",
+            ]
+        )
+        log_params = bzfs.LogParams(self.args)
+        self.p = bzfs.Params(self.args, log_params=log_params, log=bzfs.get_logger(log_params, self.args))
+        self.job = bzfs.Job()
+        self.job.params = self.p
+
+        # Setup minimal remote objects. The specific details don't matter much as they are mocked.
+        self.p.src = bzfs.Remote("src", self.args, self.p)
+        self.p.dst = bzfs.Remote("dst", self.args, self.p)
+        self.p.src.ssh_user_host = "src_host"
+        self.p.dst.ssh_user_host = "dst_host"
+        self.p.connection_pools = {
+            "local": MagicMock(spec=bzfs.ConnectionPools),
+            "src": MagicMock(spec=bzfs.ConnectionPools),
+            "dst": MagicMock(spec=bzfs.ConnectionPools),
+        }
+        self.p.zpool_features = {"src": {}, "dst": {}}
+        self.p.available_programs = {"local": {"ssh": ""}, "src": {}, "dst": {}}
+
+    def tearDown(self) -> None:
+        bzfs.reset_logger()
+
+    @patch.object(bzfs.Job, "detect_zpool_features")
+    @patch.object(bzfs.Job, "detect_available_programs_remote")
+    def test_preserve_properties_fails_on_old_zfs_with_props(
+        self, mock_detect_progs: MagicMock, mock_detect_features: MagicMock
+    ) -> None:
+        """Verify that using --preserve-properties with --props fails on ZFS < 2.2.0."""
+        with patch.object(self.job, "is_program_available") as mock_is_available:
+
+            # Make the mock specific to the zfs>=2.2.0 check on dst
+            def side_effect(program: str, location: str) -> bool:
+                if program == bzfs.zfs_version_is_at_least_2_2_0 and location == "dst":
+                    return False
+                return True  # Assume other programs are available
+
+            mock_is_available.side_effect = side_effect
+            with self.assertRaises(SystemExit) as cm:
+                self.job.detect_available_programs()
+            self.assertEqual(cm.exception.code, bzfs.die_status)
+            self.assertIn("--preserve-properties is unreliable on destination ZFS < 2.2.0", str(cm.exception))
+
+    @patch.object(bzfs.Job, "detect_zpool_features")
+    @patch.object(bzfs.Job, "detect_available_programs_remote")
+    def test_preserve_properties_succeeds_on_new_zfs_with_props(
+        self, mock_detect_progs: MagicMock, mock_detect_features: MagicMock
+    ) -> None:
+        """Verify that --preserve-properties is allowed on ZFS >= 2.2.0."""
+        with patch.object(self.job, "is_program_available", return_value=True):
+            # This should not raise an exception
+            self.job.detect_available_programs()
+
+    @patch.object(bzfs.Job, "detect_zpool_features")
+    @patch.object(bzfs.Job, "detect_available_programs_remote")
+    def test_preserve_properties_succeeds_on_old_zfs_without_props(
+        self, mock_detect_progs: MagicMock, mock_detect_features: MagicMock
+    ) -> None:
+        """Verify --preserve-properties is allowed on old ZFS if --props is not used."""
+        self.p.zfs_send_program_opts.remove("--props")  # Modify the params for this test case
+        with patch.object(self.job, "is_program_available") as mock_is_available:
+            mock_is_available.return_value = False  # Simulate old ZFS
+            # This should not raise an exception
+            self.job.detect_available_programs()
 
 
 #############################################################################

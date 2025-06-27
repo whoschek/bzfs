@@ -795,7 +795,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "--zfs-recv-program-opt=-o "
              "--zfs-recv-program-opt='org.zfsbootmenu:commandline=ro debug zswap.enabled=1'`\n\n")
     parser.add_argument(
-        "--preserve-properties", action=NonEmptyStringAction, nargs="+", default=[], metavar="STRING",
+        "--preserve-properties", nargs="+", default=[], metavar="STRING",
         help="On replication, preserve the current value of ZFS properties with the given names on the destination "
              "datasets. The destination ignores the property value it 'zfs receive's from the source if the property name "
              "matches one of the given blacklist values. This prevents a compromised or untrusted source from overwriting "
@@ -804,8 +804,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "mountpoint overlay sharenfs sharesmb exec setuid devices encryption keyformat keylocation volsize\n\n"
              "See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and "
              "https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x\n\n"
-             "Note: --preserve-properties uses the 'zfs recv -x' option and is therefore only reliable on OpenZFS >= 2.2 "
-             "(see https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or if "
+             "Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS >= 2.2.0 "
+             "(see https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or that "
              "'zfs send --props' is not used.\n\n")
     parser.add_argument(
         "--force-rollback-to-latest-snapshot", action="store_true",
@@ -5510,6 +5510,16 @@ class Job:
         for r in [p.dst, p.src]:
             if r.sudo and not self.is_program_available("sudo", r.location):
                 die(f"{p.sudo_program} CLI is not available on {r.location} host: {r.ssh_user_host or 'localhost'}")
+
+        if (
+            len(p.args.preserve_properties) > 0
+            and any(prop in p.zfs_send_program_opts for prop in ["--props", "-p"])
+            and not self.is_program_available(zfs_version_is_at_least_2_2_0, p.dst.location)
+        ):
+            die(
+                "Cowardly refusing to proceed as --preserve-properties is unreliable on destination ZFS < 2.2.0 when using "
+                "'zfs send --props'. Either upgrade destination ZFS, or remove '--props' from --zfs-send-program-opt(s)."
+            )
 
     def disable_program(self, program: str, locations: list[str]) -> None:
         for location in locations:

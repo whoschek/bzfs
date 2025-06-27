@@ -1212,9 +1212,9 @@ usage: bzfs [-h] [--recursive]
     See https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html and
     https://openzfs.github.io/openzfs-docs/man/master/8/zfs-receive.8.html#x
 
-    Note: --preserve-properties uses the 'zfs recv -x' option and is therefore only reliable on
-    OpenZFS >= 2.2 (see
-    https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or if 'zfs
+    Note: --preserve-properties uses the 'zfs recv -x' option and thus requires either OpenZFS
+    >= 2.2.0 (see
+    https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff), or that 'zfs
     send --props' is not used.
 
 <!-- -->
