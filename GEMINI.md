@@ -63,6 +63,14 @@
   fix it. Spend lots of time to confirm it's an actual bug rather than a false alarm. Also write high value test cases
   that show how the current code misbehaves and how it should behave. Finally, contribute the bug fix itself.
 
+# Writing Tests
+
+- New unit tests should fit into the `test_bzfs.py` + `test_jobrunner.py` framework whereas new integration tests should
+  fit into the `test_integrations.py` framework. Make sure that new or changed tests are included in the `suite()`.
+  - Specificity: Design test cases that target specific functionalities, edge cases, and potential failure modes.
+  - Readability: Ensure tests are clear, concise, and easy to understand.
+  - Robustness: Use unittest.mock effectively to isolate units under test and simulate external dependencies.
+
 # Workflow for Testing and Committing
 
 - Before each commit:
@@ -76,17 +84,9 @@
 - Integration tests should not be run in the docker sandbox because they require the `zfs` CLI to be installed, and thus
   run externally in GitHub Actions, which unfortunately you do not have access to.
 
-# Writing Tests
-
-- New unit tests should fit into the `test_bzfs.py` + `test_jobrunner.py` framework whereas new integration tests should
-  fit into the `test_integrations.py` framework. Make sure that new or changed tests are included in the `suite()`.
-  - Specificity: Design test cases that target specific functionalities, edge cases, and potential failure modes.
-  - Readability: Ensure tests are clear, concise, and easy to understand.
-  - Robustness: Use unittest.mock effectively to isolate units under test and simulate external dependencies.
-
 # Coverage
 
-- If the user explicitly requested an improvement in coverage:
+- If the user explicitly requested an increase in coverage:
   - Focus on adding *meaningful* tests that cover critical logic, edge cases and error paths. Do not add a unit test
     unless it turns out to measurably increase line or branch coverage.
   - Run the following commands after running unit tests (plus immediately after the start of the overall task, and
