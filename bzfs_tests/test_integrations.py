@@ -5014,7 +5014,7 @@ class LocalTestCase(BZFSTestCase):
             with stop_on_failure_subtest(i=jobiter):
                 self.tearDownAndSetup()
                 self.assert_snapshots(src_root_dataset, 0)
-                loopback = "::1" if "Ubuntu" in platform.version() and is_ipv6_loopback_possible() else "localhost"
+                loopback = "127.0.0.2" if platform.system() == "Linux" else "127.0.0.1"
                 delay_secs = bzfs.time_threshold_secs
                 localhostname = socket.gethostname()
                 src_hosts = [localhostname]  # for local mode (no ssh, no network)

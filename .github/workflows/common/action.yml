@@ -31,6 +31,7 @@ runs:
   - name: Install ssh + other dependencies
     shell: bash
     run: |
+      sudo apt-get -y update
       sudo apt-get -y install zstd mbuffer netcat-openbsd
       mkdir -p $HOME/.ssh
       rm -f $HOME/.ssh/id_rsa $HOME/.ssh/id_rsa.pub
