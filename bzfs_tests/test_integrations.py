@@ -13,8 +13,10 @@
 # limitations under the License.
 
 from __future__ import annotations
+import contextlib
 import fcntl
 import glob
+import io
 import itertools
 import json
 import os
@@ -3462,6 +3464,29 @@ class LocalTestCase(BZFSTestCase):
                         dst_root_dataset + "/foo", ["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t9", "t10", "t12"]
                     )  # nothing has changed
                     self.assert_bookmark_names(src_root_dataset + "/foo", ["t1", "t3", "t5", "t6", "t7", "t12"])
+
+    def test_create_zfs_bookmarks_raises_unexpected_error(self) -> None:
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        self.setup_basic()
+        non_existing_snapshot = snapshots(src_root_dataset)[0] + "$"
+        job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--create-bookmarks=all")
+        with contextlib.redirect_stderr(io.StringIO()) as buf:
+            with self.assertRaises(subprocess.CalledProcessError):
+                job.create_zfs_bookmarks(job.params.src, src_root_dataset, [non_existing_snapshot])
+            self.assertTrue(buf.getvalue())
+
+    def test_create_zfs_bookmarks_existing_bookmark(self) -> None:
+        if not are_bookmarks_enabled("src"):
+            self.skipTest("ZFS has no bookmark feature")
+        self.setup_basic()
+        first_snapshot = snapshots(src_root_dataset)[0]
+        first_tag = snapshot_name(first_snapshot)
+        create_bookmark(src_root_dataset, first_tag, first_tag)
+        self.assert_bookmark_names(src_root_dataset, ["s1"])
+        self.run_bzfs(src_root_dataset, dst_root_dataset, "--create-bookmarks=all")
+        self.assert_snapshot_names(dst_root_dataset, ["s1", "s2", "s3"])
+        self.assert_bookmark_names(src_root_dataset, ["s1", "s2", "s3"])
 
     @staticmethod
     def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024) -> None:
