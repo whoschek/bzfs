@@ -142,7 +142,7 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "T100", # check for debugger imports and breakpoint() calls
     "TID",  # flake8-tidy-imports
     "TRY",  # tryceratops raises
-    "TRY201",  # Use `raise` without specifying exception name, throughout
+    "TRY201",  # Use `raise` without specifying exception name
 #    "UP006",  # pyupgrade
 #    "UP007",  # pyupgrade
 #    "UP045",  # pyupgrade
