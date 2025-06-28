@@ -932,7 +932,7 @@ class TestSSHLatency(BZFSTestCase):
                                     log.info(f"time/iter: {t}, check: {check}, close_fds: {close_fds}, cmd: {' '.join(cmd)}")
                 except subprocess.CalledProcessError as e:
                     log.error(f"error: {(e.stdout, e.stderr)}")
-                    raise e
+                    raise
                 finally:
                     if master_is_running:
                         master_exit_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O exit 127.0.0.1")

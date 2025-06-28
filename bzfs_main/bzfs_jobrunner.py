@@ -871,7 +871,7 @@ class Job:
                 returncode = self.run_worker_job_in_current_thread(cmd, timeout_secs)
         except BaseException as e:
             log.error("Worker job failed with unexpected exception: %s for command: %s", e, cmd_str)
-            raise e
+            raise
         else:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
             elapsed_human = bzfs.human_readable_duration(elapsed_nanos)

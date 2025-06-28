@@ -138,6 +138,7 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "SLF",  # private member accessed
     "T100", # check for debugger imports and breakpoint() calls
     "TID",  # flake8-tidy-imports
+    "TRY201",  # Use `raise` without specifying exception name, throughout
 #    "UP006",  # pyupgrade
 #    "UP007",  # pyupgrade
 #    "UP045",  # pyupgrade

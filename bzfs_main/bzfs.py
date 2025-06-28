@@ -2336,7 +2336,7 @@ class Job:
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
                 get_simple_logger(prog_name).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
-                raise e
+                raise
 
             aux_args: list[str] = []
             if getattr(args, "include_snapshot_plan", None):
@@ -2375,9 +2375,9 @@ class Job:
                                 old_int_handler = signal.signal(signal.SIGINT, lambda s, f: self.terminate(old_term_handler))
                                 try:
                                     self.run_tasks()
-                                except BaseException as e:
+                                except BaseException:
                                     self.terminate(old_term_handler, except_current_process=True)
-                                    raise e
+                                    raise
                                 finally:
                                     signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
                                     signal.signal(signal.SIGINT, old_int_handler)  # restore original signal handler
@@ -2387,10 +2387,10 @@ class Job:
                                 sys.stderr.flush()
             except subprocess.CalledProcessError as e:
                 log_error_on_exit(e, e.returncode)
-                raise e
+                raise
             except SystemExit as e:
                 log_error_on_exit(e, e.code)
-                raise e
+                raise
             except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
                 log_error_on_exit(e, die_status)
                 raise SystemExit(die_status) from e
@@ -2445,7 +2445,7 @@ class Job:
                         if p.skip_on_error == "fail" or (
                             isinstance(e, subprocess.TimeoutExpired) and p.daemon_lifetime_nanos == 0
                         ):
-                            raise e
+                            raise
                         log.error("%s", e)
                         self.append_exception(e, "task", task_description)
                 if not self.sleep_until_next_daemon_iteration(daemon_stoptime_nanos):
@@ -4359,7 +4359,7 @@ class Job:
                 stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
                 retryable_error.no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-            raise retryable_error
+            raise
         if lines is None:
             return 0  # src dataset or snapshot has been deleted by third party
         size = lines.splitlines()[-1]
@@ -5333,7 +5333,7 @@ class Job:
                         if p.skip_on_error == "fail":
                             [todo_future.cancel() for todo_future in todo_futures]
                             terminate_process_subtree(except_current_process=True)
-                            raise e
+                            raise
                         no_skip = not (p.skip_on_error == "tree" or skip_tree_on_error(dataset))
                         log.error("%s", e)
                         self.append_exception(e, task_name, dataset)
@@ -6945,7 +6945,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
                     terminate_process_subtree(root_pid=proc.pid)  # send SIGTERM to child process and its descendants
             finally:
                 proc.kill()
-                raise e
+                raise
         else:
             exitcode: int | None = proc.poll()
             assert exitcode is not None
