@@ -218,6 +218,17 @@ class TestHelperFunctions(unittest.TestCase):
         ips: set[str] = job.get_localhost_ips()
         self.assertTrue(len(ips) > 0)
 
+    @patch("subprocess.run", side_effect=RuntimeError("fail"))
+    def test_get_localhost_ips_failure_logs_warning(self, mock_run: MagicMock) -> None:
+        job = bzfs_jobrunner.Job()
+        with patch.object(sys, "platform", "linux"), patch.object(job.log, "warning") as mock_warn:
+            ips = job.get_localhost_ips()
+        self.assertEqual(set(), ips)
+        mock_warn.assert_called_once()
+        fmt, exc = mock_warn.call_args.args
+        self.assertEqual("Cannot run 'hostname -I' on localhost: %s", fmt)
+        self.assertIsInstance(exc, RuntimeError)
+
 
 #############################################################################
 class TestValidation(unittest.TestCase):
@@ -611,6 +622,17 @@ class TestSkipDatasetsWithNonExistingDstPool(unittest.TestCase):
         )
         result = self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:existing_pool/dataset")])
         self.assertEqual([("src/dataset", "-:existing_pool/dataset")], result)
+
+    @patch("subprocess.run")
+    def test_unexpected_error_logs_and_raises(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(args=["zfs", "list"], returncode=5, stdout="", stderr="boom")
+        with patch.object(self.job.log, "error") as mock_error:
+            with self.assertRaises(SystemExit) as cm:
+                self.job.skip_nonexisting_local_dst_pools([("src/dataset", "-:pool/dataset")])
+        expected = "Unexpected error 5 on checking for existing local dst pools: boom"
+        mock_error.assert_called_once_with("%s", expected)
+        self.assertEqual(3, cm.exception.code)
+        self.assertIn(expected, str(cm.exception))
 
 
 #############################################################################
