@@ -426,7 +426,11 @@ class Job:
         self.first_exception = None
         log = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
-        args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:])  # forward all unknown args to `bzfs`
+
+        # disable --root-dataset-pairs='+path/to/file' option in DatasetPairsAction
+        nsp = argparse.Namespace(no_argument_file=True)
+
+        args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:], nsp)  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
         assert len(args.root_dataset_pairs) > 0
