@@ -1564,10 +1564,10 @@ class LogParams:
             self.log_level = "DEBUG"
         else:
             self.log_level = "INFO"
-        self.log_config_file = args.log_config_file
+        self.log_config_file: str = args.log_config_file
         if self.log_config_file:
             validate_no_argument_file(self.log_config_file, args, err_prefix="--log-config-file: ")
-        self.log_config_vars = dict(var.split(":", 1) for var in args.log_config_var)
+        self.log_config_vars: dict[str, str] = dict(var.split(":", 1) for var in args.log_config_var)
         timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.timestamp: str = timestamp
         self.home_dir: str = get_home_directory()
@@ -1581,17 +1581,17 @@ class LogParams:
         validate_is_not_a_symlink("--log-dir ", log_parent_dir)
         os.makedirs(self.log_dir, mode=DIR_PERMISSIONS, exist_ok=True)
         validate_is_not_a_symlink("--log-dir subdir ", self.log_dir)
-        self.log_file_prefix = args.log_file_prefix
-        self.log_file_infix = args.log_file_infix
-        self.log_file_suffix = args.log_file_suffix
+        self.log_file_prefix: str = args.log_file_prefix
+        self.log_file_infix: str = args.log_file_infix
+        self.log_file_suffix: str = args.log_file_suffix
         fd, self.log_file = tempfile.mkstemp(
             suffix=".log",
             prefix=f"{self.log_file_prefix}{self.timestamp}{self.log_file_infix}{self.log_file_suffix}-",
             dir=self.log_dir,
         )
         os.close(fd)
-        self.pv_log_file = self.log_file[0 : -len(".log")] + ".pv"
-        self.last_modified_cache_dir = os.path.join(log_parent_dir, ".cache", "last_modified")
+        self.pv_log_file: str = self.log_file[0 : -len(".log")] + ".pv"
+        self.last_modified_cache_dir: str = os.path.join(log_parent_dir, ".cache", "last_modified")
         os.makedirs(os.path.dirname(self.last_modified_cache_dir), mode=DIR_PERMISSIONS, exist_ok=True)
 
         # Create/update "current" symlink to current_dir, which is a subdir containing further symlinks to log files.
@@ -1645,7 +1645,7 @@ class Params:
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
         self.unset_matching_env_vars(args)
-        self.xperiods = SnapshotPeriods()
+        self.xperiods: SnapshotPeriods = SnapshotPeriods()
 
         assert len(args.root_dataset_pairs) > 0
         self.root_dataset_pairs: list[tuple[str, str]] = args.root_dataset_pairs
@@ -1882,7 +1882,7 @@ class Remote:
         # immutable variables:
         assert loc == "src" or loc == "dst"
         self.location: str = loc
-        self.params = p
+        self.params: Params = p
         self.basis_ssh_user: str = getattr(args, f"ssh_{loc}_user")
         self.basis_ssh_host: str = getattr(args, f"ssh_{loc}_host")
         self.ssh_port: int = getattr(args, f"ssh_{loc}_port")
@@ -1900,7 +1900,7 @@ class Remote:
             self.ssh_socket_dir: str = os.path.join(get_home_directory(), ".ssh", "bzfs")
             os.makedirs(os.path.dirname(self.ssh_socket_dir), exist_ok=True)
             os.makedirs(self.ssh_socket_dir, mode=DIR_PERMISSIONS, exist_ok=True)
-            self.socket_prefix = "s"
+            self.socket_prefix: str = "s"
             delete_stale_files(self.ssh_socket_dir, self.socket_prefix, ssh=True)
         self.sanitize1_regex = re.compile(r"[\s\\/@$]")  # replace whitespace, /, $, \, @ with a ~ tilde char
         self.sanitize2_regex = re.compile(rf"[^a-zA-Z0-9{re.escape('~.:_-')}]")  # Remove chars not in the allowed set
@@ -2279,15 +2279,15 @@ class Job:
         self.src_properties: dict[str, dict[str, str | int]] = {}
         self.dst_properties: dict[str, dict[str, str | int]] = {}
         self.all_exceptions: list[str] = []
-        self.all_exceptions_count = 0
-        self.max_exceptions_to_summarize = 10000
+        self.all_exceptions_count: int = 0
+        self.max_exceptions_to_summarize: int = 10000
         self.first_exception: BaseException | None = None
         self.remote_conf_cache: dict[tuple, RemoteConfCacheItem] = {}
         self.dedicated_tcp_connection_per_zfs_send: bool = True
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
         self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
-        self.stats_lock = threading.Lock()
+        self.stats_lock: threading.Lock = threading.Lock()
         self.num_cache_hits: int = 0
         self.num_cache_misses: int = 0
         self.num_snapshots_found: int = 0
@@ -2308,7 +2308,7 @@ class Job:
         self.delete_injection_triggers: dict[str, Counter] = {}  # for testing only
         self.param_injection_triggers: dict[str, dict[str, bool]] = {}  # for testing only
         self.inject_params: dict[str, bool] = {}  # for testing only
-        self.injection_lock = threading.Lock()  # for testing only
+        self.injection_lock: threading.Lock = threading.Lock()  # for testing only
         self.max_command_line_bytes: int | None = None  # for testing only
 
     def shutdown(self) -> None:
@@ -5994,7 +5994,7 @@ class ProgressReporter:
         # immutable variables:
         self.params: Params = p
         self.use_select: bool = use_select
-        self.progress_update_intervals = progress_update_intervals
+        self.progress_update_intervals: tuple[float, float] | None = progress_update_intervals
         self.inject_error: bool = fail  # for testing only
 
         # mutable variables:
@@ -6004,8 +6004,8 @@ class ProgressReporter:
         self.sleeper: InterruptibleSleep = InterruptibleSleep(self.lock)  # sleeper shares lock with reporter
         self.file_name_queue: set[str] = set()
         self.file_name_set: set[str] = set()
-        self.is_resetting = True
-        self.is_pausing = False
+        self.is_resetting: bool = True
+        self.is_pausing: bool = False
 
     def start(self) -> None:
         with self.lock:
@@ -6206,8 +6206,8 @@ class InterruptibleSleep:
 
     def __init__(self, lock: threading.Lock | None = None) -> None:
         self.is_stopping: bool = False
-        self._lock = lock if lock is not None else threading.Lock()
-        self._condition = threading.Condition(self._lock)
+        self._lock: threading.Lock = lock if lock is not None else threading.Lock()
+        self._condition: threading.Condition = threading.Condition(self._lock)
 
     def sleep(self, duration_nanos: int) -> None:
         """Delays the current thread by the given number of nanoseconds."""
