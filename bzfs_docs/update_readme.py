@@ -21,7 +21,7 @@ import tempfile
 
 from bzfs_main import bzfs
 from bzfs_main import bzfs_jobrunner
-from bzfs_main.bzfs import find_match
+from bzfs_main.utils import find_match
 
 
 def main() -> None:

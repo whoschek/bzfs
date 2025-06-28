@@ -41,7 +41,6 @@ Simply run that script whenever you change or add ArgumentParser help text.
 from __future__ import annotations
 import argparse
 import ast
-import bisect
 import calendar
 import collections
 import concurrent
@@ -61,7 +60,6 @@ import math
 import operator
 import os
 import platform
-import pwd
 import random
 import re
 import selectors
@@ -75,7 +73,6 @@ import sys
 import tempfile
 import threading
 import time
-import types
 from collections import defaultdict, deque, Counter
 from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
 from dataclasses import dataclass, field
@@ -91,9 +88,7 @@ from typing import (
     Dict,
     Final,
     Generator,
-    Generic,
     IO,
-    ItemsView,
     Iterable,
     Iterator,
     List,
@@ -101,7 +96,6 @@ from typing import (
     NamedTuple,
     NoReturn,
     Optional,
-    Protocol,
     Sequence,
     TextIO,
     Tuple,
@@ -110,7 +104,21 @@ from typing import (
     cast,
 )
 
-from bzfs_main.utils import cut, open_nofollow
+from bzfs_main.utils import (
+    InterruptibleSleep,
+    SmallPriorityQueue,
+    SynchronizedBool,
+    SynchronizedDict,
+    cut,
+    drain,
+    get_home_directory,
+    human_readable_bytes,
+    human_readable_duration,
+    open_nofollow,
+    percent,
+    replace_capturing_groups_with_non_capturing_groups,
+    xfinally,
+)
 
 # constants:
 __version__ = "1.12.0-dev"
@@ -6201,33 +6209,6 @@ class ProgressReporter:
 
 
 #############################################################################
-class InterruptibleSleep:
-    """Provides a sleep(timeout) function that can be interrupted by another thread."""
-
-    def __init__(self, lock: threading.Lock | None = None) -> None:
-        self.is_stopping: bool = False
-        self._lock: threading.Lock = lock if lock is not None else threading.Lock()
-        self._condition: threading.Condition = threading.Condition(self._lock)
-
-    def sleep(self, duration_nanos: int) -> None:
-        """Delays the current thread by the given number of nanoseconds."""
-        end_time_nanos = time.monotonic_ns() + duration_nanos
-        with self._lock:
-            while not self.is_stopping:
-                diff_nanos = end_time_nanos - time.monotonic_ns()
-                if diff_nanos <= 0:
-                    return
-                self._condition.wait(timeout=diff_nanos / 1_000_000_000)  # release, then block until notified or timeout
-
-    def interrupt(self) -> None:
-        """Wakes up currently sleeping threads and makes any future sleep()s a noop."""
-        with self._lock:
-            if not self.is_stopping:
-                self.is_stopping = True
-                self._condition.notify_all()
-
-
-#############################################################################
 def fix_send_recv_opts(
     opts: list[str],
     exclude_long_opts: set[str],
@@ -6417,23 +6398,6 @@ def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
     return compiled_regexes
 
 
-def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
-    """Replaces regex capturing groups with non-capturing groups for better matching performance.
-    Example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\()'
-    Aka replaces brace '(' followed by a char other than question mark '?', but not preceded by a backslash
-    with the replacement string '(?:'
-    Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups"""
-    # pattern = re.compile(r'(?<!\\)\((?!\?)')
-    # return pattern.sub('(?:', regex)
-    i = len(regex) - 2
-    while i >= 0:
-        i = regex.rfind("(", 0, i + 1)
-        if i >= 0 and regex[i] == "(" and (regex[i + 1] != "?") and (i == 0 or regex[i - 1] != "\\"):
-            regex = f"{regex[0:i]}(?:{regex[i + 1:]}"
-        i -= 1
-    return regex
-
-
 def getenv_any(key: str, default: str | None = None) -> str | None:
     """All shell environment variable names used for configuration start with this prefix."""
     return os.getenv(env_var_prefix + key, default)
@@ -6445,50 +6409,6 @@ def getenv_int(key: str, default: int) -> int:
 
 def getenv_bool(key: str, default: bool = False) -> bool:
     return cast(str, getenv_any(key, str(default))).lower().strip().lower() == "true"
-
-
-P = TypeVar("P")
-
-
-def find_match(
-    seq: Sequence[P],
-    predicate: Callable[[P], bool],
-    start: int | None = None,
-    end: int | None = None,
-    reverse: bool = False,
-    raises: bool | str | Callable[[], str] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
-) -> int:
-    """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
-    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter,
-    which is a bool indicating whether to raise an error, or a string containing the error message, but can also be a
-    Callable/lambda in order to support efficient deferred generation of error messages.
-    Analog to str.find(), including slicing semantics with parameters start and end.
-    For example, seq can be a list, tuple or str.
-
-    Example usage:
-        lst = ["a", "b", "-c", "d"]
-        i = find_match(lst, lambda arg: arg.startswith("-"), start=1, end=3, reverse=True)
-        if i >= 0:
-            ...
-        i = find_match(lst, lambda arg: arg.startswith("-"), raises=f"Tag {tag} not found in {file}")
-        i = find_match(lst, lambda arg: arg.startswith("-"), raises=lambda: f"Tag {tag} not found in {file}")
-    """
-    offset = 0 if start is None else start if start >= 0 else len(seq) + start
-    if start is not None or end is not None:
-        seq = seq[start:end]
-    for i, item in enumerate(reversed(seq) if reverse else seq):
-        if predicate(item):
-            if reverse:
-                return len(seq) - i - 1 + offset
-            else:
-                return i + offset
-    if raises is False or raises is None:
-        return -1
-    if raises is True:
-        raise ValueError("No matching item found in sequence")
-    if callable(raises):
-        raises = raises()
-    raise ValueError(raises)
 
 
 TAPPEND = TypeVar("TAPPEND")
@@ -6504,73 +6424,6 @@ def xappend(lst: list[TAPPEND], *items: TAPPEND | Iterable[TAPPEND]) -> list[TAP
         else:
             xappend(lst, *item)
     return lst
-
-
-def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int | None = None, long: bool = False) -> str:
-    sign = "-" if num_bytes < 0 else ""
-    s = abs(num_bytes)
-    units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
-    n = len(units) - 1
-    i = 0
-    long_form = f" ({num_bytes} bytes)" if long else ""
-    while s >= 1024 and i < n:
-        s /= 1024
-        i += 1
-    formatted_num = human_readable_float(s) if precision is None else f"{s:.{precision}f}"
-    return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
-
-
-def human_readable_duration(
-    duration: float, unit: str = "ns", separator: str = "", precision: int | None = None, long: bool = False
-) -> str:
-    sign = "-" if duration < 0 else ""
-    t = abs(duration)
-    units = ("ns", "μs", "ms", "s", "m", "h", "d")
-    nanos = (1, 1_000, 1_000_000, 1_000_000_000, 60 * 1_000_000_000, 60 * 60 * 1_000_000_000, 60 * 60 * 24 * 1_000_000_000)
-    i = units.index(unit)
-    long_form = f" ({round(duration * nanos[i] / 1_000_000_000)} seconds)" if long else ""
-    if t < 1 and t != 0:
-        t *= nanos[i]
-        i = 0
-    while t >= 1000 and i < 3:
-        t /= 1000
-        i += 1
-    if i >= 3:
-        while t >= 60 and i < 5:
-            t /= 60
-            i += 1
-    if i >= 5:
-        while t >= 24 and i < len(units) - 1:
-            t /= 24
-            i += 1
-    formatted_num = human_readable_float(t) if precision is None else f"{t:.{precision}f}"
-    return f"{sign}{formatted_num}{separator}{units[i]}{long_form}"
-
-
-def human_readable_float(number: float) -> str:
-    """If the number has one digit before the decimal point (0 <= abs(number) < 10):
-      Round and use two decimals after the decimal point (e.g., 3.14559 --> "3.15").
-
-    If the number has two digits before the decimal point (10 <= abs(number) < 100):
-      Round and use one decimal after the decimal point (e.g., 12.36 --> "12.4").
-
-    If the number has three or more digits before the decimal point (abs(number) >= 100):
-      Round and use zero decimals after the decimal point (e.g., 123.556 --> "124").
-
-    Ensure no unnecessary trailing zeroes are retained: Example: 1.500 --> "1.5", 1.00 --> "1"
-    """
-    abs_number = abs(number)
-    precision = 2 if abs_number < 10 else 1 if abs_number < 100 else 0
-    if precision == 0:
-        return str(round(number))
-    result = f"{number:.{precision}f}"
-    assert "." in result
-    result = result.rstrip("0").rstrip(".")  # Remove trailing zeros and trailing decimal point if empty
-    return "0" if result == "-0" else result
-
-
-def percent(number: int, total: int) -> str:
-    return f"{number}={'NaN' if total == 0 else human_readable_float(100 * number / total)}%"
 
 
 def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
@@ -6601,12 +6454,6 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
     return quantity * unit_milliseconds[unit]
 
 
-def get_home_directory() -> str:
-    """Reliably detects home dir without using HOME env var."""
-    # thread-safe version of: os.environ.pop('HOME', None); os.path.expanduser('~')
-    return pwd.getpwuid(os.getuid()).pw_dir
-
-
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
     rel_path = os.path.relpath(src, start=dst_dir)
     os.symlink(rel_path, os.path.join(dst_dir, dst))
@@ -6615,13 +6462,6 @@ def create_symlink(src: str, dst_dir: str, dst: str) -> None:
 def is_version_at_least(version_str: str, min_version_str: str) -> bool:
     """Checks if the version string is at least the minimum version string."""
     return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
-
-
-def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
-    if not os.path.isfile(file):
-        return []
-    with open_nofollow(file, "r", encoding="utf-8", errors=errors, check_owner=False) as fd:
-        return deque(fd, maxlen=n)
 
 
 def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:
@@ -6670,11 +6510,6 @@ def set_last_modification_time(
     elif if_more_recent and unixtime_in_secs[1] <= round(os_stat(path).st_mtime):
         return
     os_utime(path, times=unixtime_in_secs)
-
-
-def drain(iterable: Iterable) -> None:
-    """Consumes all items in the iterable, effectively draining it."""
-    deque(iterable, maxlen=0)
 
 
 def nprefix(s: str) -> str:
@@ -8048,218 +7883,6 @@ class CheckPercentRange(CheckRange):
             parser.error(f"{option_string}: Invalid percentage or number: {original}")
         super().__call__(parser, namespace, values, option_string=option_string)
         setattr(namespace, self.dest, (getattr(namespace, self.dest), is_percent))
-
-
-#############################################################################
-class Comparable(Protocol):
-    def __lt__(self, other: Any) -> bool:  # pragma: no cover - behavior defined by implementor
-        ...
-
-
-T = TypeVar("T", bound=Comparable)  # Generic type variable for elements stored in a SmallPriorityQueue
-
-
-class SmallPriorityQueue(Generic[T]):
-    """A priority queue that can handle updates to the priority of any element that is already contained in the queue, and
-    does so very efficiently if there are a small number of elements in the queue (no more than thousands), as is the case
-    for us. Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers or using an
-    indexed priority queue via https://github.com/nvictus/pqdict but, to avoid an external dependency, is actually
-    implemented using a simple yet effective binary search-based sorted list that can handle updates to the priority of
-    elements that are already contained in the queue, via removal of the element, followed by update of the element, followed
-    by (re)insertion. Duplicate elements (if any) are maintained in their order of insertion relative to other duplicates."""
-
-    def __init__(self, reverse: bool = False) -> None:
-        self._lst: list[T] = []
-        self._reverse: bool = reverse
-
-    def clear(self) -> None:
-        self._lst.clear()
-
-    def push(self, element: T) -> None:
-        bisect.insort(self._lst, element)
-
-    def pop(self) -> T:
-        """Removes and return the smallest (or largest if reverse == True) element from the queue."""
-        return self._lst.pop() if self._reverse else self._lst.pop(0)
-
-    def peek(self) -> T:
-        """Returns the smallest (or largest if reverse == True) element without removing it."""
-        return self._lst[-1] if self._reverse else self._lst[0]
-
-    def remove(self, element: T) -> bool:
-        """Removes the first occurrence of the specified element from the queue; returns True if the element was contained"""
-        lst = self._lst
-        i = bisect.bisect_left(lst, element)
-        is_contained = i < len(lst) and lst[i] == element
-        if is_contained:
-            del lst[i]  # is an optimized memmove()
-        return is_contained
-
-    def __len__(self) -> int:
-        return len(self._lst)
-
-    def __contains__(self, element: T) -> bool:
-        lst = self._lst
-        i = bisect.bisect_left(lst, element)
-        return i < len(lst) and lst[i] == element
-
-    def __iter__(self) -> Iterator[T]:
-        return reversed(self._lst) if self._reverse else iter(self._lst)
-
-    def __repr__(self) -> str:
-        return repr(list(reversed(self._lst))) if self._reverse else repr(self._lst)
-
-
-#############################################################################
-class SynchronizedBool:
-    """Thread-safe bool."""
-
-    def __init__(self, val: bool) -> None:
-        assert isinstance(val, bool)
-        self._lock: threading.Lock = threading.Lock()
-        self._value: bool = val
-
-    @property
-    def value(self) -> bool:
-        with self._lock:
-            return self._value
-
-    @value.setter
-    def value(self, new_value: bool) -> None:
-        with self._lock:
-            self._value = new_value
-
-    def get_and_set(self, new_value: bool) -> bool:
-        with self._lock:
-            old_value = self._value
-            self._value = new_value
-            return old_value
-
-    def compare_and_set(self, expected_value: bool, new_value: bool) -> bool:
-        with self._lock:
-            eq = self._value == expected_value
-            if eq:
-                self._value = new_value
-            return eq
-
-    def __bool__(self) -> bool:
-        return self.value
-
-    def __repr__(self) -> str:
-        return repr(self.value)
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-
-#############################################################################
-K = TypeVar("K")
-V = TypeVar("V")
-
-
-class SynchronizedDict(Generic[K, V]):
-    """Thread-safe dict."""
-
-    def __init__(self, val: dict[K, V]) -> None:
-        assert isinstance(val, dict)
-        self._lock: threading.Lock = threading.Lock()
-        self._dict: dict[K, V] = val
-
-    def __getitem__(self, key: K) -> V:
-        with self._lock:
-            return self._dict[key]
-
-    def __setitem__(self, key: K, value: V) -> None:
-        with self._lock:
-            self._dict[key] = value
-
-    def __delitem__(self, key: K) -> None:
-        with self._lock:
-            self._dict.pop(key)
-
-    def __contains__(self, key: K) -> bool:
-        with self._lock:
-            return key in self._dict
-
-    def __len__(self) -> int:
-        with self._lock:
-            return len(self._dict)
-
-    def __repr__(self) -> str:
-        with self._lock:
-            return repr(self._dict)
-
-    def __str__(self) -> str:
-        with self._lock:
-            return str(self._dict)
-
-    def get(self, key: K, default: V | None = None) -> V | None:
-        with self._lock:
-            return self._dict.get(key, default)
-
-    def pop(self, key: K, default: V | None = None) -> V | None:
-        with self._lock:
-            return self._dict.pop(key, default)
-
-    def clear(self) -> None:
-        with self._lock:
-            self._dict.clear()
-
-    def items(self) -> ItemsView[K, V]:
-        with self._lock:
-            return self._dict.copy().items()
-
-
-#############################################################################
-class _XFinally(contextlib.AbstractContextManager):
-    def __init__(self, cleanup: Callable[[], None]) -> None:
-        self._cleanup = cleanup  # Zero-argument callable executed after the `with` block exits.
-
-    def __exit__(  # type: ignore[exit-return]  # need to ignore on python <= 3.8
-        self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: types.TracebackType | None
-    ) -> bool:
-        try:
-            self._cleanup()
-        except BaseException as cleanup_exc:
-            if exc is None:
-                raise  # No main error --> propagate cleanup error normally
-            # Both failed
-            # if sys.version_info >= (3, 11):
-            #     raise ExceptionGroup("main error and cleanup error", [exc, cleanup_exc]) from None
-            # <= 3.10: attach so it shows up in traceback but doesn't mask
-            exc.__context__ = cleanup_exc
-            return False  # reraise original exception
-        return False  # propagate main exception if any
-
-
-def xfinally(cleanup: Callable[[], None]) -> _XFinally:
-    """Usage: with xfinally(lambda: cleanup()): ...
-    Returns a context manager that guarantees that cleanup() runs on exit and guarantees any error in cleanup() will never
-    mask an exception raised earlier inside the body of the `with` block, while still surfacing both problems when possible.
-
-    Problem it solves
-    -----------------
-    A naive ``try ... finally`` may lose the original exception:
-
-        try:
-            work()
-        finally:
-            cleanup()  # <-- if this raises an exception, it replaces the real error!
-
-    `_XFinally` preserves exception priority:
-
-    * Body raises, cleanup succeeds --> original body exception is re-raised.
-    * Body raises, cleanup also raises --> re-raises body exception; cleanup exception is linked via ``__context__``.
-    * Body succeeds, cleanup raises --> cleanup exception propagates normally.
-
-    Example:
-    -------
-    >>> with xfinally(reset_logger):   # doctest: +SKIP
-    ...     run_tasks()
-
-    The single *with* line replaces verbose ``try/except/finally`` boilerplate while preserving full error information.
-    """
-    return _XFinally(cleanup)
 
 
 #############################################################################

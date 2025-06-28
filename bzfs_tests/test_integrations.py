@@ -39,8 +39,9 @@ from subprocess import DEVNULL, PIPE
 from typing import Any, Callable, Iterable, cast
 from unittest.mock import patch
 
-from bzfs_main import bzfs, bzfs_jobrunner
-from bzfs_main.bzfs import die_status, find_match, getenv_any, getenv_bool
+from bzfs_main import bzfs, bzfs_jobrunner, utils
+from bzfs_main.bzfs import die_status, getenv_any, getenv_bool
+from bzfs_main.utils import find_match
 from bzfs_tests.test_bzfs import TestIncrementalSendSteps, stop_on_failure_subtest
 from bzfs_tests.zfs_util import (
     bookmark_name,
@@ -4713,7 +4714,7 @@ class LocalTestCase(BZFSTestCase):
                     "--log-syslog-prefix=" + syslog_prefix,
                     "--skip-replication",
                 )
-                lines = list(bzfs.tail("/var/log/syslog", 100, errors="surrogateescape"))
+                lines = list(utils.tail("/var/log/syslog", 100, errors="surrogateescape"))
                 k = -1
                 for kk, line in enumerate(lines):
                     if syslog_prefix in line and "Log file is:" in line:

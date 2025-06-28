@@ -38,11 +38,11 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Any, Callable, Iterator, List, Sequence, Tuple, Union, cast
+from typing import Any, Iterator, List, Tuple, Union, cast
 from unittest.mock import patch, mock_open, MagicMock
 
-from bzfs_main import bzfs
-from bzfs_main.bzfs import find_match, getenv_any, log_trace, Remote, PeriodAnchors
+from bzfs_main import bzfs, utils
+from bzfs_main.bzfs import getenv_any, log_trace, Remote, PeriodAnchors
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 # constants:
@@ -56,7 +56,6 @@ is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
-        TestXFinally,
         TestHelperFunctions,
         TestAdditionalHelpers,
         TestRunWithRetries,
@@ -64,13 +63,9 @@ def suite() -> unittest.TestSuite:
         TestSubprocessRun,
         TestParseDatasetLocator,
         TestReplaceCapturingGroups,
-        TestFindMatch,
         TestBuildTree,
         TestCurrentDateTime,
         TestRoundDatetimeUpToDurationMultiple,
-        TestSmallPriorityQueue,
-        TestSynchronizedBool,
-        TestSynchronizedDict,
         TestArgumentParser,
         TestAddRecvPropertyOptions,
         TestPreservePropertiesValidation,
@@ -102,54 +97,6 @@ def argparser_parse_args(args: list[str]) -> argparse.Namespace:
     return bzfs.argument_parser().parse_args(
         args + ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
     )
-
-
-#############################################################################
-class TestXFinally(unittest.TestCase):
-
-    def test_xfinally_executes_cleanup_on_success(self) -> None:
-        cleanup = MagicMock()
-        with bzfs.xfinally(cleanup):
-            pass
-        cleanup.assert_called_once()
-
-    def test_xfinally_executes_cleanup_on_exception(self) -> None:
-        cleanup = MagicMock()
-        with self.assertRaises(ValueError):
-            with bzfs.xfinally(cleanup):
-                raise ValueError("Body error")
-        cleanup.assert_called_once()
-
-    def test_xfinally_propagates_cleanup_exception(self) -> None:
-        cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
-        with self.assertRaises(RuntimeError) as cm:
-            with bzfs.xfinally(cleanup):
-                pass
-        self.assertEqual("Cleanup error", str(cm.exception))
-        cleanup.assert_called_once()
-
-    # @unittest.skipIf(sys.version_info != (3, 10), "Requires Python <= 3.10")
-    @unittest.skipIf(sys.version_info < (3, 10), "Requires Python >= 3.10")
-    def test_xfinally_handles_cleanup_exception_python_3_10_or_lower(self) -> None:
-        cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
-        with self.assertRaises(ValueError) as cm:
-            with bzfs.xfinally(cleanup):
-                raise ValueError("Body error")
-        self.assertIsInstance(cm.exception.__context__, RuntimeError)
-        self.assertEqual("Cleanup error", str(cm.exception.__context__))
-        cleanup.assert_called_once()
-
-    @unittest.skipIf(not sys.version_info >= (3, 11), "Requires Python >= 3.11")
-    def test_xfinally_handles_cleanup_exception_python_3_11_or_higher(self) -> None:
-        self.skipTest("disabled until python 3.11 is the minimum supported")
-        cleanup = MagicMock(side_effect=RuntimeError("Cleanup error"))
-        with self.assertRaises(ExceptionGroup) as cm:  # type: ignore  # noqa: F821
-            with bzfs.xfinally(cleanup):
-                raise ValueError("Body error")
-        self.assertEqual(2, len(cm.exception.exceptions))
-        self.assertIsInstance(cm.exception.exceptions[0], ValueError)
-        self.assertIsInstance(cm.exception.exceptions[1], RuntimeError)
-        cleanup.assert_called_once()
 
 
 #############################################################################
@@ -197,36 +144,6 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertListEqual([], bzfs.append_if_absent([]))
         self.assertListEqual(["a"], bzfs.append_if_absent([], "a"))
         self.assertListEqual(["a"], bzfs.append_if_absent([], "a", "a"))
-
-    def test_cut(self) -> None:
-        lines = ["34\td1@s1", "56\td2@s2"]
-        self.assertListEqual(["34", "56"], bzfs.cut(1, lines=lines))
-        self.assertListEqual(["d1@s1", "d2@s2"], bzfs.cut(2, lines=lines))
-        self.assertListEqual([], bzfs.cut(1, lines=[]))
-        self.assertListEqual([], bzfs.cut(2, lines=[]))
-        with self.assertRaises(ValueError):
-            bzfs.cut(0, lines=lines)
-
-    def test_get_home_directory(self) -> None:
-        old_home = os.environ.get("HOME")
-        if old_home is not None:
-            self.assertEqual(old_home, bzfs.get_home_directory())
-            os.environ.pop("HOME")
-            try:
-                self.assertEqual(old_home, bzfs.get_home_directory())
-            finally:
-                os.environ["HOME"] = old_home
-
-    def test_tail(self) -> None:
-        fd, file = tempfile.mkstemp(prefix="test_bzfs.tail_")
-        os.write(fd, "line1\nline2\n".encode())
-        os.close(fd)
-        self.assertEqual(["line1\n", "line2\n"], list(bzfs.tail(file, n=10)))
-        self.assertEqual(["line1\n", "line2\n"], list(bzfs.tail(file, n=2)))
-        self.assertEqual(["line2\n"], list(bzfs.tail(file, n=1)))
-        self.assertEqual([], list(bzfs.tail(file, n=0)))
-        os.remove(file)
-        self.assertEqual([], list(bzfs.tail(file, n=2)))
 
     def test_validate_port(self) -> None:
         bzfs.validate_port(47, "msg")
@@ -340,10 +257,6 @@ class TestHelperFunctions(unittest.TestCase):
         args = argparser_parse_args(["src", "dst"])
         params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
         self.assertIsNotNone(str(bzfs.pretty_print_formatter(params)))
-
-    def test_percent(self) -> None:
-        self.assertEqual("3=30%", bzfs.percent(3, 10))
-        self.assertEqual("0=NaN%", bzfs.percent(0, 0))
 
     def test_parse_duration_to_milliseconds(self) -> None:
         self.assertEqual(5000, bzfs.parse_duration_to_milliseconds("5 seconds"))
@@ -836,127 +749,6 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertFalse(is_busy("zfs send " + ds + "@snap", ds, busy_if_send=False))
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
-    def assert_human_readable_float(self, actual: float, expected: str) -> None:
-        self.assertEqual(bzfs.human_readable_float(actual), expected)
-        self.assertEqual(bzfs.human_readable_float(-actual), "-" + expected)
-
-    def test_human_readable_float_with_one_digit_before_decimal(self) -> None:
-        self.assert_human_readable_float(3.14159, "3.14")
-        self.assert_human_readable_float(5.0, "5")
-        self.assert_human_readable_float(0.5, "0.5")
-        self.assert_human_readable_float(0.499999, "0.5")
-        self.assert_human_readable_float(3.1477, "3.15")
-        self.assert_human_readable_float(1.999999, "2")
-        self.assert_human_readable_float(2.5, "2.5")
-        self.assert_human_readable_float(3.5, "3.5")
-
-    def test_human_readable_float_with_two_digits_before_decimal(self) -> None:
-        self.assert_human_readable_float(12.34, "12.3")
-        self.assert_human_readable_float(12.0, "12")
-        self.assert_human_readable_float(12.54, "12.5")
-        self.assert_human_readable_float(12.56, "12.6")
-
-    def test_human_readable_float_with_three_or_more_digits_before_decimal(self) -> None:
-        self.assert_human_readable_float(123.456, "123")
-        self.assert_human_readable_float(123.516, "124")
-        self.assert_human_readable_float(1234.4678, "1234")
-        self.assert_human_readable_float(1234.5678, "1235")
-        self.assert_human_readable_float(12345.078, "12345")
-        self.assert_human_readable_float(12345.678, "12346")
-        self.assert_human_readable_float(999.99, "1000")
-
-    def test_human_readable_float_with_zero(self) -> None:
-        self.assertEqual(bzfs.human_readable_float(0.0), "0")
-        self.assertEqual(bzfs.human_readable_float(-0.0), "0")
-        self.assertEqual(bzfs.human_readable_float(0.001), "0")
-        self.assertEqual(bzfs.human_readable_float(-0.001), "0")
-
-    def test_human_readable_float_with_halfway_rounding_behavior(self) -> None:
-        # For |n| < 10 => 2 decimals
-        self.assert_human_readable_float(1.15, "1.15")
-        self.assert_human_readable_float(1.25, "1.25")
-        self.assert_human_readable_float(1.35, "1.35")
-        self.assert_human_readable_float(1.45, "1.45")
-
-        # 10.xx => one decimal
-        eps = 1.0e-15
-        self.assert_human_readable_float(10.15, "10.2")
-        self.assert_human_readable_float(10.25, "10.2")
-        self.assert_human_readable_float(10.35 + eps, "10.4")
-        self.assert_human_readable_float(10.45, "10.4")
-
-    def test_human_readable_bytes(self) -> None:
-        self.assertEqual("0 B", bzfs.human_readable_bytes(0))
-        self.assertEqual("581 B", bzfs.human_readable_bytes(0.567 * 1024**1))
-        self.assertEqual("2 KiB", bzfs.human_readable_bytes(2 * 1024**1))
-        self.assertEqual("1 MiB", bzfs.human_readable_bytes(1 * 1024**2))
-        self.assertEqual("1 GiB", bzfs.human_readable_bytes(1 * 1024**3))
-        self.assertEqual("1 TiB", bzfs.human_readable_bytes(1 * 1024**4))
-        self.assertEqual("1 PiB", bzfs.human_readable_bytes(1 * 1024**5))
-        self.assertEqual("1 EiB", bzfs.human_readable_bytes(1 * 1024**6))
-        self.assertEqual("1 ZiB", bzfs.human_readable_bytes(1 * 1024**7))
-        self.assertEqual("1 YiB", bzfs.human_readable_bytes(1 * 1024**8))
-        self.assertEqual("1 RiB", bzfs.human_readable_bytes(1 * 1024**9))
-        self.assertEqual("1 QiB", bzfs.human_readable_bytes(1 * 1024**10))
-        self.assertEqual("1024 QiB", bzfs.human_readable_bytes(1 * 1024**11))
-        self.assertEqual("3 B", bzfs.human_readable_bytes(2.567, precision=0))
-        self.assertEqual("2.6 B", bzfs.human_readable_bytes(2.567, precision=1))
-        self.assertEqual("2.57 B", bzfs.human_readable_bytes(2.567, precision=2))
-        self.assertEqual("2.57 B", bzfs.human_readable_bytes(2.567, precision=None))
-
-    def test_human_readable_duration(self) -> None:
-        ms = 1000_000
-        self.assertEqual("0ns", bzfs.human_readable_duration(0, long=False))
-        self.assertEqual("3ns", bzfs.human_readable_duration(3, long=False))
-        self.assertEqual("3μs", bzfs.human_readable_duration(3 * 1000, long=False))
-        self.assertEqual("3ms", bzfs.human_readable_duration(3 * ms, long=False))
-        self.assertEqual("1s", bzfs.human_readable_duration(1000 * ms, long=False))
-        self.assertEqual("3s", bzfs.human_readable_duration(3000 * ms, long=False))
-        self.assertEqual("3m", bzfs.human_readable_duration(3000 * 60 * ms, long=False))
-        self.assertEqual("3h", bzfs.human_readable_duration(3000 * 60 * 60 * ms, long=False))
-        self.assertEqual("1.25d", bzfs.human_readable_duration(3000 * 60 * 60 * 10 * ms, long=False))
-        self.assertEqual("12.5d", bzfs.human_readable_duration(3000 * 60 * 60 * 100 * ms, long=False))
-        self.assertEqual("1250d", bzfs.human_readable_duration(3000 * 60 * 60 * 10000 * ms, long=False))
-        self.assertEqual("125ns", bzfs.human_readable_duration(125, long=False))
-        self.assertEqual("125μs", bzfs.human_readable_duration(125 * 1000, long=False))
-        self.assertEqual("125ms", bzfs.human_readable_duration(125 * 1000 * 1000, long=False))
-        self.assertEqual("2.08m", bzfs.human_readable_duration(125 * 1000 * 1000 * 1000, long=False))
-
-        self.assertEqual("0s", bzfs.human_readable_duration(0, unit="s", long=False))
-        self.assertEqual("3s", bzfs.human_readable_duration(3, unit="s", long=False))
-        self.assertEqual("3m", bzfs.human_readable_duration(3 * 60, unit="s", long=False))
-        self.assertEqual("0h", bzfs.human_readable_duration(0, unit="h", long=False))
-        self.assertEqual("3h", bzfs.human_readable_duration(3, unit="h", long=False))
-        self.assertEqual("7.5d", bzfs.human_readable_duration(3 * 60, unit="h", long=False))
-        self.assertEqual("0.3ns", bzfs.human_readable_duration(0.3, long=False))
-        self.assertEqual("300ns", bzfs.human_readable_duration(0.3, unit="μs", long=False))
-        self.assertEqual("300μs", bzfs.human_readable_duration(0.3, unit="ms", long=False))
-        self.assertEqual("300ms", bzfs.human_readable_duration(0.3, unit="s", long=False))
-        self.assertEqual("18s", bzfs.human_readable_duration(0.3, unit="m", long=False))
-        self.assertEqual("18m", bzfs.human_readable_duration(0.3, unit="h", long=False))
-        self.assertEqual("7.2h", bzfs.human_readable_duration(0.3, unit="d", long=False))
-        self.assertEqual("259ns", bzfs.human_readable_duration(3 / 1000_000_000_000, unit="d", long=False))
-        self.assertEqual("0.26ns", bzfs.human_readable_duration(3 / 1000_000_000_000_000, unit="d", long=False))
-        with self.assertRaises(ValueError):
-            bzfs.human_readable_duration(3, unit="hhh", long=False)  # invalid unit
-
-        self.assertEqual("0s (0 seconds)", bzfs.human_readable_duration(0, unit="s", long=True))
-        self.assertEqual("3m (180 seconds)", bzfs.human_readable_duration(3 * 60, unit="s", long=True))
-        self.assertEqual("3h (10800 seconds)", bzfs.human_readable_duration(3 * 60, unit="m", long=True))
-        self.assertEqual("3ms (0 seconds)", bzfs.human_readable_duration(3, unit="ms", long=True))
-        self.assertEqual("3ms (0 seconds)", bzfs.human_readable_duration(3 * 1000 * 1000, long=True))
-
-        self.assertEqual("0s (0 seconds)", bzfs.human_readable_duration(-0, unit="s", long=True))
-        self.assertEqual("-3m (-180 seconds)", bzfs.human_readable_duration(-3 * 60, unit="s", long=True))
-        self.assertEqual("-3h (-10800 seconds)", bzfs.human_readable_duration(-3 * 60, unit="m", long=True))
-        self.assertEqual("-3ms (0 seconds)", bzfs.human_readable_duration(-3, unit="ms", long=True))
-        self.assertEqual("-3ms (0 seconds)", bzfs.human_readable_duration(-3 * 1000 * 1000, long=True))
-
-        self.assertEqual("3ns", bzfs.human_readable_duration(2.567, precision=0))
-        self.assertEqual("2.6ns", bzfs.human_readable_duration(2.567, precision=1))
-        self.assertEqual("2.57ns", bzfs.human_readable_duration(2.567, precision=2))
-        self.assertEqual("2.57ns", bzfs.human_readable_duration(2.567, precision=None))
-
     def test_pv_cmd(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         log_params = bzfs.LogParams(args)
@@ -1009,7 +801,7 @@ class TestHelperFunctions(unittest.TestCase):
         try:
             subprocess.run(cmd, shell=True, check=True)
             num_bytes = bzfs.count_num_bytes_transferred_by_zfs_send(pv_file)
-            print("pv_log_file: " + "\n".join(bzfs.tail(pv_file, 10)))
+            print("pv_log_file: " + "\n".join(utils.tail(pv_file, 10)))
             self.assertEqual(16 * 1024, num_bytes)
         finally:
             Path(pv_file).unlink(missing_ok=True)
@@ -3433,133 +3225,6 @@ class TestRoundDatetimeUpToDurationMultiple(unittest.TestCase):
 
 
 #############################################################################
-class TestFindMatch(unittest.TestCase):
-
-    def test_basic(self) -> None:
-        condition = lambda arg: arg.startswith("-")  # noqa: E731
-
-        lst = ["a", "b", "-c", "d"]
-        self.assert_find_match(2, lst, condition)
-
-        self.assert_find_match(2, lst, condition, -3)
-        self.assert_find_match(2, lst, condition, -2)
-        self.assert_find_match(-1, lst, condition, -1)
-        self.assert_find_match(2, lst, condition, 0)
-        self.assert_find_match(2, lst, condition, 1)
-        self.assert_find_match(2, lst, condition, 2)
-        self.assert_find_match(-1, lst, condition, 3)
-        self.assert_find_match(-1, lst, condition, 4)
-        self.assert_find_match(-1, lst, condition, 5)
-
-        self.assert_find_match(-1, lst, condition, end=-3)
-        self.assert_find_match(-1, lst, condition, end=-2)
-        self.assert_find_match(2, lst, condition, end=-1)
-        self.assert_find_match(-1, lst, condition, end=0)
-        self.assert_find_match(-1, lst, condition, end=1)
-        self.assert_find_match(-1, lst, condition, end=2)
-        self.assert_find_match(2, lst, condition, end=3)
-        self.assert_find_match(2, lst, condition, end=4)
-        self.assert_find_match(2, lst, condition, end=5)
-        self.assert_find_match(2, lst, condition, end=6)
-
-        self.assert_find_match(2, lst, condition, start=2, end=-1)
-        self.assert_find_match(-1, lst, condition, start=2, end=-2)
-        self.assert_find_match(-1, lst, condition, start=3, end=-1)
-        self.assert_find_match(-1, lst, condition, start=3, end=-1, raises=None)
-        self.assert_find_match(-1, lst, condition, start=3, end=-1, raises=False)
-
-        self.assert_find_match(2, lst, condition, raises=None)
-        self.assert_find_match(2, lst, condition, raises=False)
-        self.assert_find_match(2, lst, condition, raises=True)
-        with self.assertRaises(ValueError):
-            find_match(lst, condition, start=0, end=2, raises=True)
-        x = 2
-        with self.assertRaises(ValueError) as e:
-            find_match(lst, condition, start=0, end=2, raises=f"foo: {x}")
-        self.assertEqual(f"foo: {x}", str(e.exception))
-        with self.assertRaises(ValueError) as e:
-            find_match(lst, condition, start=0, end=2, raises=lambda: f"foo: {x}")
-        self.assertEqual(f"foo: {x}", str(e.exception))
-        with self.assertRaises(ValueError) as e:
-            find_match(lst, condition, start=0, end=2, raises="")
-        self.assertEqual("", str(e.exception))
-
-        lst = ["-c"]
-        self.assert_find_match(0, lst, condition)
-        self.assert_find_match(0, lst, condition, -1)
-        self.assert_find_match(0, lst, condition, 0)
-        self.assert_find_match(-1, lst, condition, 1)
-
-        self.assert_find_match(-1, lst, condition, end=-1)
-        self.assert_find_match(-1, lst, condition, end=0)
-        self.assert_find_match(0, lst, condition, end=1)
-
-        self.assert_find_match(-1, lst, condition, start=2, end=-1)
-        self.assert_find_match(-1, lst, condition, start=2, end=-2)
-        self.assert_find_match(-1, lst, condition, start=3, end=-1)
-
-        lst = []
-        self.assert_find_match(-1, lst, condition)
-        self.assert_find_match(-1, lst, condition, -1)
-        self.assert_find_match(-1, lst, condition, 0)
-        self.assert_find_match(-1, lst, condition, 1)
-
-        self.assert_find_match(-1, lst, condition, end=-1)
-        self.assert_find_match(-1, lst, condition, end=0)
-        self.assert_find_match(-1, lst, condition, end=1)
-
-        self.assert_find_match(-1, lst, condition, start=2, end=-1)
-        self.assert_find_match(-1, lst, condition, start=2, end=-2)
-        self.assert_find_match(-1, lst, condition, start=3, end=-1)
-
-        lst = ["a", "b", "-c", "-d"]
-        self.assertEqual(2, find_match(lst, condition, start=None, end=None, reverse=False))
-        self.assertEqual(3, find_match(lst, condition, start=None, end=None, reverse=True))
-        self.assertEqual(2, find_match(lst, condition, start=2, end=None, reverse=False))
-        self.assertEqual(3, find_match(lst, condition, start=2, end=None, reverse=True))
-        self.assertEqual(3, find_match(lst, condition, start=3, end=None, reverse=False))
-        self.assertEqual(3, find_match(lst, condition, start=3, end=None, reverse=True))
-
-        self.assertEqual(2, find_match(lst, condition, start=0, end=None, reverse=False))
-        self.assertEqual(3, find_match(lst, condition, start=0, end=None, reverse=True))
-        self.assertEqual(3, find_match(lst, condition, start=-1, end=None, reverse=False))
-        self.assertEqual(3, find_match(lst, condition, start=-1, end=None, reverse=True))
-        self.assertEqual(2, find_match(lst, condition, start=-2, end=None, reverse=False))
-        self.assertEqual(3, find_match(lst, condition, start=-2, end=None, reverse=True))
-        self.assertEqual(2, find_match(lst, condition, start=-3, end=None, reverse=False))
-        self.assertEqual(3, find_match(lst, condition, start=-3, end=None, reverse=True))
-
-        lst = ["-a", "-b", "c", "d"]
-        self.assertEqual(0, find_match(lst, condition, end=-1, reverse=False))
-        self.assertEqual(1, find_match(lst, condition, end=-1, reverse=True))
-        self.assertEqual(0, find_match(lst, condition, end=-2, reverse=False))
-        self.assertEqual(1, find_match(lst, condition, end=-2, reverse=True))
-        self.assertEqual(0, find_match(lst, condition, end=-3, reverse=False))
-        self.assertEqual(0, find_match(lst, condition, end=-3, reverse=True))
-        self.assertEqual(-1, find_match(lst, condition, end=-4, reverse=False))
-        self.assertEqual(-1, find_match(lst, condition, end=-4, reverse=True))
-
-        lst = ["a", "-b", "-c", "d"]
-        self.assertEqual(1, find_match(lst, condition, start=1, end=-1, reverse=False))
-        self.assertEqual(2, find_match(lst, condition, start=1, end=-1, reverse=True))
-        self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=False))
-        self.assertEqual(1, find_match(lst, condition, start=1, end=-2, reverse=True))
-
-    def assert_find_match(
-        self,
-        expected: int,
-        lst: Sequence[str],
-        condition: Callable[[str], bool],
-        start: int | None = None,
-        end: int | None = None,
-        raises: bool | str | Callable[[], str] | None = False,
-    ) -> None:
-        raise_arg = cast(Union[bool, str, Callable[[], str]], raises)
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raise_arg))
-        self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True, raises=raise_arg))
-
-
-#############################################################################
 class TestArgumentParser(unittest.TestCase):
 
     def test_help(self) -> None:
@@ -5038,244 +4703,6 @@ class TestIncrementalSendSteps(unittest.TestCase):
             is_resume=is_resume,
             force_convert_I_to_i=force_convert_I_to_i,
         )
-
-
-#############################################################################
-class TestSmallPriorityQueue(unittest.TestCase):
-    def setUp(self) -> None:
-        self.pq: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue()
-        self.pq_reverse: bzfs.SmallPriorityQueue[int] = bzfs.SmallPriorityQueue(reverse=True)
-
-    def test_basic(self) -> None:
-        self.assertEqual(0, len(self.pq))
-        self.assertTrue(len(str(self.pq)) > 0)
-        self.pq.push(2)
-        self.assertEqual(1, len(self.pq))
-        self.pq.push(1)
-        self.assertEqual(2, len(self.pq))
-        self.assertTrue(2 in self.pq)
-        self.assertTrue(1 in self.pq)
-        self.assertFalse(0 in self.pq)
-        self.pq.clear()
-        self.assertEqual(len(self.pq), 0)
-
-    def test_push_and_pop(self) -> None:
-        self.pq.push(3)
-        self.pq.push(1)
-        self.pq.push(2)
-        self.assertEqual(self.pq._lst, [1, 2, 3])
-        self.assertEqual(self.pq.pop(), 1)
-        self.assertEqual(self.pq._lst, [2, 3])
-
-    def test_pop_empty(self) -> None:
-        with self.assertRaises(IndexError):  # Generic IndexError from list.pop()
-            self.pq.pop()
-
-    def test_remove(self) -> None:
-        self.pq.push(3)
-        self.pq.push(1)
-        self.pq.push(2)
-        self.pq.remove(2)
-        self.assertEqual(self.pq._lst, [1, 3])
-        self.assertFalse(self.pq.remove(0))
-        self.assertTrue(self.pq.remove(1))
-        self.assertEqual(self.pq._lst, [3])
-
-    def test_remove_nonexistent_element(self) -> None:
-        self.pq.push(1)
-        self.pq.push(3)
-        self.pq.push(2)
-
-        # Attempt to remove an element that doesn't exist (should raise IndexError)
-        self.assertFalse(self.pq.remove(4))
-
-    def test_peek(self) -> None:
-        self.pq.push(3)
-        self.pq.push(1)
-        self.pq.push(2)
-        self.assertEqual(self.pq.peek(), 1)
-        self.assertEqual(self.pq._lst, [1, 2, 3])
-        self.pq_reverse.push(3)
-        self.pq_reverse.push(1)
-        self.pq_reverse.push(2)
-        self.assertEqual(self.pq_reverse.peek(), 3)
-        self.assertEqual(self.pq_reverse._lst, [1, 2, 3])
-
-    def test_peek_empty(self) -> None:
-        with self.assertRaises(IndexError):  # Generic IndexError from list indexing
-            self.pq.peek()
-
-        with self.assertRaises(IndexError):  # Generic IndexError from list indexing
-            self.pq_reverse.peek()
-
-    def test_reverse_order(self) -> None:
-        self.pq_reverse.push(1)
-        self.pq_reverse.push(3)
-        self.pq_reverse.push(2)
-        self.assertEqual(self.pq_reverse.pop(), 3)
-        self.assertEqual(self.pq_reverse._lst, [1, 2])
-
-    def test_iter(self) -> None:
-        self.pq.push(3)
-        self.pq.push(1)
-        self.pq.push(2)
-        self.assertListEqual([1, 2, 3], list(iter(self.pq)))
-        self.assertEqual("[1, 2, 3]", str(self.pq))
-        self.pq_reverse.push(1)
-        self.pq_reverse.push(3)
-        self.pq_reverse.push(2)
-        self.assertListEqual([3, 2, 1], list(iter(self.pq_reverse)))
-        self.assertEqual("[3, 2, 1]", str(self.pq_reverse))
-
-    def test_duplicates(self) -> None:
-        self.pq.push(2)
-        self.pq.push(2)
-        self.pq.push(1)
-        self.assertEqual(self.pq._lst, [1, 2, 2])
-
-        # Pop should remove the smallest duplicate first
-        self.assertEqual(self.pq.pop(), 1)
-        self.assertEqual(self.pq._lst, [2, 2])
-
-        # Remove one duplicate, leaving another
-        self.pq.remove(2)
-        self.assertEqual(self.pq._lst, [2])
-
-        # Peek and pop should now work on the remaining duplicate
-        self.assertEqual(self.pq.peek(), 2)
-        self.assertEqual(self.pq.pop(), 2)
-        self.assertEqual(len(self.pq), 0)
-
-    def test_reverse_with_duplicates(self) -> None:
-        self.pq_reverse.push(2)
-        self.pq_reverse.push(2)
-        self.pq_reverse.push(3)
-        self.pq_reverse.push(1)
-        self.assertEqual(self.pq_reverse._lst, [1, 2, 2, 3])
-
-        # Pop the largest first in reverse order
-        self.assertEqual(self.pq_reverse.pop(), 3)
-        self.assertEqual(self.pq_reverse._lst, [1, 2, 2])
-
-        # Remove a duplicate
-        self.pq_reverse.remove(2)
-        self.assertEqual(self.pq_reverse._lst, [1, 2])
-
-        # Peek and pop the remaining elements
-        self.assertEqual(self.pq_reverse.peek(), 2)
-        self.assertEqual(self.pq_reverse.pop(), 2)
-        self.assertEqual(self.pq_reverse.pop(), 1)
-        self.assertEqual(len(self.pq_reverse), 0)
-
-
-#############################################################################
-class TestSynchronizedBool(unittest.TestCase):
-    def test_initialization(self) -> None:
-        b = bzfs.SynchronizedBool(True)
-        self.assertTrue(b.value)
-
-        b = bzfs.SynchronizedBool(False)
-        self.assertFalse(b.value)
-
-        with self.assertRaises(AssertionError):
-            bzfs.SynchronizedBool(cast(Any, "not_a_bool"))
-
-    def test_value_property(self) -> None:
-        b = bzfs.SynchronizedBool(True)
-        self.assertTrue(b.value)
-
-        b.value = False
-        self.assertFalse(b.value)
-
-    def test_loop(self) -> None:
-        b = bzfs.SynchronizedBool(False)
-        for _ in range(3):
-            b.value = not b.value
-        self.assertIsInstance(b.value, bool)
-
-    def test_bool_conversion(self) -> None:
-        b = bzfs.SynchronizedBool(True)
-        self.assertTrue(bool(b))
-
-        b.value = False
-        self.assertFalse(bool(b))
-
-    def test_get_and_set(self) -> None:
-        b = bzfs.SynchronizedBool(True)
-        self.assertTrue(b.get_and_set(False))
-        self.assertFalse(b.value)
-
-    def test_compare_and_set(self) -> None:
-        b = bzfs.SynchronizedBool(True)
-        self.assertTrue(b.compare_and_set(True, False))
-        self.assertFalse(b.value)
-
-        b = bzfs.SynchronizedBool(True)
-        self.assertFalse(b.compare_and_set(False, False))
-        self.assertTrue(b.value)
-
-    def test_str_and_repr(self) -> None:
-        b = bzfs.SynchronizedBool(True)
-        self.assertEqual(str(b), "True")
-        self.assertEqual(repr(b), "True")
-
-        b.value = False
-        self.assertEqual(str(b), "False")
-        self.assertEqual(repr(b), "False")
-
-
-#############################################################################
-class TestSynchronizedDict(unittest.TestCase):
-    def setUp(self) -> None:
-        self.sync_dict: bzfs.SynchronizedDict = bzfs.SynchronizedDict({"a": 1, "b": 2, "c": 3})
-
-    def test_getitem(self) -> None:
-        self.assertEqual(self.sync_dict["a"], 1)
-        self.assertEqual(self.sync_dict["b"], 2)
-
-    def test_setitem(self) -> None:
-        self.sync_dict["d"] = 4
-        self.assertEqual(self.sync_dict["d"], 4)
-
-    def test_delitem(self) -> None:
-        del self.sync_dict["a"]
-        self.assertNotIn("a", self.sync_dict)
-
-    def test_contains(self) -> None:
-        self.assertTrue("a" in self.sync_dict)
-        self.assertFalse("z" in self.sync_dict)
-
-    def test_len(self) -> None:
-        self.assertEqual(len(self.sync_dict), 3)
-        del self.sync_dict["a"]
-        self.assertEqual(len(self.sync_dict), 2)
-
-    def test_repr(self) -> None:
-        self.assertEqual(repr(self.sync_dict), repr({"a": 1, "b": 2, "c": 3}))
-
-    def test_str(self) -> None:
-        self.assertEqual(str(self.sync_dict), str({"a": 1, "b": 2, "c": 3}))
-
-    def test_get(self) -> None:
-        self.assertEqual(self.sync_dict.get("a"), 1)
-        self.assertEqual(self.sync_dict.get("z", 42), 42)
-
-    def test_pop(self) -> None:
-        value = self.sync_dict.pop("b")
-        self.assertEqual(value, 2)
-        self.assertNotIn("b", self.sync_dict)
-
-    def test_clear(self) -> None:
-        self.sync_dict.clear()
-        self.assertEqual(len(self.sync_dict), 0)
-
-    def test_items(self) -> None:
-        items = self.sync_dict.items()
-        self.assertEqual(set(items), {("a", 1), ("b", 2), ("c", 3)})
-
-    def test_loop(self) -> None:
-        self.sync_dict["key"] = 1
-        self.assertIn("key", self.sync_dict)
 
 
 #############################################################################

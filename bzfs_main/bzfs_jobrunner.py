@@ -48,6 +48,7 @@ from typing import Any, Iterable, TypeVar, Union
 
 from bzfs_main import bzfs
 from bzfs_main.bzfs import die_status, log_trace, prog_name as bzfs_prog_name
+from bzfs_main.utils import human_readable_duration, percent, shuffle_dict
 
 # constants:
 prog_name = "bzfs_jobrunner"
@@ -807,7 +808,7 @@ class Job:
         assert interval_nanos >= 0
         if jitter:  # randomize job start time to avoid potential thundering herd problems in large distributed systems
             sleep_nanos = random.randint(0, interval_nanos)  # noqa: S311
-            log.info("Jitter: Delaying job start time by sleeping for %s ...", bzfs.human_readable_duration(sleep_nanos))
+            log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
             time.sleep(sleep_nanos / 1_000_000_000)  # seconds
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(bzfs.BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
@@ -839,7 +840,7 @@ class Job:
                     break
         stats = self.stats
         jobs_skipped = stats.jobs_all - stats.jobs_started
-        msg = f"{stats}, skipped:" + bzfs.percent(jobs_skipped, total=stats.jobs_all)
+        msg = f"{stats}, skipped:" + percent(jobs_skipped, total=stats.jobs_all)
         log.info("Final Progress: %s", msg)
         assert stats.jobs_running == 0, msg
         assert stats.jobs_completed == stats.jobs_started, msg
@@ -874,7 +875,7 @@ class Job:
             raise
         else:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
-            elapsed_human = bzfs.human_readable_duration(elapsed_nanos)
+            elapsed_human = human_readable_duration(elapsed_nanos)
             if returncode != 0:
                 with stats.lock:
                     if self.first_exception is None:
@@ -1076,11 +1077,11 @@ class Stats:
 
     def __repr__(self) -> str:
         def pct(number: int) -> str:
-            return bzfs.percent(number, total=self.jobs_all)
+            return percent(number, total=self.jobs_all)
 
         al, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
         running = self.jobs_running
-        t = "avg_completion_time:" + bzfs.human_readable_duration(self.sum_elapsed_nanos / max(1, completed))
+        t = "avg_completion_time:" + human_readable_duration(self.sum_elapsed_nanos / max(1, completed))
         return f"all:{al}, started:{pct(started)}, completed:{pct(completed)}, failed:{pct(failed)}, running:{running}, {t}"
 
 
@@ -1104,20 +1105,6 @@ T = TypeVar("T")
 
 def flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
     return [item for pair in root_dataset_pairs for item in pair]
-
-
-K = TypeVar("K")
-V = TypeVar("V")
-
-
-def shuffle_dict(dictionary: dict[K, V]) -> dict[K, V]:
-    items = list(dictionary.items())
-    random.shuffle(items)
-    return dict(items)
-
-
-def sorted_dict(dictionary: dict[K, V]) -> dict[K, V]:
-    return dict(sorted(dictionary.items()))
 
 
 def sanitize(filename: str) -> str:

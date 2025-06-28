@@ -140,26 +140,6 @@ class TestHelperFunctions(unittest.TestCase):
             parser.parse_args(["--version"])
         self.assertEqual(0, e.exception.code)
 
-    def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
-        result: dict[str, int] = bzfs_jobrunner.sorted_dict({})
-        self.assertEqual(result, {})
-
-    def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self) -> None:
-        result: dict[str, int] = bzfs_jobrunner.sorted_dict({"a": 1})
-        self.assertEqual(result, {"a": 1})
-
-    def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self) -> None:
-        result: dict[str, int] = bzfs_jobrunner.sorted_dict({"b": 2, "a": 1, "c": 3})
-        self.assertEqual(result, {"a": 1, "b": 2, "c": 3})
-
-    def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self) -> None:
-        result: dict[int, str] = bzfs_jobrunner.sorted_dict({3: "three", 1: "one", 2: "two"})
-        self.assertEqual(result, {1: "one", 2: "two", 3: "three"})
-
-    def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
-        with self.assertRaises(TypeError):
-            bzfs_jobrunner.sorted_dict({"a": 1, 2: "two"})
-
     def test_reject_argument_action(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--secret", action=bzfs_jobrunner.RejectArgumentAction)
@@ -173,20 +153,6 @@ class TestHelperFunctions(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 parser.parse_args(["--delete-dst-snapshots"] + opts)
-
-    def test_shuffle_dict_preserves_items(self) -> None:
-        d = {"a": 1, "b": 2, "c": 3}
-
-        def fake_shuffle(lst: list) -> None:
-            lst.reverse()
-
-        with patch("random.shuffle", side_effect=fake_shuffle) as mock_shuffle:
-            result = bzfs_jobrunner.shuffle_dict(d)
-            self.assertEqual({"c": 3, "b": 2, "a": 1}, result)
-            mock_shuffle.assert_called_once()
-
-    def test_shuffle_dict_empty(self) -> None:
-        self.assertEqual({}, bzfs_jobrunner.shuffle_dict({}))
 
     def test_stats_repr(self) -> None:
         stats = bzfs_jobrunner.Stats()
