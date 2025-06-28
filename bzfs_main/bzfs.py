@@ -1574,13 +1574,13 @@ class LogParams:
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, log_dir_default)
         if log_dir_default not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{log_dir_default}', but got: {log_parent_dir}")
-        if os.path.islink(log_parent_dir):
-            die(f"--log-dir must not be a symlink: {log_parent_dir}")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
         os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        validate_is_not_a_symlink("--log-dir ", log_parent_dir)
         os.makedirs(self.log_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        validate_is_not_a_symlink("--log-dir subdir ", self.log_dir)
         self.log_file_prefix = args.log_file_prefix
         self.log_file_infix = args.log_file_infix
         self.log_file_suffix = args.log_file_suffix
@@ -1600,7 +1600,9 @@ class LogParams:
         dot_current_dir = os.path.join(log_parent_dir, f".{current}")
         current_dir = os.path.join(dot_current_dir, os.path.basename(self.log_file)[0 : -len(".log")])
         os.makedirs(dot_current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        validate_is_not_a_symlink("--log-dir: .current ", dot_current_dir)
         os.makedirs(current_dir, mode=DIR_PERMISSIONS, exist_ok=True)
+        validate_is_not_a_symlink("--log-dir: current ", current_dir)
         create_symlink(self.log_file, current_dir, f"{current}.log")
         create_symlink(self.pv_log_file, current_dir, f"{current}.pv")
         create_symlink(self.log_dir, current_dir, f"{current}.dir")
@@ -6290,6 +6292,7 @@ def delete_stale_files(
     """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
     seconds = millis / 1000
     now = time.time()
+    validate_is_not_a_symlink("", root_dir)
     for entry in os.scandir(root_dir):
         if entry.name == exclude or not entry.name.startswith(prefix):
             continue
@@ -7135,6 +7138,11 @@ def validate_port(port: str | int, message: str) -> None:
         port = str(port)
     if port and not port.isdigit():
         die(message + f"must be empty or a positive integer: '{port}'")
+
+
+def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentParser | None = None) -> None:
+    if os.path.islink(path):
+        die(f"{msg}must not be a symlink: {path}", parser=parser)
 
 
 def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
