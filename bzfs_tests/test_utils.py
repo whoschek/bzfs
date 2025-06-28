@@ -153,3 +153,33 @@ class OpenNoFollowTest(unittest.TestCase):
                 open_nofollow(self.real_path, "r")
         m_fdopen.assert_called_once()
         m_close.assert_called_once()
+
+    def test_check_owner_skipped(self) -> None:
+        """check_owner=False should skip ownership verification"""
+        with mock.patch("os.fstat", side_effect=AssertionError("should not call")) as m_fstat:
+            with open_nofollow(self.real_path, "r", check_owner=False, encoding="utf-8") as f:
+                self.assertEqual(f.read(), "hello")
+        m_fstat.assert_not_called()
+
+    def test_owner_mismatch_raises_and_closes_fd(self) -> None:
+        class Stat:
+            st_uid = os.geteuid() + 1
+
+        orig_close = os.close
+        with mock.patch("os.fstat", return_value=Stat()), mock.patch("os.close", side_effect=orig_close) as m_close:
+            with self.assertRaises(PermissionError):
+                open_nofollow(self.real_path, "r")
+        m_close.assert_called_once()
+
+    def test_close_error_ignored(self) -> None:
+        err = RuntimeError("boom")
+        orig_close = os.close
+
+        def failing_close(fd: int) -> None:
+            orig_close(fd)
+            raise OSError("close fail")
+
+        with mock.patch("os.fdopen", side_effect=err), mock.patch("os.close", side_effect=failing_close) as m_close:
+            with self.assertRaises(RuntimeError):
+                open_nofollow(self.real_path, "r")
+        m_close.assert_called_once()
