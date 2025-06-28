@@ -30,11 +30,11 @@
 - `bzfs_tests/` contains all unit and integration tests as well as `bzfs_job_example.py`.
 - `bzfs_docs/` and `bash_completion_d/` provide doc generation utilities used by `update_readme.sh`.
 
-# Large Context Window is Key
+# Context Window Engineering is Key
 
 - I have noticed that you only use a small portion of your context window. It's impossible to be successful like this.
-  Leverage your entire available context window to the max! Be a PRO! Use deep thinking and meticulous tracing to
-  complete the most critical task.
+  Leverage your available context window to the max! Be a PRO! Use deep thinking and meticulous tracing to complete the
+  most critical task.
 - Repeat and remember the user's explicit requests, and make fulfilling them your objective.
 - Whenever your context window becomes more than 90% full, use the `/compact` command (or a similar tool) to thoroughly
   summarize the context window in detail, in an analytic, structured way, paying close attention to the user's explicit
@@ -112,7 +112,7 @@
 - Code changes should not require additional external Python packages or Unix CLIs beyond the external Python packages
   and standard Unix CLIs that are already installed or used by the current codebase. For example, calling anything in
   the Python standard library is ok. CLI tools like `zfs`, `zpool`, `ssh`, `zstd`, `pv`, `mbuffer`, `ps`, `uname`, Unix
-  coreutils, etc, are already installed and used by the project, thus calling these from Python is ok, too.
+  coreutils, are already installed and used by the project, thus calling these from Python is ok, too.
 
 # Documentation
 
@@ -128,8 +128,8 @@
   don't run into the current environment time limit to avoid your task getting aborted. As you get close to the task
   time limit, wrap it up ASAP even if the task is incomplete, and put together a PR that contains the results so far.
 
-# Large Context Window is Key to Success
+# Context Window Engineering is Key to Success
 
 - I have noticed that you are doing much better if you use all deep thinking and meticulous tracing power that you have
   to complete the top critical task you've been asked to do. Still, so far you have used only a small portion of the
-  available context window. Leverage your entire available context window to the max! Be a PRO!
+  available context window. Leverage your available context window to the max! Be a PRO!
