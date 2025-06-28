@@ -132,12 +132,16 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "N8",   # naming, snake case
     "PGH",  # pygrep-hooks
     "PIE",  # flake8-pie
+    "PLC",  # convention
+    "PLE0704", # bare raise statement is not inside an exception handler
+    "PLE",  # error
     "PLW",  # warning
     "RUF",  # ruff-specifc rules
     "S",    # bandit
     "SLF",  # private member accessed
     "T100", # check for debugger imports and breakpoint() calls
     "TID",  # flake8-tidy-imports
+    "TRY",  # tryceratops raises
     "TRY201",  # Use `raise` without specifying exception name, throughout
 #    "UP006",  # pyupgrade
 #    "UP007",  # pyupgrade
@@ -149,6 +153,7 @@ explicit-preview-rules = true
 extend-select = ["CPY001"]   # copyright
 ignore = [  # toggles to exclude overly strict `ruff` checks:
     "G004",     # logging statement uses f-string
+    "PLC0415",  # `import` should be at the top-level of a file
     "PLW0108",  # lambda may be unnecessary; consider inlining inner function
     "PLW1510",  # subprocess-run
     "PLW2901",  # redefined-loop-name
@@ -157,6 +162,10 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
     "S101",     # use of assert detected (harmless)
     "S404",     # use of subprocess module (this use is intended)
     "S603",     # use of subprocess without shell=True (this use is intended)
+    "TRY003",   # avoid specifying long messages outside the exception class
+    "TRY300",   # Consider moving this statement to an else block
+    "TRY301",   # abstract raise to an inner function
+    "TRY400",   # use logging.exception instead of logging.error
 ]
 
 [tool.ruff.lint.per-file-ignores]
