@@ -401,6 +401,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
 #############################################################################
 def main() -> None:
+    """API for command line clients."""
     Job().run_main(sys.argv)
 
 
@@ -424,6 +425,7 @@ class Job:
         self.is_test_mode: bool = False  # for testing only
 
     def run_main(self, sys_argv: list[str]) -> None:
+        """API for Python clients; visible for testing; may become a public API eventually."""
         self.first_exception = None
         log = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
@@ -488,15 +490,15 @@ class Job:
                 "substitution token to prevent collisions on writing destination datasets. "
                 f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(basis_src_hosts)}"
             )
+        if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
+            random.shuffle(src_hosts)
+            dst_hosts = shuffle_dict(dst_hosts)
         ssh_src_user = args.ssh_src_user if args.ssh_src_user is not None else args.src_user  # --src-user is deprecated
         ssh_dst_user = args.ssh_dst_user if args.ssh_dst_user is not None else args.dst_user  # --dst-user is deprecated
         ssh_src_port = args.ssh_src_port
         ssh_dst_port = args.ssh_dst_port
         ssh_src_config_file = args.ssh_src_config_file
         ssh_dst_config_file = args.ssh_dst_config_file
-        if args.jitter:  # randomize host order to avoid potential thundering herd problems in large distributed systems
-            random.shuffle(src_hosts)
-            dst_hosts = shuffle_dict(dst_hosts)
         job_id = sanitize(args.job_id)
         job_run = args.job_run if args.job_run is not None else args.jobid  # --jobid is deprecated; was renamed to --job-run
         job_run = sanitize(job_run) if job_run else uuid.uuid1().hex
@@ -557,9 +559,9 @@ class Job:
                 opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
                 opts += [f"--log-file-infix={sep}{job_id}"]
                 opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}"]
-                opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
-                opts += [f"--ssh-src-port={ssh_src_port}"] if ssh_src_port else []
-                opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
+                self.add_ssh_opts(
+                    opts, ssh_src_user=ssh_src_user, ssh_src_port=ssh_src_port, ssh_src_config_file=ssh_src_config_file
+                )
                 opts += ["--"]
                 opts += flatten(dedupe([(resolve_dataset(src_host, src), dummy) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/create-src-snapshots"
@@ -574,12 +576,15 @@ class Job:
                     )
                     if len(opts) > 0:
                         opts += [f"--daemon-frequency={args.daemon_replication_frequency}"]
-                        opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
-                        opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
-                        opts += [f"--ssh-src-port={ssh_src_port}"] if ssh_src_port else []
-                        opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
-                        opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
-                        opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
+                        self.add_ssh_opts(
+                            opts,
+                            ssh_src_user=ssh_src_user,
+                            ssh_dst_user=ssh_dst_user,
+                            ssh_src_port=ssh_src_port,
+                            ssh_dst_port=ssh_dst_port,
+                            ssh_src_config_file=ssh_src_config_file,
+                            ssh_dst_config_file=ssh_dst_config_file,
+                        )
                         opts += ["--"]
                         dataset_pairs = [
                             (resolve_dataset(src_host, src), resolve_dst_dataset(dst_hostname, dst))
@@ -600,9 +605,9 @@ class Job:
                     f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",  # noqa: B023
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
-                opts += [f"--ssh-dst-user={ssh_src_user}"] if ssh_src_user else []
-                opts += [f"--ssh-dst-port={ssh_src_port}"] if ssh_src_port else []
-                opts += [f"--ssh-dst-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
+                self.add_ssh_opts(  # i.e. dst=src, src=dummy
+                    opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
+                )
                 opts += ["--"]
                 opts += flatten(
                     dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])  # noqa: B023
@@ -635,9 +640,9 @@ class Job:
                     opts += [f"--log-file-infix={sep}{job_id}"]
                     opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, dst_hostname)}{sep}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
-                    opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
-                    opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
-                    opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
+                    self.add_ssh_opts(
+                        opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
+                    )
                     opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
@@ -679,9 +684,9 @@ class Job:
                 marker = "monitor-src-snapshots"
                 monitor_plan = build_monitor_plan(monitor_snapshot_plan, src_snapshot_plan, "src_snapshot_")
                 opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, ""))
-                opts += [f"--ssh-dst-user={ssh_src_user}"] if ssh_src_user else []
-                opts += [f"--ssh-dst-port={ssh_src_port}"] if ssh_src_port else []
-                opts += [f"--ssh-dst-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
+                self.add_ssh_opts(  # i.e. dst=src, src=dummy
+                    opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
+                )
                 opts += ["--"]
                 opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 subjob_name += "/" + marker
@@ -698,9 +703,9 @@ class Job:
                     }
                     monitor_plan = build_monitor_plan(monitor_plan, dst_snapshot_plan, "dst_snapshot_")
                     opts = monitor_snapshots_opts(marker, monitor_plan, log_suffix(lhn, src_host, dst_hostname))
-                    opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
-                    opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
-                    opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
+                    self.add_ssh_opts(
+                        opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
+                    )
                     opts += ["--"]
                     dataset_pairs = [(dummy, resolve_dst_dataset(dst_hostname, dst)) for src, dst in args.root_dataset_pairs]
                     dataset_pairs = self.skip_nonexisting_local_dst_pools(dataset_pairs)
@@ -791,6 +796,24 @@ class Job:
             else:
                 self.log.warning("Skipping dst dataset for which local dst pool does not exist: %s", dst)
         return results
+
+    @staticmethod
+    def add_ssh_opts(
+        opts: list[str],
+        ssh_src_user: str | None = None,
+        ssh_dst_user: str | None = None,
+        ssh_src_port: str | None = None,
+        ssh_dst_port: str | None = None,
+        ssh_src_config_file: str | None = None,
+        ssh_dst_config_file: str | None = None,
+    ) -> None:
+        assert isinstance(opts, list)
+        opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
+        opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
+        opts += [f"--ssh-src-port={ssh_src_port}"] if ssh_src_port else []
+        opts += [f"--ssh-dst-port={ssh_dst_port}"] if ssh_dst_port else []
+        opts += [f"--ssh-src-config-file={ssh_src_config_file}"] if ssh_src_config_file else []
+        opts += [f"--ssh-dst-config-file={ssh_dst_config_file}"] if ssh_dst_config_file else []
 
     def run_subjobs(
         self,
@@ -1057,9 +1080,10 @@ class Job:
         if sys.platform == "linux":
             try:
                 proc = subprocess.run(["hostname", "-I"], stdin=DEVNULL, stdout=PIPE, text=True, check=True)  # noqa: S607
-                return {ip for ip in proc.stdout.strip().split() if ip}
-            except BaseException as e:
+            except Exception as e:
                 self.log.warning("Cannot run 'hostname -I' on localhost: %s", e)
+            else:
+                return {ip for ip in proc.stdout.strip().split() if ip}
         return set()
 
 
