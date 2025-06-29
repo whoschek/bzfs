@@ -18,6 +18,7 @@ import sys
 import unittest
 
 from bzfs_tests.test_utils import suite as test_utils_suite
+from bzfs_tests.test_progress_reporter import suite as test_progress_reporter_utils_suite
 from bzfs_tests.test_bzfs import suite as test_bzfs_suite
 from bzfs_tests.test_jobrunner import suite as test_jobrunner_suite
 from bzfs_tests.test_integrations import suite as test_integrations_suite
@@ -27,6 +28,7 @@ from bzfs_main.bzfs import getenv_any
 def main() -> None:
     suite = unittest.TestSuite()
     suite.addTests(test_utils_suite())
+    suite.addTests(test_progress_reporter_utils_suite())
     suite.addTests(test_bzfs_suite())
     suite.addTests(test_jobrunner_suite())
     test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing

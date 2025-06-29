@@ -20,9 +20,11 @@ import stat
 import sys
 import tempfile
 import unittest
+import contextlib
 from typing import (
     Any,
     Callable,
+    Iterator,
     Sequence,
     Union,
     cast,
@@ -856,3 +858,12 @@ class TestXFinally(unittest.TestCase):
         self.assertIsInstance(cm.exception.exceptions[0], ValueError)
         self.assertIsInstance(cm.exception.exceptions[1], RuntimeError)
         cleanup.assert_called_once()
+
+
+@contextlib.contextmanager
+def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
+    """Context manager to mimic UnitTest.subTest() but stop on first failure"""
+    try:
+        yield
+    except AssertionError as e:
+        raise AssertionError(f"SubTest failed with parameters: {params}") from e
