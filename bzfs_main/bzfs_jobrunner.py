@@ -247,7 +247,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     parser.add_argument(
         "--src-snapshot-plan", default="{}", metavar="DICT_STRING",
         help="Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src. "
-             "Snapshots that do not match a retention period will be deleted. A zero within a retention period indicates "
+             "Snapshots that do not match a retention period will be deleted. A zero or missing retention period indicates "
              "that no snapshots shall be retained (or even be created) for the given period.\n\n"
              f"Example: `{format_dict(src_snapshot_plan_example)}`. This example will, for the organization 'prod' and "
              "the intended logical target 'onsite', create and then retain secondly snapshots that were created less "

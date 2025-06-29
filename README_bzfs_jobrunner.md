@@ -322,9 +322,9 @@ usage: bzfs_jobrunner [-h] [--create-src-snapshots] [--replicate []]
 **--src-snapshot-plan** *DICT_STRING*
 
 *  Retention periods for snapshots to be used if pruning src, and when creating new snapshots on
-    src. Snapshots that do not match a retention period will be deleted. A zero within a retention
-    period indicates that no snapshots shall be retained (or even be created) for the given
-    period.
+    src. Snapshots that do not match a retention period will be deleted. A zero or missing
+    retention period indicates that no snapshots shall be retained (or even be created) for the
+    given period.
 
     Example: `"{'prod': {'onsite': {'secondly': 40, 'minutely': 40, 'hourly': 36,
     'daily': 31, 'weekly': 12, 'monthly': 18, 'yearly': 5}, 'us-west-1': {'secondly':

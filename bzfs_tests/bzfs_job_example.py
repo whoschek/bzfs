@@ -29,6 +29,7 @@
 import argparse
 import os
 import pathlib
+import pwd
 import subprocess
 import sys
 
@@ -134,6 +135,7 @@ org = "prod"
 # Retention periods for snapshots to be used if pruning src, and when creating new snapshots on src.
 # For example, "daily": 31 specifies to retain all daily snapshots that were created less than 31 days ago, and
 # ensure that the latest 31 daily snapshots (per dataset) are retained regardless of creation time.
+# A zero or missing retention period indicates that no snapshots shall be retained (or even be created) for the given period.
 # Each target of each organization can have separate retention periods.
 # Uses snapshot names like 'prod_onsite_<timestamp>_daily', 'prod_onsite_<timestamp>_minutely', etc.:
 # src_snapshot_plan = {
@@ -252,8 +254,8 @@ jitter = False  # don't randomize
 worker_timeout_seconds = None
 
 
-home_dir = os.path.expanduser("~")
-basename_stem = pathlib.Path(sys.argv[0]).stem  # stem is basename without file extension ("bzfs_job_example")
+home_dir = pwd.getpwuid(os.getuid()).pw_dir  # returns the user's home directory without reading the $HOME Unix env var
+basename_stem = pathlib.Path(sys.argv[0]).stem  # the file's stem is the basename without file extension ("bzfs_job_example")
 extra_args = []
 extra_args += [f"--job-id={basename_stem}"]
 extra_args += [f"--log-dir={os.path.join(home_dir, 'bzfs-job-logs', 'bzfs-logs-' + basename_stem)}"]
