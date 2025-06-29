@@ -58,7 +58,6 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
         TestAdditionalHelpers,
-        TestRunWithRetries,
         TestTerminateProcessSubtree,
         TestSubprocessRun,
         TestParseDatasetLocator,
@@ -1542,125 +1541,6 @@ class TestAdditionalHelpers(unittest.TestCase):
         args_valid = argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={valid_opts}"])
         params_valid = bzfs.Params(args_valid)
         self.assertIn("-q", params_valid.mbuffer_program_opts)
-
-
-#############################################################################
-class TestRunWithRetries(unittest.TestCase):
-
-    def test_retry_policy_repr(self) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--retries=2",
-                "--retry-min-sleep-secs=0.1",
-                "--retry-max-sleep-secs=0.5",
-                "--retry-max-elapsed-secs=1",
-            ]
-        )
-        params = bzfs.Params(args)
-        rp = bzfs.RetryPolicy(args, params)
-        self.assertIn("retries: 2", repr(rp))
-
-    @patch("time.sleep")
-    def test_run_with_retries_success(self, mock_sleep: MagicMock) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--retries=2",
-                "--retry-min-sleep-secs=0",
-                "--retry-max-sleep-secs=0",
-                "--retry-max-elapsed-secs=1",
-            ]
-        )
-        params = bzfs.Params(args, log=logging.getLogger())
-        job = bzfs.Job()
-        job.params = params
-        calls: list[int] = []
-
-        def fn(*, retry: bzfs.Retry) -> str:
-            calls.append(retry.count)
-            if retry.count < 2:
-                raise bzfs.RetryableError("fail", no_sleep=(retry.count == 0)) from ValueError("boom")
-            return "ok"
-
-        self.assertEqual("ok", job.run_with_retries(params.retry_policy, fn))
-        self.assertEqual([0, 1, 2], calls)
-
-    @patch("time.sleep")
-    def test_run_with_retries_gives_up(self, mock_sleep: MagicMock) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--retries=1",
-                "--retry-min-sleep-secs=0",
-                "--retry-max-sleep-secs=0",
-                "--retry-max-elapsed-secs=1",
-            ]
-        )
-        params = bzfs.Params(args, log=logging.getLogger())
-        job = bzfs.Job()
-        job.params = params
-
-        def fn(*, retry: bzfs.Retry) -> None:
-            raise bzfs.RetryableError("fail", no_sleep=True) from ValueError("boom")
-
-        with self.assertRaises(ValueError):
-            job.run_with_retries(params.retry_policy, fn)
-
-    @patch("time.sleep")
-    def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--retries=0",
-                "--retry-min-sleep-secs=0",
-                "--retry-max-sleep-secs=0",
-                "--retry-max-elapsed-secs=1",
-            ]
-        )
-        log_mock = MagicMock(spec=logging.Logger)
-        params = bzfs.Params(args, log=log_mock)
-        job = bzfs.Job()
-        job.params = params
-
-        def fn(*, retry: bzfs.Retry) -> None:
-            raise bzfs.RetryableError("fail") from ValueError("boom")
-
-        with self.assertRaises(ValueError):
-            job.run_with_retries(params.retry_policy, fn)
-        log_mock.warning.assert_not_called()
-        mock_sleep.assert_not_called()
-
-    @patch("time.sleep")
-    def test_run_with_retries_elapsed_time(self, mock_sleep: MagicMock) -> None:
-        args = argparser_parse_args(
-            [
-                "src",
-                "dst",
-                "--retries=5",
-                "--retry-min-sleep-secs=0",
-                "--retry-max-sleep-secs=0",
-                "--retry-max-elapsed-secs=0",
-            ]
-        )
-        log_mock = MagicMock(spec=logging.Logger)
-        params = bzfs.Params(args, log=log_mock)
-        job = bzfs.Job()
-        job.params = params
-        max_elapsed = params.retry_policy.max_elapsed_nanos
-
-        with patch("time.monotonic_ns", side_effect=[0, max_elapsed + 1]):
-
-            def fn(*, retry: bzfs.Retry) -> None:
-                raise bzfs.RetryableError("fail", no_sleep=True) from ValueError("boom")
-
-            with self.assertRaises(ValueError):
-                job.run_with_retries(params.retry_policy, fn)
-        log_mock.warning.assert_called_once()
 
 
 #############################################################################

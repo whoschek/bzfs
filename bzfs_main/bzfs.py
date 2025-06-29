@@ -100,11 +100,20 @@ from typing import (
     Union,
     cast,
 )
-from bzfs_main.period_anchors import PeriodAnchors, round_datetime_up_to_duration_multiple
+from bzfs_main.period_anchors import (
+    PeriodAnchors,
+    round_datetime_up_to_duration_multiple,
+)
 from bzfs_main.progress_reporter import (
     ProgressReporter,
     count_num_bytes_transferred_by_zfs_send,
     pv_file_thread_separator,
+)
+from bzfs_main.retries import (
+    Retry,
+    RetryPolicy,
+    RetryableError,
+    run_with_retries,
 )
 from bzfs_main.utils import (
     SmallPriorityQueue,
@@ -1694,7 +1703,7 @@ class Params:
         self.skip_parent: bool = args.skip_parent
         self.skip_missing_snapshots: str = args.skip_missing_snapshots
         self.skip_on_error: str = args.skip_on_error
-        self.retry_policy: RetryPolicy = RetryPolicy(args, self)
+        self.retry_policy: RetryPolicy = RetryPolicy(args)
         self.skip_replication: bool = args.skip_replication
         self.delete_dst_snapshots: bool = args.delete_dst_snapshots is not None
         self.delete_dst_bookmarks: bool = args.delete_dst_snapshots == "bookmarks"
@@ -1978,34 +1987,6 @@ class CopyPropertiesConfig:
 
     def __repr__(self) -> str:
         return str(self.__dict__)
-
-
-#############################################################################
-class RetryPolicy:
-    def __init__(self, args: argparse.Namespace, p: Params) -> None:
-        """Option values for retries; reads from ArgumentParser via args."""
-        # immutable variables:
-        self.retries: int = args.retries
-        self.min_sleep_secs: float = args.retry_min_sleep_secs
-        self.max_sleep_secs: float = args.retry_max_sleep_secs
-        self.max_elapsed_secs: float = args.retry_max_elapsed_secs
-        self.min_sleep_nanos: int = int(self.min_sleep_secs * 1_000_000_000)
-        self.max_sleep_nanos: int = int(self.max_sleep_secs * 1_000_000_000)
-        self.max_elapsed_nanos: int = int(self.max_elapsed_secs * 1_000_000_000)
-        self.min_sleep_nanos = max(1, self.min_sleep_nanos)
-        self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
-
-    def __repr__(self) -> str:
-        return (
-            f"retries: {self.retries}, min_sleep_secs: {self.min_sleep_secs}, "
-            f"max_sleep_secs: {self.max_sleep_secs}, max_elapsed_secs: {self.max_elapsed_secs}"
-        )
-
-
-#############################################################################
-@dataclass(frozen=True)
-class Retry:
-    count: int
 
 
 #############################################################################
@@ -4398,40 +4379,6 @@ class Job:
             results.append(regex)
         return results
 
-    TRetryRun = TypeVar("TRetryRun")
-
-    def run_with_retries(self, policy: RetryPolicy, fn: Callable[..., TRetryRun], *args: Any, **kwargs: Any) -> TRetryRun:
-        """Runs the given function with the given arguments, and retries on failure as indicated by policy."""
-        log = self.params.log
-        max_sleep_mark = policy.min_sleep_nanos
-        retry_count = 0
-        sysrandom = None
-        start_time_nanos = time.monotonic_ns()
-        while True:
-            try:
-                return fn(*args, **kwargs, retry=Retry(retry_count))  # Call the target function with provided args
-            except RetryableError as retryable_error:
-                elapsed_nanos = time.monotonic_ns() - start_time_nanos
-                if retry_count < policy.retries and elapsed_nanos < policy.max_elapsed_nanos:
-                    retry_count += 1
-                    if retryable_error.no_sleep and retry_count <= 1:
-                        log.info(f"Retrying [{retry_count}/{policy.retries}] immediately ...")
-                    else:  # jitter: pick a random sleep duration within the range [min_sleep_nanos, max_sleep_mark] as delay
-                        sysrandom = random.SystemRandom() if sysrandom is None else sysrandom
-                        sleep_nanos = sysrandom.randint(policy.min_sleep_nanos, max_sleep_mark)
-                        log.info(f"Retrying [{retry_count}/{policy.retries}] in {human_readable_duration(sleep_nanos)} ...")
-                        time.sleep(sleep_nanos / 1_000_000_000)
-                        max_sleep_mark = min(policy.max_sleep_nanos, 2 * max_sleep_mark)  # exponential backoff with cap
-                else:
-                    if policy.retries > 0:
-                        log.warning(
-                            f"Giving up because the last [{retry_count}/{policy.retries}] retries across "
-                            f"[{elapsed_nanos // 1_000_000_000}/{policy.max_elapsed_nanos // 1_000_000_000}] "
-                            "seconds for the current request failed!"
-                        )
-                    assert retryable_error.__cause__ is not None
-                    raise retryable_error.__cause__ from None
-
     def incremental_send_steps_wrapper(
         self, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
     ) -> list[tuple[str, str, str, list[str]]]:
@@ -5252,7 +5199,7 @@ class Job:
         def _process_dataset(dataset: str, tid: str) -> bool:
             start_time_nanos = time.monotonic_ns()
             try:
-                return self.run_with_retries(p.retry_policy, process_dataset, dataset, tid)
+                return run_with_retries(log, p.retry_policy, process_dataset, dataset, tid)
             finally:
                 elapsed_nanos = time.monotonic_ns() - start_time_nanos
                 log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
@@ -6846,15 +6793,6 @@ def validate_log_config_dict(config: dict) -> None:
     elif isinstance(config, list):
         for item in config:
             validate_log_config_dict(item)
-
-
-#############################################################################
-class RetryableError(Exception):
-    """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
-
-    def __init__(self, message: str, no_sleep: bool = False) -> None:
-        super().__init__(message)
-        self.no_sleep: bool = no_sleep
 
 
 #############################################################################
