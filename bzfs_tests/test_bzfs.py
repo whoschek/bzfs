@@ -33,16 +33,16 @@ import threading
 import time
 import unittest
 from collections import defaultdict
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from subprocess import PIPE
-from typing import Any, Iterator, List, Tuple, Union, cast
+from typing import Any, List, Tuple, Union, cast
 from unittest.mock import patch, mock_open, MagicMock
 
 from bzfs_main import bzfs
 from bzfs_main.bzfs import getenv_any, log_trace, Remote, PeriodAnchors
+from bzfs_tests.test_utils import stop_on_failure_subtest
 from bzfs_tests.zfs_util import is_solaris_zfs
 
 # constants:
@@ -5010,12 +5010,3 @@ class TestPerformance(unittest.TestCase):
                     self.assertTrue(stdout)
                 secs = (time.time_ns() - start_time_nanos) / 1000_000_000
                 print(f"close_fds={close_fds}: Took {secs:.1f} seconds, iters/sec: {iters/secs:.1f}")
-
-
-@contextmanager
-def stop_on_failure_subtest(**params: Any) -> Iterator[None]:
-    """Context manager to mimic UnitTest.subTest() but stop on first failure"""
-    try:
-        yield
-    except AssertionError as e:
-        raise AssertionError(f"SubTest failed with parameters: {params}") from e
