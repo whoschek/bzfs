@@ -47,7 +47,8 @@ from subprocess import DEVNULL, PIPE
 from typing import Any, Iterable, TypeVar, Union
 
 from bzfs_main import bzfs
-from bzfs_main.bzfs import die_status, log_trace, prog_name as bzfs_prog_name
+from bzfs_main.bzfs import die_status, log_trace
+from bzfs_main.bzfs import prog_name as bzfs_prog_name
 from bzfs_main.parallel_engine import BARRIER_CHAR, process_datasets_in_parallel_and_fault_tolerant
 from bzfs_main.utils import human_readable_duration, percent, shuffle_dict
 

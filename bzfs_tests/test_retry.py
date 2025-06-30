@@ -16,9 +16,9 @@ from __future__ import annotations
 import argparse
 import unittest
 from logging import Logger
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from bzfs_main.retry import Retry, RetryableError, run_with_retries, RetryPolicy
+from bzfs_main.retry import Retry, RetryableError, RetryPolicy, run_with_retries
 
 
 #############################################################################

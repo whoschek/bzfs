@@ -19,8 +19,7 @@ import subprocess
 import sys
 import tempfile
 
-from bzfs_main import bzfs
-from bzfs_main import bzfs_jobrunner
+from bzfs_main import bzfs, bzfs_jobrunner
 from bzfs_main.utils import find_match
 
 

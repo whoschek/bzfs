@@ -34,10 +34,10 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
 from typing import Any, List, Tuple, Union, cast
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import MagicMock, mock_open, patch
 
 from bzfs_main import bzfs
-from bzfs_main.bzfs import getenv_any, log_trace, Remote
+from bzfs_main.bzfs import Remote, getenv_any, log_trace
 from bzfs_tests.test_utils import stop_on_failure_subtest
 from bzfs_tests.zfs_util import is_solaris_zfs
 
@@ -2772,6 +2772,7 @@ class TestPythonVersionCheck(unittest.TestCase):
     def test_version_below_3_8(self, mock_exit: MagicMock) -> None:
         with patch("sys.stderr"):
             import importlib
+
             from bzfs_main import bzfs
 
             importlib.reload(bzfs)  # Reload module to apply version patch
@@ -2781,6 +2782,7 @@ class TestPythonVersionCheck(unittest.TestCase):
     @patch("sys.version_info", new=(3, 8))
     def test_version_3_8_or_higher(self, mock_exit: MagicMock) -> None:
         import importlib
+
         from bzfs_main import bzfs
 
         importlib.reload(bzfs)  # Reload module to apply version patch

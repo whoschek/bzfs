@@ -25,13 +25,13 @@ import subprocess
 import threading
 import time
 import types
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from subprocess import DEVNULL, PIPE
 from typing import (
+    IO,
     Any,
     Callable,
     Generic,
-    IO,
     ItemsView,
     Iterable,
     Iterator,

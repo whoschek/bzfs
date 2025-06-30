@@ -69,22 +69,24 @@ import sys
 import tempfile
 import threading
 import time
-from collections import defaultdict, deque, Counter
-from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
+from collections import Counter, defaultdict, deque
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
-from os import stat as os_stat, utime as os_utime
-from os.path import exists as os_path_exists, join as os_path_join
+from os import stat as os_stat
+from os import utime as os_utime
+from os.path import exists as os_path_exists
+from os.path import join as os_path_join
 from pathlib import Path
-from subprocess import CalledProcessError, DEVNULL, PIPE
+from subprocess import DEVNULL, PIPE, CalledProcessError
 from typing import (
+    IO,
     Any,
     Callable,
     Dict,
     Final,
     Generator,
-    IO,
     Iterable,
     Iterator,
     List,
@@ -100,6 +102,7 @@ from typing import (
     cast,
 )
 
+import bzfs_main.utils
 from bzfs_main.parallel_engine import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
@@ -114,10 +117,9 @@ from bzfs_main.progress_reporter import (
 )
 from bzfs_main.retry import (
     Retry,
-    RetryPolicy,
     RetryableError,
+    RetryPolicy,
 )
-import bzfs_main.utils
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
     SmallPriorityQueue,

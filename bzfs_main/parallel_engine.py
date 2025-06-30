@@ -19,7 +19,7 @@ import heapq
 import os
 import subprocess
 import time
-from concurrent.futures import ThreadPoolExecutor, Future, FIRST_COMPLETED
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
 from logging import Logger
 from typing import (
     Any,

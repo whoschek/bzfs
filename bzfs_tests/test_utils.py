@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+import contextlib
 import errno
 import os
 import re
@@ -25,7 +26,6 @@ import tempfile
 import threading
 import time
 import unittest
-import contextlib
 from subprocess import PIPE
 from typing import (
     Any,

@@ -15,24 +15,24 @@
 from __future__ import annotations
 import argparse
 import glob
+import os
 import re
 import selectors
 import sys
-import os
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from logging import Logger
+from pathlib import Path
 from typing import (
     IO,
     NamedTuple,
 )
-from pathlib import Path
 
 import bzfs_main.utils
-from bzfs_main.utils import human_readable_bytes, InterruptibleSleep
+from bzfs_main.utils import InterruptibleSleep, human_readable_bytes
 
 # constants
 pv_file_thread_separator = "_"

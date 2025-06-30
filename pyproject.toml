@@ -127,6 +127,7 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "F",    # pyflakes
     "FA",   # forward annotations
     "G",    # flake8-logging-format
+    "I",    # sort imports
     "INP",  # flake8-no-pep420
     "LOG",  # flake8-logging
     "N8",   # naming, snake case
@@ -184,6 +185,12 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 
 [tool.ruff.lint.flake8-copyright]
 author = "Wolfgang Hoschek"
+
+[tool.ruff.lint.isort]
+known-first-party = ["bzfs_*"]
+no-lines-before = ["standard-library"]  # no blank line before std-lib
+lines-between-types = 0  # keep `import ...` and `from ...` tight
+split-on-trailing-comma = true  # retain multi-line blocks when a trailing comma is present
 
 [tool.mypy]
 python_version = "3.8"

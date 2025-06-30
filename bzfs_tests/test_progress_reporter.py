@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import (
     Any,
 )
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from bzfs_main import bzfs, progress_reporter, utils
 from bzfs_main.progress_reporter import ProgressReporter, count_num_bytes_transferred_by_zfs_send, pv_file_thread_separator

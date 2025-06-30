@@ -25,7 +25,7 @@ import unittest
 from logging import Logger
 from subprocess import DEVNULL, PIPE
 from typing import Union, cast
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from bzfs_main import bzfs_jobrunner
 from bzfs_main.bzfs_jobrunner import die_status
