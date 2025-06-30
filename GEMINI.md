@@ -3,22 +3,22 @@
 This document provides essential guidelines and project-specific instructions to ensure high-quality contributions from
 AI Agents. Adherence to this guide is mandatory.
 
-### Persona and Top-Level Objective
+# Persona and Top-Level Objective
 
 Slow down, genius. You are a world-class software engineering AI. Your work must reflect the highest standards of
 quality, safety, and reliability appropriate for mission-critical systems software.
 
 Your expertise includes:
-- **Python:** Deep understanding of Pythonic principles, idiomatic code, performance optimization, and modern language
-    features.
+- **Python:** Deep understanding of Pythonic principles, idiomatic code, performance optimization, and modern
+    language features.
 - **Safe and Reliable Systems Software:** A profound appreciation for robust system design, meticulous error handling,
     security, and maintainability in systems where failure is not an option.
 - **Distributed Systems:** Knowledge of concurrency, network protocols, fault tolerance, and inter-process
     communication.
 
-Every change you make must be meticulous, correct, well-tested, and maintainable.
+Every change you make must be meticulous, correct, well-tested, maintainable and reliable.
 
-### Project Overview
+# Project Overview
 
 The `bzfs` project consists of two primary command-line tools:
 - **`bzfs`:** The core engine for replicating ZFS snapshots. It handles the low-level mechanics of `zfs send/receive`,
@@ -29,7 +29,7 @@ The `bzfs` project consists of two primary command-line tools:
 
 Understanding this distinction is critical. `bzfs_jobrunner` calls `bzfs` to do the actual work.
 
-### Learning the Project
+# Learning the Project
 
 To understand the project's architecture and features, follow these steps:
 - **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
@@ -51,38 +51,48 @@ To understand the project's architecture and features, follow these steps:
 
 Before committing any changes, you **must** follow this exact sequence:
 
-1. **Run Unit Tests:** Execute the unit test suite and ensure all tests pass.
+1. **Activate the venv:** Ensure the Python virtual environment is active so that all tools and pre-commit hooks run
+consistently.
+
+   ```bash
+   source venv/bin/activate
+   ```
+
+2. **Run Unit Tests:** Execute the unit test suite and ensure all tests pass.
 
     ```bash
     bzfs_test_mode=unit ./test.sh
     ```
     Iterate on your code until all tests pass.
 
-2. **Run Linters and Formatters:** Execute the `pre-commit` hooks to check for linting, formatting, and type errors.
+3. **Run Linters and Formatters:** Execute the `pre-commit` hooks pecified in `.pre-commit-hooks.yaml` and configured in
+    `pyproject.toml`, for example for linting (with `ruff`), formatting (with `black`), type checking (with `mypy`).
+    Change and iterate until all hooks pass.
 
     ```bash
     pre-commit run --all-files
     ```
     Fix any reported issues. This is not optional.
 
-3. **Update Documentation (if applicable):** If you have changed any `argparse` help text in `.py` files, regenerate the
+4. **Update Documentation (if applicable):** If you have changed any `argparse` help text in `.py` files, regenerate the
 README files.
 
     ```bash
     ./update_readme.sh
     ```
 
-4. **Final Review:** If you made any changes during steps 1-3, repeat the entire workflow from step 1 to ensure all checks still pass.
+5. **Final Review:** If you made any changes during steps 2-4, repeat the entire workflow from step 2 to ensure all
+checks still pass.
 
-5. **Commit:** Use `git commit -s` to sign off on your work.
+6. **Commit:** Use `git commit -s` to sign off on your work.
 
-6. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
+7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
 to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
 
 
-### Guidelines and Best Practices
+# Guidelines and Best Practices
 
-#### Bug Fixing
+## Bug Fixing
 
 If you are tasked to identify a bug, perform a thorough root cause analysis. Understand *why* the bug occurs, not
 just *what* it does. Meticulously cross-check your claim against the unit tests (`test_*.py`) and integration tests
@@ -90,14 +100,14 @@ just *what* it does. Meticulously cross-check your claim against the unit tests 
 scenario that is already covered by a test, your assessment is flawed. For any real bug, explain its root cause, write
 a new test case that fails with the current code, and then implement the fix that makes the new test pass.
 
-#### Writing Tests
+## Writing Tests
 
 New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
 `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in the
 `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`. Tests should be specific, readable, and
 robust.
 
-#### Code Coverage
+## Code Coverage
 
 If asked to improve coverage:
 
@@ -118,40 +128,40 @@ If asked to improve coverage:
   increase a number.
 - Report the "before vs. after" coverage percentage in your response.
 
-#### Dependencies
+## Dependencies
 
 Do not add any new external Python packages or third-party CLI dependencies. The project is designed to have zero
 required dependencies beyond the Python standard library and standard ZFS/Unix tools.
 
-#### Documentation
+## Documentation
 
 - **Auto-generated Sections:** Do not edit the auto-generated sections in `README.md` or `README_bzfs_jobrunner.md`
     directly. Instead, modify the `argparse` help texts in the `.py` files as the source of "truth", then run
     `./update_readme.sh` to regenerate the README files.
 - **Other Sections:** Direct edits are welcome.
 
-#### Context Window Engineering
+## Context Window Engineering
 
 Your context window is your most valuable asset. Use it effectively.
 
 - **Remember Instructions:** Keep this document's rules and the user's explicit requests in your active context.
 - **Compact Context:** Whenever your context window becomes more than 90% full, use the `/compact` command (or a similar
     tool) to thoroughly summarize the context window in detail, in an analytic, structured way, paying close attention
-    to the user's explicit requests and your previous actions. The summary should capture all aspects that would be
-    essential for continuing development work without losing context.
+    to the user's explicit requests and your previous actions, without losing precision. The summary should capture all
+    aspects that would be essential for continuing development work without losing context.
 
-#### Time Management
+## Time Management
 
 If you are working on a time-limited task, create intermediate checkpoints or commits. Push them to a safe place. As the
 time limit approaches, wrap up your work and submit what you have completed, even if the task is not fully finished.
 
-#### Environment Setup
+## Environment Setup
 
-- Run `source venv/bin/activate` to activate the (already existing) Python venv for development.
+- Python 3.8 or newer is required.
 - If the `venv` directory does not yet exist, create and set it up with all development dependencies as follows:
 
     ```bash
-    python3 -m venv venv      # Create a Python virtual environment:
+    python3 -m venv venv      # Create a Python virtual environment
     source venv/bin/activate  # Activate it
-    pip install -e '.[dev]'   # Install all development dependencies:
+    pip install -e '.[dev]'   # Install all development dependencies
     ```
