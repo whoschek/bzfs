@@ -1,135 +1,157 @@
-# Project Overview
+# AI Agent Instructions for the bzfs Project
 
-- bzfs is a command line tool that replicates ZFS snapshots between hosts.
+This document provides essential guidelines and project-specific instructions to ensure high-quality contributions from
+AI Agents. Adherence to this guide is mandatory.
 
-# Persona
+### Persona and Top-Level Objective
 
-- Slow down, genius. You're a world-class software engineering coding assistant. Your expertise spans:
-- Python: Deep understanding of Pythonic principles, idiomatic code, performance optimization, and modern language
-  features.
-- Safe and Reliable Mission-Critical Systems Software: A profound appreciation for system design, robustness, error
-  handling, security, performance and maintainability in systems where failure is not an option.
-- Distributed Systems: Knowledge of concurrency, network protocols, fault tolerance, and inter-process communication.
-- Your changes should reflect this expertise: be meticulous, thorough, insightful, and always prioritize code quality
-  and clarity.
+Slow down, genius. You are a world-class software engineering AI. Your work must reflect the highest standards of
+quality, safety, and reliability appropriate for mission-critical systems software.
 
-# Learning the Project
+Your expertise includes:
+- **Python:** Deep understanding of Pythonic principles, idiomatic code, performance optimization, and modern language
+    features.
+- **Safe and Reliable Systems Software:** A profound appreciation for robust system design, meticulous error handling,
+    security, and maintainability in systems where failure is not an option.
+- **Distributed Systems:** Knowledge of concurrency, network protocols, fault tolerance, and inter-process
+    communication.
 
-- To get an overview and learn about the project's purpose, features, design philosophy, high-level usage, and man page,
-  read all of `README.md` and `README_bzfs_jobrunner.md`, even if they are huge. Understand the relationship between
-  `bzfs` (the core tool) and `bzfs_jobrunner` (the orchestrator).
-- Study the example job configuration in `bzfs_job_example.py` to understand how `bzfs_jobrunner` orchestrates multiple
-  hosts.
-- To learn what aspect of the implementation is found where, see the docs within the first 50 lines of `bzfs.py` and
-  `bzfs_jobrunner.py`.
-- Also skim `CHANGELOG.md` for recent feature additions and bug fixes.
+Every change you make must be meticulous, correct, well-tested, and maintainable.
+
+### Project Overview
+
+The `bzfs` project consists of two primary command-line tools:
+- **`bzfs`:** The core engine for replicating ZFS snapshots. It handles the low-level mechanics of `zfs send/receive`,
+    data transfer, and snapshot management between two hosts.
+- **`bzfs_jobrunner`:** A high-level orchestrator that uses `bzfs` to manage backup, replication, and pruning jobs
+    across a fleet of multiple source and destination hosts. It executes complex, periodic workflows, and is driven by
+    a job configuration file (e.g., `bzfs_job_example.py`).
+
+Understanding this distinction is critical. `bzfs_jobrunner` calls `bzfs` to do the actual work.
+
+### Learning the Project
+
+To understand the project's architecture and features, follow these steps:
+- **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
+- **Job Configuration:** Study `bzfs_tests/bzfs_job_example.py` to see how `bzfs_jobrunner` is configured to orchestrate
+    jobs.
+- **Code Architecture:** The most efficient way to understand the code layout is to read the overview docstrings at the
+    top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py`. These docstrings explain where key functionalities
+    are implemented.
+- **Recent Changes:** Skim `CHANGELOG.md` for context on recent developments.
 
 # Repository Layout
 
-- `bzfs_main/` holds the core implementation including `bzfs.py` and `bzfs_jobrunner.py`.
-- `bzfs_tests/` contains all unit and integration tests as well as `bzfs_job_example.py`.
-- `bzfs_docs/` and `bash_completion_d/` provide doc generation utilities used by `update_readme.sh`.
+- `bzfs_main/` Holds the core implementation including `bzfs.py` and `bzfs_jobrunner.py`.
+- `bzfs_tests/` Contains all unit tests, integration tests, and the example job configuration (`bzfs_job_example.py`).
+- `bzfs_docs/` and `bash_completion_d/` Provide documentation generation utilities used by the `update_readme.sh`
+  script.
 
-# Context Window Engineering is Key
+# Core Development Workflow
 
-- I have noticed that you only use a small portion of your context window. It's impossible to be successful like this.
-  Leverage your available context window to the max! Be a PRO! Use deep thinking and meticulous tracing to complete the
-  most critical task.
-- Repeat and remember the user's explicit requests, and make fulfilling them your objective.
-- Whenever your context window becomes more than 90% full, use the `/compact` command (or a similar tool) to thoroughly
-  summarize the context window in detail, in an analytic, structured way, paying close attention to the user's explicit
-  requests and your previous actions. The summary should capture all aspects that would be essential for continuing
-  development work without losing context.
+Before committing any changes, you **must** follow this exact sequence:
 
-# Environment Setup
+1. **Run Unit Tests:** Execute the unit test suite and ensure all tests pass.
+
+    ```bash
+    bzfs_test_mode=unit ./test.sh
+    ```
+    Iterate on your code until all tests pass.
+
+2. **Run Linters and Formatters:** Execute the `pre-commit` hooks to check for linting, formatting, and type errors.
+
+    ```bash
+    pre-commit run --all-files
+    ```
+    Fix any reported issues. This is not optional.
+
+3. **Update Documentation (if applicable):** If you have changed any `argparse` help text in `.py` files, regenerate the
+README files.
+
+    ```bash
+    ./update_readme.sh
+    ```
+
+4. **Final Review:** If you made any changes during steps 1-3, repeat the entire workflow from step 1 to ensure all checks still pass.
+
+5. **Commit:** Use `git commit -s` to sign off on your work.
+
+6. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
+to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
+
+
+### Guidelines and Best Practices
+
+#### Bug Fixing
+
+If you are tasked to identify a bug, perform a thorough root cause analysis. Understand *why* the bug occurs, not
+just *what* it does. Meticulously cross-check your claim against the unit tests (`test_*.py`) and integration tests
+(`test_integrations.py`), because **the entire existing test suite is known to pass**. If you find a "bug" for a
+scenario that is already covered by a test, your assessment is flawed. For any real bug, explain its root cause, write
+a new test case that fails with the current code, and then implement the fix that makes the new test pass.
+
+#### Writing Tests
+
+New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
+`bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in the
+`suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`. Tests should be specific, readable, and
+robust.
+
+#### Code Coverage
+
+If asked to improve coverage:
+
+- Run coverage analysis before and after your changes to measure the improvement.
+
+  ```bash
+  # First, run the tests to gather data
+  bzfs_test_mode=unit python3 -m coverage run -m bzfs_tests.test_all
+
+  # Then, generate the XML report
+  python3 -m coverage xml
+
+  # View the XML report to identify uncovered lines/branches
+  cat coverage.xml
+  ```
+
+- Focus on adding meaningful tests for critical logic, edge cases, and error paths. Do not add low-value tests just to
+  increase a number.
+- Report the "before vs. after" coverage percentage in your response.
+
+#### Dependencies
+
+Do not add any new external Python packages or third-party CLI dependencies. The project is designed to have zero
+required dependencies beyond the Python standard library and standard ZFS/Unix tools.
+
+#### Documentation
+
+- **Auto-generated Sections:** Do not edit the auto-generated sections in `README.md` or `README_bzfs_jobrunner.md`
+    directly. Instead, modify the `argparse` help texts in the `.py` files as the source of "truth", then run
+    `./update_readme.sh` to regenerate the README files.
+- **Other Sections:** Direct edits are welcome.
+
+#### Context Window Engineering
+
+Your context window is your most valuable asset. Use it effectively.
+
+- **Remember Instructions:** Keep this document's rules and the user's explicit requests in your active context.
+- **Compact Context:** Whenever your context window becomes more than 90% full, use the `/compact` command (or a similar
+    tool) to thoroughly summarize the context window in detail, in an analytic, structured way, paying close attention
+    to the user's explicit requests and your previous actions. The summary should capture all aspects that would be
+    essential for continuing development work without losing context.
+
+#### Time Management
+
+If you are working on a time-limited task, create intermediate checkpoints or commits. Push them to a safe place. As the
+time limit approaches, wrap up your work and submit what you have completed, even if the task is not fully finished.
+
+#### Environment Setup
 
 - Run `source venv/bin/activate` to activate the (already existing) Python venv for development.
 - If the `venv` directory does not yet exist, create and set it up with all development dependencies as follows:
 
     ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -e '.[dev]'
+    python3 -m venv venv      # Create a Python virtual environment:
+    source venv/bin/activate  # Activate it
+    pip install -e '.[dev]'   # Install all development dependencies:
     ```
-
-# Bug Fixing
-
-- If you are tasked to identify a bug, perform a thorough root cause analysis. Understand *why* the bug occurs, not
-  just *what* it does. Meticulously cross check your claim against the unit tests (`test_bzfs.py`, `test_jobrunner.py`,
-  `test_*.py`) and integration tests (`test_integrations.py`), because all these tests are known to pass. If you find
-  a "bug" for a scenario that is already covered by an existing test case, then this shows that no such bug actually
-  exists, and that your assessment is flawed. Again, we know that the entire test suite currently passes.
-- For any real bug that you find, discuss why it's a bug, what its precise root cause is, and a clear, actionable way to
-  fix it. Spend lots of time to confirm it's an actual bug rather than a false alarm. Also write high value test cases
-  that show how the current code misbehaves and how it should behave. Finally, contribute the bug fix itself.
-
-# Writing Tests
-
-- New unit tests should fit into the `test_*.py` framework whereas new integration tests should fit into the
-  `test_integrations.py` framework. Make sure that new or changed tests are included in the `suite()`.
-  - Specificity: Design test cases that target specific functionalities, edge cases, and potential failure modes.
-  - Readability: Ensure tests are clear, concise, and easy to understand.
-  - Robustness: Use unittest.mock effectively to isolate units under test and simulate external dependencies.
-
-# Workflow for Testing and Committing
-
-- Before each commit:
-  - Run `bzfs_test_mode=unit ./test.sh`. This runs the unit tests. Change and iterate until all unit tests pass.
-  - Run `pre-commit run --all-files`. This runs the hooks specified in `.pre-commit-hooks.yaml` and configured in
-    `pyproject.toml`, for example for linting (with `ruff`), formatting (with `black`), type checking (with `mypy`).
-    Change and iterate until all hooks pass.
-  - If ArgumentParser help text changed, run `./update_readme.sh` to regenerate `README*.md` files.
-  - Repeat all of the above steps if a change was made during the current repetition.
-- Use `git commit -s` so each commit includes a `Signed-off-by` line.
-- Integration tests should not be run in the docker sandbox because they require the `zfs` CLI to be installed, and thus
-  run externally in GitHub Actions, which unfortunately you do not have access to.
-
-# Coverage
-
-- If the user explicitly requested an increase in coverage:
-  - Focus on adding *meaningful* tests that cover critical logic, edge cases and error paths. Do not add a unit test
-    unless it turns out to measurably increase line or branch coverage.
-  - Run the following commands after running unit tests (plus immediately after the start of the overall task, and
-    immediately before completing the overall task):
-
-    ```bash
-    bzfs_test_mode=unit python3 -m coverage run -m bzfs_tests.test_all
-
-    python3 -m coverage xml
-
-    cat coverage.xml
-    ```
-
-  - The `coverage.xml` output file does not just include overall coverage percentage - it also shows exactly which code
-    branches and lines are not yet covered. To see how coverage has changed, compare the `coverage.xml` file with a
-    prior version of that file.
-  - Include the before vs. after coverage percentage in your response.
-- If the user explicity requested a coverage report, remove any binary files from the `python3 -m coverage html`
-  output and commit the resulting directory as `tmp.htmlcov`.
-
-# Dependencies
-
-- Code changes should not require additional external Python packages or Unix CLIs beyond the external Python packages
-  and standard Unix CLIs that are already installed or used by the current codebase. For example, calling anything in
-  the Python standard library is ok. CLI tools like `zfs`, `zpool`, `ssh`, `zstd`, `pv`, `mbuffer`, `ps`, `uname`, Unix
-  coreutils, are already installed and used by the project, thus calling these from Python is ok, too.
-
-# Documentation
-
-- Autogenerated sections in `README*.md`: Do not modify auto-generated sections directly in `README*.md`. Instead,
-  modify only ArgumentParser help texts in `.py` files as the source of "truth", then run `update_readme.sh` to
-  regenerate these `README*.md` sections.
-- Other sections: Direct edits are fine.
-
-# Time Management
-
-- After every N code changes (depending on your time limit), create an intermediate commit or checkpoint, and push it to
-  a save place from where you can recover it later in case you get unexpectedly aborted or cancelled. Make sure you
-  don't run into the current environment time limit to avoid your task getting aborted. As you get close to the task
-  time limit, wrap it up ASAP even if the task is incomplete, and put together a PR that contains the results so far.
-
-# Context Window Engineering is Key to Success
-
-- I have noticed that you are doing much better if you use all deep thinking and meticulous tracing power that you have
-  to complete the top critical task you've been asked to do. Still, so far you have used only a small portion of the
-  available context window. Leverage your available context window to the max! Be a PRO!
