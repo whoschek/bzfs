@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+import argparse
 import subprocess
 import threading
 import unittest
@@ -21,7 +22,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from bzfs_main.parallel_engine import BARRIER_CHAR, Tree, build_dataset_tree, process_datasets_in_parallel_and_fault_tolerant
-from bzfs_main.retry import Retry
+from bzfs_main.retry import Retry, RetryPolicy
 from bzfs_tests.test_utils import stop_on_failure_subtest
 
 
@@ -170,6 +171,23 @@ class TestProcessDatasetsInParallel(unittest.TestCase):
     def append_submission(self, dataset: str) -> None:
         with self.lock:
             self.submitted.append(dataset)
+
+    def test_basic(self) -> None:
+        def submit_no_skiptree(dataset: str, tid: str, retry: Retry) -> bool:
+            self.append_submission(dataset)
+            return True
+
+        self.default_kwargs["retry_policy"] = RetryPolicy(
+            argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=1)
+        )
+        failed = process_datasets_in_parallel_and_fault_tolerant(
+            datasets=[],
+            skip_tree_on_error=lambda dataset: False,
+            process_dataset=submit_no_skiptree,  # lambda
+            **self.default_kwargs,
+        )
+        self.assertFalse(failed)
+        self.assertListEqual([], self.submitted)
 
     def test_submit_no_skiptree(self) -> None:
         def submit_no_skiptree(dataset: str, tid: str, retry: Retry) -> bool:

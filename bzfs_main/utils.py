@@ -268,8 +268,8 @@ def has_duplicates(sorted_list: list) -> bool:
     return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
 
 
-def dry(msg: str, dry_run: bool) -> str:
-    return "Dry " + msg if dry_run else msg
+def dry(msg: str, is_dry_run: bool) -> str:
+    return "Dry " + msg if is_dry_run else msg
 
 
 def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:

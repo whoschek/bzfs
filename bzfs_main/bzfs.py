@@ -126,6 +126,7 @@ from bzfs_main.utils import (
     cut,
     drain,
     get_home_directory,
+    has_duplicates,
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
@@ -5866,11 +5867,6 @@ def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
 def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> None:
     for i in range(len(lines)):
         lines[i] = lines[i].replace(old, new, count)
-
-
-def has_duplicates(sorted_list: list) -> bool:
-    """Returns True if any adjacent items within the given sorted sequence are equal."""
-    return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
 
 
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
