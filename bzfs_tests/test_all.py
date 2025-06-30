@@ -18,7 +18,7 @@ import sys
 import unittest
 
 from bzfs_tests.test_utils import suite as test_utils_suite
-from bzfs_tests.test_retries import suite as test_retries_suite
+from bzfs_tests.test_retry import suite as test_retry_suite
 from bzfs_tests.test_period_anchors import suite as test_period_anchors_suite
 from bzfs_tests.test_progress_reporter import suite as test_progress_reporter_utils_suite
 from bzfs_tests.test_parallel_engine import suite as test_parallel_engine_suite
@@ -31,7 +31,7 @@ from bzfs_main.bzfs import getenv_any
 def main() -> None:
     suite = unittest.TestSuite()
     suite.addTests(test_utils_suite())
-    suite.addTests(test_retries_suite())
+    suite.addTests(test_retry_suite())
     suite.addTests(test_period_anchors_suite())
     suite.addTests(test_progress_reporter_utils_suite())
     suite.addTests(test_parallel_engine_suite())

@@ -33,11 +33,11 @@ from typing import (
     Generic,
     IO,
     ItemsView,
+    Iterable,
     Iterator,
     Protocol,
     Sequence,
     TypeVar,
-    Iterable,
 )
 
 # constants:

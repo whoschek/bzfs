@@ -28,7 +28,7 @@ from typing import (
     NamedTuple,
 )
 
-from bzfs_main.retries import (
+from bzfs_main.retry import (
     Retry,
     RetryPolicy,
     run_with_retries,
@@ -97,6 +97,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     has_barrier = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
     assert (enable_barriers is not False) or not has_barrier
     barriers_enabled: bool = bool(has_barrier or enable_barriers)
+    assert callable(append_exception)
     retry_policy = (
         retry_policy
         if retry_policy is not None

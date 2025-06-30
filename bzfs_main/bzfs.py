@@ -112,7 +112,7 @@ from bzfs_main.progress_reporter import (
     count_num_bytes_transferred_by_zfs_send,
     pv_file_thread_separator,
 )
-from bzfs_main.retries import (
+from bzfs_main.retry import (
     Retry,
     RetryPolicy,
     RetryableError,

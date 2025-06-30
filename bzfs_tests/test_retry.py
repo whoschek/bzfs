@@ -18,7 +18,7 @@ import unittest
 from logging import Logger
 from unittest.mock import patch, MagicMock
 
-from bzfs_main.retries import Retry, RetryableError, run_with_retries, RetryPolicy
+from bzfs_main.retry import Retry, RetryableError, run_with_retries, RetryPolicy
 
 
 #############################################################################

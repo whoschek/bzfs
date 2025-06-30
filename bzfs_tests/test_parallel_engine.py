@@ -21,7 +21,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from bzfs_main.parallel_engine import BARRIER_CHAR, Tree, build_dataset_tree, process_datasets_in_parallel_and_fault_tolerant
-from bzfs_main.retries import Retry
+from bzfs_main.retry import Retry
 from bzfs_tests.test_utils import stop_on_failure_subtest
 
 
