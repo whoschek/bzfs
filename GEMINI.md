@@ -56,17 +56,17 @@
 
 - If you are tasked to identify a bug, perform a thorough root cause analysis. Understand *why* the bug occurs, not
   just *what* it does. Meticulously cross check your claim against the unit tests (`test_bzfs.py`, `test_jobrunner.py`,
-  `test_utils.py`) and integration tests (`test_integrations.py`), because all these tests are known to pass. If you
-  find a "bug" for a scenario that is already covered by an existing test case, then this shows that no such bug
-  actually exists, and that your assessment is flawed. Again, we know that the entire test suite currently passes.
+  `test_*.py`) and integration tests (`test_integrations.py`), because all these tests are known to pass. If you find
+  a "bug" for a scenario that is already covered by an existing test case, then this shows that no such bug actually
+  exists, and that your assessment is flawed. Again, we know that the entire test suite currently passes.
 - For any real bug that you find, discuss why it's a bug, what its precise root cause is, and a clear, actionable way to
   fix it. Spend lots of time to confirm it's an actual bug rather than a false alarm. Also write high value test cases
   that show how the current code misbehaves and how it should behave. Finally, contribute the bug fix itself.
 
 # Writing Tests
 
-- New unit tests should fit into the `test_bzfs.py` + `test_jobrunner.py` framework whereas new integration tests should
-  fit into the `test_integrations.py` framework. Make sure that new or changed tests are included in the `suite()`.
+- New unit tests should fit into the `test_*.py` framework whereas new integration tests should fit into the
+  `test_integrations.py` framework. Make sure that new or changed tests are included in the `suite()`.
   - Specificity: Design test cases that target specific functionalities, edge cases, and potential failure modes.
   - Readability: Ensure tests are clear, concise, and easy to understand.
   - Robustness: Use unittest.mock effectively to isolate units under test and simulate external dependencies.
