@@ -15,7 +15,6 @@
 from __future__ import annotations
 import argparse
 import contextlib
-import errno
 import io
 import itertools
 import json
@@ -24,19 +23,16 @@ import os
 import random
 import re
 import shutil
-import signal
 import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import unittest
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
 from pathlib import Path
-from subprocess import PIPE
 from typing import Any, List, Tuple, Union, cast
 from unittest.mock import patch, mock_open, MagicMock
 
@@ -58,11 +54,7 @@ def suite() -> unittest.TestSuite:
     test_cases = [
         TestHelperFunctions,
         TestAdditionalHelpers,
-        TestTerminateProcessSubtree,
-        TestSubprocessRun,
         TestParseDatasetLocator,
-        TestReplaceCapturingGroups,
-        TestBuildTree,
         TestCurrentDateTime,
         TestArgumentParser,
         TestAddRecvPropertyOptions,
@@ -82,7 +74,6 @@ def suite() -> unittest.TestSuite:
         TestRankRangeAction,
         TestConnectionPool,
         TestItrSSHCmdParallel,
-        TestProcessDatasetsInParallel,
         TestRemoteConfCache,
         TestIncrementalSendSteps,
         TestLogging,
@@ -387,27 +378,6 @@ class TestHelperFunctions(unittest.TestCase):
         bzfs.xprint(log, "", run=False)
         bzfs.xprint(log, None)
 
-    def test_pid_exists(self) -> None:
-        self.assertTrue(bzfs.pid_exists(os.getpid()))
-        self.assertFalse(bzfs.pid_exists(-1))
-        self.assertFalse(bzfs.pid_exists(0))
-        # This fake PID is extremely unlikely to be alive because it is orders of magnitude higher than the typical
-        # range of process IDs on Unix-like systems:
-        fake_pid = 2**31 - 1  # 2147483647
-        self.assertFalse(bzfs.pid_exists(fake_pid))
-
-        # Process 1 is typically owned by root; if not running as root, this should return True because it raises EPERM
-        if os.getuid() != 0:
-            self.assertTrue(bzfs.pid_exists(1))
-
-    @patch("os.kill")
-    def test_pid_exists_with_unexpected_oserror_returns_none(self, mock_kill: MagicMock) -> None:
-        # Simulate an unexpected OSError (e.g., EINVAL) and verify that pid_exists returns None.
-        err = OSError()
-        err.errno = errno.EINVAL
-        mock_kill.side_effect = err
-        self.assertIsNone(bzfs.pid_exists(1234))
-
     def test_delete_stale_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             new_socket_file = os.path.join(tmpdir, "s_new_socket_file")
@@ -678,22 +648,6 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c", "a/b/d"]))
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
-    def test_is_descendant(self) -> None:
-        self.assertTrue(bzfs.is_descendant("pool/fs/child", "pool/fs"))
-        self.assertTrue(bzfs.is_descendant("pool/fs/child/grandchild", "pool/fs"))
-        self.assertTrue(bzfs.is_descendant("a/b/c/d", "a/b"))
-        self.assertTrue(bzfs.is_descendant("pool/fs", "pool/fs"))
-        self.assertFalse(bzfs.is_descendant("pool/otherfs", "pool/fs"))
-        self.assertFalse(bzfs.is_descendant("a/c", "a/b"))
-        self.assertFalse(bzfs.is_descendant("pool/fs", "pool/fs/child"))
-        self.assertFalse(bzfs.is_descendant("a/b", "a/b/c"))
-        self.assertFalse(bzfs.is_descendant("tank1/data", "tank2/backup"))
-        self.assertFalse(bzfs.is_descendant("a", ""))
-        self.assertFalse(bzfs.is_descendant("", "a"))
-        self.assertTrue(bzfs.is_descendant("", ""))
-        self.assertFalse(bzfs.is_descendant("pool/fs-backup", "pool/fs"))
-        self.assertTrue(bzfs.is_descendant("pool/fs", "pool"))
-
     def test_validate_default_shell(self) -> None:
         args = argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
@@ -757,17 +711,6 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
         finally:
             bzfs.reset_logger()
-
-    def test_has_duplicates(self) -> None:
-        self.assertFalse(bzfs.has_duplicates([]))
-        self.assertFalse(bzfs.has_duplicates([42]))
-        self.assertFalse(bzfs.has_duplicates([1, 2, 3, 4, 5]))
-        self.assertTrue(bzfs.has_duplicates([2, 2, 3, 4, 5]))
-        self.assertTrue(bzfs.has_duplicates([1, 2, 3, 3, 4, 5]))
-        self.assertTrue(bzfs.has_duplicates([1, 2, 3, 4, 5, 5]))
-        self.assertTrue(bzfs.has_duplicates([1, 1, 2, 3, 3, 4, 4, 5]))
-        self.assertTrue(bzfs.has_duplicates(["a", "b", "b", "c"]))
-        self.assertFalse(bzfs.has_duplicates(["ant", "bee", "cat"]))
 
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
@@ -1294,36 +1237,6 @@ class TestHelperFunctions(unittest.TestCase):
 
 
 #############################################################################
-class TestTerminateProcessSubtree(unittest.TestCase):
-    def setUp(self) -> None:
-        self.children: list[subprocess.Popen[Any]] = []
-
-    def tearDown(self) -> None:
-        for child in self.children:
-            try:
-                child.kill()
-            except Exception:
-                pass
-        self.children = []
-
-    def test_get_descendant_processes(self) -> None:
-        child = subprocess.Popen(["sleep", "1"])
-        self.children.append(child)
-        time.sleep(0.1)
-        descendants = bzfs.get_descendant_processes(os.getpid())
-        self.assertIn(child.pid, descendants, "Child PID not found in descendants")
-
-    def test_terminate_process_subtree_excluding_current(self) -> None:
-        child = subprocess.Popen(["sleep", "1"])
-        self.children.append(child)
-        time.sleep(0.1)
-        self.assertIsNone(child.poll(), "Child process should be running before termination")
-        bzfs.terminate_process_subtree(except_current_process=True)
-        time.sleep(0.1)
-        self.assertIsNotNone(child.poll(), "Child process should be terminated")
-
-
-#############################################################################
 class TestAdditionalHelpers(unittest.TestCase):
 
     def test_params_verbose_zfs_and_bwlimit(self) -> None:
@@ -1544,58 +1457,6 @@ class TestAdditionalHelpers(unittest.TestCase):
 
 
 #############################################################################
-class TestSubprocessRun(unittest.TestCase):
-    def test_successful_command(self) -> None:
-        result = bzfs.subprocess_run(["true"], stdout=PIPE, stderr=PIPE)
-        self.assertEqual(0, result.returncode)
-        self.assertEqual(b"", result.stdout)
-        self.assertEqual(b"", result.stderr)
-
-    def test_failing_command_no_check(self) -> None:
-        result = bzfs.subprocess_run(["false"], stdout=PIPE, stderr=PIPE)
-        self.assertNotEqual(0, result.returncode)
-        self.assertEqual(b"", result.stdout)
-        self.assertEqual(b"", result.stderr)
-
-    def test_failing_command_with_check(self) -> None:
-        with self.assertRaises(subprocess.CalledProcessError) as context:
-            bzfs.subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True)
-        self.assertIsInstance(context.exception, subprocess.CalledProcessError)
-        self.assertIsInstance(context.exception.returncode, int)
-        self.assertTrue(context.exception.returncode != 0)
-
-    def test_input_bytes(self) -> None:
-        result = bzfs.subprocess_run(["cat"], input=b"hello", stdout=PIPE, stderr=PIPE)
-        self.assertEqual(b"hello", result.stdout)
-
-    def test_valueerror_input_and_stdin(self) -> None:
-        with self.assertRaises(ValueError):
-            bzfs.subprocess_run(["cat"], input=b"hello", stdin=PIPE, stdout=PIPE, stderr=PIPE)
-
-    def test_timeout_expired(self) -> None:
-        with self.assertRaises(subprocess.TimeoutExpired) as context:
-            bzfs.subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE)
-        self.assertIsInstance(context.exception, subprocess.TimeoutExpired)
-        self.assertEqual(["sleep", "1"], context.exception.cmd)
-
-    def test_keyboardinterrupt_signal(self) -> None:
-        old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)  # install a handler that ignores SIGINT
-        try:
-
-            def send_sigint_to_sleep_cli() -> None:
-                time.sleep(0.1)  # ensure sleep CLI has started before we kill it
-                os.kill(os.getpid(), signal.SIGINT)  # send SIGINT to all members of the process group, including `sleep` CLI
-
-            thread = threading.Thread(target=send_sigint_to_sleep_cli)
-            thread.start()
-            with self.assertRaises(KeyboardInterrupt):
-                bzfs.subprocess_run(["sleep", "1"])
-            thread.join()
-        finally:
-            signal.signal(signal.SIGINT, old_handler)  # restore original signal handler
-
-
-#############################################################################
 class TestParseDatasetLocator(unittest.TestCase):
     def run_test(
         self,
@@ -1752,181 +1613,6 @@ class TestParseDatasetLocator(unittest.TestCase):
         self.run_test("user@host:tank1/foo/space bar", "user", "host", "tank1/foo/space bar", "user@host", False)
         self.run_test("user@||1:tank1/foo/space bar", "user", "::1", "tank1/foo/space bar", "user@::1", False)
         self.run_test("user@::1:tank1/foo/space bar", "", "user@", ":1:tank1/foo/space bar", "user@", True)
-
-
-#############################################################################
-class TestReplaceCapturingGroups(unittest.TestCase):
-    @staticmethod
-    def replace_capturing_group(regex: str) -> str:
-        return bzfs.replace_capturing_groups_with_non_capturing_groups(regex)
-
-    def test_basic_case(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(abc)"), "(?:abc)")
-
-    def test_nested_groups(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(a(bc)d)"), "(?:a(?:bc)d)")
-
-    def test_preceding_backslash(self) -> None:
-        self.assertEqual(self.replace_capturing_group("\\(abc)"), "\\(abc)")
-
-    def test_group_starting_with_question_mark(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(?abc)"), "(?abc)")
-
-    def test_multiple_groups(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(abc)(def)"), "(?:abc)(?:def)")
-
-    def test_mixed_cases(self) -> None:
-        self.assertEqual(self.replace_capturing_group("a(bc\\(de)f(gh)?i"), "a(?:bc\\(de)f(?:gh)?i")
-
-    def test_empty_group(self) -> None:
-        self.assertEqual(self.replace_capturing_group("()"), "(?:)")
-
-    def test_group_with_named_group(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(?P<name>abc)"), "(?P<name>abc)")
-
-    def test_group_with_non_capturing_group(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(a(?:bc)d)"), "(?:a(?:bc)d)")
-
-    def test_group_with_lookahead(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(abc)(?=def)"), "(?:abc)(?=def)")
-
-    def test_group_with_lookbehind(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(?<=abc)(def)"), "(?<=abc)(?:def)")
-
-    def test_escaped_characters(self) -> None:
-        pattern = re.escape("(abc)")
-        self.assertEqual(self.replace_capturing_group(pattern), pattern)
-
-    def test_complex_pattern_with_escape(self) -> None:
-        complex_pattern = re.escape("(a[b]c{d}e|f.g)")
-        self.assertEqual(self.replace_capturing_group(complex_pattern), complex_pattern)
-
-    def test_complex_pattern(self) -> None:
-        complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
-        expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
-        self.assertEqual(self.replace_capturing_group(complex_pattern), expected_result)
-
-
-#############################################################################
-class TestBuildTree(unittest.TestCase):
-    def assert_keys_sorted(self, tree: dict[str, Any]) -> None:
-        keys = list(tree.keys())
-        self.assertEqual(keys, sorted(keys), f"Keys are not sorted: {keys}")
-        for value in tree.values():
-            if isinstance(value, dict):
-                self.assert_keys_sorted(value)
-
-    def test_basic_tree(self) -> None:
-        datasets = ["pool", "pool/dataset", "pool/dataset/sub", "pool/other", "pool/other/sub/child"]
-        expected_tree = {"pool": {"dataset": {"sub": {}}, "other": {"sub": {"child": {}}}}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_empty_input(self) -> None:
-        datasets: list[str] = []
-        expected_tree: bzfs.Tree = {}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-
-    def test_single_root(self) -> None:
-        datasets: list[str] = ["pool"]
-        expected_tree: bzfs.Tree = {"pool": {}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_single_branch(self) -> None:
-        datasets: list[str] = ["pool/dataset/sub/child"]
-        expected_tree: bzfs.Tree = {"pool": {"dataset": {"sub": {"child": {}}}}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_multiple_roots(self) -> None:
-        datasets: list[str] = ["pool", "otherpool", "anotherpool"]
-        expected_tree: bzfs.Tree = {"anotherpool": {}, "otherpool": {}, "pool": {}}
-        tree = bzfs.Job().build_dataset_tree(sorted(datasets))
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_large_dataset(self) -> None:
-        datasets: list[str] = [f"pool/dataset{i}" for i in range(100)]
-        tree = bzfs.Job().build_dataset_tree(sorted(datasets))
-        self.assertEqual(len(tree["pool"]), 100)
-        self.assert_keys_sorted(tree)
-
-    def test_nested_structure(self) -> None:
-        datasets: list[str] = [
-            "pool/parent",
-            "pool/parent/child1",
-            "pool/parent/child2",
-            "pool/parent/child2/grandchild",
-            "pool/parent/child3",
-        ]
-        expected_tree: bzfs.Tree = {"pool": {"parent": {"child1": {}, "child2": {"grandchild": {}}, "child3": {}}}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_no_children(self) -> None:
-        datasets: list[str] = ["pool", "otherpool"]
-        expected_tree: bzfs.Tree = {"otherpool": {}, "pool": {}}
-        tree = bzfs.Job().build_dataset_tree(sorted(datasets))
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_single_level(self) -> None:
-        datasets: list[str] = ["pool", "pool1", "pool2", "pool3"]
-        expected_tree: bzfs.Tree = {"pool": {}, "pool1": {}, "pool2": {}, "pool3": {}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_multiple_roots_with_hierarchy(self) -> None:
-        datasets: list[str] = ["pool", "pool1", "pool1/dataset1", "pool2", "pool2/dataset2", "pool2/dataset2/sub", "pool3"]
-        expected_tree: bzfs.Tree = {"pool": {}, "pool1": {"dataset1": {}}, "pool2": {"dataset2": {"sub": {}}}, "pool3": {}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_multiple_roots_flat(self) -> None:
-        datasets: list[str] = ["root1", "root2", "root3", "root4"]
-        expected_tree: bzfs.Tree = {"root1": {}, "root2": {}, "root3": {}, "root4": {}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_multiple_roots_mixed_depth(self) -> None:
-        datasets: list[str] = ["a", "a/b", "a/b/c", "x", "x/y", "z", "z/1", "z/2", "z/2/3"]
-        expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "x": {"y": {}}, "z": {"1": {}, "2": {"3": {}}}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_tree_with_missing_intermediate_nodes(self) -> None:
-        datasets: list[str] = ["a", "a/b/c", "z/2/3"]
-        expected_tree: bzfs.Tree = {"a": {"b": {"c": {}}}, "z": {"2": {"3": {}}}}
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
-
-    def test_tree_with_barriers(self) -> None:
-        br = bzfs.BARRIER_CHAR
-        datasets: list[str] = [
-            "a/b/c",
-            "a/b/c/0d",
-            "a/b/c/1d",
-            f"a/b/c/{br}/prune",
-            f"a/b/c/{br}/prune/monitor",
-            f"a/b/c/{br}/{br}/done",
-        ]
-        expected_tree: bzfs.Tree = {
-            "a": {"b": {"c": {"0d": {}, "1d": {}, br: {"prune": {"monitor": {}}, br: {"done": {}}}}}}
-        }
-        tree = bzfs.Job().build_dataset_tree(datasets)
-        self.assertEqual(tree, expected_tree)
-        self.assert_keys_sorted(tree)
 
 
 #############################################################################
@@ -3680,271 +3366,6 @@ class TestItrSSHCmdParallel(unittest.TestCase):
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)
         )
         self.assertEqual(results, expected_ordered)
-
-
-#############################################################################
-class TestProcessDatasetsInParallel(unittest.TestCase):
-    def setUp(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
-        p = bzfs.Params(args, log=bzfs.get_simple_logger("myprogram"))
-        self.job = bzfs.Job()
-        self.job.params = p
-        self.lock = threading.Lock()
-        self.submitted: list[str] = []
-
-    def append_submission(self, dataset: str) -> None:
-        with self.lock:
-            self.submitted.append(dataset)
-
-    def test_submit_no_skiptree(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        for i in range(2):
-            with stop_on_failure_subtest(i=i):
-                self.setUp()
-                src_datasets = ["a1", "a1/b1", "a2"]
-                failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-                    src_datasets,
-                    process_dataset=submit_no_skiptree,  # lambda
-                    skip_tree_on_error=lambda dataset: False,
-                    max_workers=8,
-                    interval_nanos=lambda dataset: 10_000_000,
-                    task_name="mytask",
-                    enable_barriers=i > 0,
-                )
-                self.assertFalse(failed)
-                self.assertListEqual(["a1", "a1/b1", "a2"], sorted(self.submitted))
-
-    def test_submit_skiptree(self) -> None:
-        def submit_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return False
-
-        for i in range(2):
-            with stop_on_failure_subtest(i=i):
-                self.setUp()
-                src_datasets = ["a1", "a1/b1", "a2"]
-                failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-                    src_datasets,
-                    process_dataset=submit_skiptree,  # lambda
-                    skip_tree_on_error=lambda dataset: False,
-                    max_workers=8,
-                    enable_barriers=i > 0,
-                )
-                self.assertFalse(failed)
-                self.assertListEqual(["a1", "a2"], sorted(self.submitted))
-
-    def test_submit_zero_datasets(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        src_datasets: list[str] = []
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_no_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: False,
-            max_workers=8,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual([], sorted(self.submitted))
-
-    def test_submit_timeout_with_skip_on_error_is_fail(self) -> None:
-        def submit_raise_timeout(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            raise subprocess.TimeoutExpired("submit_raise_timeout", 10)
-
-        src_datasets = ["a1", "a1/b1", "a2"]
-        self.job.params.skip_on_error = "fail"
-        with self.assertRaises(subprocess.TimeoutExpired):
-            self.job.process_datasets_in_parallel_and_fault_tolerant(
-                src_datasets,
-                process_dataset=submit_raise_timeout,  # lambda
-                skip_tree_on_error=lambda dataset: True,
-                max_workers=1,
-            )
-        self.assertListEqual(["a1"], sorted(self.submitted))
-
-    def test_submit_timeout_with_skip_on_error_is_not_fail(self) -> None:
-        def submit_raise_timeout(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            raise subprocess.TimeoutExpired("submit_raise_timeout", 10)
-
-        src_datasets = ["a1", "a1/b1", "a2"]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_raise_timeout,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-        )
-        self.assertTrue(failed)
-        self.assertListEqual(["a1", "a2"], sorted(self.submitted))
-
-    def submit_raise_error(self, dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-        self.append_submission(dataset)
-        raise subprocess.CalledProcessError(1, "foo_cmd")
-
-    def test_submit_raise_error_with_skip_tree_on_error_is_false(self) -> None:
-        src_datasets = ["a1", "a1/b1", "a2"]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=self.submit_raise_error,  # lambda
-            skip_tree_on_error=lambda dataset: False,
-            max_workers=8,
-        )
-        self.assertTrue(failed)
-        self.assertListEqual(["a1", "a1/b1", "a2"], sorted(self.submitted))
-
-    def test_submit_raise_error_with_skip_tree_on_error_is_true(self) -> None:
-        src_datasets = ["a1", "a1/b1", "a2"]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=self.submit_raise_error,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-        )
-        self.assertTrue(failed)
-        self.assertListEqual(["a1", "a2"], sorted(self.submitted))
-
-    def test_submit_barriers0a_no_skiptree(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        br = bzfs.BARRIER_CHAR
-        src_datasets = ["a/b/c", "a/b/c/0d", "a/b/c/1d", f"a/b/c/{br}/prune", f"a/b/c/{br}/prune/monitor"]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_no_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-            enable_barriers=True,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual(src_datasets, sorted(self.submitted))
-
-    def test_submit_barriers0a_with_skiptree(self) -> None:
-        def submit_with_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return dataset != "a/b/c/0d"
-
-        br = bzfs.BARRIER_CHAR
-        src_datasets = ["a/b/c", "a/b/c/0d", "a/b/c/1d", f"a/b/c/{br}/prune", f"a/b/c/{br}/prune/monitor"]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_with_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-            enable_barriers=True,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual(["a/b/c", "a/b/c/0d", "a/b/c/1d"], sorted(self.submitted))
-
-    def test_submit_barriers0b(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        src_datasets = ["a/b/c", "a/b/c/d/e/f", "u/v/w"]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_no_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-            enable_barriers=True,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual(src_datasets, sorted(self.submitted))
-
-    def test_submit_barriers0c(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        src_datasets = ["a/b/c", "a/b/c/d/e/f", "u/v/w"]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_no_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-            enable_barriers=False,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual(src_datasets, sorted(self.submitted))
-
-    def test_submit_barriers1(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        br = bzfs.BARRIER_CHAR
-        src_datasets = [
-            "a/b/c",
-            "a/b/c/0d",
-            "a/b/c/1d",
-            f"a/b/c/{br}/prune",
-            f"a/b/c/{br}/prune/monitor",
-            f"a/b/c/{br}/{br}/done",
-        ]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_no_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-            enable_barriers=True,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual(src_datasets, sorted(self.submitted))
-
-    def test_submit_barriers2(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        br = bzfs.BARRIER_CHAR
-        src_datasets = [
-            "a/b/c",
-            "a/b/c/0d",
-            "a/b/c/1d",
-            f"a/b/c/{br}/prune",
-            f"a/b/c/{br}/prune/monitor",
-            f"a/b/c/{br}/{br}/{br}/{br}/done",
-        ]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_no_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-            enable_barriers=True,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual(src_datasets, sorted(self.submitted))
-
-    def test_submit_barriers3(self) -> None:
-        def submit_no_skiptree(dataset: str, tid: str, retry: bzfs.Retry) -> bool:
-            self.append_submission(dataset)
-            return True
-
-        br = bzfs.BARRIER_CHAR
-        src_datasets = [
-            "a/b/c",
-            "a/b/c/0d",
-            "a/b/c/1d",
-            f"a/b/c/{br}/prune",
-            f"a/b/c/{br}/prune/monitor",
-            f"a/b/c/{br}/{br}/{br}/{br}",
-        ]
-        failed = self.job.process_datasets_in_parallel_and_fault_tolerant(
-            src_datasets,
-            process_dataset=submit_no_skiptree,  # lambda
-            skip_tree_on_error=lambda dataset: True,
-            max_workers=8,
-            enable_barriers=True,
-        )
-        self.assertFalse(failed)
-        self.assertListEqual(src_datasets[0:-1], sorted(self.submitted))
 
 
 #############################################################################

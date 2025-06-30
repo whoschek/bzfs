@@ -48,6 +48,7 @@ from typing import Any, Iterable, TypeVar, Union
 
 from bzfs_main import bzfs
 from bzfs_main.bzfs import die_status, log_trace, prog_name as bzfs_prog_name
+from bzfs_main.parallel_engine import BARRIER_CHAR, process_datasets_in_parallel_and_fault_tolerant
 from bzfs_main.utils import human_readable_duration, percent, shuffle_dict
 
 # constants:
@@ -527,7 +528,7 @@ class Job:
             elif j == 1:
                 return subjob_name + jpad(j - 1, tag)
             else:
-                return subjob_name + "/" + bzfs.BARRIER_CHAR
+                return subjob_name + "/" + BARRIER_CHAR
 
         def resolve_dataset(hostname: str, dataset: str, is_src: bool = True) -> str:
             ssh_user = ssh_src_user if is_src else ssh_dst_user
@@ -834,23 +835,25 @@ class Job:
             log.info("Jitter: Delaying job start time by sleeping for %s ...", human_readable_duration(sleep_nanos))
             time.sleep(sleep_nanos / 1_000_000_000)  # seconds
         sorted_subjobs = sorted(subjobs.keys())
-        has_barrier = any(bzfs.BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
+        has_barrier = any(BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
             log.log(log_trace, "%s", "spawn_process_per_job: True")
-            helper = bzfs.Job()
-            helper.params = bzfs.Params(self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"]), log=log)
-            helper.is_test_mode = self.is_test_mode
-
-            helper.process_datasets_in_parallel_and_fault_tolerant(
-                sorted_subjobs,
+            params = bzfs.Params(self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"]), log=log)
+            process_datasets_in_parallel_and_fault_tolerant(
+                log=params.log,
+                datasets=sorted_subjobs,
                 process_dataset=lambda subjob, tid, retry: self.run_subjob(
                     subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=True
                 )
                 == 0,
                 skip_tree_on_error=lambda subjob: True,
+                skip_on_error=params.skip_on_error,
                 max_workers=max_workers,
                 interval_nanos=lambda subjob: interval_nanos,
                 task_name="Subjob",
+                retry_policy=params.retry_policy,
+                dry_run=params.dry_run,
+                is_test_mode=self.is_test_mode,
             )
         else:
             log.log(log_trace, "%s", "spawn_process_per_job: False")

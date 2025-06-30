@@ -19,11 +19,14 @@ import errno
 import os
 import pwd
 import random
+import signal
 import stat
+import subprocess
 import threading
 import time
 import types
-from collections import deque
+from collections import deque, defaultdict
+from subprocess import DEVNULL, PIPE
 from typing import (
     Any,
     Callable,
@@ -36,6 +39,9 @@ from typing import (
     TypeVar,
     Iterable,
 )
+
+# constants:
+DONT_SKIP_DATASET = ""
 
 
 def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) -> list[str]:
@@ -251,6 +257,99 @@ def find_match(
     if callable(raises):
         raises = raises()
     raise ValueError(raises)
+
+
+def is_descendant(dataset: str, of_root_dataset: str) -> bool:
+    return (dataset + "/").startswith(of_root_dataset + "/")
+
+
+def has_duplicates(sorted_list: list) -> bool:
+    """Returns True if any adjacent items within the given sorted sequence are equal."""
+    return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
+
+
+def dry(msg: str, dry_run: bool) -> str:
+    return "Dry " + msg if dry_run else msg
+
+
+def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
+    """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
+    input_value = kwargs.pop("input", None)
+    timeout = kwargs.pop("timeout", None)
+    check = kwargs.pop("check", False)
+    if input_value is not None:
+        if kwargs.get("stdin") is not None:
+            raise ValueError("input and stdin are mutually exclusive")
+        kwargs["stdin"] = subprocess.PIPE
+
+    with subprocess.Popen(*args, **kwargs) as proc:
+        try:
+            stdout, stderr = proc.communicate(input_value, timeout=timeout)
+        except BaseException as e:
+            try:
+                if isinstance(e, subprocess.TimeoutExpired):
+                    terminate_process_subtree(root_pid=proc.pid)  # send SIGTERM to child process and its descendants
+            finally:
+                proc.kill()
+                raise
+        else:
+            exitcode: int | None = proc.poll()
+            assert exitcode is not None
+            if check and exitcode:
+                raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
+
+
+def terminate_process_subtree(
+    except_current_process: bool = False, root_pid: int | None = None, sig: signal.Signals = signal.SIGTERM
+) -> None:
+    """Sends signal also to descendant processes to also terminate processes started via subprocess.run()"""
+    current_pid = os.getpid()
+    root_pid = current_pid if root_pid is None else root_pid
+    pids = get_descendant_processes(root_pid)
+    if root_pid == current_pid:
+        pids += [] if except_current_process else [current_pid]
+    else:
+        pids.insert(0, root_pid)
+    for pid in pids:
+        with contextlib.suppress(OSError):
+            os.kill(pid, sig)
+
+
+def get_descendant_processes(root_pid: int) -> list[int]:
+    """Returns the list of all descendant process IDs for the given root PID, on Unix systems."""
+    procs = defaultdict(list)
+    cmd = ["ps", "-Ao", "pid,ppid"]
+    lines = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
+    for line in lines[1:]:  # all lines except the header line
+        splits = line.split()
+        assert len(splits) == 2
+        pid = int(splits[0])
+        ppid = int(splits[1])
+        procs[ppid].append(pid)
+    descendants: list[int] = []
+
+    def recursive_append(ppid: int) -> None:
+        for child_pid in procs[ppid]:
+            descendants.append(child_pid)
+            recursive_append(child_pid)
+
+    recursive_append(root_pid)
+    return descendants
+
+
+def pid_exists(pid: int) -> bool | None:
+    if pid <= 0:
+        return False
+    try:  # with signal=0, no signal is actually sent, but error checking is still performed
+        os.kill(pid, 0)  # ... which can be used to check for process existence on POSIX systems
+    except OSError as err:
+        if err.errno == errno.ESRCH:  # No such process
+            return False
+        if err.errno == errno.EPERM:  # Operation not permitted
+            return True
+        return None
+    return True
 
 
 #############################################################################

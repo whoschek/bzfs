@@ -15,12 +15,18 @@
 from __future__ import annotations
 import errno
 import os
+import re
 import shutil
+import signal
 import stat
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 import contextlib
+from subprocess import PIPE
 from typing import (
     Any,
     Callable,
@@ -39,15 +45,22 @@ from bzfs_main.utils import (
     cut,
     drain,
     find_match,
+    get_descendant_processes,
     get_home_directory,
+    is_descendant,
+    has_duplicates,
     human_readable_bytes,
     human_readable_duration,
     human_readable_float,
     open_nofollow,
     percent,
+    pid_exists,
+    replace_capturing_groups_with_non_capturing_groups,
     shuffle_dict,
     sorted_dict,
+    subprocess_run,
     tail,
+    terminate_process_subtree,
     xfinally,
 )
 
@@ -65,6 +78,9 @@ def suite() -> unittest.TestSuite:
         TestHumanReadable,
         TestOpenNoFollow,
         TestFindMatch,
+        TestSubprocessRun,
+        TestPIDExists,
+        TestTerminateProcessSubtree,
         TestSmallPriorityQueue,
         TestSynchronizedBool,
         TestSynchronizedDict,
@@ -75,7 +91,32 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(unittest.TestCase):
-    pass
+    def test_has_duplicates(self) -> None:
+        self.assertFalse(has_duplicates([]))
+        self.assertFalse(has_duplicates([42]))
+        self.assertFalse(has_duplicates([1, 2, 3, 4, 5]))
+        self.assertTrue(has_duplicates([2, 2, 3, 4, 5]))
+        self.assertTrue(has_duplicates([1, 2, 3, 3, 4, 5]))
+        self.assertTrue(has_duplicates([1, 2, 3, 4, 5, 5]))
+        self.assertTrue(has_duplicates([1, 1, 2, 3, 3, 4, 4, 5]))
+        self.assertTrue(has_duplicates(["a", "b", "b", "c"]))
+        self.assertFalse(has_duplicates(["ant", "bee", "cat"]))
+
+    def test_is_descendant(self) -> None:
+        self.assertTrue(is_descendant("pool/fs/child", "pool/fs"))
+        self.assertTrue(is_descendant("pool/fs/child/grandchild", "pool/fs"))
+        self.assertTrue(is_descendant("a/b/c/d", "a/b"))
+        self.assertTrue(is_descendant("pool/fs", "pool/fs"))
+        self.assertFalse(is_descendant("pool/otherfs", "pool/fs"))
+        self.assertFalse(is_descendant("a/c", "a/b"))
+        self.assertFalse(is_descendant("pool/fs", "pool/fs/child"))
+        self.assertFalse(is_descendant("a/b", "a/b/c"))
+        self.assertFalse(is_descendant("tank1/data", "tank2/backup"))
+        self.assertFalse(is_descendant("a", ""))
+        self.assertFalse(is_descendant("", "a"))
+        self.assertTrue(is_descendant("", ""))
+        self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
+        self.assertTrue(is_descendant("pool/fs", "pool"))
 
 
 #############################################################################
@@ -572,6 +613,166 @@ class TestFindMatch(unittest.TestCase):
         raise_arg = cast(Union[bool, str, Callable[[], str]], raises)
         self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=False, raises=raise_arg))
         self.assertEqual(expected, find_match(lst, condition, start=start, end=end, reverse=True, raises=raise_arg))
+
+
+#############################################################################
+class TestReplaceCapturingGroups(unittest.TestCase):
+    @staticmethod
+    def replace_capturing_group(regex: str) -> str:
+        return replace_capturing_groups_with_non_capturing_groups(regex)
+
+    def test_basic_case(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(abc)"), "(?:abc)")
+
+    def test_nested_groups(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(a(bc)d)"), "(?:a(?:bc)d)")
+
+    def test_preceding_backslash(self) -> None:
+        self.assertEqual(self.replace_capturing_group("\\(abc)"), "\\(abc)")
+
+    def test_group_starting_with_question_mark(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(?abc)"), "(?abc)")
+
+    def test_multiple_groups(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(abc)(def)"), "(?:abc)(?:def)")
+
+    def test_mixed_cases(self) -> None:
+        self.assertEqual(self.replace_capturing_group("a(bc\\(de)f(gh)?i"), "a(?:bc\\(de)f(?:gh)?i")
+
+    def test_empty_group(self) -> None:
+        self.assertEqual(self.replace_capturing_group("()"), "(?:)")
+
+    def test_group_with_named_group(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(?P<name>abc)"), "(?P<name>abc)")
+
+    def test_group_with_non_capturing_group(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(a(?:bc)d)"), "(?:a(?:bc)d)")
+
+    def test_group_with_lookahead(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(abc)(?=def)"), "(?:abc)(?=def)")
+
+    def test_group_with_lookbehind(self) -> None:
+        self.assertEqual(self.replace_capturing_group("(?<=abc)(def)"), "(?<=abc)(?:def)")
+
+    def test_escaped_characters(self) -> None:
+        pattern = re.escape("(abc)")
+        self.assertEqual(self.replace_capturing_group(pattern), pattern)
+
+    def test_complex_pattern_with_escape(self) -> None:
+        complex_pattern = re.escape("(a[b]c{d}e|f.g)")
+        self.assertEqual(self.replace_capturing_group(complex_pattern), complex_pattern)
+
+    def test_complex_pattern(self) -> None:
+        complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
+        expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
+        self.assertEqual(self.replace_capturing_group(complex_pattern), expected_result)
+
+
+#############################################################################
+class TestSubprocessRun(unittest.TestCase):
+    def test_successful_command(self) -> None:
+        result = subprocess_run(["true"], stdout=PIPE, stderr=subprocess.PIPE)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+
+    def test_failing_command_no_check(self) -> None:
+        result = subprocess_run(["false"], stdout=PIPE, stderr=PIPE)
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+
+    def test_failing_command_with_check(self) -> None:
+        with self.assertRaises(subprocess.CalledProcessError) as context:
+            subprocess_run(["false"], stdout=PIPE, stderr=PIPE, check=True)
+        self.assertIsInstance(context.exception, subprocess.CalledProcessError)
+        self.assertIsInstance(context.exception.returncode, int)
+        self.assertTrue(context.exception.returncode != 0)
+
+    def test_input_bytes(self) -> None:
+        result = subprocess_run(["cat"], input=b"hello", stdout=PIPE, stderr=PIPE)
+        self.assertEqual(b"hello", result.stdout)
+
+    def test_valueerror_input_and_stdin(self) -> None:
+        with self.assertRaises(ValueError):
+            subprocess_run(["cat"], input=b"hello", stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+    def test_timeout_expired(self) -> None:
+        with self.assertRaises(subprocess.TimeoutExpired) as context:
+            subprocess_run(["sleep", "1"], timeout=0.01, stdout=PIPE, stderr=PIPE)
+        self.assertIsInstance(context.exception, subprocess.TimeoutExpired)
+        self.assertEqual(["sleep", "1"], context.exception.cmd)
+
+    def test_keyboardinterrupt_signal(self) -> None:
+        old_handler = signal.signal(signal.SIGINT, signal.default_int_handler)  # install a handler that ignores SIGINT
+        try:
+
+            def send_sigint_to_sleep_cli() -> None:
+                time.sleep(0.1)  # ensure sleep CLI has started before we kill it
+                os.kill(os.getpid(), signal.SIGINT)  # send SIGINT to all members of the process group, including `sleep` CLI
+
+            thread = threading.Thread(target=send_sigint_to_sleep_cli)
+            thread.start()
+            with self.assertRaises(KeyboardInterrupt):
+                subprocess_run(["sleep", "1"])
+            thread.join()
+        finally:
+            signal.signal(signal.SIGINT, old_handler)  # restore original signal handler
+
+
+#############################################################################
+class TestPIDExists(unittest.TestCase):
+
+    def test_pid_exists(self) -> None:
+        self.assertTrue(pid_exists(os.getpid()))
+        self.assertFalse(pid_exists(-1))
+        self.assertFalse(pid_exists(0))
+        # This fake PID is extremely unlikely to be alive because it is orders of magnitude higher than the typical
+        # range of process IDs on Unix-like systems:
+        fake_pid = 2**31 - 1  # 2147483647
+        self.assertFalse(pid_exists(fake_pid))
+
+        # Process 1 is typically owned by root; if not running as root, this should return True because it raises EPERM
+        if os.getuid() != 0:
+            self.assertTrue(pid_exists(1))
+
+    @patch("os.kill")
+    def test_pid_exists_with_unexpected_oserror_returns_none(self, mock_kill: MagicMock) -> None:
+        # Simulate an unexpected OSError (e.g., EINVAL) and verify that pid_exists returns None.
+        err = OSError()
+        err.errno = errno.EINVAL
+        mock_kill.side_effect = err
+        self.assertIsNone(pid_exists(1234))
+
+
+#############################################################################
+class TestTerminateProcessSubtree(unittest.TestCase):
+    def setUp(self) -> None:
+        self.children: list[subprocess.Popen[Any]] = []
+
+    def tearDown(self) -> None:
+        for child in self.children:
+            try:
+                child.kill()
+            except OSError:
+                pass
+        self.children = []
+
+    def test_get_descendant_processes(self) -> None:
+        child = subprocess.Popen(["sleep", "1"])
+        self.children.append(child)
+        time.sleep(0.1)
+        descendants = get_descendant_processes(os.getpid())
+        self.assertIn(child.pid, descendants, "Child PID not found in descendants")
+
+    def test_terminate_process_subtree_excluding_current(self) -> None:
+        child = subprocess.Popen(["sleep", "1"])
+        self.children.append(child)
+        time.sleep(0.1)
+        self.assertIsNone(child.poll(), "Child process should be running before termination")
+        terminate_process_subtree(except_current_process=True)
+        time.sleep(0.1)
+        self.assertIsNotNone(child.poll(), "Child process should be terminated")
 
 
 #############################################################################

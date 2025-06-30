@@ -46,7 +46,6 @@ import concurrent
 import contextlib
 import copy
 import dataclasses
-import errno
 import fcntl
 import hashlib
 import heapq
@@ -100,6 +99,10 @@ from typing import (
     Union,
     cast,
 )
+
+from bzfs_main.parallel_engine import (
+    process_datasets_in_parallel_and_fault_tolerant,
+)
 from bzfs_main.period_anchors import (
     PeriodAnchors,
     round_datetime_up_to_duration_multiple,
@@ -113,9 +116,10 @@ from bzfs_main.retries import (
     Retry,
     RetryPolicy,
     RetryableError,
-    run_with_retries,
 )
+import bzfs_main.utils
 from bzfs_main.utils import (
+    DONT_SKIP_DATASET,
     SmallPriorityQueue,
     SynchronizedBool,
     SynchronizedDict,
@@ -124,9 +128,13 @@ from bzfs_main.utils import (
     get_home_directory,
     human_readable_bytes,
     human_readable_duration,
+    is_descendant,
     open_nofollow,
     percent,
+    pid_exists,
     replace_capturing_groups_with_non_capturing_groups,
+    subprocess_run,
+    terminate_process_subtree,
     xfinally,
 )
 
@@ -167,10 +175,8 @@ log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
 DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
-BARRIER_CHAR = "~"
 SHARED = "shared"
 DEDICATED = "dedicated"
-DONT_SKIP_DATASET = ""
 SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 
 
@@ -1889,7 +1895,7 @@ class Params:
         return os.path.join(tempfile.gettempdir(), f"{prog_name}-lockfile-{hash_code}.lock")
 
     def dry(self, msg: str) -> str:
-        return "Dry " + msg if self.dry_run else msg
+        return bzfs_main.utils.dry(msg, self.dry_run)
 
 
 #############################################################################
@@ -2851,13 +2857,19 @@ class Job:
             # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
             if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
                 start_time_nanos = time.monotonic_ns()
-                failed = self.process_datasets_in_parallel_and_fault_tolerant(
-                    dst_datasets,
+                failed = process_datasets_in_parallel_and_fault_tolerant(
+                    log=p.log,
+                    datasets=dst_datasets,
                     process_dataset=delete_destination_snapshots,  # lambda
                     skip_tree_on_error=lambda dataset: False,
+                    skip_on_error=p.skip_on_error,
                     max_workers=max_workers,
                     enable_barriers=False,
                     task_name="--delete-dst-snapshots",
+                    append_exception=self.append_exception,
+                    retry_policy=p.retry_policy,
+                    dry_run=p.dry_run,
+                    is_test_mode=self.is_test_mode,
                 )
                 elapsed_nanos = time.monotonic_ns() - start_time_nanos
                 log.info(
@@ -3153,13 +3165,19 @@ class Job:
             cmsg = ""
 
         # Run replicate_dataset(dataset) for each dataset, while taking care of errors, retries + parallel execution
-        failed = self.process_datasets_in_parallel_and_fault_tolerant(
-            stale_src_datasets,
+        failed = process_datasets_in_parallel_and_fault_tolerant(
+            log=p.log,
+            datasets=stale_src_datasets,
             process_dataset=self.replicate_dataset,  # lambda
             skip_tree_on_error=lambda dataset: not self.dst_dataset_exists[src2dst(dataset)],
+            skip_on_error=p.skip_on_error,
             max_workers=max_workers,
             enable_barriers=False,
             task_name="Replication",
+            append_exception=self.append_exception,
+            retry_policy=p.retry_policy,
+            dry_run=p.dry_run,
+            is_test_mode=self.is_test_mode,
         )
 
         if self.is_caching_snapshots(src) and not failed:
@@ -5152,229 +5170,6 @@ class Job:
                         yield choices[n], src_next
                 src_next = next(src_itr, None)
 
-    @staticmethod
-    def build_dataset_tree(sorted_datasets: list[str]) -> Tree:
-        """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names,
-        in the form of nested dicts."""
-        tree: Tree = {}
-        for dataset in sorted_datasets:
-            current = tree
-            for component in dataset.split("/"):
-                child = current.get(component)
-                if child is None:
-                    child = {}
-                    current[component] = child
-                current = child
-        return tree
-
-    def process_datasets_in_parallel_and_fault_tolerant(
-        self,
-        datasets: list[str],
-        process_dataset: Callable[[str, str, Retry], bool],  # lambda, must be thread-safe
-        skip_tree_on_error: Callable[[str], bool],
-        max_workers: int = os.cpu_count() or 1,
-        interval_nanos: Callable[[str], int] = lambda dataset: 0,
-        task_name: str = "Task",
-        enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
-    ) -> bool:
-        """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling and retries and
-        parallel execution. Assumes that the input dataset list is sorted and does not contain duplicates. All children of a
-        dataset may be processed in parallel. For consistency (even during parallel dataset replication/deletion), processing
-        of a dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is ready
-        to start processing another dataset, it chooses the "smallest" dataset wrt. lexicographical sort order from the
-        datasets that are currently available for start of processing. Initially, only the roots of the selected dataset
-        subtrees are available for start of processing."""
-        assert not self.is_test_mode or datasets == sorted(datasets), "List is not sorted"
-        assert not self.is_test_mode or not has_duplicates(datasets), "List contains duplicates"
-        assert callable(process_dataset)
-        assert callable(skip_tree_on_error)
-        assert max_workers > 0
-        assert callable(interval_nanos)
-        assert "%" not in task_name
-        has_barrier = any(BARRIER_CHAR in dataset.split("/") for dataset in datasets)
-        assert (enable_barriers is not False) or not has_barrier
-        barriers_enabled: bool = bool(has_barrier or enable_barriers)
-        p, log = self.params, self.params.log
-
-        def _process_dataset(dataset: str, tid: str) -> bool:
-            start_time_nanos = time.monotonic_ns()
-            try:
-                return run_with_retries(log, p.retry_policy, process_dataset, dataset, tid)
-            finally:
-                elapsed_nanos = time.monotonic_ns() - start_time_nanos
-                log.debug(p.dry(f"{tid} {task_name} done: %s took %s"), dataset, human_readable_duration(elapsed_nanos))
-
-        class TreeNodeMutableAttributes:
-            __slots__ = ("barrier", "pending")  # uses more compact memory layout than __dict__
-
-            def __init__(self) -> None:
-                self.barrier: TreeNode | None = None  # zero or one barrier TreeNode waiting for this node to complete
-                self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
-
-        class TreeNode(NamedTuple):
-            # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
-            dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
-            children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-            parent: Any  # aka TreeNode
-            mut: TreeNodeMutableAttributes
-
-            def __repr__(self) -> str:
-                dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
-                return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
-
-        def make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None) -> TreeNode:
-            return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
-
-        def build_dataset_tree_and_find_roots() -> list[TreeNode]:
-            """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""
-            tree: Tree = self.build_dataset_tree(datasets)  # tree consists of nested dictionaries
-            skip_dataset = DONT_SKIP_DATASET
-            roots = []
-            for dataset in datasets:
-                if is_descendant(dataset, of_root_dataset=skip_dataset):
-                    continue
-                skip_dataset = dataset
-                children = tree
-                for component in dataset.split("/"):
-                    children = children[component]
-                roots.append(make_tree_node(dataset, children))
-            return roots
-
-        assert (not self.is_test_mode) or str(make_tree_node("foo", {}))
-        immutable_empty_barrier: TreeNode = make_tree_node("immutable_empty_barrier", {})
-        priority_queue: list[TreeNode] = build_dataset_tree_and_find_roots()
-        heapq.heapify(priority_queue)  # same order as sorted()
-        len_datasets: int = len(datasets)
-        datasets_set: set[str] = set(datasets)
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            todo_futures: set[Future] = set()
-            submitted: int = 0
-            next_update_nanos: int = time.monotonic_ns()
-            fw_timeout: float | None = None
-
-            def submit_datasets() -> bool:
-                nonlocal fw_timeout
-                fw_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
-                while len(priority_queue) > 0 and len(todo_futures) < max_workers:
-                    # pick "smallest" dataset (wrt. sort order) available for start of processing; submit to thread pool
-                    nonlocal next_update_nanos
-                    sleep_nanos = next_update_nanos - time.monotonic_ns()
-                    if sleep_nanos > 0:
-                        time.sleep(sleep_nanos / 1_000_000_000)  # seconds
-                    if sleep_nanos > 0 and len(todo_futures) > 0:
-                        fw_timeout = 0  # indicates to use non-blocking flavor of concurrent.futures.wait()
-                        # It's possible an even "smaller" dataset (wrt. sort order) has become available while we slept.
-                        # If so it's preferable to submit to the thread pool the smaller one first.
-                        break  # break out of loop to check if that's the case via non-blocking concurrent.futures.wait()
-                    node: TreeNode = heapq.heappop(priority_queue)
-                    next_update_nanos += max(0, interval_nanos(node.dataset))
-                    nonlocal submitted
-                    submitted += 1
-                    future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
-                    future.node = node  # type: ignore[attr-defined]
-                    todo_futures.add(future)
-                return len(todo_futures) > 0
-
-            # coordination loop; runs in the (single) main thread; submits tasks to worker threads and handles their results
-            failed = False
-            while submit_datasets():
-                done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
-                for done_future in done_futures:
-                    dataset = done_future.node.dataset  # type: ignore[attr-defined]
-                    try:
-                        no_skip: bool = done_future.result()  # does not block as processing has already completed
-                    except (CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
-                        failed = True
-                        if p.skip_on_error == "fail":
-                            [todo_future.cancel() for todo_future in todo_futures]
-                            terminate_process_subtree(except_current_process=True)
-                            raise
-                        no_skip = not (p.skip_on_error == "tree" or skip_tree_on_error(dataset))
-                        log.error("%s", e)
-                        self.append_exception(e, task_name, dataset)
-
-                    if not barriers_enabled:
-                        # This simple algorithm is sufficient for almost all use cases:
-                        def simple_enqueue_children(node: TreeNode) -> None:
-                            for child, grandchildren in node.children.items():  # as processing of parent has now completed
-                                child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren)
-                                if child_node.dataset in datasets_set:
-                                    heapq.heappush(priority_queue, child_node)  # make it available for start of processing
-                                else:  # it's an intermediate node that has no job attached; pass the enqueue operation
-                                    simple_enqueue_children(child_node)  # ... recursively down the tree
-
-                        if no_skip:
-                            simple_enqueue_children(done_future.node)  # type: ignore[attr-defined]
-                    else:
-                        # The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner.
-                        # Here, a "dataset" string is treated as an identifier for any kind of job rather than a reference
-                        # to a concrete ZFS object. Example "dataset" job string: "src_host1/createsnapshot/push/prune".
-                        # Jobs can depend on another job via a parent/child relationship formed by '/' directory separators
-                        # within the dataset string, and multiple "datasets" form a job dependency tree by way of common
-                        # dataset directory prefixes. Jobs that do not depend on each other can be executed in parallel, and
-                        # jobs can be told to first wait for other jobs to complete successfully. The algorithm is based on
-                        # a barrier primitive and is typically disabled; it is only required for rare jobrunner configs. For
-                        # example, a job scheduler can specify that all parallel push replications jobs to multiple
-                        # destinations must succeed before the jobs of the pruning phase can start. More generally, with
-                        # this algo, a job scheduler can specify that all jobs within a given job subtree (containing any
-                        # nested combination of sequential and/or parallel jobs) must successfully complete before a certain
-                        # other job within the job tree is started. This is specified via the barrier directory named "~".
-                        # Example: "src_host1/createsnapshot/~/prune".
-                        # Note that "~" is unambiguous as it is not a valid ZFS dataset name component per the naming rules
-                        # enforced by the 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs.
-                        def enqueue_children(node: TreeNode) -> int:
-                            """Returns number of jobs that were added to priority_queue for immediate start of processing."""
-                            n = 0
-                            children = node.children
-                            for child, grandchildren in children.items():
-                                child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren, parent=node)
-                                if child != BARRIER_CHAR:
-                                    if child_node.dataset in datasets_set:
-                                        # it's not a barrier; make job available for immediate start of processing
-                                        heapq.heappush(priority_queue, child_node)
-                                        k = 1
-                                    else:  # it's an intermediate node that has no job attached; pass the enqueue operation
-                                        k = enqueue_children(child_node)  # ... recursively down the tree
-                                elif len(children) == 1:  # if the only child is a barrier then pass the enqueue operation
-                                    k = enqueue_children(child_node)  # ... recursively down the tree
-                                else:  # park the barrier node within the (still closed) barrier for the time being
-                                    assert node.mut.barrier is None
-                                    node.mut.barrier = child_node
-                                    k = 0
-                                node.mut.pending += min(1, k)
-                                n += k
-                            assert n >= 0
-                            return n
-
-                        def on_job_completion_with_barriers(node: TreeNode, no_skip: bool) -> None:
-                            if no_skip:
-                                enqueue_children(node)  # make child datasets available for start of processing
-                            else:  # job completed without success
-                                tmp = node  # ... thus, opening the barrier shall always do nothing in node and its ancestors
-                                while tmp is not None:
-                                    tmp.mut.barrier = immutable_empty_barrier
-                                    tmp = tmp.parent
-                            assert node.mut.pending >= 0
-                            while node.mut.pending == 0:  # have all jobs in subtree of current node completed?
-                                if no_skip:  # ... if so open the barrier, if it exists, and enqueue jobs waiting on it
-                                    if not (node.mut.barrier is None or node.mut.barrier is immutable_empty_barrier):
-                                        node.mut.pending += min(1, enqueue_children(node.mut.barrier))
-                                node.mut.barrier = immutable_empty_barrier
-                                if node.mut.pending > 0:  # did opening of barrier cause jobs to be enqueued in subtree?
-                                    break  # ... if so we aren't quite done yet with this subtree
-                                if node.parent is None:
-                                    break  # we've reached the root node
-                                node = node.parent  # recurse up the tree to propagate completion upward
-                                node.mut.pending -= 1  # mark subtree as completed
-                                assert node.mut.pending >= 0
-
-                        assert barriers_enabled
-                        on_job_completion_with_barriers(done_future.node, no_skip)  # type: ignore[attr-defined]
-            # endwhile submit_datasets()
-            assert len(priority_queue) == 0
-            assert len(todo_futures) == 0
-            return failed
-
     def is_program_available(self, program: str, location: str) -> bool:
         return program in self.params.available_programs.get(location, {})
 
@@ -6056,10 +5851,6 @@ def has_siblings(sorted_datasets: list[str]) -> bool:
     return False
 
 
-def is_descendant(dataset: str, of_root_dataset: str) -> bool:
-    return (dataset + "/").startswith(of_root_dataset + "/")
-
-
 def relativize_dataset(dataset: str, root_dataset: str) -> str:
     """Converts an absolute dataset path to a relative dataset path wrt root_dataset
     Example: root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz"""
@@ -6298,86 +6089,6 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
         else:
             raise ValueError(f"Invalid timezone specification: {tz_spec}")
     return tz
-
-
-def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
-    """Drop-in replacement for subprocess.run() that mimics its behavior except it enhances cleanup on TimeoutExpired."""
-    input_value = kwargs.pop("input", None)
-    timeout = kwargs.pop("timeout", None)
-    check = kwargs.pop("check", False)
-    if input_value is not None:
-        if kwargs.get("stdin") is not None:
-            raise ValueError("input and stdin are mutually exclusive")
-        kwargs["stdin"] = subprocess.PIPE
-
-    with subprocess.Popen(*args, **kwargs) as proc:
-        try:
-            stdout, stderr = proc.communicate(input_value, timeout=timeout)
-        except BaseException as e:
-            try:
-                if isinstance(e, subprocess.TimeoutExpired):
-                    terminate_process_subtree(root_pid=proc.pid)  # send SIGTERM to child process and its descendants
-            finally:
-                proc.kill()
-                raise
-        else:
-            exitcode: int | None = proc.poll()
-            assert exitcode is not None
-            if check and exitcode:
-                raise subprocess.CalledProcessError(exitcode, proc.args, output=stdout, stderr=stderr)
-    return subprocess.CompletedProcess(proc.args, exitcode, stdout, stderr)
-
-
-def terminate_process_subtree(
-    except_current_process: bool = False, root_pid: int | None = None, sig: signal.Signals = signal.SIGTERM
-) -> None:
-    """Sends signal also to descendant processes to also terminate processes started via subprocess.run()"""
-    current_pid = os.getpid()
-    root_pid = current_pid if root_pid is None else root_pid
-    pids = get_descendant_processes(root_pid)
-    if root_pid == current_pid:
-        pids += [] if except_current_process else [current_pid]
-    else:
-        pids.insert(0, root_pid)
-    for pid in pids:
-        with contextlib.suppress(OSError):
-            os.kill(pid, sig)
-
-
-def get_descendant_processes(root_pid: int) -> list[int]:
-    """Returns the list of all descendant process IDs for the given root PID, on Unix systems."""
-    procs = defaultdict(list)
-    cmd = ["ps", "-Ao", "pid,ppid"]
-    lines = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, text=True, check=True).stdout.splitlines()
-    for line in lines[1:]:  # all lines except the header line
-        splits = line.split()
-        assert len(splits) == 2
-        pid = int(splits[0])
-        ppid = int(splits[1])
-        procs[ppid].append(pid)
-    descendants: list[int] = []
-
-    def recursive_append(ppid: int) -> None:
-        for child_pid in procs[ppid]:
-            descendants.append(child_pid)
-            recursive_append(child_pid)
-
-    recursive_append(root_pid)
-    return descendants
-
-
-def pid_exists(pid: int) -> bool | None:
-    if pid <= 0:
-        return False
-    try:  # with signal=0, no signal is actually sent, but error checking is still performed
-        os.kill(pid, 0)  # ... which can be used to check for process existence on POSIX systems
-    except OSError as err:
-        if err.errno == errno.ESRCH:  # No such process
-            return False
-        if err.errno == errno.EPERM:  # Operation not permitted
-            return True
-        return None
-    return True
 
 
 def parse_dataset_locator(

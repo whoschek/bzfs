@@ -21,6 +21,7 @@ from bzfs_tests.test_utils import suite as test_utils_suite
 from bzfs_tests.test_retries import suite as test_retries_suite
 from bzfs_tests.test_period_anchors import suite as test_period_anchors_suite
 from bzfs_tests.test_progress_reporter import suite as test_progress_reporter_utils_suite
+from bzfs_tests.test_parallel_engine import suite as test_parallel_engine_suite
 from bzfs_tests.test_bzfs import suite as test_bzfs_suite
 from bzfs_tests.test_jobrunner import suite as test_jobrunner_suite
 from bzfs_tests.test_integrations import suite as test_integrations_suite
@@ -33,6 +34,7 @@ def main() -> None:
     suite.addTests(test_retries_suite())
     suite.addTests(test_period_anchors_suite())
     suite.addTests(test_progress_reporter_utils_suite())
+    suite.addTests(test_parallel_engine_suite())
     suite.addTests(test_bzfs_suite())
     suite.addTests(test_jobrunner_suite())
     test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
