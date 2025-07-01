@@ -492,7 +492,8 @@ class TestOpenNoFollow(unittest.TestCase):
 class TestFindMatch(unittest.TestCase):
 
     def test_basic(self) -> None:
-        condition = lambda arg: arg.startswith("-")  # noqa: E731
+        def condition(arg: str) -> bool:
+            return arg.startswith("-")
 
         lst = ["a", "b", "-c", "d"]
         self.assert_find_match(2, lst, condition)

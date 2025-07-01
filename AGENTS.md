@@ -93,20 +93,24 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 
 ## Refactoring
 
-- **Remove Unused Imports:** Immediately remove any `import` that becomes unused. This is always safe because bzfs has
-    no public python API.
+- **Retain names and docstrings and code comments:** Never change existing names or docstrings or code comments unless
+    explicitly requested.
 
-  ```bash
-  # Remove unused imports in all .py files
-  ruff check --isolated --select F401 --fix .
+- **Don't Suppress Linter Checks:** Never add new `# noqa:` or `# type:` annotations, or similar hacks.
 
-  # Remove unused imports only in a specific file
-  ruff check --isolated --select F401 --fix path/to/file.py
-  ```
+- **Remove Unused Imports:** Immediately run `pre-commit run --all-files` to remove any `import` that becomes unused.
+    This is always safe because bzfs has no public python API.
 
-- **Avoid Circular Dependencies:** If a move would create a cycle, think harder and extract the shared functionality
-    into a new utility module - or an existing one that keeps the dependency graph acyclic - rather than adding deep
-    import chains.
+- **Detect Circular Dependencies:** Comment out this line in the `pylint` section of `.pre-commit-config.yaml` to enable
+    the detection of cyclic imports between two or more modules as part of pre-commit:
+
+    ```bash
+    exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
+    ```
+
+- **Avoid Circular Dependencies:** Never duplicate code to avoid circular imports. If a move would create a cycle, think
+    harder and extract the shared functionality into a new utility module - or an existing one that keeps the
+    dependency graph acyclic - rather than adding deep import chains.
 
 ## Bug Fixing
 
@@ -163,11 +167,11 @@ Your context window is your most valuable asset. Use it effectively.
 
 - **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in active
     context.
-- **Compact Context:** Whenever your context window becomes more than 85% full *or* when a single impending response
-    would overflow, *or* earlier if the next answer is code-heavy, use the `/compact` command (or a similar tool) to
-    thoroughly summarize the context window in detail, in an analytic, structured way, paying close attention to the
-    user's explicit requests and your previous actions, without losing precision. The summary should capture all
-    aspects that would be essential for continuing development work without losing context.
+- **Compact Context:** Whenever your context window becomes more than 75% full *or* when a single impending response
+    would overflow, use the `/compact` or `/compress` command to thoroughly summarize the context window in detail, in
+    an analytic, structured way, paying close attention to the user's explicit requests and your previous actions,
+    without losing precision. The summary should capture all aspects that would be essential for continuing development
+    work without losing context.
 
 ## Time Management
 

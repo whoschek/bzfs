@@ -60,6 +60,7 @@ Distribution = "https://pypi.org/project/bzfs"
 dev = [  # for development only
   "black==25.1",  # see https://github.com/psf/black
   "ruff==0.12.1",  # see https://github.com/astral-sh/ruff
+  "pylint==3.3.7",  # see https://github.com/pycqa/pylint
   "coverage>=7.6",  # see https://github.com/nedbat/coveragepy
   "mypy==1.16.1",  # see https://github.com/python/mypy
   "argparse-manpage==4.6",  # see https://github.com/praiskup/argparse-manpage
@@ -128,6 +129,7 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "FA",   # forward annotations
     "G",    # flake8-logging-format
     "I",    # sort imports
+    "ICN",  # flake8-import-conventions
     "INP",  # flake8-no-pep420
     "LOG",  # flake8-logging
     "N8",   # naming, snake case
@@ -189,6 +191,16 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 [tool.ruff.lint.flake8-copyright]
 author = "Wolfgang Hoschek"
 
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-import-conventions]  # ICN
+# forbid-aliased-import-of-modules, e.g. forbids 'import bzfs_main.bzfs as foo'
+aliases = { "bzfs_main.bzfs" = "bzfs", "bzfs_main.bzfs_jobrunner" = "bzfs_jobrunner" }
+
+# forbid-aliased-import-of-attributes, e.g. forbids 'from bzfs_main import bzfs as foo'
+extend-aliases = { "bzfs_main.bzfs" = "bzfs", "bzfs_main.bzfs_jobrunner" = "bzfs_jobrunner" }
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]  # for TID251
 "typing.TYPE_CHECKING".msg = "Conditional TYPE_CHECKING blocks are prohibited in this codebase; they clutter code"
 
@@ -197,6 +209,10 @@ known-first-party = ["bzfs_*"]
 no-lines-before = ["standard-library"]  # no blank line before std-lib
 lines-between-types = 0  # keep `import ...` and `from ...` tight
 split-on-trailing-comma = true  # retain multi-line blocks when a trailing comma is present
+
+[tool.pylint."MESSAGES CONTROL"]  # see https://pylint.readthedocs.io/en/latest/user_guide/messages/messages_overview.html
+disable = ["all"]        # turn all checks off ...
+enable  = ["R0401"]      # ...then re-enable just the detection of cyclic imports
 
 [tool.mypy]
 python_version = "3.8"

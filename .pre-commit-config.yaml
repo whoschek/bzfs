@@ -33,29 +33,50 @@ repos:
         args: [--fix=lf]  # Replace line endings with linefeed
       - id: trailing-whitespace  # Remove whitespace from the end of lines
       - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
-  - repo: local
-    hooks:
-      - id: forbid-noqa-F401
-        name: "forbid '# noqa: F401' (Suppressing auto-removal of unused imports is prohibited)"
-        language: pygrep
-        entry: '#\s*noqa:\s*F401\b' # regex that must NOT appear
-        types: [python]             # only scan *.py
-      - id: forbid-dunder-all
-        name: "forbid __all__ definitions"
-        language: pygrep
-        entry: '^__all__\s*='       # any assignment to __all__ must NOT appear
-        types: [python]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.1
     hooks:
       - id: ruff-check  # Run linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
+  - repo: https://github.com/pycqa/pylint
+    rev: v3.3.7
+    hooks:
+      - id: pylint
+        name: pylint R0401 (cyclic imports)
+        exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.16.1
     hooks:
       - id: mypy  # Run Python type checker
         exclude: ^\.git.*$
         # config options like `select` live in pyproject.toml
+  - repo: local
+    hooks:
+      - id: forbid-noqa-E
+        name: "forbid '# noqa: E' (pycodestyle errors)"
+        language: pygrep
+        entry: '#\s*noqa:\s*E(?!501\b)\d+\b' # noqa: E except E501
+        types: [python]  # only scan *.py
+      - id: forbid-noqa-F
+        name: "forbid '# noqa: F' (pyflakes)"
+        language: pygrep
+        entry: '#\s*noqa:\s*F(?!821\b)\d+\b' # noqa: F except F821
+        types: [python]
+      - id: forbid-dunder-all
+        name: "forbid __all__ definitions"
+        language: pygrep
+        entry: '^__all__\s*='                # any assignment to __all__ must NOT appear
+        types: [python]
+      - id: forbid-aliased-import-of-modules
+        name: "forbid aliased import of modules"    # e.g. forbids 'import bzfs_main.bzfs as foo'
+        language: pygrep
+        entry: '^\s*import\s+bzfs_\w+(\.\w+)*\s+as\s+\w+\s*'
+        types: [python]
+      - id: forbid-aliased-import-of-attributes
+        name: "forbid aliased import of attributes" # e.g. forbids 'from bzfs_main import bzfs as foo'
+        language: pygrep
+        entry: '^\s*from\s+bzfs_\w+(\.\w+)*\s+import\s+(?!suite|prog_name)\w+(\.\w+)*\s+as\s+\w+\s*'
+        types: [python]
   - repo: https://github.com/psf/black
     rev: 25.1.0  # bump version number occasionally with autoupdate
     hooks:
