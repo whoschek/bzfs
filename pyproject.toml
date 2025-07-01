@@ -182,6 +182,9 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 "**/__init__.py" = [
     "CPY",      # copyright
 ]
+"**/check_range.py" = [
+    "CPY",      # copyright
+]
 
 [tool.ruff.lint.flake8-copyright]
 author = "Wolfgang Hoschek"

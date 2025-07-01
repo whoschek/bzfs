@@ -38,6 +38,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 from bzfs_main import bzfs
 from bzfs_main.bzfs import Remote, getenv_any, log_trace
+from bzfs_main.check_range import CheckRange
 from bzfs_tests.test_utils import stop_on_failure_subtest
 from bzfs_tests.zfs_util import is_solaris_zfs
 
@@ -2608,123 +2609,123 @@ class TestCheckRange(unittest.TestCase):
 
     def test_valid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=0, max=100)
+        parser.add_argument("--age", type=int, action=CheckRange, min=0, max=100)
         args = parser.parse_args(["--age", "50"])
         self.assertEqual(args.age, 50)
 
     def test_valid_range_inf_sup(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange, inf=0, sup=100)
+        parser.add_argument("--age", type=int, action=CheckRange, inf=0, sup=100)
         args = parser.parse_args(["--age", "50"])
         self.assertEqual(args.age, 50)
 
     def test_invalid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=0, max=100)
+        parser.add_argument("--age", type=int, action=CheckRange, min=0, max=100)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "-1"])
 
     def test_invalid_range_inf_sup(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange, inf=0, sup=100)
+        parser.add_argument("--age", type=int, action=CheckRange, inf=0, sup=100)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "101"])
 
     def test_invalid_combination_min_inf(self) -> None:
         with self.assertRaises(ValueError):
             parser = argparse.ArgumentParser()
-            parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=0, inf=100)
+            parser.add_argument("--age", type=int, action=CheckRange, min=0, inf=100)
 
     def test_invalid_combination_max_sup(self) -> None:
         with self.assertRaises(ValueError):
             parser = argparse.ArgumentParser()
-            parser.add_argument("--age", type=int, action=bzfs.CheckRange, max=0, sup=100)
+            parser.add_argument("--age", type=int, action=CheckRange, max=0, sup=100)
 
     def test_valid_float_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
+        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "50.5"])
         self.assertEqual(args.age, 50.5)
 
     def test_invalid_float_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
+        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "-0.1"])
 
     def test_valid_edge_case_min(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
+        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "0.0"])
         self.assertEqual(args.age, 0.0)
 
     def test_valid_edge_case_max(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=bzfs.CheckRange, min=0.0, max=100.0)
+        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "100.0"])
         self.assertEqual(args.age, 100.0)
 
     def test_invalid_edge_case_sup(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=bzfs.CheckRange, inf=0.0, sup=100.0)
+        parser.add_argument("--age", type=float, action=CheckRange, inf=0.0, sup=100.0)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "100.0"])
 
     def test_invalid_edge_case_inf(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=bzfs.CheckRange, inf=0.0, sup=100.0)
+        parser.add_argument("--age", type=float, action=CheckRange, inf=0.0, sup=100.0)
         with self.assertRaises(SystemExit):
             parser.parse_args(["--age", "0.0"])
 
     def test_no_range_constraints(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange)
+        parser.add_argument("--age", type=int, action=CheckRange)
         args = parser.parse_args(["--age", "150"])
         self.assertEqual(args.age, 150)
 
     def test_no_range_constraints_float(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=bzfs.CheckRange)
+        parser.add_argument("--age", type=float, action=CheckRange)
         args = parser.parse_args(["--age", "150.5"])
         self.assertEqual(args.age, 150.5)
 
     def test_very_large_value(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange, max=10**18)
+        parser.add_argument("--age", type=int, action=CheckRange, max=10**18)
         args = parser.parse_args(["--age", "999999999999999999"])
         self.assertEqual(args.age, 999999999999999999)
 
     def test_very_small_value(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange, min=-(10**18))
+        parser.add_argument("--age", type=int, action=CheckRange, min=-(10**18))
         args = parser.parse_args(["--age", "-999999999999999999"])
         self.assertEqual(args.age, -999999999999999999)
 
     def test_default_interval(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange)
-        action = bzfs.CheckRange(option_strings=["--age"], dest="age")
+        parser.add_argument("--age", type=int, action=CheckRange)
+        action = CheckRange(option_strings=["--age"], dest="age")
         self.assertEqual(action.interval(), "valid range: (-infinity, +infinity)")
 
     def test_interval_with_inf_sup(self) -> None:
-        action = bzfs.CheckRange(option_strings=["--age"], dest="age", inf=0, sup=100)
+        action = CheckRange(option_strings=["--age"], dest="age", inf=0, sup=100)
         self.assertEqual(action.interval(), "valid range: (0, 100)")
 
     def test_interval_with_min_max(self) -> None:
-        action = bzfs.CheckRange(option_strings=["--age"], dest="age", min=0, max=100)
+        action = CheckRange(option_strings=["--age"], dest="age", min=0, max=100)
         self.assertEqual(action.interval(), "valid range: [0, 100]")
 
     def test_interval_with_min(self) -> None:
-        action = bzfs.CheckRange(option_strings=["--age"], dest="age", min=0)
+        action = CheckRange(option_strings=["--age"], dest="age", min=0)
         self.assertEqual(action.interval(), "valid range: [0, +infinity)")
 
     def test_interval_with_max(self) -> None:
-        action = bzfs.CheckRange(option_strings=["--age"], dest="age", max=100)
+        action = CheckRange(option_strings=["--age"], dest="age", max=100)
         self.assertEqual(action.interval(), "valid range: (-infinity, 100]")
 
     def test_call_without_range_constraints(self) -> None:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=bzfs.CheckRange)
+        parser.add_argument("--age", type=int, action=CheckRange)
         args = parser.parse_args(["--age", "50"])
         self.assertEqual(args.age, 50)
 

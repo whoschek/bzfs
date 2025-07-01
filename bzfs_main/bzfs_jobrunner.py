@@ -49,6 +49,7 @@ from typing import Any, Iterable, TypeVar, Union
 from bzfs_main import bzfs
 from bzfs_main.bzfs import die_status, log_trace
 from bzfs_main.bzfs import prog_name as bzfs_prog_name
+from bzfs_main.check_range import CheckRange
 from bzfs_main.parallel_engine import BARRIER_CHAR, process_datasets_in_parallel_and_fault_tolerant
 from bzfs_main.utils import human_readable_duration, percent, shuffle_dict
 
@@ -344,7 +345,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many parallel jobs as "
              "there are cores on the machine; 75%% uses num_procs = num_cores * 0.75. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(
-        "--work-period-seconds", type=float, min=0, default=0, action=bzfs.CheckRange, metavar="FLOAT",
+        "--work-period-seconds", type=float, min=0, default=0, action=CheckRange, metavar="FLOAT",
         help="Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; "
              "0 disables this feature (default: %(default)s). Examples: 0, 60, 86400\n\n")
     parser.add_argument(
@@ -352,7 +353,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Randomize job start time and host order to avoid potential thundering herd problems in large distributed "
              "systems (optional). Randomizing job start time is only relevant if --work-period-seconds > 0.\n\n")
     parser.add_argument(
-        "--worker-timeout-seconds", type=float, min=0, default=None, action=bzfs.CheckRange, metavar="FLOAT",
+        "--worker-timeout-seconds", type=float, min=0, default=None, action=CheckRange, metavar="FLOAT",
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
              "(optional). Other workers remain unaffected. Examples: 60, 3600\n\n")
     parser.add_argument(
