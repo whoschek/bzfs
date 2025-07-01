@@ -83,7 +83,6 @@ from typing import (
     IO,
     Any,
     Callable,
-    Dict,
     Final,
     Generator,
     Iterable,
@@ -1646,7 +1645,6 @@ class LogParams:
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
 RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
-Tree = Dict[str, Dict[str, Any]]  # Type alias
 
 
 #############################################################################
