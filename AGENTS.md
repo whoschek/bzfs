@@ -92,6 +92,22 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 
 # Guidelines and Best Practices
 
+## Refactoring
+
+- **Remove Unused Imports:** Immediately remove any `import` that becomes unused. Do not re-export it as bzfs has *no*
+    public python API.
+
+  ```bash
+  # Remove unused imports in all .py files
+  ruff check --isolated --select F401 --fix .
+
+  # Remove unused imports only in a specific file
+  ruff check --isolated --select F401 --fix path/to/file.py
+  ```
+
+- **Avoid Circular Dependencies:** If a move would create a cycle, extract the shared functionality into a new utility
+    module - or an existing one that keeps the dependency graph acyclic - rather than adding deep import chains.
+
 ## Bug Fixing
 
 If you are tasked to identify a bug, perform a thorough root cause analysis. Understand *why* the bug occurs, not
@@ -107,11 +123,6 @@ New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and inte
 `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in the
 `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`. Tests should be specific, readable, and
 robust, and deterministic.
-
-## Refactoring
-
-If you are tasked to refactor the codebase, remove imports that become unused, instead of re-exporting them. Also, don't
-introduce this unnecessary idiom: `if TYPE_CHECKING: ...`
 
 ## Code Coverage
 
@@ -160,12 +171,13 @@ Your context window is your most valuable asset. Use it effectively.
 
 ## Time Management
 
-If you are working on a time-limited task, create intermediate checkpoints or commits. Push them to a safe place. As the
-time limit approaches, wrap up your work and submit what you have completed, even if the task is not fully finished.
+After every N code changes (depending on your time limit), create intermediate checkpoints or commits. Push them to a
+safe place from where you can recover it later in case you get unexpectedly aborted or cancelled. Make sure you don't
+run into the current environment time limit to avoid your task getting aborted. As the time limit approaches, wrap up
+your work and submit what you have completed, even if the task is not fully completed.
 
 ## Environment Setup
 
-- Python 3.8 or newer is required.
 - If the `venv` directory does not yet exist, create and set it up with all development dependencies as follows:
 
     ```bash

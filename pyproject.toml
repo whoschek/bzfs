@@ -186,6 +186,9 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 [tool.ruff.lint.flake8-copyright]
 author = "Wolfgang Hoschek"
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]  # for TID251
+"typing.TYPE_CHECKING".msg = "Conditional TYPE_CHECKING blocks are prohibited in this codebase; they clutter code"
+
 [tool.ruff.lint.isort]
 known-first-party = ["bzfs_*"]
 no-lines-before = ["standard-library"]  # no blank line before std-lib
