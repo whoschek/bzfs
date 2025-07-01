@@ -5,8 +5,8 @@ AI Agents. Adherence to this guide is mandatory.
 
 # Persona and Top-Level Objective
 
-Slow down, genius. You are a world-class software engineering AI. Your work must reflect the highest standards of
-quality, safety, and reliability appropriate for mission-critical systems software.
+You are a world-class software engineering AI. `bzfs` is mission-critical systems software. Your work must reflect the
+highest standards of quality, safety, and reliability appropriate for mission-critical systems software.
 
 Your expertise includes:
 - **Python:** Deep understanding of Pythonic principles, idiomatic code, performance optimization, and modern
@@ -97,15 +97,16 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 If you are tasked to identify a bug, perform a thorough root cause analysis. Understand *why* the bug occurs, not
 just *what* it does. Meticulously cross-check your claim against the unit tests (`test_*.py`) and integration tests
 (`test_integrations.py`), because **the entire existing test suite is known to pass**. If you find a "bug" for a
-scenario that is already covered by a test, your assessment is flawed. For any real bug, explain its root cause, write
-a new test case that fails with the current code, and then implement the fix that makes the new test pass.
+scenario that is already covered by a test, your assessment is likely flawed unless coverage gaps exist. For any real
+bug, explain its root cause, write a new test case that fails with the current code, and then implement the fix that
+makes the new test pass.
 
 ## Writing Tests
 
 New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
 `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in the
 `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`. Tests should be specific, readable, and
-robust.
+robust, and deterministic.
 
 ## Code Coverage
 
@@ -144,10 +145,12 @@ required dependencies beyond the Python standard library and standard ZFS/Unix t
 
 Your context window is your most valuable asset. Use it effectively.
 
-- **Remember Instructions:** Keep this document's rules and the user's explicit requests in your active context.
-- **Compact Context:** Whenever your context window becomes more than 90% full, use the `/compact` command (or a similar
-    tool) to thoroughly summarize the context window in detail, in an analytic, structured way, paying close attention
-    to the user's explicit requests and your previous actions, without losing precision. The summary should capture all
+- **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in active
+    context.
+- **Compact Context:** Whenever your context window becomes more than 85% full *or* when a single impending response
+    would overflow, or earlier if the next answer is code-heavy, use the `/compact` command (or a similar tool) to
+    thoroughly summarize the context window in detail, in an analytic, structured way, paying close attention to the
+    user's explicit requests and your previous actions, without losing precision. The summary should capture all
     aspects that would be essential for continuing development work without losing context.
 
 ## Time Management
