@@ -35,10 +35,9 @@ To understand the project's architecture and features, follow these steps:
 - **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
 - **Job Configuration:** Study `bzfs_tests/bzfs_job_example.py` to see how `bzfs_jobrunner` is configured to orchestrate
     jobs.
-- **Code Architecture:** The most efficient way to understand the code layout is to read the overview docstrings at the
+- **Code Design:** The most efficient way to understand the code layout is to read the overview docstrings at the
     top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py`. These docstrings explain where key functionalities
     are implemented.
-- **Recent Changes:** Skim `CHANGELOG.md` for context on recent developments.
 
 # Repository Layout
 
@@ -65,9 +64,9 @@ consistently.
     ```
     Iterate on your code until all tests pass.
 
-3. **Run Linters and Formatters:** Execute the `pre-commit` hooks pecified in `.pre-commit-hooks.yaml` and configured in
-    `pyproject.toml`, for example for linting (with `ruff`), formatting (with `black`), type checking (with `mypy`).
-    Change and iterate until all hooks pass.
+3. **Run Linters and Formatters:** Execute the `pre-commit` hooks specified in `.pre-commit-hooks.yaml` and configured
+in `pyproject.toml`, for example for linting (with `ruff`), formatting (with `black`), type checking (with `mypy`).
+Change and iterate until all hooks pass.
 
     ```bash
     pre-commit run --all-files
@@ -92,26 +91,38 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 
 # Guidelines and Best Practices
 
+## Refactoring
+
+- **Remove Unused Imports:** Immediately remove any `import` that becomes unused. This is always safe because bzfs has
+    no public python API.
+
+  ```bash
+  # Remove unused imports in all .py files
+  ruff check --isolated --select F401 --fix .
+
+  # Remove unused imports only in a specific file
+  ruff check --isolated --select F401 --fix path/to/file.py
+  ```
+
+- **Avoid Circular Dependencies:** If a move would create a cycle, think harder and extract the shared functionality
+    into a new utility module - or an existing one that keeps the dependency graph acyclic - rather than adding deep
+    import chains.
+
 ## Bug Fixing
 
-If you are tasked to identify a bug, perform a thorough root cause analysis. Understand *why* the bug occurs, not
-just *what* it does. Meticulously cross-check your claim against the unit tests (`test_*.py`) and integration tests
-(`test_integrations.py`), because **the entire existing test suite is known to pass**. If you find a "bug" for a
-scenario that is already covered by a test, your assessment is likely flawed unless coverage gaps exist. For any real
-bug, explain its root cause, write a new test case that fails with the current code, and then implement the fix that
-makes the new test pass.
+If you are tasked to identify a bug, perform a thorough root cause analysis. Think harder to understand *why* the bug
+occurs, not just *what* it does. Meticulously cross-check your claim against the unit tests (`test_*.py`) and
+integration tests (`test_integrations.py`), because **the entire existing test suite is known to pass**. If you find
+a "bug" for a scenario that is already covered by a test, your assessment is likely flawed unless coverage gaps exist.
+For any real bug, explain its root cause, write a new test case that fails with the current code, and then implement
+the fix that makes the new test pass.
 
 ## Writing Tests
 
 New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
 `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in the
-`suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`. Tests should be specific, readable, and
+`suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`. Tests should be specific, readable,
 robust, and deterministic.
-
-## Refactoring
-
-If you are tasked to refactor the codebase, remove imports that become unused, instead of re-exporting them. Also, don't
-introduce this unnecessary idiom: `if TYPE_CHECKING: ...`
 
 ## Code Coverage
 
@@ -153,23 +164,25 @@ Your context window is your most valuable asset. Use it effectively.
 - **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in active
     context.
 - **Compact Context:** Whenever your context window becomes more than 85% full *or* when a single impending response
-    would overflow, or earlier if the next answer is code-heavy, use the `/compact` command (or a similar tool) to
+    would overflow, *or* earlier if the next answer is code-heavy, use the `/compact` command (or a similar tool) to
     thoroughly summarize the context window in detail, in an analytic, structured way, paying close attention to the
     user's explicit requests and your previous actions, without losing precision. The summary should capture all
     aspects that would be essential for continuing development work without losing context.
 
 ## Time Management
 
-If you are working on a time-limited task, create intermediate checkpoints or commits. Push them to a safe place. As the
-time limit approaches, wrap up your work and submit what you have completed, even if the task is not fully finished.
+After every N code changes (depending on your time limit), create intermediate checkpoints or commits. Push them to a
+safe place from where you can recover it later in case you get unexpectedly aborted or cancelled. Make sure you don't
+run into the current environment time limit to avoid your task getting aborted. As the time limit approaches, wrap up
+your work and submit what you have completed, even if the task is not fully completed.
 
 ## Environment Setup
 
-- Python 3.8 or newer is required.
 - If the `venv` directory does not yet exist, create and set it up with all development dependencies as follows:
 
     ```bash
-    python3 -m venv venv      # Create a Python virtual environment
-    source venv/bin/activate  # Activate it
-    pip install -e '.[dev]'   # Install all development dependencies
+    python3 -m venv venv                # Create a Python virtual environment
+    source venv/bin/activate            # Activate it
+    pip install -e '.[dev]'             # Install all development dependencies
+    pre-commit install --install-hooks  # Ensure Linters and Formatters run on every commit
     ```

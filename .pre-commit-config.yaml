@@ -18,6 +18,7 @@
 # These steps should also be mirrored in CI (e.g. `pre-commit run --all-files`)
 # to guarantee that the same checks are enforced everywhere.
 # ---------------------------------------------------------------------------
+fail_fast: true  # abort on first failing hook
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -32,6 +33,18 @@ repos:
         args: [--fix=lf]  # Replace line endings with linefeed
       - id: trailing-whitespace  # Remove whitespace from the end of lines
       - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
+  - repo: local
+    hooks:
+      - id: forbid-noqa-F401
+        name: "forbid '# noqa: F401' (Suppressing auto-removal of unused imports is prohibited)"
+        language: pygrep
+        entry: '#\s*noqa:\s*F401\b' # regex that must NOT appear
+        types: [python]             # only scan *.py
+      - id: forbid-dunder-all
+        name: "forbid __all__ definitions"
+        language: pygrep
+        entry: '^__all__\s*='       # any assignment to __all__ must NOT appear
+        types: [python]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.1
     hooks:
