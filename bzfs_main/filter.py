@@ -30,6 +30,9 @@ from typing import (
     Union,
 )
 
+from bzfs_main.connection import (
+    try_ssh_command,
+)
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
     RegexList,
@@ -100,7 +103,7 @@ def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_dataset
         # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset)
         job.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
-        property_value = job.try_ssh_command(remote, log_trace, cmd=cmd)
+        property_value = try_ssh_command(job, remote, log_trace, cmd=cmd)
         if property_value is None:
             log.warning(f"Third party deleted {remote.location}: %s", dataset)
             skip_dataset = dataset

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+import argparse
 import bisect
 import contextlib
 import errno
@@ -24,6 +25,7 @@ import re
 import signal
 import stat
 import subprocess
+import sys
 import threading
 import time
 import types
@@ -38,8 +40,10 @@ from typing import (
     Iterable,
     Iterator,
     List,
+    NoReturn,
     Protocol,
     Sequence,
+    TextIO,
     Tuple,
     TypeVar,
     cast,
@@ -48,6 +52,7 @@ from typing import (
 # constants:
 prog_name = "bzfs"
 env_var_prefix = prog_name + "_"
+die_status = 3
 descendants_re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
 log_stderr = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
@@ -355,6 +360,47 @@ def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
             regex = f"{regex}{suffix}"
         compiled_regexes.append((re.compile(regex), is_negation))
     return compiled_regexes
+
+
+def list_formatter(iterable: Iterable, separator: str = " ", lstrip: bool = False) -> Any:
+    # For lazy/noop evaluation in disabled log levels
+    class CustomListFormatter:
+        def __str__(self) -> str:
+            s = separator.join(map(str, iterable))
+            return s.lstrip() if lstrip else s
+
+    return CustomListFormatter()
+
+
+def pretty_print_formatter(obj_to_format: Any) -> Any:  # For lazy/noop evaluation in disabled log levels
+    class PrettyPrintFormatter:
+        def __str__(self) -> str:
+            import pprint
+
+            return pprint.pformat(vars(obj_to_format))
+
+    return PrettyPrintFormatter()
+
+
+def stderr_to_str(stderr: Any) -> str:
+    """Workaround for https://github.com/python/cpython/issues/87597"""
+    return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8")
+
+
+def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
+    if run and value:
+        value = value if end else str(value).rstrip()
+        level = log_stdout if file is sys.stdout else log_stderr
+        log.log(level, "%s", value)
+
+
+def die(msg: str, exit_code: int = die_status, parser: argparse.ArgumentParser | None = None) -> NoReturn:
+    if parser is None:
+        ex = SystemExit(msg)
+        ex.code = exit_code
+        raise ex
+    else:
+        parser.error(msg)
 
 
 def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
