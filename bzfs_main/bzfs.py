@@ -53,7 +53,6 @@ import itertools
 import logging
 import logging.config
 import logging.handlers
-import math
 import os
 import platform
 import random
@@ -87,21 +86,28 @@ from typing import (
     Generator,
     Iterable,
     Iterator,
-    List,
     Literal,
     NamedTuple,
     NoReturn,
-    Optional,
     Sequence,
     TextIO,
-    Tuple,
     TypeVar,
-    Union,
     cast,
 )
 
 import bzfs_main.utils
 from bzfs_main.check_range import CheckRange
+from bzfs_main.filter import (
+    RankRange,
+    UnixTimeRange,
+    dataset_regexes,
+    filter_datasets,
+    filter_lines,
+    filter_lines_except,
+    filter_properties,
+    filter_snapshots,
+    snapshot_regex_filter_name,
+)
 from bzfs_main.parallel_engine import (
     process_datasets_in_parallel_and_fault_tolerant,
 )
@@ -121,28 +127,42 @@ from bzfs_main.retry import (
 )
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
+    RegexList,
     SmallPriorityQueue,
     SynchronizedBool,
     SynchronizedDict,
+    compile_regexes,
     cut,
+    descendants_re_suffix,
     drain,
+    env_var_prefix,
     get_home_directory,
+    getenv_bool,
+    getenv_int,
     has_duplicates,
     human_readable_bytes,
     human_readable_duration,
     is_descendant,
+    is_included,
+    log_debug,
+    log_stderr,
+    log_stdout,
+    log_trace,
     open_nofollow,
     percent,
     pid_exists,
-    replace_capturing_groups_with_non_capturing_groups,
+    prog_name,
+    relativize_dataset,
+    replace_in_lines,
+    replace_prefix,
     subprocess_run,
     terminate_process_subtree,
+    unixtime_infinity_secs,
     xfinally,
 )
 
 # constants:
 __version__ = "1.12.0-dev"
-prog_name = "bzfs"
 prog_author = "Wolfgang Hoschek"
 die_status = 3
 critical_status = 2
@@ -158,22 +178,15 @@ create_src_snapshots_prefix_dflt = prog_name + "_"
 create_src_snapshots_suffix_dflt = "_adhoc"
 time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
 disable_prg = "-"
-env_var_prefix = prog_name + "_"
 dummy_dataset = "dummy"
 zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
 zfs_version_is_at_least_2_2_0 = "zfs>=2.2.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
-snapshot_regex_filter_name = "snapshot_regex"
 snapshot_filters_var = "snapshot_filters_var"
 cmp_choices_items = ("src", "dst", "all")
 inject_dst_pipe_fail_kbytes = 400
-unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
-log_stderr = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
-log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
-log_debug = logging.DEBUG
-log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
 DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
@@ -1642,12 +1655,6 @@ class LogParams:
 
 
 #############################################################################
-RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
-UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
-RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
-
-
-#############################################################################
 class Params:
     def __init__(
         self,
@@ -2282,7 +2289,6 @@ class Job:
         self.dedicated_tcp_connection_per_zfs_send: bool = True
         self.max_datasets_per_minibatch_on_list_snaps: dict[str, int] = {}
         self.max_workers: dict[str, int] = {}
-        self.re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
         self.stats_lock: threading.Lock = threading.Lock()
         self.num_cache_hits: int = 0
         self.num_cache_misses: int = 0
@@ -2520,9 +2526,10 @@ class Job:
 
         p.abs_exclude_datasets, rel_exclude_datasets = separate_abs_vs_rel_datasets(p.args.exclude_dataset)
         p.abs_include_datasets, rel_include_datasets = separate_abs_vs_rel_datasets(p.args.include_dataset)
+        suffix = descendants_re_suffix
         p.tmp_exclude_dataset_regexes, p.tmp_include_dataset_regexes = (
-            compile_regexes(exclude_regexes + self.dataset_regexes(rel_exclude_datasets), suffix=self.re_suffix),
-            compile_regexes(include_regexes + self.dataset_regexes(rel_include_datasets), suffix=self.re_suffix),
+            compile_regexes(exclude_regexes + dataset_regexes(p.src, p.dst, rel_exclude_datasets), suffix=suffix),
+            compile_regexes(include_regexes + dataset_regexes(p.src, p.dst, rel_include_datasets), suffix=suffix),
         )
 
         if p.pv_program != disable_prg:
@@ -2564,10 +2571,10 @@ class Job:
             ):
                 die(f"Source and destination dataset trees must not overlap! {msg}")
 
-        suffix = self.re_suffix  # also match descendants of a matching dataset
+        suffx = descendants_re_suffix  # also match descendants of a matching dataset
         p.exclude_dataset_regexes, p.include_dataset_regexes = (
-            p.tmp_exclude_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_exclude_datasets), suffix=suffix),
-            p.tmp_include_dataset_regexes + compile_regexes(self.dataset_regexes(p.abs_include_datasets), suffix=suffix),
+            p.tmp_exclude_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_exclude_datasets), suffix=suffx),
+            p.tmp_include_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_include_datasets), suffix=suffx),
         )
         if len(p.include_dataset_regexes) == 0:
             p.include_dataset_regexes = [(re.compile(r".*"), False)]
@@ -2641,7 +2648,7 @@ class Job:
 
     def run_task(self) -> None:
         def filter_src_datasets() -> list[str]:  # apply --{include|exclude}-dataset policy
-            return self.filter_datasets(src, basis_src_datasets) if src_datasets is None else src_datasets
+            return filter_datasets(self, src, basis_src_datasets) if src_datasets is None else src_datasets
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
@@ -2749,7 +2756,7 @@ class Job:
                 basis_dst_datasets.append(dst_dataset)
 
         assert not self.is_test_mode or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
-        dst_datasets = self.filter_datasets(dst, basis_dst_datasets)  # apply include/exclude policy
+        dst_datasets = filter_datasets(self, dst, basis_dst_datasets)  # apply include/exclude policy
 
         # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
         # included via --{include|exclude}-dataset* policy. Do not recurse without --recursive. With --recursive,
@@ -2813,7 +2820,7 @@ class Job:
                     # the policy says to *keep* (so all_except=False for the filter_snapshots() call), then from that "keep"
                     # list, we later further refine by checking what's on the source dataset.
                     all_except = False
-                dst_snaps_with_guids = self.filter_snapshots(dst_snaps_with_guids, all_except=all_except)
+                dst_snaps_with_guids = filter_snapshots(self, dst_snaps_with_guids, all_except=all_except)
                 if p.delete_dst_bookmarks:
                     replace_in_lines(dst_snaps_with_guids, old="@", new="#", count=1)  # restore pre-filtering bookmark state
                 if filter_needs_creation_time:
@@ -3247,7 +3254,7 @@ class Job:
             self.num_snapshots_found += num_src_snapshots_found
         # apply include/exclude regexes to ignore irrelevant src snapshots
         basis_src_snapshots_with_guids = src_snapshots_with_guids
-        src_snapshots_with_guids = self.filter_snapshots(src_snapshots_with_guids)
+        src_snapshots_with_guids = filter_snapshots(self, src_snapshots_with_guids)
         if filter_needs_creation_time:
             src_snapshots_with_guids = cut(field=2, lines=src_snapshots_with_guids)
             basis_src_snapshots_with_guids = cut(field=2, lines=basis_src_snapshots_with_guids)
@@ -4011,221 +4018,6 @@ class Job:
         """shell-escapes double quotes and dollar and backticks, then surrounds with double quotes."""
         return '"' + arg.replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
 
-    def filter_datasets(self, remote: Remote, sorted_datasets: list[str]) -> list[str]:
-        """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
-        exclude regexes. Assumes the list of input datasets is sorted. The list of output datasets will be sorted too."""
-        p, log = self.params, self.params.log
-        results = []
-        for i, dataset in enumerate(sorted_datasets):
-            if i == 0 and p.skip_parent:
-                continue
-            rel_dataset = relativize_dataset(dataset, remote.root_dataset)
-            if rel_dataset.startswith("/"):
-                rel_dataset = rel_dataset[1:]  # strip leading '/' char if any
-            if is_included(rel_dataset, p.include_dataset_regexes, p.exclude_dataset_regexes):
-                results.append(dataset)
-                log.debug("Including b/c dataset regex: %s", dataset)
-            else:
-                log.debug("Excluding b/c dataset regex: %s", dataset)
-        if p.exclude_dataset_property:
-            results = self.filter_datasets_by_exclude_property(remote, results)
-        is_debug = p.log.isEnabledFor(log_debug)
-        for dataset in results:
-            if is_debug:
-                log.debug("Finally included %s dataset: %s", remote.location, dataset)
-        if self.is_test_mode:
-            # Asserts the following: If a dataset is excluded its descendants are automatically excluded too, and this
-            # decision is never reconsidered even for the descendants because exclude takes precedence over include.
-            resultset = set(results)
-            root_datasets = [dataset for dataset in results if os.path.dirname(dataset) not in resultset]  # have no parent
-            for root in root_datasets:  # each root is not a descendant of another dataset
-                assert not any(is_descendant(root, of_root_dataset=dataset) for dataset in results if dataset != root)
-            for dataset in results:  # each dataset belongs to a subtree rooted at one of the roots
-                assert any(is_descendant(dataset, of_root_dataset=root) for root in root_datasets)
-        return results
-
-    def filter_datasets_by_exclude_property(self, remote: Remote, sorted_datasets: list[str]) -> list[str]:
-        """Excludes datasets that are marked with a ZFS user property value that, in effect, says 'skip me'."""
-        p, log = self.params, self.params.log
-        results = []
-        localhostname = None
-        skip_dataset = DONT_SKIP_DATASET
-        for dataset in sorted_datasets:
-            if is_descendant(dataset, of_root_dataset=skip_dataset):
-                # skip_dataset shall be ignored or has been deleted by some third party while we're running
-                continue  # nothing to do anymore for this dataset subtree (note that datasets is sorted)
-            skip_dataset = DONT_SKIP_DATASET
-            # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
-            cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset)
-            self.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
-            property_value = self.try_ssh_command(remote, log_trace, cmd=cmd)
-            if property_value is None:
-                log.warning(f"Third party deleted {remote.location}: %s", dataset)
-                skip_dataset = dataset
-            else:
-                reason = ""
-                property_value = property_value.strip()
-                if not property_value or property_value == "-" or property_value.lower() == "true":
-                    sync = True
-                elif property_value.lower() == "false":
-                    sync = False
-                else:
-                    localhostname = localhostname or socket.gethostname()
-                    sync = any(localhostname == hostname.strip() for hostname in property_value.split(","))
-                    reason = f", localhostname: {localhostname}, hostnames: {property_value}"
-
-                if sync:
-                    results.append(dataset)
-                    log.debug("Including b/c dataset prop: %s%s", dataset, reason)
-                else:
-                    skip_dataset = dataset
-                    log.debug("Excluding b/c dataset prop: %s%s", dataset, reason)
-        return results
-
-    def filter_snapshots(self, basis_snapshots: list[str], all_except: bool = False) -> list[str]:
-        """Returns all snapshots that pass all include/exclude policies.
-        `all_except=False` returns snapshots *matching* the filters,
-        for example those that should be deleted if we are in "delete selected" mode.
-        `all_except=True` returns snapshots *not* matching the filters,
-        for example those that should be deleted if we are in "retain selected" mode."""
-
-        def resolve_timerange(timerange: UnixTimeRange) -> UnixTimeRange:
-            assert timerange is not None
-            lo, hi = timerange
-            if isinstance(lo, timedelta):
-                lo = math.ceil(current_unixtime_in_secs - lo.total_seconds())
-            if isinstance(hi, timedelta):
-                hi = math.ceil(current_unixtime_in_secs - hi.total_seconds())
-            assert isinstance(lo, int)
-            assert isinstance(hi, int)
-            return (lo, hi) if lo <= hi else (hi, lo)
-
-        p, log = self.params, self.params.log
-        current_unixtime_in_secs: float = p.create_src_snapshots_config.current_datetime.timestamp()
-        resultset = set()
-        for snapshot_filter in p.snapshot_filters:
-            snapshots = basis_snapshots
-            for _filter in snapshot_filter:
-                name = _filter.name
-                if name == snapshot_regex_filter_name:
-                    snapshots = self.filter_snapshots_by_regex(snapshots, regexes=_filter.options)
-                elif name == "include_snapshot_times":
-                    timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
-                    snapshots = self.filter_snapshots_by_creation_time(snapshots, include_snapshot_times=timerange)
-                else:
-                    assert name == "include_snapshot_times_and_ranks"
-                    timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
-                    snapshots = self.filter_snapshots_by_creation_time_and_rank(
-                        snapshots, include_snapshot_times=timerange, include_snapshot_ranks=_filter.options
-                    )
-            resultset.update(snapshots)  # union
-        snapshots = [line for line in basis_snapshots if "#" in line or ((line in resultset) != all_except)]
-        is_debug = log.isEnabledFor(log_debug)
-        for snapshot in snapshots:
-            if is_debug:
-                log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
-        return snapshots
-
-    def filter_snapshots_by_regex(self, snapshots: list[str], regexes: tuple[RegexList, RegexList]) -> list[str]:
-        """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
-        exclude_snapshot_regexes, include_snapshot_regexes = regexes
-        log = self.params.log
-        is_debug = log.isEnabledFor(log_debug)
-        results = []
-        for snapshot in snapshots:
-            i = snapshot.find("@")  # snapshot separator
-            if i < 0:
-                continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
-            elif is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
-                results.append(snapshot)
-                if is_debug:
-                    log.debug("Including b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
-            else:
-                if is_debug:
-                    log.debug("Excluding b/c snapshot regex: %s", snapshot[snapshot.rindex("\t") + 1 :])
-        return results
-
-    def filter_snapshots_by_creation_time(self, snapshots: list[str], include_snapshot_times: UnixTimeRange) -> list[str]:
-        log = self.params.log
-        is_debug = log.isEnabledFor(log_debug)
-        lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
-        assert isinstance(lo_snaptime, int)
-        assert isinstance(hi_snaptime, int)
-        results = []
-        for snapshot in snapshots:
-            if "@" not in snapshot:
-                continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
-            elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
-                results.append(snapshot)
-                if is_debug:
-                    log.debug("Including b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-            else:
-                if is_debug:
-                    log.debug("Excluding b/c creation time: %s", snapshot[snapshot.rindex("\t") + 1 :])
-        return results
-
-    def filter_snapshots_by_creation_time_and_rank(
-        self, snapshots: list[str], include_snapshot_times: UnixTimeRange, include_snapshot_ranks: list[RankRange]
-    ) -> list[str]:
-
-        def get_idx(rank: tuple[str, int, bool], n: int) -> int:
-            kind, num, is_percent = rank
-            m = round(n * num / 100) if is_percent else min(n, num)
-            assert kind == "latest" or kind == "oldest"
-            return m if kind == "oldest" else n - m
-
-        assert isinstance(include_snapshot_ranks, list)
-        assert len(include_snapshot_ranks) > 0
-        log = self.params.log
-        is_debug = log.isEnabledFor(log_debug)
-        lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
-        assert isinstance(lo_time, int)
-        assert isinstance(hi_time, int)
-        n = sum(1 for snapshot in snapshots if "@" in snapshot)
-        for rank_range in include_snapshot_ranks:
-            lo_rank, hi_rank = rank_range
-            lo = get_idx(lo_rank, n)
-            hi = get_idx(hi_rank, n)
-            lo, hi = (lo, hi) if lo <= hi else (hi, lo)
-            i = 0
-            results = []
-            for snapshot in snapshots:
-                if "@" not in snapshot:
-                    continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
-                else:
-                    msg = None
-                    if lo <= i < hi:
-                        msg = "Including b/c snapshot rank: %s"
-                    elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
-                        msg = "Including b/c creation time: %s"
-                    if msg:
-                        results.append(snapshot)
-                    else:
-                        msg = "Excluding b/c snapshot rank: %s"
-                    if is_debug:
-                        log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
-                    i += 1
-            snapshots = results
-            n = hi - lo
-        return snapshots
-
-    def filter_properties(
-        self, props: dict[str, str | None], include_regexes: RegexList, exclude_regexes: RegexList
-    ) -> dict[str, str | None]:
-        """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
-        log = self.params.log
-        is_debug = log.isEnabledFor(log_debug)
-        results: dict[str, str | None] = {}
-        for propname, propvalue in props.items():
-            if is_included(propname, include_regexes, exclude_regexes):
-                results[propname] = propvalue
-                if is_debug:
-                    log.debug("Including b/c property regex: %s", propname)
-            else:
-                if is_debug:
-                    log.debug("Excluding b/c property regex: %s", propname)
-        return results
-
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:
         if len(snapshot_tags) == 0:
             return
@@ -4373,30 +4165,6 @@ class Job:
         size = lines.splitlines()[-1]
         assert size.startswith("size")
         return int(size[size.index("\t") + 1 :])
-
-    def dataset_regexes(self, datasets: list[str]) -> list[str]:
-        src, dst = self.params.src, self.params.dst
-        results = []
-        for dataset in datasets:
-            if dataset.startswith("/"):
-                # it's an absolute dataset - convert it to a relative dataset
-                dataset = dataset[1:]
-                if is_descendant(dataset, of_root_dataset=src.root_dataset):
-                    dataset = relativize_dataset(dataset, src.root_dataset)
-                elif is_descendant(dataset, of_root_dataset=dst.root_dataset):
-                    dataset = relativize_dataset(dataset, dst.root_dataset)
-                else:
-                    continue  # ignore datasets that make no difference
-                if dataset.startswith("/"):
-                    dataset = dataset[1:]
-            if dataset.endswith("/"):
-                dataset = dataset[0:-1]
-            if dataset:
-                regex = re.escape(dataset)
-            else:
-                regex = ".*"
-            results.append(regex)
-        return results
 
     def incremental_send_steps_wrapper(
         self, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
@@ -4569,7 +4337,7 @@ class Job:
                 # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
                 try:
                     props_any = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
-                    props_filtered = self.filter_properties(props_any, config.include_regexes, config.exclude_regexes)
+                    props_filtered = filter_properties(self, props_any, config.include_regexes, config.exclude_regexes)
                     user_propnames = [name for name in props_filtered.keys() if ":" in name]
                     sys_propnames = ",".join([name for name in props_filtered.keys() if ":" not in name])
                     props = self.zfs_get(p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)
@@ -4957,7 +4725,7 @@ class Job:
                 sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.replace("#", "@").index("@")]
             ):
                 snapshots = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
-                snapshots = self.filter_snapshots(snapshots)  # apply include/exclude policy
+                snapshots = filter_snapshots(self, snapshots)  # apply include/exclude policy
                 snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # stable sort by GUID (2nd remains createtxg)
                 rel_dataset = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
                 last_guid = ""
@@ -5820,20 +5588,6 @@ def die(msg: str, exit_code: int = die_status, parser: argparse.ArgumentParser |
         parser.error(msg)
 
 
-def filter_lines(input_list: Iterable[str], input_set: set[str]) -> list[str]:
-    """For each line in input_list, includes the line if input_set contains the first column field of that line."""
-    if len(input_set) == 0:
-        return []
-    return [line for line in input_list if line[0 : line.index("\t")] in input_set]
-
-
-def filter_lines_except(input_list: list[str], input_set: set[str]) -> list[str]:
-    """For each line in input_list, includes the line if input_set does not contain the first column field of that line."""
-    if len(input_set) == 0:
-        return input_list
-    return [line for line in input_list if line[0 : line.index("\t")] not in input_set]
-
-
 def has_siblings(sorted_datasets: list[str]) -> bool:
     """Returns whether the (sorted) list of input datasets contains any siblings."""
     skip_dataset = DONT_SKIP_DATASET
@@ -5850,76 +5604,6 @@ def has_siblings(sorted_datasets: list[str]) -> bool:
             return True  # I have a sibling if I am a root dataset and another root dataset already exists
         skip_dataset = dataset
     return False
-
-
-def relativize_dataset(dataset: str, root_dataset: str) -> str:
-    """Converts an absolute dataset path to a relative dataset path wrt root_dataset
-    Example: root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz"""
-    return dataset[len(root_dataset) :]
-
-
-def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
-    """In a string s, replaces a leading old_prefix string with new_prefix. Assumes the leading string is present."""
-    assert s.startswith(old_prefix)
-    return new_prefix + s[len(old_prefix) :]
-
-
-def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> None:
-    for i in range(len(lines)):
-        lines[i] = lines[i].replace(old, new, count)
-
-
-def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
-    """Returns True if the name matches at least one of the include regexes but none of the exclude regexes; else False.
-    A regex that starts with a `!` is a negation - the regex matches if the regex without the `!` prefix does not match."""
-    for regex, is_negation in exclude_regexes:
-        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
-        if is_negation:
-            is_match = not is_match
-        if is_match:
-            return False
-
-    for regex, is_negation in include_regexes:
-        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
-        if is_negation:
-            is_match = not is_match
-        if is_match:
-            return True
-
-    return False
-
-
-def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
-    assert isinstance(regexes, list)
-    compiled_regexes = []
-    for regex in regexes:
-        if suffix:  # disallow non-trailing end-of-str symbol in dataset regexes to ensure descendants will also match
-            if regex.endswith("\\$"):
-                pass  # trailing literal $ is ok
-            elif regex.endswith("$"):
-                regex = regex[0:-1]  # ok because all users of compile_regexes() call re.fullmatch()
-            elif "$" in regex:
-                raise re.error("Must not use non-trailing '$' character", regex)
-        if is_negation := regex.startswith("!"):
-            regex = regex[1:]
-        regex = replace_capturing_groups_with_non_capturing_groups(regex)
-        if regex != ".*" or not (suffix.startswith("(") and suffix.endswith(")?")):
-            regex = f"{regex}{suffix}"
-        compiled_regexes.append((re.compile(regex), is_negation))
-    return compiled_regexes
-
-
-def getenv_any(key: str, default: str | None = None) -> str | None:
-    """All shell environment variable names used for configuration start with this prefix."""
-    return os.getenv(env_var_prefix + key, default)
-
-
-def getenv_int(key: str, default: int) -> int:
-    return int(cast(str, getenv_any(key, str(default))))
-
-
-def getenv_bool(key: str, default: bool = False) -> bool:
-    return cast(str, getenv_any(key, str(default))).lower().strip().lower() == "true"
 
 
 TAPPEND = TypeVar("TAPPEND")

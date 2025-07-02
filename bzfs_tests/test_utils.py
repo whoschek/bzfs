@@ -36,13 +36,18 @@ from typing import (
     cast,
 )
 from unittest import mock
-from unittest.mock import MagicMock, patch
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
 from bzfs_main.utils import (
     SmallPriorityQueue,
     SynchronizedBool,
     SynchronizedDict,
+    compile_regexes,
     cut,
+    descendants_re_suffix,
     drain,
     find_match,
     get_descendant_processes,
@@ -117,6 +122,40 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(is_descendant("", ""))
         self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(is_descendant("pool/fs", "pool"))
+
+    def test_compile_regexes(self) -> None:
+        def _assert_full_match(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
+            match = compile_regexes([regex], suffix=re_suffix)[0][0].fullmatch(text)
+            if expected:
+                self.assertTrue(match)
+            else:
+                self.assertFalse(match)
+
+        def assert_full_match(text: str, regex: str, re_suffix: str = "") -> None:
+            _assert_full_match(text=text, regex=regex, re_suffix=re_suffix, expected=True)
+
+        def assert_not_full_match(text: str, regex: str, re_suffix: str = "") -> None:
+            _assert_full_match(text=text, regex=regex, re_suffix=re_suffix, expected=False)
+
+        re_suffix = descendants_re_suffix
+        assert_full_match("foo", "foo")
+        assert_not_full_match("xfoo", "foo")
+        assert_not_full_match("fooy", "foo")
+        assert_not_full_match("foo/bar", "foo")
+        assert_full_match("foo", "foo$")
+        assert_full_match("foo", ".*")
+        assert_full_match("foo/bar", ".*")
+        assert_full_match("foo", ".*", re_suffix)
+        assert_full_match("foo/bar", ".*", re_suffix)
+        assert_full_match("foo", "foo", re_suffix)
+        assert_full_match("foo/bar", "foo", re_suffix)
+        assert_full_match("foo/bar/baz", "foo", re_suffix)
+        assert_full_match("foo", "foo$", re_suffix)
+        assert_full_match("foo$", "foo\\$", re_suffix)
+        assert_full_match("foo", "!foo", re_suffix)
+        assert_full_match("foo", "!foo")
+        with self.assertRaises(re.error):
+            compile_regexes(["fo$o"], re_suffix)
 
 
 #############################################################################

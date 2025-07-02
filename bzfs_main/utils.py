@@ -16,9 +16,11 @@ from __future__ import annotations
 import bisect
 import contextlib
 import errno
+import logging
 import os
 import pwd
 import random
+import re
 import signal
 import stat
 import subprocess
@@ -35,13 +37,39 @@ from typing import (
     ItemsView,
     Iterable,
     Iterator,
+    List,
     Protocol,
     Sequence,
+    Tuple,
     TypeVar,
+    cast,
 )
 
 # constants:
+prog_name = "bzfs"
+env_var_prefix = prog_name + "_"
+descendants_re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
+log_stderr = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
+log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
+log_debug = logging.DEBUG
+log_trace = logging.DEBUG // 2  # custom log level is halfway in between
+unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
+
+RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
+
+
+def getenv_any(key: str, default: str | None = None) -> str | None:
+    """All shell environment variable names used for configuration start with this prefix."""
+    return os.getenv(env_var_prefix + key, default)
+
+
+def getenv_int(key: str, default: int) -> int:
+    return int(cast(str, getenv_any(key, str(default))))
+
+
+def getenv_bool(key: str, default: bool = False) -> bool:
+    return cast(str, getenv_any(key, str(default))).lower().strip().lower() == "true"
 
 
 def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) -> list[str]:
@@ -270,6 +298,63 @@ def has_duplicates(sorted_list: list) -> bool:
 
 def dry(msg: str, is_dry_run: bool) -> str:
     return "Dry " + msg if is_dry_run else msg
+
+
+def relativize_dataset(dataset: str, root_dataset: str) -> str:
+    """Converts an absolute dataset path to a relative dataset path wrt root_dataset
+    Example: root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz"""
+    return dataset[len(root_dataset) :]
+
+
+def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
+    """In a string s, replaces a leading old_prefix string with new_prefix. Assumes the leading string is present."""
+    assert s.startswith(old_prefix)
+    return new_prefix + s[len(old_prefix) :]
+
+
+def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> None:
+    for i in range(len(lines)):
+        lines[i] = lines[i].replace(old, new, count)
+
+
+def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
+    """Returns True if the name matches at least one of the include regexes but none of the exclude regexes; else False.
+    A regex that starts with a `!` is a negation - the regex matches if the regex without the `!` prefix does not match."""
+    for regex, is_negation in exclude_regexes:
+        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
+        if is_negation:
+            is_match = not is_match
+        if is_match:
+            return False
+
+    for regex, is_negation in include_regexes:
+        is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
+        if is_negation:
+            is_match = not is_match
+        if is_match:
+            return True
+
+    return False
+
+
+def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
+    assert isinstance(regexes, list)
+    compiled_regexes = []
+    for regex in regexes:
+        if suffix:  # disallow non-trailing end-of-str symbol in dataset regexes to ensure descendants will also match
+            if regex.endswith("\\$"):
+                pass  # trailing literal $ is ok
+            elif regex.endswith("$"):
+                regex = regex[0:-1]  # ok because all users of compile_regexes() call re.fullmatch()
+            elif "$" in regex:
+                raise re.error("Must not use non-trailing '$' character", regex)
+        if is_negation := regex.startswith("!"):
+            regex = regex[1:]
+        regex = replace_capturing_groups_with_non_capturing_groups(regex)
+        if regex != ".*" or not (suffix.startswith("(") and suffix.endswith(")?")):
+            regex = f"{regex}{suffix}"
+        compiled_regexes.append((re.compile(regex), is_negation))
+    return compiled_regexes
 
 
 def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:

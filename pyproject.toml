@@ -201,9 +201,6 @@ aliases = { "bzfs_main.bzfs" = "bzfs", "bzfs_main.bzfs_jobrunner" = "bzfs_jobrun
 # forbid-aliased-import-of-attributes, e.g. forbids 'from bzfs_main import bzfs as foo'
 extend-aliases = { "bzfs_main.bzfs" = "bzfs", "bzfs_main.bzfs_jobrunner" = "bzfs_jobrunner" }
 
-[tool.ruff.lint.flake8-tidy-imports.banned-api]  # for TID251
-"typing.TYPE_CHECKING".msg = "Conditional TYPE_CHECKING blocks are prohibited in this codebase; they clutter code"
-
 [tool.ruff.lint.isort]
 known-first-party = ["bzfs_*"]
 no-lines-before = ["standard-library"]  # no blank line before std-lib

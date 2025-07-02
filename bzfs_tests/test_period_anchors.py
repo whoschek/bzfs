@@ -19,15 +19,7 @@ from datetime import datetime, timedelta, timezone
 
 import bzfs_main.period_anchors
 from bzfs_main import bzfs
-from bzfs_main.bzfs import getenv_any
 from bzfs_main.period_anchors import PeriodAnchors
-
-# constants:
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
-is_unit_test = test_mode == "unit"  # run only unit tests aka skip integration tests
-is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
-is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
-is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
 
 
 #############################################################################
