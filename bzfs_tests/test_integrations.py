@@ -52,7 +52,7 @@ from bzfs_main.utils import (
     getenv_any,
     getenv_bool,
 )
-from bzfs_tests.test_bzfs import (
+from bzfs_tests.test_incremental_send_steps import (
     TestIncrementalSendSteps,
 )
 from bzfs_tests.test_utils import (

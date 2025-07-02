@@ -112,6 +112,9 @@ from bzfs_main.filter import (
     filter_snapshots,
     snapshot_regex_filter_name,
 )
+from bzfs_main.incremental_send_steps import (
+    incremental_send_steps,
+)
 from bzfs_main.loggers import (
     Tee,
     get_logger,
@@ -4073,101 +4076,6 @@ class Job:
         assert size.startswith("size")
         return int(size[size.index("\t") + 1 :])
 
-    def incremental_send_steps_wrapper(
-        self, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
-    ) -> list[tuple[str, str, str, list[str]]]:
-        force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool(  # noqa: N806
-            "no_force_convert_I_to_i", True
-        )
-        # force_convert_I_to_i == True implies that:
-        # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
-        # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
-        return self.incremental_send_steps(src_snapshots, src_guids, included_guids, is_resume, force_convert_I_to_i)
-
-    @staticmethod
-    def incremental_send_steps(
-        src_snapshots: list[str],
-        src_guids: list[str],
-        included_guids: set[str],
-        is_resume: bool,
-        force_convert_I_to_i: bool,  # noqa: N803
-    ) -> list[tuple[str, str, str, list[str]]]:
-        """Computes steps to incrementally replicate the given src snapshots with the given src_guids such that we
-        include intermediate src snapshots that pass the policy specified by --{include,exclude}-snapshot-*
-        (represented here by included_guids), using an optimal series of -i/-I send/receive steps that skip
-        excluded src snapshots. The steps are optimal in the sense that no solution with fewer steps exists. A step
-        corresponds to a single ZFS send/receive operation. Fewer steps translate to better performance, especially
-        when sending many small snapshots. For example, 1 step that sends 100 small snapshots in a single operation is
-        much faster than 100 steps that each send only 1 such snapshot per ZFS send/receive operation.
-        Example: skip hourly snapshots and only include daily shapshots for replication
-        Example: [d1, h1, d2, d3, d4] (d is daily, h is hourly) --> [d1, d2, d3, d4] via
-        -i d1:d2 (i.e. exclude h1; '-i' and ':' indicate 'skip intermediate snapshots')
-        -I d2-d4 (i.e. also include d3; '-I' and '-' indicate 'include intermediate snapshots')
-        * The force_convert_I_to_i param is necessary as a work-around for https://github.com/openzfs/zfs/issues/16394
-        * The 'zfs send' CLI with a bookmark as starting snapshot does not (yet) support including intermediate
-        src_snapshots via -I flag per https://github.com/openzfs/zfs/issues/12415. Thus, if the replication source
-        is a bookmark we convert a -I step to a -i step followed by zero or more -i/-I steps.
-        * The is_resume param is necessary as 'zfs send -t' does not support sending more than a single snapshot
-        on resuming a previously interrupted 'zfs receive -s'. Thus, here too, we convert a -I step to a -i step
-        followed by zero or more -i/-I steps."""
-
-        def append_run(i: int, label: str) -> int:
-            # step = ("-I", src_snapshots[start], src_snapshots[i], i - start)
-            # print(f"{label} {self.send_step_to_str(step)}")
-            is_not_resume = len(steps) > 0 or not is_resume
-            if i - start > 1 and (not force_convert_I_to_i) and "@" in src_snapshots[start] and is_not_resume:
-                steps.append(("-I", src_snapshots[start], src_snapshots[i], src_snapshots[start + 1 : i + 1]))
-            elif "@" in src_snapshots[start] and is_not_resume:
-                for j in range(start, i):  # convert -I step to -i steps
-                    steps.append(("-i", src_snapshots[j], src_snapshots[j + 1], src_snapshots[j + 1 : j + 2]))
-            else:  # it's a bookmark src or zfs send -t; convert -I step to -i step followed by zero or more -i/-I steps
-                steps.append(("-i", src_snapshots[start], src_snapshots[start + 1], src_snapshots[start + 1 : start + 2]))
-                i = start + 1
-            return i - 1
-
-        assert len(src_guids) == len(src_snapshots)
-        assert len(included_guids) >= 0
-        steps = []
-        guids = src_guids
-        n = len(guids)
-        i = 0
-        while i < n and guids[i] not in included_guids:  # skip hourlies
-            i += 1
-
-        while i < n:
-            assert guids[i] in included_guids  # it's a daily
-            start = i
-            i += 1
-            while i < n and guids[i] in included_guids:  # skip dailies
-                i += 1
-            if i < n:
-                if i - start == 1:
-                    # it's a single daily (that was already replicated) followed by an hourly
-                    i += 1
-                    while i < n and guids[i] not in included_guids:  # skip hourlies
-                        i += 1
-                    if i < n:
-                        assert start != i
-                        step = ("-i", src_snapshots[start], src_snapshots[i], src_snapshots[i : i + 1])
-                        # print(f"r1 {self.send_step_to_str(step)}")
-                        steps.append(step)
-                        i -= 1
-                else:  # it's a run of more than one daily
-                    i -= 1
-                    assert start != i
-                    i = append_run(i, "r2")
-            else:  # finish up run of trailing dailies
-                i -= 1
-                if start != i:
-                    i = append_run(i, "r3")
-            i += 1
-        return steps
-
-    @staticmethod
-    def send_step_to_str(step: tuple[str, str, str]) -> str:
-        # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
-        return str(step)
-
     def zfs_set(self, properties: list[str], remote: Remote, dataset: str) -> None:
         """Applies the given property key=value pairs via 'zfs set' CLI to the given dataset on the given remote."""
         p = self.params
@@ -4215,6 +4123,17 @@ class Job:
                     props[line] = None
             props_cache[cache_key] = props
         return props
+
+    def incremental_send_steps_wrapper(
+        self, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
+    ) -> list[tuple[str, str, str, list[str]]]:
+        force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool(  # noqa: N806
+            "no_force_convert_I_to_i", True
+        )
+        # force_convert_I_to_i == True implies that:
+        # If using 'zfs allow' delegation mechanism, force convert 'zfs send -I' to a series of
+        # 'zfs send -i' as a workaround for zfs issue https://github.com/openzfs/zfs/issues/16394
+        return incremental_send_steps(src_snapshots, src_guids, included_guids, is_resume, force_convert_I_to_i)
 
     def add_recv_property_options(
         self, full_send: bool, recv_opts: list[str], dataset: str, cache: dict[tuple[str, str, str], dict[str, str | None]]
