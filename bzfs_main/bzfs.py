@@ -101,6 +101,20 @@ from bzfs_main.connection import (
     refresh_ssh_connection_if_necessary,
     timeout,
 )
+from bzfs_main.detect import (
+    RemoteConfCacheItem,
+    are_bookmarks_enabled,
+    detect_available_programs,
+    disable_prg,
+    dummy_dataset,
+    is_caching_snapshots,
+    is_dummy,
+    is_solaris_zfs,
+    is_solaris_zfs_location,
+    is_zpool_feature_enabled_or_active,
+    zfs_version_is_at_least_2_1_0,
+    zfs_version_is_at_least_2_2_0,
+)
 from bzfs_main.filter import (
     RankRange,
     UnixTimeRange,
@@ -193,10 +207,6 @@ log_dir_default = prog_name + "-logs"
 create_src_snapshots_prefix_dflt = prog_name + "_"
 create_src_snapshots_suffix_dflt = "_adhoc"
 time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
-disable_prg = "-"
-dummy_dataset = "dummy"
-zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
-zfs_version_is_at_least_2_2_0 = "zfs>=2.2.0"
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 snapshot_regex_filter_names = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 snapshot_filters_var = "snapshot_filters_var"
@@ -1919,6 +1929,9 @@ class Params:
     def dry(self, msg: str) -> str:
         return bzfs_main.utils.dry(msg, self.dry_run)
 
+    def is_program_available(self, program: str, location: str) -> bool:
+        return program in self.available_programs.get(location, {})
+
 
 #############################################################################
 class Remote:
@@ -2265,15 +2278,6 @@ class MonitorSnapshotsConfig:
 
 
 #############################################################################
-@dataclass(frozen=True)
-class RemoteConfCacheItem:
-    connection_pools: ConnectionPools
-    available_programs: dict[str, str]
-    zpool_features: dict[str, str]
-    timestamp_nanos: int = field(default_factory=time.monotonic_ns)
-
-
-#############################################################################
 def main() -> None:
     """API for command line clients."""
     try:
@@ -2509,7 +2513,7 @@ class Job:
         p, log = self.params, self.params.log
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
-        if self.is_program_available("pv", "local"):
+        if p.is_program_available("pv", "local"):
             sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
@@ -2593,15 +2597,15 @@ class Job:
         if len(p.include_dataset_regexes) == 0:
             p.include_dataset_regexes = [(re.compile(r".*"), False)]
 
-        self.detect_available_programs()
+        detect_available_programs(self)
 
         zfs_send_program_opts = p.curr_zfs_send_program_opts
-        if self.is_zpool_feature_enabled_or_active(dst, "feature@large_blocks"):
+        if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
             append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4 does not have this feature
-        if self.is_solaris_zfs(dst):
+        if is_solaris_zfs(p, dst):
             p.dry_run_destroy = ""  # solaris-11.4 knows no 'zfs destroy -n' flag
             p.verbose_destroy = ""  # solaris-11.4 knows no 'zfs destroy -v' flag
-        if self.is_solaris_zfs(src):  # solaris-11.4 only knows -w compress
+        if is_solaris_zfs(p, src):  # solaris-11.4 only knows -w compress
             zfs_send_program_opts = ["-p" if opt == "--props" else opt for opt in zfs_send_program_opts]
             zfs_send_program_opts = fix_solaris_raw_mode(zfs_send_program_opts)
         p.curr_zfs_send_program_opts = zfs_send_program_opts
@@ -2674,8 +2678,8 @@ class Job:
         basis_src_datasets = []
         self.src_properties = {}
         self.dst_properties = {}
-        if not self.is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
-            is_caching = self.is_caching_snapshots(src)
+        if not is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
+            is_caching = is_caching_snapshots(p, src)
             props = "volblocksize,recordsize,name"
             props = "snapshots_changed," + props if is_caching else props
             cmd = p.split_args(
@@ -2725,7 +2729,7 @@ class Job:
                 src,
                 [(commands[lbl], [f"{ds}@{lbl}" for ds in datasets]) for lbl, datasets in datasets_to_snapshot.items()],
                 fn=lambda cmd, batch: self.run_ssh_command(src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
-                max_batch_items=1 if self.is_solaris_zfs(src) else 2**29,  # solaris CLI doesn't accept multiple datasets
+                max_batch_items=1 if is_solaris_zfs(p, src) else 2**29,  # solaris CLI doesn't accept multiple datasets
             )
             # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
             self.update_last_modified_cache(basis_datasets_to_snapshot)
@@ -2734,7 +2738,7 @@ class Job:
         if not p.skip_replication:
             if len(basis_src_datasets) == 0:
                 die(f"Replication: Source dataset does not exist: {src.basis_root_dataset}")
-            if self.is_dummy(dst):
+            if is_dummy(dst):
                 die("Replication: Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             failed = self.replicate_datasets(src_datasets, task_description, max_workers)
@@ -2748,9 +2752,9 @@ class Job:
         ):
             return
         log.info("Listing dst datasets: %s", task_description)
-        if self.is_dummy(dst):
+        if is_dummy(dst):
             die("Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
-        is_caching = self.is_caching_snapshots(dst) and p.monitor_snapshots_config.enable_monitor_snapshots
+        is_caching = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
         props = "name"
         props = "snapshots_changed," + props if is_caching else props
         cmd = p.split_args(
@@ -2805,10 +2809,10 @@ class Job:
 
             def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
                 src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in basis_src_datasets_set and (self.are_bookmarks_enabled(src) or not p.delete_dst_bookmarks):
+                if src_dataset in basis_src_datasets_set and (are_bookmarks_enabled(p, src) or not p.delete_dst_bookmarks):
                     src_kind = kind
                     if not p.delete_dst_snapshots_no_crosscheck:
-                        src_kind = "snapshot,bookmark" if self.are_bookmarks_enabled(src) else "snapshot"
+                        src_kind = "snapshot,bookmark" if are_bookmarks_enabled(p, src) else "snapshot"
                     src_cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
                 else:
                     src_cmd = None
@@ -2829,7 +2833,7 @@ class Job:
                 #  The check against the source dataset happens *after* filtering the dst snapshots with filter_snapshots().
                 # `p.delete_dst_snapshots_except` means the user wants to specify snapshots to *retain* aka *keep*
                 all_except = p.delete_dst_snapshots_except
-                if p.delete_dst_snapshots_except and not self.is_dummy(src):
+                if p.delete_dst_snapshots_except and not is_dummy(src):
                     # However, as here we are in "except" mode AND the source is NOT a dummy, we first filter to get what
                     # the policy says to *keep* (so all_except=False for the filter_snapshots() call), then from that "keep"
                     # list, we later further refine by checking what's on the source dataset.
@@ -2840,7 +2844,7 @@ class Job:
                 if filter_needs_creation_time:
                     dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
                     basis_dst_snaps_with_guids = cut(field=2, lines=basis_dst_snaps_with_guids)
-                if p.delete_dst_snapshots_except and not self.is_dummy(src):  # Non-dummy Source + "Except" (Keep) Mode
+                if p.delete_dst_snapshots_except and not is_dummy(src):  # Non-dummy Source + "Except" (Keep) Mode
                     # Retain dst snapshots that match snapshot filter policy AND are on src dataset, aka
                     # Delete dst snapshots except snapshots that match snapshot filter policy AND are on src dataset.
                     # Concretely, `dst_snaps_with_guids` contains GUIDs of DST snapshots that the filter policy says to KEEP.
@@ -2877,7 +2881,7 @@ class Job:
                 return True
 
             # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
-            if self.are_bookmarks_enabled(dst) or not p.delete_dst_bookmarks:
+            if are_bookmarks_enabled(p, dst) or not p.delete_dst_bookmarks:
                 start_time_nanos = time.monotonic_ns()
                 failed = process_datasets_in_parallel_and_fault_tolerant(
                     log=p.log,
@@ -2909,7 +2913,7 @@ class Job:
         if p.delete_empty_dst_datasets and p.recursive and not failed:
             log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
             delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
-                p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and self.are_bookmarks_enabled(dst)
+                p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and are_bookmarks_enabled(p, dst)
             )
 
             # Compute the direct children of each NON-FILTERED dataset. Thus, no non-selected dataset and no ancestor of a
@@ -2953,7 +2957,7 @@ class Job:
         # recently taken snapshots have been successfully replicated by a periodic job.
         if p.compare_snapshot_lists and not failed:
             log.info("--compare-snapshot-lists: %s", task_description)
-            if len(basis_src_datasets) == 0 and not self.is_dummy(src):
+            if len(basis_src_datasets) == 0 and not is_dummy(src):
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
             self.run_compare_snapshot_lists(src_datasets, dst_datasets)
@@ -2988,7 +2992,7 @@ class Job:
         labels: list[SnapshotLabel] = [alert.label for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
         is_debug: bool = log.isEnabledFor(log_debug)
-        if self.is_caching_snapshots(remote):
+        if is_caching_snapshots(p, remote):
             props = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: dict[str, int] = {
                 dataset: int(vals[SNAPSHOTS_CHANGED]) for dataset, vals in props.items()
@@ -3086,7 +3090,7 @@ class Job:
             return stale_datasets
 
         # satisfy request from local cache as much as possible
-        if self.is_caching_snapshots(remote):
+        if is_caching_snapshots(p, remote):
             stale_datasets = find_stale_datasets_and_check_alerts()
             with self.stats_lock:
                 self.num_cache_misses += len(stale_datasets)
@@ -3095,7 +3099,7 @@ class Job:
             stale_datasets = sorted_datasets
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
-        is_caching = self.is_caching_snapshots(remote)
+        is_caching = is_caching_snapshots(p, remote)
         datasets_without_snapshots = self.handle_minmax_snapshots(
             remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
         )
@@ -3173,7 +3177,7 @@ class Job:
             assert not self.is_test_mode or not has_duplicates(stale_src_datasets), "List contains duplicates"
             return stale_src_datasets, cache_files
 
-        if self.is_caching_snapshots(src):
+        if is_caching_snapshots(p, src):
             stale_src_datasets, cache_files = find_stale_datasets()
             num_cache_misses = len(stale_src_datasets)
             num_cache_hits = len(src_datasets) - len(stale_src_datasets)
@@ -3202,7 +3206,7 @@ class Job:
             is_test_mode=self.is_test_mode,
         )
 
-        if self.is_caching_snapshots(src) and not failed:
+        if is_caching_snapshots(p, src) and not failed:
             # refresh "snapshots_changed" ZFS dataset property from dst
             stale_dst_datasets = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
             dst_snapshots_changed_dict = self.zfs_get_snapshots_changed(dst, stale_dst_datasets)
@@ -3245,7 +3249,7 @@ class Job:
         # char, bookmark names must not contain a '@' char, and dataset names must not contain a '#' or '@' char.
         # GUID and creation time also do not contain a '#' or '@' char.
         filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
-        types = "snapshot,bookmark" if p.use_bookmark and self.are_bookmarks_enabled(src) else "snapshot"
+        types = "snapshot,bookmark" if p.use_bookmark and are_bookmarks_enabled(p, src) else "snapshot"
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
         src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
@@ -3547,7 +3551,7 @@ class Job:
         send_cmd_str = shlex.join(send_cmd)
         recv_cmd_str = shlex.join(recv_cmd)
 
-        if self.is_program_available("zstd", "src") and self.is_program_available("zstd", "dst"):
+        if p.is_program_available("zstd", "src") and p.is_program_available("zstd", "dst"):
             compress_cmd_ = self.compress_cmd("src", size_estimate_bytes)
             decompress_cmd_ = self.decompress_cmd("dst", size_estimate_bytes)
         else:  # no compression is used if source and destination do not both support compression
@@ -3635,11 +3639,11 @@ class Job:
 
         # If there's no support for shell pipelines, we can't do compression, mbuffering, monitoring and rate-limiting,
         # so we fall back to simple zfs send/receive.
-        if not self.is_program_available("sh", "src"):
+        if not p.is_program_available("sh", "src"):
             src_pipe = send_cmd_str
-        if not self.is_program_available("sh", "dst"):
+        if not p.is_program_available("sh", "dst"):
             dst_pipe = recv_cmd_str
-        if not self.is_program_available("sh", "local"):
+        if not p.is_program_available("sh", "local"):
             local_pipe = ""
 
         src_pipe = self.squote(p.src, src_pipe)
@@ -3763,9 +3767,9 @@ class Job:
         if not p.resume_recv:
             return None, [], []
         warning = None
-        if not self.is_zpool_feature_enabled_or_active(p.dst, "feature@extensible_dataset"):
+        if not is_zpool_feature_enabled_or_active(p, p.dst, "feature@extensible_dataset"):
             warning = "not available on destination dataset"
-        elif not self.is_program_available(zfs_version_is_at_least_2_1_0, "dst"):
+        elif not p.is_program_available(zfs_version_is_at_least_2_1_0, "dst"):
             warning = "unreliable as zfs version is too old"  # e.g. zfs-0.8.3 "internal error: Unknown error 1040"
         if warning:
             log.warning(f"ZFS receive resume feature is {warning}. Falling back to --no-resume-recv: %s", dst_dataset)
@@ -3795,9 +3799,9 @@ class Job:
                 or (loc == "dst" and (p.src.is_nonlocal or p.dst.is_nonlocal))
                 or (loc == "local" and p.src.is_nonlocal and p.dst.is_nonlocal)
             )
-            and self.is_program_available("mbuffer", loc)
+            and p.is_program_available("mbuffer", loc)
         ):
-            recordsize = max(recordsize, 128 * 1024 if self.is_solaris_zfs_location(loc) else 2 * 1024 * 1024)
+            recordsize = max(recordsize, 128 * 1024 if is_solaris_zfs_location(p, loc) else 2 * 1024 * 1024)
             return shlex.join([p.mbuffer_program, "-s", str(recordsize)] + p.mbuffer_program_opts)
         else:
             return "cat"
@@ -3809,7 +3813,7 @@ class Job:
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
             and (p.src.is_nonlocal or p.dst.is_nonlocal)
-            and self.is_program_available("zstd", loc)
+            and p.is_program_available("zstd", loc)
         ):
             return shlex.join([p.compression_program, "-c"] + p.compression_program_opts)
         else:
@@ -3820,7 +3824,7 @@ class Job:
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
             and (p.src.is_nonlocal or p.dst.is_nonlocal)
-            and self.is_program_available("zstd", loc)
+            and p.is_program_available("zstd", loc)
         ):
             return shlex.join([p.compression_program, "-dc"])
         else:
@@ -3834,7 +3838,7 @@ class Job:
         """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
         Progress can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
         p = self.params
-        if self.is_program_available("pv", loc):
+        if p.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
             if disable_progress_bar or size_estimate_bytes == 0:
                 size = ""
@@ -3939,14 +3943,14 @@ class Job:
             self.delete_snapshot_cmd(remote, dataset + "@"),
             snapshot_tags,
             lambda batch: self.delete_snapshot(remote, dataset, dataset + "@" + ",".join(batch)),
-            max_batch_items=1 if self.is_solaris_zfs(remote) else self.params.max_snapshots_per_minibatch_on_delete_snaps,
+            max_batch_items=1 if is_solaris_zfs(p, remote) else self.params.max_snapshots_per_minibatch_on_delete_snaps,
             sep=",",
         )
 
     def delete_snapshot(self, r: Remote, dataset: str, snapshots_to_delete: str) -> None:
         p = self.params
         cmd = self.delete_snapshot_cmd(r, snapshots_to_delete)
-        is_dry = p.dry_run and self.is_solaris_zfs(r)  # solaris-11.4 knows no 'zfs destroy -n' flag
+        is_dry = p.dry_run and is_solaris_zfs(p, r)  # solaris-11.4 knows no 'zfs destroy -n' flag
         try:
             maybe_inject_error(self, cmd=cmd, error_trigger="zfs_delete_snapshot")
             self.run_ssh_command(r, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
@@ -3995,7 +3999,7 @@ class Job:
                 p.dry_run_destroy,
                 dataset,
             )
-            is_dry = p.dry_run and self.is_solaris_zfs(remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
+            is_dry = p.dry_run and is_solaris_zfs(p, remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
             self.run_ssh_command(remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
             last_deleted_dataset = dataset
 
@@ -4006,7 +4010,7 @@ class Job:
         # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
         p = self.params
         parent = ""
-        no_mount = "-u" if self.is_program_available(zfs_version_is_at_least_2_1_0, "dst") else ""
+        no_mount = "-u" if p.is_program_available(zfs_version_is_at_least_2_1_0, "dst") else ""
         for component in filesystem.split("/"):
             parent += component
             if not self.dst_dataset_exists[parent]:
@@ -4043,7 +4047,7 @@ class Job:
                     print(e.stderr, file=sys.stderr, end="")
                     raise
 
-        if p.create_bookmarks != "none" and self.are_bookmarks_enabled(remote):
+        if p.create_bookmarks != "none" and are_bookmarks_enabled(p, remote):
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} bookmark")
             self.run_ssh_cmd_parallel(
                 remote, [(cmd, snapshots)], lambda _cmd, batch: create_zfs_bookmark(_cmd + batch), max_batch_items=1
@@ -4052,7 +4056,7 @@ class Job:
     def estimate_send_size(self, remote: Remote, dst_dataset: str, recv_resume_token: str | None, *items: str) -> int:
         """Estimates num bytes to transfer via 'zfs send'."""
         p = self.params
-        if p.no_estimate_send_size or self.is_solaris_zfs(remote):
+        if p.no_estimate_send_size or is_solaris_zfs(p, remote):
             return 0  # solaris-11.4 does not have a --parsable equivalent
         zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
         zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
@@ -4090,7 +4094,7 @@ class Job:
             lambda batch: self.run_ssh_command(
                 remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
             ),
-            max_batch_items=1 if self.is_solaris_zfs(remote) else 2**29,  # solaris-11.4 CLI doesn't accept multiple props
+            max_batch_items=1 if is_solaris_zfs(p, remote) else 2**29,  # solaris-11.4 CLI doesn't accept multiple props
         )
 
     def zfs_get(
@@ -4145,7 +4149,7 @@ class Job:
         x_names = p.zfs_recv_x_names
         x_names_set = set(x_names)
         ox_names = p.zfs_recv_ox_names.copy()
-        if self.is_program_available(zfs_version_is_at_least_2_2_0, p.dst.location):
+        if p.is_program_available(zfs_version_is_at_least_2_2_0, p.dst.location):
             # workaround for https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff
             # 'zfs recv -x foo' on zfs < 2.2 errors out if the 'foo' property isn't contained in the send stream
             for propname in x_names:
@@ -4298,7 +4302,7 @@ class Job:
 
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
-        if self.is_caching_snapshots(src):
+        if is_caching_snapshots(p, src):
             sorted_datasets_todo = []
             for dataset in sorted_datasets:
                 cached_snapshots_changed: int = self.cache_get_snapshots_changed(self.last_modified_cache_file(src, dataset))
@@ -4335,7 +4339,7 @@ class Job:
                 )
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
-        is_caching = self.is_caching_snapshots(src)
+        is_caching = is_caching_snapshots(p, src)
         datasets_without_snapshots = self.handle_minmax_snapshots(
             src, sorted_datasets, labels, fn_latest=create_snapshot_fn, fn_on_finish_dataset=on_finish_dataset
         )
@@ -4443,7 +4447,7 @@ class Job:
         """perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls."""
         p = self.params
         src = p.src
-        if not self.is_caching_snapshots(src):
+        if not is_caching_snapshots(p, src):
             return
         src_datasets_set: set[str] = set()
         dataset_labels: dict[str, list[SnapshotLabel]] = defaultdict(list)
@@ -4530,11 +4534,11 @@ class Job:
             """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
             assert not self.is_test_mode or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
             written_zfs_prop = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
-            if self.is_solaris_zfs(r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
+            if is_solaris_zfs(p, r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
                 written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
             props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
             types = "snapshot"
-            if p.use_bookmark and r.location == "src" and self.are_bookmarks_enabled(r):
+            if p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r):
                 types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
             cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
             for lines in self.zfs_list_snapshots_in_parallel(r, cmd, sorted_datasets):
@@ -4765,246 +4769,6 @@ class Job:
                         yield choices[n], src_next
                 src_next = next(src_itr, None)
 
-    def is_program_available(self, program: str, location: str) -> bool:
-        return program in self.params.available_programs.get(location, {})
-
-    def detect_available_programs(self) -> None:
-        p = params = self.params
-        log = p.log
-        available_programs = params.available_programs
-        if "local" not in available_programs:
-            cmd = [p.shell_program_local, "-c", self.find_available_programs()]
-            available_programs["local"] = {
-                prog: ""
-                for prog in subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines()
-            }
-            cmd = [p.shell_program_local, "-c", "exit"]
-            if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
-                self.disable_program("sh", ["local"])
-
-        for r in [p.dst, p.src]:
-            loc = r.location
-            remote_conf_cache_key = r.cache_key()
-            cache_item: RemoteConfCacheItem | None = self.remote_conf_cache.get(remote_conf_cache_key)
-            if cache_item is not None:
-                # startup perf: cache avoids ssh connect setup and feature detection roundtrips on revisits to same site
-                p.connection_pools[loc] = cache_item.connection_pools
-                if time.monotonic_ns() - cache_item.timestamp_nanos < p.remote_conf_cache_ttl_nanos:
-                    available_programs[loc] = cache_item.available_programs
-                    p.zpool_features[loc] = cache_item.zpool_features
-                    continue  # cache hit, skip remote detection
-            else:
-                p.connection_pools[loc] = ConnectionPools(
-                    r, {SHARED: r.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
-                )
-            self.detect_zpool_features(r)
-            self.detect_available_programs_remote(r, available_programs, r.ssh_user_host)
-            self.remote_conf_cache[remote_conf_cache_key] = RemoteConfCacheItem(
-                p.connection_pools[loc], available_programs[loc], p.zpool_features[loc]
-            )
-            if r.use_zfs_delegation and p.zpool_features[loc].get("delegation") == "off":
-                die(
-                    f"Permission denied as ZFS delegation is disabled for {r.location} "
-                    f"dataset: {r.basis_root_dataset}. Manually enable it via 'sudo zpool set delegation=on {r.pool}'"
-                )
-
-        locations = ["src", "dst", "local"]
-        if params.compression_program == disable_prg:
-            self.disable_program("zstd", locations)
-        if params.mbuffer_program == disable_prg:
-            self.disable_program("mbuffer", locations)
-        if params.ps_program == disable_prg:
-            self.disable_program("ps", locations)
-        if params.pv_program == disable_prg:
-            self.disable_program("pv", locations)
-        if params.shell_program == disable_prg:
-            self.disable_program("sh", locations)
-        if params.sudo_program == disable_prg:
-            self.disable_program("sudo", locations)
-        if params.zpool_program == disable_prg:
-            self.disable_program("zpool", locations)
-
-        for key, programs in available_programs.items():
-            for program in list(programs.keys()):
-                if program.startswith("uname-"):
-                    # uname-Linux foo 5.15.0-69-generic #76-Ubuntu SMP Fri Mar 17 17:19:29 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux  # noqa: E501
-                    # uname-FreeBSD freebsd 14.1-RELEASE FreeBSD 14.1-RELEASE releng/14.1-n267679-10e31f0946d8 GENERIC amd64
-                    # uname-SunOS solaris 5.11 11.4.42.111.0 i86pc i386 i86pc # https://blogs.oracle.com/solaris/post/building-open-source-software-on-oracle-solaris-114-cbe-release  # noqa: E501
-                    # uname-SunOS solaris 5.11 11.4.0.15.0 i86pc i386 i86pc
-                    # uname-Darwin foo 23.6.0 Darwin Kernel Version 23.6.0: Mon Jul 29 21:13:04 PDT 2024; root:xnu-10063.141.2~1/RELEASE_ARM64_T6020 arm64  # noqa: E501
-                    programs.pop(program)
-                    uname = program[len("uname-") :]
-                    programs["uname"] = uname
-                    log.log(log_trace, f"available_programs[{key}][uname]: %s", uname)
-                    programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
-                    log.log(log_trace, f"available_programs[{key}][os]: %s", programs["os"])
-                elif program.startswith("default_shell-"):
-                    programs.pop(program)
-                    default_shell = program[len("default_shell-") :]
-                    programs["default_shell"] = default_shell
-                    log.log(log_trace, f"available_programs[{key}][default_shell]: %s", default_shell)
-                    validate_default_shell(default_shell, r)
-                elif program.startswith("getconf_cpu_count-"):
-                    programs.pop(program)
-                    getconf_cpu_count = program[len("getconf_cpu_count-") :]
-                    programs["getconf_cpu_count"] = getconf_cpu_count
-                    log.log(log_trace, f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
-
-        for key, programs in available_programs.items():
-            log.debug(f"available_programs[{key}]: %s", list_formatter(programs, separator=", "))
-
-        for r in [p.dst, p.src]:
-            if r.sudo and not self.is_program_available("sudo", r.location):
-                die(f"{p.sudo_program} CLI is not available on {r.location} host: {r.ssh_user_host or 'localhost'}")
-
-        if (
-            len(p.args.preserve_properties) > 0
-            and any(prop in p.zfs_send_program_opts for prop in ["--props", "-p"])
-            and not self.is_program_available(zfs_version_is_at_least_2_2_0, p.dst.location)
-        ):
-            die(
-                "Cowardly refusing to proceed as --preserve-properties is unreliable on destination ZFS < 2.2.0 when using "
-                "'zfs send --props'. Either upgrade destination ZFS, or remove '--props' from --zfs-send-program-opt(s)."
-            )
-
-    def disable_program(self, program: str, locations: list[str]) -> None:
-        for location in locations:
-            self.params.available_programs[location].pop(program, None)
-
-    def find_available_programs(self) -> str:
-        """POSIX shell script that checks for the existence of various programs. It uses `if` statements instead of `&&` plus
-        `printf` instead of `echo` to ensure maximum compatibility across shells."""
-        p = self.params
-        cmds = []
-        cmds.append("printf 'default_shell-%s\n' \"$SHELL\"")
-        cmds.append("if command -v echo > /dev/null; then printf 'echo\n'; fi")
-        cmds.append(f"if command -v {p.zpool_program} > /dev/null; then printf 'zpool\n'; fi")
-        cmds.append(f"if command -v {p.ssh_program} > /dev/null; then printf 'ssh\n'; fi")
-        cmds.append(f"if command -v {p.shell_program} > /dev/null; then printf 'sh\n'; fi")
-        cmds.append(f"if command -v {p.sudo_program} > /dev/null; then printf 'sudo\n'; fi")
-        cmds.append(f"if command -v {p.compression_program} > /dev/null; then printf 'zstd\n'; fi")
-        cmds.append(f"if command -v {p.mbuffer_program} > /dev/null; then printf 'mbuffer\n'; fi")
-        cmds.append(f"if command -v {p.pv_program} > /dev/null; then printf 'pv\n'; fi")
-        cmds.append(f"if command -v {p.ps_program} > /dev/null; then printf 'ps\n'; fi")
-        cmds.append(
-            f"if command -v {p.psrinfo_program} > /dev/null; then "
-            f"printf 'getconf_cpu_count-'; {p.psrinfo_program} -p; "
-            f"elif command -v {p.getconf_program} > /dev/null; then "
-            f"printf 'getconf_cpu_count-'; {p.getconf_program} _NPROCESSORS_ONLN; "
-            "fi"
-        )
-        cmds.append(f"if command -v {p.uname_program} > /dev/null; then printf 'uname-'; {p.uname_program} -a || true; fi")
-        return "; ".join(cmds)
-
-    def detect_available_programs_remote(self, remote: Remote, available_programs: dict, ssh_user_host: str) -> None:
-        p, log = self.params, self.params.log
-        location = remote.location
-        available_programs_minimum = {"zpool": None, "sudo": None}
-        available_programs[location] = {}
-        lines = None
-        try:
-            # on Linux, 'zfs --version' returns with zero status and prints the correct info
-            # on FreeBSD, 'zfs --version' always prints the same (correct) info as Linux, but nonetheless sometimes
-            # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
-            # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
-            # option is not known there
-            lines = self.run_ssh_command(remote, log_trace, print_stderr=False, cmd=[p.zfs_program, "--version"])
-            assert lines
-        except (FileNotFoundError, PermissionError):  # location is local and program file was not found
-            die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
-        except subprocess.CalledProcessError as e:
-            if "unrecognized command '--version'" in e.stderr and "run: zfs help" in e.stderr:
-                available_programs[location]["zfs"] = "notOpenZFS"  # solaris-11.4 zfs does not know --version flag
-            elif not e.stdout.startswith("zfs"):
-                die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
-            else:
-                lines = e.stdout  # FreeBSD if the zfs kernel module is not loaded
-                assert lines
-        if lines:
-            line = lines.splitlines()[0]
-            assert line.startswith("zfs")
-            # Example: zfs-2.1.5~rc5-ubuntu3 -> 2.1.5, zfswin-2.2.3rc5 -> 2.2.3
-            version = line.split("-")[1].strip()
-            match = re.fullmatch(r"(\d+\.\d+\.\d+).*", version)
-            assert match, "Unparsable zfs version string: " + version
-            version = match.group(1)
-            available_programs[location]["zfs"] = version
-            if is_version_at_least(version, "2.1.0"):
-                available_programs[location][zfs_version_is_at_least_2_1_0] = True
-            if is_version_at_least(version, "2.2.0"):
-                available_programs[location][zfs_version_is_at_least_2_2_0] = True
-        log.log(log_trace, f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
-
-        if p.shell_program != disable_prg:
-            try:
-                cmd = [p.shell_program, "-c", self.find_available_programs()]
-                available_programs[location].update(
-                    dict.fromkeys(self.run_ssh_command(remote, log_trace, cmd=cmd).splitlines())
-                )
-                return
-            except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
-                if e.filename != p.shell_program:
-                    raise
-            except subprocess.CalledProcessError:
-                pass
-            log.warning("%s", f"Failed to find {p.shell_program} on {location}. Continuing with minimal assumptions...")
-        available_programs[location].update(available_programs_minimum)
-
-    def is_solaris_zfs(self, remote: Remote) -> bool:
-        return self.is_solaris_zfs_location(remote.location)
-
-    def is_solaris_zfs_location(self, location: str) -> bool:
-        if location == "local":
-            return platform.system() == "SunOS"
-        return self.params.available_programs[location].get("zfs") == "notOpenZFS"
-
-    @staticmethod
-    def is_dummy(r: Remote) -> bool:
-        return r.root_dataset == dummy_dataset
-
-    def detect_zpool_features(self, remote: Remote) -> None:
-        p = params = self.params
-        r, loc, log = remote, remote.location, p.log
-        lines = []
-        features = {}
-        params.zpool_features.pop(loc, None)
-        if self.is_dummy(r):
-            params.zpool_features[loc] = {}
-            return
-        if params.zpool_program != disable_prg:
-            cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
-            try:
-                lines = self.run_ssh_command(remote, log_trace, check=False, cmd=cmd).splitlines()
-            except (FileNotFoundError, PermissionError) as e:
-                if e.filename != params.zpool_program:
-                    raise
-                log.warning(
-                    "%s", f"Failed to detect zpool features on {loc}: {r.pool}. Continuing with minimal assumptions ..."
-                )
-            else:
-                props = {line.split("\t", 1)[0]: line.split("\t", 1)[1] for line in lines}
-                features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
-        if len(lines) == 0:
-            cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-            if self.try_ssh_command(remote, log_trace, cmd=cmd) is None:
-                die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
-        params.zpool_features[loc] = features
-
-    def is_zpool_feature_enabled_or_active(self, remote: Remote, feature: str) -> bool:
-        return self.params.zpool_features[remote.location].get(feature) in ("active", "enabled")
-
-    def are_bookmarks_enabled(self, remote: Remote) -> bool:
-        return self.is_zpool_feature_enabled_or_active(
-            remote, "feature@bookmark_v2"
-        ) and self.is_zpool_feature_enabled_or_active(remote, "feature@bookmark_written")
-
-    def is_caching_snapshots(self, remote: Remote) -> bool:
-        return (
-            self.params.is_caching_snapshots
-            and self.is_program_available(zfs_version_is_at_least_2_2_0, remote.location)
-            and self.is_zpool_feature_enabled_or_active(remote, "feature@extensible_dataset")
-        )
-
     def check_zfs_dataset_busy(self, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
         """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with other
         currently running processes. Instead, retry the operation later, after some delay. For example, decline to
@@ -5022,7 +4786,7 @@ class Job:
         concurrency control where the parties simply retry on collision detection (rather than coordinate concurrency
         via a remote lock server)."""
         p, log = self.params, self.params.log
-        if not self.is_program_available("ps", remote.location):
+        if not p.is_program_available("ps", remote.location):
             return True
         cmd = p.split_args(f"{p.ps_program} -Ao args")
         procs = (self.try_ssh_command(remote, log_trace, cmd=cmd) or "").splitlines()
@@ -5354,11 +5118,6 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
     rel_path = os.path.relpath(src, start=dst_dir)
     os.symlink(rel_path, os.path.join(dst_dir, dst))
-
-
-def is_version_at_least(version_str: str, min_version_str: str) -> bool:
-    """Checks if the version string is at least the minimum version string."""
-    return tuple(map(int, version_str.split("."))) >= tuple(map(int, min_version_str.split(".")))
 
 
 def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:

@@ -133,7 +133,7 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connect
     p, log = job.params, job.params.log
     if remote.ssh_user_host == "":
         return  # we're in local mode; no ssh required
-    if not job.is_program_available("ssh", "local"):
+    if not p.is_program_available("ssh", "local"):
         die(f"{p.ssh_program} CLI is not available to talk to remote host. Install {p.ssh_program} first!")
     if not remote.reuse_ssh_connection:
         return

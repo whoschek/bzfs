@@ -47,6 +47,9 @@ from bzfs_main import (
 from bzfs_main.bzfs import (
     die_status,
 )
+from bzfs_main.detect import (
+    is_version_at_least,
+)
 from bzfs_main.utils import (
     find_match,
     getenv_any,
@@ -1563,15 +1566,15 @@ class LocalTestCase(BZFSTestCase):
                     self.assert_snapshots(dst_root_dataset, 3, "s")
                 for loc in ["local", "src", "dst"]:
                     if loc != "local":
-                        self.assertTrue(job.is_program_available("zfs", loc))
-                    self.assertTrue(job.is_program_available("zpool", loc))
-                    self.assertTrue(job.is_program_available("ssh", loc))
-                    self.assertTrue(job.is_program_available("sh", loc))
-                    self.assertTrue(job.is_program_available("sudo", loc))
-                    self.assertTrue(job.is_program_available("zstd", loc))
-                    self.assertTrue(job.is_program_available("mbuffer", loc))
-                    self.assertTrue(job.is_program_available("pv", loc))
-                    self.assertTrue(job.is_program_available("ps", loc))
+                        self.assertTrue(job.params.is_program_available("zfs", loc))
+                    self.assertTrue(job.params.is_program_available("zpool", loc))
+                    self.assertTrue(job.params.is_program_available("ssh", loc))
+                    self.assertTrue(job.params.is_program_available("sh", loc))
+                    self.assertTrue(job.params.is_program_available("sudo", loc))
+                    self.assertTrue(job.params.is_program_available("zstd", loc))
+                    self.assertTrue(job.params.is_program_available("mbuffer", loc))
+                    self.assertTrue(job.params.is_program_available("pv", loc))
+                    self.assertTrue(job.params.is_program_available("ps", loc))
 
     def test_basic_replication_flat_simple_with_progress_reporter(self) -> None:
         for pv_program in ["pv", bzfs.disable_prg]:
@@ -5731,7 +5734,7 @@ def natsort_key(s: str) -> tuple[str, int, str]:
 
 
 def is_solaris_zfs_at_least_11_4_42() -> bool:
-    return is_solaris_zfs() and bzfs.is_version_at_least(".".join(platform.version().split(".")[0:3]), "11.4.42")
+    return is_solaris_zfs() and is_version_at_least(".".join(platform.version().split(".")[0:3]), "11.4.42")
 
 
 def is_zfs_at_least_2_3_0() -> bool:
@@ -5740,7 +5743,7 @@ def is_zfs_at_least_2_3_0() -> bool:
     ver = zfs_version()
     if ver is None:
         return False
-    return bzfs.is_version_at_least(ver, "2.3.0")
+    return is_version_at_least(ver, "2.3.0")
 
 
 def is_zfs_at_least_2_2_0() -> bool:
@@ -5749,7 +5752,7 @@ def is_zfs_at_least_2_2_0() -> bool:
     ver = zfs_version()
     if ver is None:
         return False
-    return bzfs.is_version_at_least(ver, "2.2.0")
+    return is_version_at_least(ver, "2.2.0")
 
 
 def is_zfs_at_least_2_1_0() -> bool:
@@ -5758,12 +5761,12 @@ def is_zfs_at_least_2_1_0() -> bool:
     ver = zfs_version()
     if ver is None:
         return False
-    return bzfs.is_version_at_least(ver, "2.1.0")
+    return is_version_at_least(ver, "2.1.0")
 
 
 def is_pv_at_least_1_9_0() -> bool:
     ver = pv_version()
-    return bzfs.is_version_at_least(ver, "1.9.0")
+    return is_version_at_least(ver, "1.9.0")
 
 
 def pv_version() -> str:

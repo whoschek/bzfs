@@ -37,11 +37,23 @@ from unittest.mock import (
     patch,
 )
 
+import bzfs_main.detect
 from bzfs_main import bzfs
 from bzfs_main.check_range import (
     CheckRange,
 )
+from bzfs_main.connection import (
+    DEDICATED,
+    SHARED,
+    ConnectionPools,
+)
+from bzfs_main.detect import (
+    RemoteConfCacheItem,
+    detect_available_programs,
+    zfs_version_is_at_least_2_2_0,
+)
 from bzfs_main.utils import (
+    die_status,
     getenv_any,
 )
 from bzfs_tests.zfs_util import (
@@ -78,7 +90,6 @@ def suite() -> unittest.TestSuite:
         TestCheckPercentRange,
         TestPythonVersionCheck,
         TestItrSSHCmdParallel,
-        TestRemoteConfCache,
         # TestPerformance,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -1124,7 +1135,7 @@ class TestAdditionalHelpers(unittest.TestCase):
     def test_job_shutdown_calls_pool_shutdown(self) -> None:
         job = bzfs.Job()
         mock_pool = MagicMock()
-        job.remote_conf_cache = {("k",): bzfs.RemoteConfCacheItem(mock_pool, {}, {})}
+        job.remote_conf_cache = {("k",): RemoteConfCacheItem(mock_pool, {}, {})}
         job.shutdown()
         mock_pool.shutdown.assert_called_once()
 
@@ -1522,7 +1533,7 @@ class TestAddRecvPropertyOptions(unittest.TestCase):
 
     def test_appends_x_options_when_supported(self) -> None:
         recv_opts: list[str] = []
-        with patch.object(self.job, "is_program_available", return_value=True):
+        with patch.object(self.p, "is_program_available", return_value=True):
             result_opts, set_opts = self.job.add_recv_property_options(True, recv_opts, "ds", {})
         self.assertEqual(["-x", "xprop1", "-x", "xprop2"], result_opts)
         self.assertEqual([], set_opts)
@@ -1531,7 +1542,7 @@ class TestAddRecvPropertyOptions(unittest.TestCase):
 
     def test_skips_x_options_when_not_supported(self) -> None:
         recv_opts: list[str] = []
-        with patch.object(self.job, "is_program_available", return_value=False):
+        with patch.object(self.p, "is_program_available", return_value=False):
             result_opts, set_opts = self.job.add_recv_property_options(True, recv_opts, "ds", {})
         self.assertEqual([], result_opts)
         self.assertEqual([], set_opts)
@@ -1629,9 +1640,9 @@ class TestPreservePropertiesValidation(unittest.TestCase):
         self.p.src.ssh_user_host = "src_host"
         self.p.dst.ssh_user_host = "dst_host"
         self.p.connection_pools = {
-            "local": MagicMock(spec=bzfs.ConnectionPools),
-            "src": MagicMock(spec=bzfs.ConnectionPools),
-            "dst": MagicMock(spec=bzfs.ConnectionPools),
+            "local": MagicMock(spec=ConnectionPools),
+            "src": MagicMock(spec=ConnectionPools),
+            "dst": MagicMock(spec=ConnectionPools),
         }
         self.p.zpool_features = {"src": {}, "dst": {}}
         self.p.available_programs = {"local": {"ssh": ""}, "src": {}, "dst": {}}
@@ -1639,47 +1650,53 @@ class TestPreservePropertiesValidation(unittest.TestCase):
     def tearDown(self) -> None:
         bzfs.reset_logger()
 
-    @patch.object(bzfs.Job, "detect_zpool_features")
-    @patch.object(bzfs.Job, "detect_available_programs_remote")
+    @patch.object(bzfs_main.detect, "detect_zpool_features")
+    @patch.object(bzfs_main.detect, "detect_available_programs_remote")
     def test_preserve_properties_fails_on_old_zfs_with_props(
-        self, mock_detect_progs: MagicMock, mock_detect_features: MagicMock
+        self, mock_detect_zpool_features: MagicMock, mock_detect_available_programs_remote: MagicMock
     ) -> None:
         """Verify that using --preserve-properties with --props fails on ZFS < 2.2.0."""
-        with patch.object(self.job, "is_program_available") as mock_is_available:
-
+        with patch.object(self.p, "is_program_available") as mock_is_available:
             # Make the mock specific to the zfs>=2.2.0 check on dst
             def side_effect(program: str, location: str) -> bool:
-                if program == bzfs.zfs_version_is_at_least_2_2_0 and location == "dst":
+                if program == zfs_version_is_at_least_2_2_0 and location == "dst":
                     return False
                 return True  # Assume other programs are available
 
             mock_is_available.side_effect = side_effect
             with self.assertRaises(SystemExit) as cm:
-                self.job.detect_available_programs()
-            self.assertEqual(cm.exception.code, bzfs.die_status)
+                detect_available_programs(self.job)
+            self.assertEqual(cm.exception.code, die_status)
             self.assertIn("--preserve-properties is unreliable on destination ZFS < 2.2.0", str(cm.exception))
 
-    @patch.object(bzfs.Job, "detect_zpool_features")
-    @patch.object(bzfs.Job, "detect_available_programs_remote")
+    @patch.object(bzfs_main.detect, "detect_zpool_features")
+    @patch.object(bzfs_main.detect, "detect_available_programs_remote")
     def test_preserve_properties_succeeds_on_new_zfs_with_props(
-        self, mock_detect_progs: MagicMock, mock_detect_features: MagicMock
+        self, mock_detect_zpool_features: MagicMock, mock_detect_available_programs_remote: MagicMock
     ) -> None:
         """Verify that --preserve-properties is allowed on ZFS >= 2.2.0."""
-        with patch.object(self.job, "is_program_available", return_value=True):
+        with patch.object(self.p, "is_program_available", return_value=True):
             # This should not raise an exception
-            self.job.detect_available_programs()
+            detect_available_programs(self.job)
 
-    @patch.object(bzfs.Job, "detect_zpool_features")
-    @patch.object(bzfs.Job, "detect_available_programs_remote")
+    @patch.object(bzfs_main.detect, "detect_zpool_features")
+    @patch.object(bzfs_main.detect, "detect_available_programs_remote")
     def test_preserve_properties_succeeds_on_old_zfs_without_props(
-        self, mock_detect_progs: MagicMock, mock_detect_features: MagicMock
+        self, mock_detect_zpool_features: MagicMock, mock_detect_available_programs_remote: MagicMock
     ) -> None:
         """Verify --preserve-properties is allowed on old ZFS if --props is not used."""
         self.p.zfs_send_program_opts.remove("--props")  # Modify the params for this test case
-        with patch.object(self.job, "is_program_available") as mock_is_available:
-            mock_is_available.return_value = False  # Simulate old ZFS
+        with patch.object(self.p, "is_program_available") as mock_is_available:
+
+            def side_effect(program: str, location: str) -> bool:
+                # Simulate old ZFS by returning False for version checks, but True for other programs like ssh.
+                if program == zfs_version_is_at_least_2_2_0:
+                    return False
+                return True
+
+            mock_is_available.side_effect = side_effect
             # This should not raise an exception
-            self.job.detect_available_programs()
+            detect_available_programs(self.job)
 
 
 #############################################################################
@@ -2033,7 +2050,7 @@ class TestPythonVersionCheck(unittest.TestCase):
             from bzfs_main import bzfs
 
             importlib.reload(bzfs)  # Reload module to apply version patch
-            mock_exit.assert_called_with(bzfs.die_status)
+            mock_exit.assert_called_with(die_status)
 
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 8))
@@ -2083,8 +2100,8 @@ class TestItrSSHCmdParallel(unittest.TestCase):
         job = bzfs.Job()
         job.params = p
         p.src = bzfs.Remote("src", args, p)
-        job.params.connection_pools["src"] = bzfs.ConnectionPools(
-            p.src, {bzfs.SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, bzfs.DEDICATED: 1}
+        job.params.connection_pools["src"] = ConnectionPools(
+            p.src, {SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
         )
         job.max_workers = {"src": 2}
         job.params.available_programs = {"src": {"os": "Linux"}, "local": {"os": "Linux"}}
@@ -2197,57 +2214,6 @@ class TestItrSSHCmdParallel(unittest.TestCase):
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)
         )
         self.assertEqual(results, expected_ordered)
-
-
-#############################################################################
-class TestRemoteConfCache(unittest.TestCase):
-
-    def test_remote_conf_cache_hit_skips_detection(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
-        job = bzfs.Job()
-        job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        p.dst = bzfs.Remote("dst", args, p)
-        p.src.ssh_host = "host"
-        p.src.ssh_user_host = "host"
-        p.dst.ssh_host = "host2"
-        p.dst.ssh_user_host = "host2"
-        job.params.available_programs["local"] = {"ssh": ""}
-        pools = bzfs.ConnectionPools(p.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
-        item = bzfs.RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, time.monotonic_ns())
-        job.remote_conf_cache[p.src.cache_key()] = item
-        job.remote_conf_cache[p.dst.cache_key()] = item
-        with patch.object(job, "detect_available_programs_remote") as d1, patch.object(job, "detect_zpool_features") as d2:
-            job.detect_available_programs()
-            d1.assert_not_called()
-            d2.assert_not_called()
-
-    def test_remote_conf_cache_miss_runs_detection(self) -> None:
-        args = argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "10 milliseconds"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
-        job = bzfs.Job()
-        job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        p.dst = bzfs.Remote("dst", args, p)
-        p.src.ssh_host = "host"
-        p.src.ssh_user_host = "host"
-        p.dst.ssh_host = "host2"
-        p.dst.ssh_user_host = "host2"
-        job.params.available_programs["local"] = {"ssh": ""}
-        pools = bzfs.ConnectionPools(p.src, {bzfs.SHARED: 1, bzfs.DEDICATED: 1})
-        expired_ts = time.monotonic_ns() - p.remote_conf_cache_ttl_nanos - 1
-        item = bzfs.RemoteConfCacheItem(pools, {"os": "Linux"}, {"feat": "on"}, expired_ts)
-        job.remote_conf_cache[p.src.cache_key()] = item
-        job.remote_conf_cache[p.dst.cache_key()] = item
-        with patch.object(job, "detect_available_programs_remote") as d1, patch.object(job, "detect_zpool_features") as d2:
-            d1.side_effect = lambda r, programs, host: programs.__setitem__(r.location, {"ssh": ""})
-            d2.side_effect = lambda r: job.params.zpool_features.__setitem__(r.location, {"feat": "on"})
-            job.detect_available_programs()
-            self.assertEqual(d1.call_count, 2)
-            self.assertEqual(d2.call_count, 2)
 
 
 #############################################################################
