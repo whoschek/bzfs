@@ -38,7 +38,7 @@ from bzfs_main.connection import (
     ConnectionPools,
 )
 from bzfs_main.utils import log_trace
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
 #############################################################################
@@ -83,7 +83,7 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
 
 
 #############################################################################
-class TestConnectionPool(AbstractTest):
+class TestConnectionPool(AbstractTestCase):
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst", "-v"])
         p = Params(args, log=bzfs_main.loggers.get_logger(LogParams(args), args))

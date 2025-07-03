@@ -49,7 +49,7 @@ from bzfs_main.utils import (
     log_stdout,
     log_trace,
 )
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
 #############################################################################
@@ -62,7 +62,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestHelperFunctions(AbstractTest):
+class TestHelperFunctions(AbstractTestCase):
 
     def test_logdir_basename_prefix(self) -> None:
         """Basename of --log-dir must start with prefix 'bzfs-logs'"""
@@ -172,7 +172,7 @@ class TestHelperFunctions(AbstractTest):
 
 
 #############################################################################
-class TestLogging(AbstractTest):
+class TestLogging(AbstractTestCase):
 
     def test_get_default_logger(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])

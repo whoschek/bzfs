@@ -29,7 +29,7 @@ from unittest.mock import MagicMock, patch
 
 from bzfs_main import bzfs_jobrunner
 from bzfs_main.utils import die_status
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
 #############################################################################
@@ -48,7 +48,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestHelperFunctions(AbstractTest):
+class TestHelperFunctions(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
 
@@ -198,7 +198,7 @@ class TestHelperFunctions(AbstractTest):
 
 
 #############################################################################
-class TestValidation(AbstractTest):
+class TestValidation(AbstractTestCase):
     def test_multisource_substitution_token_validation_with_empty_target(self) -> None:
         job = bzfs_jobrunner.Job()
         job.log = MagicMock()
@@ -326,7 +326,7 @@ class TestValidation(AbstractTest):
 
 
 #############################################################################
-class TestSkipDatasetsWithNonExistingDstPool(AbstractTest):
+class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
         self.log_mock = MagicMock()
@@ -603,7 +603,7 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTest):
 
 
 #############################################################################
-class TestRunSubJobSpawnProcessPerJob(AbstractTest):
+class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
 
     def setUp(self) -> None:
         self.assertIsNotNone(shutil.which("sh"))
@@ -662,7 +662,7 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTest):
 
 #############################################################################
 @patch("bzfs_main.bzfs_jobrunner.Job._bzfs_run_main")
-class TestRunSubJobInCurrentThread(AbstractTest):
+class TestRunSubJobInCurrentThread(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
 
@@ -725,7 +725,7 @@ class TestRunSubJobInCurrentThread(AbstractTest):
 
 
 #############################################################################
-class TestRunSubJob(AbstractTest):
+class TestRunSubJob(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
         self.job.stats.jobs_all = 1
@@ -760,7 +760,7 @@ class TestRunSubJob(AbstractTest):
 
 
 #############################################################################
-class TestValidateSnapshotPlan(AbstractTest):
+class TestValidateSnapshotPlan(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
         self.job.log = MagicMock()
@@ -780,7 +780,7 @@ class TestValidateSnapshotPlan(AbstractTest):
 
 
 #############################################################################
-class TestValidateMonitorSnapshotPlan(AbstractTest):
+class TestValidateMonitorSnapshotPlan(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs_jobrunner.Job()
         self.job.log = MagicMock()

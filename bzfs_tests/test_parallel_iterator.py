@@ -26,7 +26,7 @@ from bzfs_main.connection import (
     ConnectionPools,
 )
 from bzfs_main.loggers import reset_logger
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
 #############################################################################
@@ -65,7 +65,7 @@ def dummy_fn_race(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str
     return cmd, batch
 
 
-class TestParallelIterator(AbstractTest):
+class TestParallelIterator(AbstractTestCase):
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         p = Params(args)

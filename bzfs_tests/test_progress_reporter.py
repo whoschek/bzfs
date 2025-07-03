@@ -29,7 +29,7 @@ from unittest.mock import MagicMock, patch
 from bzfs_main import bzfs, progress_reporter
 from bzfs_main.progress_reporter import ProgressReporter, count_num_bytes_transferred_by_zfs_send, pv_file_thread_separator
 from bzfs_main.utils import tail
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.test_utils import stop_on_failure_subtest
 
 
@@ -42,7 +42,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestHelperFunctions(AbstractTest):
+class TestHelperFunctions(AbstractTestCase):
 
     def setUp(self) -> None:
         self.default_opts = bzfs.argument_parser().get_default("pv_program_opts")

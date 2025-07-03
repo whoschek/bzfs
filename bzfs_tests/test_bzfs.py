@@ -53,7 +53,7 @@ from bzfs_main.detect import (
 from bzfs_main.utils import (
     die_status,
 )
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.zfs_util import (
     is_solaris_zfs,
 )
@@ -86,7 +86,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestHelperFunctions(AbstractTest):
+class TestHelperFunctions(AbstractTestCase):
     s = "s"
     d = "d"
     a = "a"
@@ -1046,7 +1046,7 @@ class TestHelperFunctions(AbstractTest):
 
 
 #############################################################################
-class TestAdditionalHelpers(AbstractTest):
+class TestAdditionalHelpers(AbstractTestCase):
 
     def test_params_verbose_zfs_and_bwlimit(self) -> None:
         args = self.argparser_parse_args(["src", "dst", "-v", "-v", "--bwlimit", "20m"])
@@ -1191,7 +1191,7 @@ class TestAdditionalHelpers(AbstractTest):
 
 
 #############################################################################
-class TestParseDatasetLocator(AbstractTest):
+class TestParseDatasetLocator(AbstractTestCase):
     def run_test(
         self,
         input_value: str,
@@ -1350,7 +1350,7 @@ class TestParseDatasetLocator(AbstractTest):
 
 
 #############################################################################
-class TestCurrentDateTime(AbstractTest):
+class TestCurrentDateTime(AbstractTestCase):
 
     def setUp(self) -> None:
         self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)  # in no timezone
@@ -1469,7 +1469,7 @@ class TestCurrentDateTime(AbstractTest):
 
 
 #############################################################################
-class TestArgumentParser(AbstractTest):
+class TestArgumentParser(AbstractTestCase):
 
     def test_help(self) -> None:
         if is_solaris_zfs():
@@ -1505,7 +1505,7 @@ class TestArgumentParser(AbstractTest):
 
 
 ###############################################################################
-class TestAddRecvPropertyOptions(AbstractTest):
+class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def setUp(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
@@ -1536,7 +1536,7 @@ class TestAddRecvPropertyOptions(AbstractTest):
 
 
 #############################################################################
-class TestDatasetPairsAction(AbstractTest):
+class TestDatasetPairsAction(AbstractTestCase):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1604,7 +1604,7 @@ class TestDatasetPairsAction(AbstractTest):
 
 
 #############################################################################
-class TestPreservePropertiesValidation(AbstractTest):
+class TestPreservePropertiesValidation(AbstractTestCase):
     def setUp(self) -> None:
         self.args = self.argparser_parse_args(
             [
@@ -1686,7 +1686,7 @@ class TestPreservePropertiesValidation(AbstractTest):
 
 
 #############################################################################
-class TestFileOrLiteralAction(AbstractTest):
+class TestFileOrLiteralAction(AbstractTestCase):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1727,7 +1727,7 @@ class TestFileOrLiteralAction(AbstractTest):
 
 
 #############################################################################
-class TestNewSnapshotFilterGroupAction(AbstractTest):
+class TestNewSnapshotFilterGroupAction(AbstractTestCase):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1743,7 +1743,7 @@ class TestNewSnapshotFilterGroupAction(AbstractTest):
 
 
 #############################################################################
-class TestNonEmptyStringAction(AbstractTest):
+class TestNonEmptyStringAction(AbstractTestCase):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1755,7 +1755,7 @@ class TestNonEmptyStringAction(AbstractTest):
 
 
 #############################################################################
-class TestLogConfigVariablesAction(AbstractTest):
+class TestLogConfigVariablesAction(AbstractTestCase):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1771,7 +1771,7 @@ class TestLogConfigVariablesAction(AbstractTest):
 
 
 #############################################################################
-class SSHConfigFileNameAction(AbstractTest):
+class SSHConfigFileNameAction(AbstractTestCase):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1797,7 +1797,7 @@ class SSHConfigFileNameAction(AbstractTest):
 
 
 #############################################################################
-class TestSafeFileNameAction(AbstractTest):
+class TestSafeFileNameAction(AbstractTestCase):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1837,7 +1837,7 @@ class TestSafeFileNameAction(AbstractTest):
 
 
 #############################################################################
-class TestSafeDirectoryNameAction(AbstractTest):
+class TestSafeDirectoryNameAction(AbstractTestCase):
     def test_valid_directory_name_is_accepted(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
@@ -1864,7 +1864,7 @@ class TestSafeDirectoryNameAction(AbstractTest):
 
 
 #############################################################################
-class TestCheckRange(AbstractTest):
+class TestCheckRange(AbstractTestCase):
 
     def test_valid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
@@ -1990,7 +1990,7 @@ class TestCheckRange(AbstractTest):
 
 
 #############################################################################
-class TestCheckPercentRange(AbstractTest):
+class TestCheckPercentRange(AbstractTestCase):
 
     def test_valid_range_min(self) -> None:
         parser = argparse.ArgumentParser()
@@ -2020,7 +2020,7 @@ class TestCheckPercentRange(AbstractTest):
 
 
 #############################################################################
-class TestPythonVersionCheck(AbstractTest):
+class TestPythonVersionCheck(AbstractTestCase):
     """Test version check near top of program:
     if sys.version_info < (3, 8):
         print(f"ERROR: {prog_name} requires Python version >= 3.8!", file=sys.stderr)
@@ -2050,7 +2050,7 @@ class TestPythonVersionCheck(AbstractTest):
 
 
 #############################################################################
-class TestPerformance(AbstractTest):
+class TestPerformance(AbstractTestCase):
 
     def test_close_fds(self) -> None:
         """see https://bugs.python.org/issue42738

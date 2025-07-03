@@ -28,7 +28,7 @@ from bzfs_main.utils import (
 
 
 #############################################################################
-class AbstractTest(unittest.TestCase):
+class AbstractTestCase(unittest.TestCase):
 
     def __init__(self, methodName: str = "runTest") -> None:  # noqa: N803
         super().__init__(methodName)

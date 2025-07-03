@@ -51,7 +51,7 @@ from bzfs_main.utils import (
     compile_regexes,
     log_debug,
 )
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
 #############################################################################
@@ -65,7 +65,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class CommonTest(AbstractTest):
+class CommonTest(AbstractTestCase):
 
     def __init__(self, methodName: str = "runTest") -> None:  # noqa: N803
         super().__init__(methodName)

@@ -57,7 +57,7 @@ from bzfs_main.utils import (
     getenv_bool,
     human_readable_duration,
 )
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.test_incremental_send_steps import (
     TestIncrementalSendSteps,
 )
@@ -122,7 +122,7 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
 
 
 def suite() -> unittest.TestSuite:
-    ttype = AbstractTest()
+    ttype = AbstractTestCase()
     suite = unittest.TestSuite()
     if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
@@ -209,7 +209,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class ParametrizedTestCase(AbstractTest):
+class ParametrizedTestCase(AbstractTestCase):
 
     def __init__(self, methodName: str = "runTest", param: dict[str, Any] | None = None) -> None:  # noqa: N803
         super().__init__(methodName)

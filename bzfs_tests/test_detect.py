@@ -31,7 +31,7 @@ from bzfs_main.detect import (
     RemoteConfCacheItem,
     detect_available_programs,
 )
-from bzfs_tests.abstract_test import AbstractTest
+from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
 #############################################################################
@@ -43,7 +43,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestRemoteConfCache(AbstractTest):
+class TestRemoteConfCache(AbstractTestCase):
 
     def test_remote_conf_cache_hit_skips_detection(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
