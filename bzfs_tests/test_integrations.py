@@ -39,21 +39,23 @@ from subprocess import DEVNULL, PIPE
 from typing import Any, Callable, Iterable, cast
 from unittest.mock import patch
 
+import bzfs_main.utils
 from bzfs_main import (
     bzfs,
     bzfs_jobrunner,
     utils,
 )
-from bzfs_main.bzfs import (
-    die_status,
-)
 from bzfs_main.detect import (
+    dummy_dataset,
     is_version_at_least,
 )
 from bzfs_main.utils import (
+    die_status,
+    env_var_prefix,
     find_match,
     getenv_any,
     getenv_bool,
+    human_readable_duration,
 )
 from bzfs_tests.abstract_test import AbstractTest
 from bzfs_tests.test_incremental_send_steps import (
@@ -321,7 +323,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
     @staticmethod
     def log_dir_opt() -> list[str]:
-        return ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
+        return ["--log-dir", os.path.join(bzfs_main.utils.get_home_directory(), bzfs.log_dir_default + "-test")]
 
     def run_bzfs_internal(
         self,
@@ -420,8 +422,8 @@ class IntegrationTestCase(ParametrizedTestCase):
             args = args + ["--verbose"]
 
         if params and "min_pipe_transfer_size" in params:
-            old_min_pipe_transfer_size = os.environ.get(bzfs.env_var_prefix + "min_pipe_transfer_size")
-            os.environ[bzfs.env_var_prefix + "min_pipe_transfer_size"] = str(int(params["min_pipe_transfer_size"]))
+            old_min_pipe_transfer_size = os.environ.get(env_var_prefix + "min_pipe_transfer_size")
+            os.environ[env_var_prefix + "min_pipe_transfer_size"] = str(int(params["min_pipe_transfer_size"]))
 
         if dry_run:
             args = args + ["--dryrun=recv"]
@@ -485,27 +487,25 @@ class IntegrationTestCase(ParametrizedTestCase):
                 job.progress_update_intervals = progress_update_intervals
 
         old_max_datasets_per_minibatch_on_list_snaps = os.environ.get(
-            bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"
+            env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"
         )
         if max_datasets_per_minibatch_on_list_snaps is not None:
-            os.environ[bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = str(
+            os.environ[env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = str(
                 max_datasets_per_minibatch_on_list_snaps
             )
 
-        old_dedicated_tcp_connection_per_zfs_send = os.environ.get(
-            bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfs_send"
-        )
+        old_dedicated_tcp_connection_per_zfs_send = os.environ.get(env_var_prefix + "dedicated_tcp_connection_per_zfs_send")
         if platform.platform().startswith("FreeBSD-13") or platform.system() == "SunOS":
             # workaround for spurious hangs during zfs send/receive in ~30% of Github Action jobs on QEMU
             # probably caused by https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=283101
             # via https://github.com/openzfs/zfs/issues/16731#issuecomment-2561987688
-            os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfs_send"] = "false"
+            os.environ[env_var_prefix + "dedicated_tcp_connection_per_zfs_send"] = "false"
 
         if include_snapshot_plan_excludes_outdated_snapshots is not None:
             old_include_snapshot_plan_excludes_outdated_snapshots = os.environ.get(
-                bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"
+                env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"
             )
-            os.environ[bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"] = str(
+            os.environ[env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"] = str(
                 include_snapshot_plan_excludes_outdated_snapshots
             )
 
@@ -538,30 +538,30 @@ class IntegrationTestCase(ParametrizedTestCase):
 
             if params and "min_pipe_transfer_size" in params:
                 if old_min_pipe_transfer_size is None:
-                    os.environ.pop(bzfs.env_var_prefix + "min_pipe_transfer_size", None)
+                    os.environ.pop(env_var_prefix + "min_pipe_transfer_size", None)
                 else:
-                    os.environ[bzfs.env_var_prefix + "min_pipe_transfer_size"] = old_min_pipe_transfer_size
+                    os.environ[env_var_prefix + "min_pipe_transfer_size"] = old_min_pipe_transfer_size
 
             if max_datasets_per_minibatch_on_list_snaps is not None:
                 if old_max_datasets_per_minibatch_on_list_snaps is None:
-                    os.environ.pop(bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps", None)
+                    os.environ.pop(env_var_prefix + "max_datasets_per_minibatch_on_list_snaps", None)
                 else:
-                    os.environ[bzfs.env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = (
+                    os.environ[env_var_prefix + "max_datasets_per_minibatch_on_list_snaps"] = (
                         old_max_datasets_per_minibatch_on_list_snaps
                     )
 
             if old_dedicated_tcp_connection_per_zfs_send is None:
-                os.environ.pop(bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfs_send", None)
+                os.environ.pop(env_var_prefix + "dedicated_tcp_connection_per_zfs_send", None)
             else:
-                os.environ[bzfs.env_var_prefix + "dedicated_tcp_connection_per_zfs_send"] = (
+                os.environ[env_var_prefix + "dedicated_tcp_connection_per_zfs_send"] = (
                     old_dedicated_tcp_connection_per_zfs_send
                 )
 
             if include_snapshot_plan_excludes_outdated_snapshots is not None:
                 if old_include_snapshot_plan_excludes_outdated_snapshots is None:
-                    os.environ.pop(bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots", None)
+                    os.environ.pop(env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots", None)
                 else:
-                    os.environ[bzfs.env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"] = (
+                    os.environ[env_var_prefix + "include_snapshot_plan_excludes_outdated_snapshots"] = (
                         old_include_snapshot_plan_excludes_outdated_snapshots
                     )
 
@@ -904,7 +904,7 @@ class TestSSHLatency(IntegrationTestCase):
                 check_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O check 127.0.0.1")
                 echo_cmd = "echo hello"
                 list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
-                log = bzfs.get_logger(p.log_params, args, None)
+                log = bzfs_main.loggers.get_logger(p.log_params, args, None)
                 master_is_running = False
                 try:
                     log.info(f"mode: {mode}")
@@ -944,7 +944,7 @@ class TestSSHLatency(IntegrationTestCase):
                                             self.assertIn("Master running", stderr)
                                         result = self.run_latency_cmd(cmd, close_fds=close_fds)
                                         # log.info(f"cmd result: {result}")
-                                    t = bzfs.human_readable_duration((time.time_ns() - start_time_nanos) / iters)
+                                    t = human_readable_duration((time.time_ns() - start_time_nanos) / iters)
                                     log.info(f"time/iter: {t}, check: {check}, close_fds: {close_fds}, cmd: {' '.join(cmd)}")
                 except subprocess.CalledProcessError as e:
                     log.error(f"error: {(e.stdout, e.stderr)}")
@@ -954,7 +954,7 @@ class TestSSHLatency(IntegrationTestCase):
                         master_exit_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O exit 127.0.0.1")
                         result = self.run_latency_cmd(master_exit_cmd)
                         log.info(f"exit result: {result}")
-                    bzfs.reset_logger()
+                    bzfs_main.loggers.reset_logger()
 
 
 #############################################################################
@@ -969,7 +969,7 @@ class LocalTestCase(IntegrationTestCase):
                 localperiods["secondly" if i != 4 else "daily"] = 1
                 self.run_bzfs(
                     src_root_dataset,
-                    bzfs.dummy_dataset,
+                    dummy_dataset,
                     "--skip-replication",
                     "--create-src-snapshots",
                     "--create-src-snapshots-plan=" + str({"s1": {"onsite": localperiods}}),
@@ -1076,7 +1076,7 @@ class LocalTestCase(IntegrationTestCase):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
                     src_root_dataset,
-                    bzfs.dummy_dataset,
+                    dummy_dataset,
                     "--skip-parent",
                     "--recursive",
                     "--skip-replication",
@@ -1176,7 +1176,7 @@ class LocalTestCase(IntegrationTestCase):
         start_time_nanos = time.time_ns()
         for i in range(n):
             create_filesystem(src_root_dataset, f"foo{i}")
-        print(f"Creating {n} filesystems took {bzfs.human_readable_duration(time.time_ns() - start_time_nanos)}")
+        print(f"Creating {n} filesystems took {human_readable_duration(time.time_ns() - start_time_nanos)}")
         start_time_nanos = time.time_ns()
         self.run_bzfs(
             src_root_dataset,
@@ -1188,7 +1188,7 @@ class LocalTestCase(IntegrationTestCase):
             "--create-src-snapshots-plan=" + str({"z": {"onsite": {"foo": 1}}}),
             "--create-src-snapshots-timeformat=",
         )
-        print(f"Snapshotting took {bzfs.human_readable_duration(time.time_ns() - start_time_nanos)}")
+        print(f"Snapshotting took {human_readable_duration(time.time_ns() - start_time_nanos)}")
         self.assert_snapshotting_generates_identical_createtxg()
 
     def assert_snapshotting_generates_identical_createtxg(self) -> None:
@@ -1283,19 +1283,23 @@ class LocalTestCase(IntegrationTestCase):
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--daemon-frequency=1second", expected_status=die_status)
 
     def test_invalid_use_of_dummy(self) -> None:
-        self.run_bzfs(src_root_dataset, bzfs.dummy_dataset, expected_status=die_status)
+        self.run_bzfs(src_root_dataset, dummy_dataset, expected_status=die_status)
         self.run_bzfs(
-            src_root_dataset, bzfs.dummy_dataset, "--skip-replication", "--delete-dst-snapshots", expected_status=die_status
+            src_root_dataset,
+            dummy_dataset,
+            "--skip-replication",
+            "--delete-dst-snapshots",
+            expected_status=die_status,
         )
         self.run_bzfs(
-            bzfs.dummy_dataset,
-            bzfs.dummy_dataset,
+            dummy_dataset,
+            dummy_dataset,
             "--skip-replication",
             "--create-src-snapshots",
             "--create-src-snapshots-plan=" + str({"s1": {"onsite": {"secondly": 1}}}),
             expected_status=die_status,
         )
-        self.run_bzfs(bzfs.dummy_dataset, bzfs.dummy_dataset, expected_status=die_status)
+        self.run_bzfs(dummy_dataset, dummy_dataset, expected_status=die_status)
 
     def test_include_snapshots_plan(self) -> None:
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-01_00:00:00_secondly")
@@ -1351,7 +1355,7 @@ class LocalTestCase(IntegrationTestCase):
         )
         time.sleep(1.1)
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1363,7 +1367,7 @@ class LocalTestCase(IntegrationTestCase):
         # multiple --delete-dst-snapshots-except-plan expressions are UNIONized:
         take_snapshot(src_root_dataset, "s2_onsite_2024-01-01_00:02:00_secondly")
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1377,7 +1381,7 @@ class LocalTestCase(IntegrationTestCase):
         )
 
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1388,7 +1392,7 @@ class LocalTestCase(IntegrationTestCase):
 
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-04_00:00:00_adhoc")
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1398,7 +1402,7 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshot_names(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
 
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1409,7 +1413,7 @@ class LocalTestCase(IntegrationTestCase):
 
         take_snapshot(src_root_dataset, "s1_onsite_2024-01-04_00:00:00_adhoc")
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1420,7 +1424,7 @@ class LocalTestCase(IntegrationTestCase):
         self.assert_snapshot_names(src_root_dataset, ["s1_onsite_2024-01-04_00:00:00_adhoc"])
 
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1462,7 +1466,7 @@ class LocalTestCase(IntegrationTestCase):
         # Policy: Retain dailies. Mode: delete-except. Source is dummy.
         # Means: Keep snapshots on DST if (they are daily). Delete all others.
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             dst_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1494,7 +1498,7 @@ class LocalTestCase(IntegrationTestCase):
             ],
         )
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1528,7 +1532,7 @@ class LocalTestCase(IntegrationTestCase):
             ],
         )
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             src_root_dataset,
             "--skip-replication",
             "--delete-dst-snapshots",
@@ -1574,7 +1578,7 @@ class LocalTestCase(IntegrationTestCase):
                     self.assertTrue(job.params.is_program_available("ps", loc))
 
     def test_basic_replication_flat_simple_with_progress_reporter(self) -> None:
-        for pv_program in ["pv", bzfs.disable_prg]:
+        for pv_program in ["pv", bzfs_main.detect.disable_prg]:
             for i in range(3):
                 with stop_on_failure_subtest(i=i):
                     self.tearDownAndSetup()
@@ -1687,7 +1691,7 @@ class LocalTestCase(IntegrationTestCase):
                         self.assert_snapshots(dst_root_dataset + f"/woo{j}/qoo{k}", 3, "q")
                 if i == 0 and are_bookmarks_enabled("src") and not self.is_no_privilege_elevation():
                     self.run_bzfs(
-                        bzfs.dummy_dataset,
+                        dummy_dataset,
                         src_root_dataset,
                         "--skip-replication",
                         "--recursive",
@@ -2128,7 +2132,7 @@ class LocalTestCase(IntegrationTestCase):
 
     def test_basic_replication_flat_simple_with_multiple_root_datasets(self) -> None:
         self.setup_basic()
-        param_name = bzfs.env_var_prefix + "reuse_ssh_connection"
+        param_name = env_var_prefix + "reuse_ssh_connection"
         old_value = os.environ.get(param_name)
         try:
             os.environ[param_name] = "False"
@@ -2187,7 +2191,8 @@ class LocalTestCase(IntegrationTestCase):
             with stop_on_failure_subtest(i=i):
                 src_datasets = zfs_list([src_root_dataset], types=["filesystem", "volume"], max_depth=None)
                 dst_datasets = [
-                    bzfs.replace_prefix(src_dataset, src_root_dataset, dst_root_dataset) for src_dataset in src_datasets
+                    bzfs_main.utils.replace_prefix(src_dataset, src_root_dataset, dst_root_dataset)
+                    for src_dataset in src_datasets
                 ]
                 opts = [elem for pair in zip(src_datasets, dst_datasets) for elem in pair]
                 self.run_bzfs(*opts, dry_run=(i == 0))
@@ -2483,10 +2488,10 @@ class LocalTestCase(IntegrationTestCase):
                 self.setup_basic()
                 props = self.properties_with_special_characters()
                 zfs_set([src_root_dataset + "/foo"], props)
-                disable_pv = [] if i <= 0 else ["--pv-program=" + bzfs.disable_prg]
-                disable_mbuffer = [] if i <= 1 else ["--mbuffer-program=" + bzfs.disable_prg]
-                disable_zstd = [] if i <= 2 else ["--compression-program=" + bzfs.disable_prg]
-                disable_sh = [] if i <= 3 else ["--shell-program=" + bzfs.disable_prg]
+                disable_pv = [] if i <= 0 else ["--pv-program=" + bzfs_main.detect.disable_prg]
+                disable_mbuffer = [] if i <= 1 else ["--mbuffer-program=" + bzfs_main.detect.disable_prg]
+                disable_zstd = [] if i <= 2 else ["--compression-program=" + bzfs_main.detect.disable_prg]
+                disable_sh = [] if i <= 3 else ["--shell-program=" + bzfs_main.detect.disable_prg]
                 self.run_bzfs(
                     src_root_dataset + "/foo",
                     dst_root_dataset + "/foo",
@@ -3707,7 +3712,7 @@ class LocalTestCase(IntegrationTestCase):
 
         for i in range(2):
             with stop_on_failure_subtest(i=i):
-                param_name = bzfs.env_var_prefix + "max_datasets_per_batch_on_list_snaps"
+                param_name = env_var_prefix + "max_datasets_per_batch_on_list_snaps"
                 old_value = os.environ.get(param_name)
                 try:
                     if i > 0:
@@ -3968,7 +3973,7 @@ class LocalTestCase(IntegrationTestCase):
         for i in range(3):
             with stop_on_failure_subtest(i=i):
                 self.run_bzfs(
-                    bzfs.dummy_dataset,
+                    dummy_dataset,
                     dst_root_dataset,
                     "--skip-replication",
                     "--delete-dst-datasets",
@@ -3987,7 +3992,7 @@ class LocalTestCase(IntegrationTestCase):
         dst_foo2a = create_filesystem(dst_foo2, "a")
         self.assertIsNotNone(dst_foo2a)
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             dst_root_dataset,
             "--skip-replication",
             "--delete-dst-datasets",
@@ -4150,7 +4155,7 @@ class LocalTestCase(IntegrationTestCase):
         self.assertTrue(dataset_exists(dst_root_dataset + "/boo"))
 
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
@@ -4214,7 +4219,7 @@ class LocalTestCase(IntegrationTestCase):
         # Run bzfs: delete empty datasets, exclude child_excluded from management
         # Source is dummy, so all selected datasets on dst are candidates for deletion if empty.
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             dst_root_dataset,
             "--recursive",
             "--skip-replication",
@@ -4246,7 +4251,7 @@ class LocalTestCase(IntegrationTestCase):
         self.run_bzfs(src_root_dataset, dst_root_dataset, "--delete-dst-snapshots=bookmarks")
         self.assert_snapshots(dst_root_dataset, 3, "s")
         if are_bookmarks_enabled("src") and not self.is_no_privilege_elevation():
-            self.run_bzfs(bzfs.dummy_dataset, src_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
+            self.run_bzfs(dummy_dataset, src_root_dataset, "--skip-replication", "--delete-dst-snapshots=bookmarks")
             self.assert_bookmark_names(src_root_dataset, [])
 
     def test_delete_dst_snapshots_flat_with_replication_with_crosscheck(self) -> None:
@@ -4437,7 +4442,7 @@ class LocalTestCase(IntegrationTestCase):
         self.setup_basic_with_recursive_replication_done()
         for i in range(2):
             self.run_bzfs(
-                bzfs.dummy_dataset,
+                dummy_dataset,
                 dst_root_dataset,
                 "--recursive",
                 "--skip-replication",
@@ -4455,7 +4460,7 @@ class LocalTestCase(IntegrationTestCase):
         self.setup_basic_with_recursive_replication_done()
         for i in range(3):
             self.run_bzfs(
-                bzfs.dummy_dataset,
+                dummy_dataset,
                 dst_root_dataset,
                 "--recursive",
                 "--skip-replication",
@@ -4488,7 +4493,7 @@ class LocalTestCase(IntegrationTestCase):
         # inject send failures before this many tries. only after that succeed the operation
         counter = Counter(zfs_delete_snapshot=2)
         self.run_bzfs(
-            bzfs.dummy_dataset,
+            dummy_dataset,
             dst_root_dataset,
             "--skip-replication",
             "--recursive",
@@ -4923,7 +4928,9 @@ class LocalTestCase(IntegrationTestCase):
     def test_ssh_program_must_not_be_disabled_in_nonlocal_mode(self) -> None:
         if not self.param or self.param.get("ssh_mode", "local") == "local" or ssh_program != "ssh":
             self.skipTest("ssh is only required in nonlocal mode")
-        self.run_bzfs(src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs.disable_prg, expected_status=die_status)
+        self.run_bzfs(
+            src_root_dataset, dst_root_dataset, "--ssh-program=" + bzfs_main.detect.disable_prg, expected_status=die_status
+        )
 
     def test_cache_flat_simple(self) -> None:
         if not is_cache_snapshots_enabled():
@@ -5495,7 +5502,7 @@ class MinimalRemoteTestCase(IntegrationTestCase):
         self.run_bzfs(
             src_root_dataset,
             dst_root_dataset,
-            f"--{prog}-program=" + bzfs.disable_prg,
+            f"--{prog}-program=" + bzfs_main.detect.disable_prg,
             expected_status=expected_error,
         )
         if expected_error != 0:

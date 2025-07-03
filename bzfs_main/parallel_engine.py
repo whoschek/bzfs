@@ -157,7 +157,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     len_datasets: int = len(datasets)
     datasets_set: set[str] = set(datasets)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        todo_futures: set[Future] = set()
+        todo_futures: set[Future[Any]] = set()
         submitted: int = 0
         next_update_nanos: int = time.monotonic_ns()
         fw_timeout: float | None = None

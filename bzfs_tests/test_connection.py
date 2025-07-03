@@ -23,10 +23,12 @@ from typing import (
     cast,
 )
 
+import bzfs_main.loggers
 from bzfs_main import bzfs
 from bzfs_main.bzfs import (
+    LogParams,
+    Params,
     Remote,
-    log_trace,
 )
 from bzfs_main.connection import (
     DEDICATED,
@@ -35,6 +37,7 @@ from bzfs_main.connection import (
     ConnectionPool,
     ConnectionPools,
 )
+from bzfs_main.utils import log_trace
 from bzfs_tests.abstract_test import AbstractTest
 
 
@@ -83,7 +86,7 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
 class TestConnectionPool(AbstractTest):
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst", "-v"])
-        p = bzfs.Params(args, log=bzfs.get_logger(bzfs.LogParams(args), args))
+        p = Params(args, log=bzfs_main.loggers.get_logger(LogParams(args), args))
         self.src = p.src
         self.dst = p.dst
         self.dst.ssh_user_host = "127.0.0.1"

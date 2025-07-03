@@ -242,7 +242,7 @@ class TestHelperFunctions(AbstractTest):
     def test_pretty_print_formatter(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
-        self.assertIsNotNone(str(bzfs.pretty_print_formatter(params)))
+        self.assertIsNotNone(str(bzfs_main.utils.pretty_print_formatter(params)))
 
     def test_parse_duration_to_milliseconds(self) -> None:
         self.assertEqual(5000, bzfs.parse_duration_to_milliseconds("5 seconds"))
@@ -296,14 +296,14 @@ class TestHelperFunctions(AbstractTest):
 
     def test_xprint(self) -> None:
         log = logging.getLogger()
-        bzfs.xprint(log, "foo")
-        bzfs.xprint(log, "foo", run=True)
-        bzfs.xprint(log, "foo", run=False)
-        bzfs.xprint(log, "foo", file=sys.stdout)
-        bzfs.xprint(log, "")
-        bzfs.xprint(log, "", run=True)
-        bzfs.xprint(log, "", run=False)
-        bzfs.xprint(log, None)
+        bzfs_main.utils.xprint(log, "foo")
+        bzfs_main.utils.xprint(log, "foo", run=True)
+        bzfs_main.utils.xprint(log, "foo", run=False)
+        bzfs_main.utils.xprint(log, "foo", file=sys.stdout)
+        bzfs_main.utils.xprint(log, "")
+        bzfs_main.utils.xprint(log, "", run=True)
+        bzfs_main.utils.xprint(log, "", run=False)
+        bzfs_main.utils.xprint(log, None)
 
     def test_delete_stale_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -406,7 +406,7 @@ class TestHelperFunctions(AbstractTest):
                 with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
                     job.run_main(args)
         finally:
-            bzfs.reset_logger()
+            bzfs_main.loggers.reset_logger()
 
     def test_recv_option_property_names(self) -> None:
         def names(lst: list[str]) -> set[str]:
@@ -515,11 +515,11 @@ class TestHelperFunctions(AbstractTest):
         log_params = bzfs.LogParams(args)
         try:
             job = bzfs.Job()
-            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            job.params = bzfs.Params(args, log_params=log_params, log=bzfs_main.loggers.get_logger(log_params, args))
             job.params.available_programs = {"src": {"pv": "pv"}}
             self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
         finally:
-            bzfs.reset_logger()
+            bzfs_main.loggers.reset_logger()
 
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
@@ -530,7 +530,7 @@ class TestHelperFunctions(AbstractTest):
         root_datasets = bzfs.Job().find_root_datasets(src_datasets)
         for basis_dataset in basis_src_datasets:
             for root_dataset in root_datasets:
-                if bzfs.is_descendant(basis_dataset, of_root_dataset=root_dataset):
+                if bzfs_main.utils.is_descendant(basis_dataset, of_root_dataset=root_dataset):
                     if basis_dataset not in src_datasets_set:
                         return None
         return root_datasets
@@ -911,7 +911,7 @@ class TestHelperFunctions(AbstractTest):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(100 + 2, bzfs.unixtime_infinity_secs)],
+            [(100 + 2, bzfs_main.utils.unixtime_infinity_secs)],
             [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -922,7 +922,7 @@ class TestHelperFunctions(AbstractTest):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(bzfs.unixtime_infinity_secs, 100 + 2)],
+            [(bzfs_main.utils.unixtime_infinity_secs, 100 + 2)],
             [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -1042,7 +1042,7 @@ class TestHelperFunctions(AbstractTest):
     def test_die_with_parser(self) -> None:
         parser = argparse.ArgumentParser()
         with self.assertRaises(SystemExit):
-            bzfs.die("boom", parser=parser)
+            bzfs_main.utils.die("boom", parser=parser)
 
 
 #############################################################################
@@ -1616,7 +1616,7 @@ class TestPreservePropertiesValidation(AbstractTest):
             ]
         )
         log_params = bzfs.LogParams(self.args)
-        self.p = bzfs.Params(self.args, log_params=log_params, log=bzfs.get_logger(log_params, self.args))
+        self.p = bzfs.Params(self.args, log_params=log_params, log=bzfs_main.loggers.get_logger(log_params, self.args))
         self.job = bzfs.Job()
         self.job.params = self.p
 
@@ -1634,7 +1634,7 @@ class TestPreservePropertiesValidation(AbstractTest):
         self.p.available_programs = {"local": {"ssh": ""}, "src": {}, "dst": {}}
 
     def tearDown(self) -> None:
-        bzfs.reset_logger()
+        bzfs_main.loggers.reset_logger()
 
     @patch.object(bzfs_main.detect, "detect_zpool_features")
     @patch.object(bzfs_main.detect, "detect_available_programs_remote")

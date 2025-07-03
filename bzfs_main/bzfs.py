@@ -2326,8 +2326,8 @@ class Job:
         self.isatty: bool | None = None  # for testing only
         self.use_select: bool = False  # for testing only
         self.progress_update_intervals: tuple[float, float] | None = None  # for testing only
-        self.error_injection_triggers: dict[str, Counter] = {}  # for testing only
-        self.delete_injection_triggers: dict[str, Counter] = {}  # for testing only
+        self.error_injection_triggers: dict[str, Counter[str]] = {}  # for testing only
+        self.delete_injection_triggers: dict[str, Counter[str]] = {}  # for testing only
         self.param_injection_triggers: dict[str, dict[str, bool]] = {}  # for testing only
         self.inject_params: dict[str, bool] = {}  # for testing only
         self.injection_lock: threading.Lock = threading.Lock()  # for testing only

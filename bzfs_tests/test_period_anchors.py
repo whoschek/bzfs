@@ -18,7 +18,6 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 import bzfs_main.period_anchors
-from bzfs_main import bzfs
 from bzfs_main.period_anchors import PeriodAnchors
 from bzfs_tests.abstract_test import AbstractTest
 
@@ -228,39 +227,39 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
         # anchor is the most recent between Friday and Saturday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=6))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=PeriodAnchors(weekly_weekday=6))
         self.assertEqual(expected, result)
 
     def test_weeks_non_boundary_sunday(self) -> None:
         # anchor is the most recent midnight between Saturday and Sunday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=0))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=PeriodAnchors(weekly_weekday=0))
         self.assertEqual(expected, result)
 
     def test_weeks_non_boundary_monday(self) -> None:
         # anchor is the most recent midnight between Sunday and Monday
         dt = datetime(2025, 2, 11, 14, 5, 1, tzinfo=self.tz)  # Tuesday
         expected = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=1))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=PeriodAnchors(weekly_weekday=1))
         self.assertEqual(expected, result)
 
     def test_weeks_boundary_saturday(self) -> None:
         # dt is exactly at midnight between Friday and Saturday
         dt = datetime(2025, 2, 15, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=6))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=PeriodAnchors(weekly_weekday=6))
         self.assertEqual(dt, result)
 
     def test_weeks_boundary_sunday(self) -> None:
         # dt is exactly at midnight between Saturday and Sunday
         dt = datetime(2025, 2, 16, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=0))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=PeriodAnchors(weekly_weekday=0))
         self.assertEqual(dt, result)
 
     def test_weeks_boundary_monday(self) -> None:
         # dt is exactly at midnight between Sunday and Monday
         dt = datetime(2025, 2, 17, 0, 0, 0, tzinfo=self.tz)
-        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=bzfs.PeriodAnchors(weekly_weekday=1))
+        result = round_datetime_up_to_duration_multiple(dt, 1, "weekly", anchors=PeriodAnchors(weekly_weekday=1))
         self.assertEqual(dt, result)
 
     def test_months_non_boundary2a(self) -> None:
@@ -329,7 +328,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
         # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
         expected = datetime(2025, 2, 11, 15, 15, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(
-            dt, 1, "hourly", anchors=bzfs.PeriodAnchors(hourly_minute=15, hourly_second=30)
+            dt, 1, "hourly", anchors=PeriodAnchors(hourly_minute=15, hourly_second=30)
         )
         self.assertEqual(expected, result)
 
@@ -340,7 +339,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
         # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
         expected = datetime(2025, 2, 11, 16, 15, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(
-            dt, 2, "hourly", anchors=bzfs.PeriodAnchors(hourly_minute=15, hourly_second=30)
+            dt, 2, "hourly", anchors=PeriodAnchors(hourly_minute=15, hourly_second=30)
         )
         self.assertEqual(expected, result)
 
@@ -351,13 +350,13 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
         # dt is 14:20:00; offset = 14h04m30s → next multiple with 1-hour step: 15:15:30.
         expected = datetime(2025, 2, 11, 16, 15, 30, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(
-            dt, 2, "hourly", anchors=bzfs.PeriodAnchors(hourly_minute=15, hourly_second=30)
+            dt, 2, "hourly", anchors=PeriodAnchors(hourly_minute=15, hourly_second=30)
         )
         self.assertEqual(expected, result)
 
     def test_custom_daily_anchor(self) -> None:
         # Custom daily: snapshots occur at 01:30:00.
-        custom = bzfs.PeriodAnchors(daily_hour=1, daily_minute=30, daily_second=0)
+        custom = PeriodAnchors(daily_hour=1, daily_minute=30, daily_second=0)
         dt = datetime(2025, 2, 11, 0, 45, 0, tzinfo=self.tz)
         # Global base = previous day at 01:30:00, so next boundary = that + 1 day.
         yesterday = dt.replace(hour=custom.daily_hour, minute=custom.daily_minute, second=custom.daily_second)
@@ -369,7 +368,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_weekly_anchor1a(self) -> None:
         # Custom weekly: every week, weekly_weekday=2, weekly time = 03:00:00.
-        custom = bzfs.PeriodAnchors(weekly_weekday=2, weekly_hour=3, weekly_minute=0, weekly_second=0)
+        custom = PeriodAnchors(weekly_weekday=2, weekly_hour=3, weekly_minute=0, weekly_second=0)
         dt = datetime(2025, 2, 13, 5, 0, 0, tzinfo=self.tz)  # Thursday
         anchor = (dt - timedelta(days=2)).replace(hour=3, minute=0, second=0, microsecond=0)
         expected = anchor + timedelta(weeks=1)
@@ -378,7 +377,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_monthly_anchor1a(self) -> None:
         # Custom monthly: snapshots every month on the 15th at 12:00:00.
-        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        custom = PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 4, 20, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom)
@@ -386,7 +385,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_monthly_anchor1b(self) -> None:
         # Custom monthly: snapshots every month on the 15th at 12:00:00.
-        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        custom = PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 5, 12, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "monthly", anchors=custom)
@@ -394,7 +393,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_monthly_anchor2a(self) -> None:
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
-        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        custom = PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 4, 20, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
@@ -402,7 +401,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_monthly_anchor2b(self) -> None:
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
-        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        custom = PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 5, 12, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 5, 15, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
@@ -410,7 +409,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_monthly_anchor2c(self) -> None:
         # Custom monthly: snapshots every other month on the 15th at 12:00:00.
-        custom = bzfs.PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        custom = PeriodAnchors(monthly_monthday=15, monthly_hour=12, monthly_minute=0, monthly_second=0)
         dt = datetime(2025, 5, 17, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 7, 15, 12, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "monthly", anchors=custom)
@@ -418,7 +417,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_yearly_anchor1a(self) -> None:
         # Custom yearly: snapshots on June 30 at 02:00:00.
-        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        custom = PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2024, 3, 15, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2024, 6, 30, 2, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=custom)
@@ -426,7 +425,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_yearly_anchor1b(self) -> None:
         # Custom yearly: snapshots on June 30 at 02:00:00.
-        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        custom = PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2025, 3, 15, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 6, 30, 2, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 1, "yearly", anchors=custom)
@@ -434,7 +433,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_yearly_anchor2a(self) -> None:
         # Custom yearly: snapshots every other year on June 30 at 02:00:00.
-        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        custom = PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2024, 3, 15, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 6, 30, 2, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
@@ -442,7 +441,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_custom_yearly_anchor2b(self) -> None:
         # Custom yearly: snapshots every other year on June 30 at 02:00:00.
-        custom = bzfs.PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
+        custom = PeriodAnchors(yearly_month=6, yearly_monthday=30, yearly_hour=2, yearly_minute=0, yearly_second=0)
         dt = datetime(2025, 3, 15, 10, 0, 0, tzinfo=self.tz)
         expected = datetime(2025, 6, 30, 2, 0, 0, tzinfo=self.tz)
         result = round_datetime_up_to_duration_multiple(dt, 2, "yearly", anchors=custom)
@@ -470,7 +469,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
         dt_before_dst = datetime(2023, 3, 12, 1, 30, 0, tzinfo=tz)  # Just before "spring forward"
 
         # Create custom anchors
-        custom = bzfs.PeriodAnchors(daily_hour=3, daily_minute=0, daily_second=0)
+        custom = PeriodAnchors(daily_hour=3, daily_minute=0, daily_second=0)
 
         # Round to next daily anchor - should be 3:00 same day, respecting DST change
         result = round_datetime_up_to_duration_multiple(dt_before_dst, 1, "daily", anchors=custom)
@@ -486,7 +485,7 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTest):
 
     def test_monthly_anchor_invalid_day(self) -> None:
         # Custom monthly: snapshots every month on the 31st
-        custom = bzfs.PeriodAnchors(monthly_monthday=31, monthly_hour=12, monthly_minute=0, monthly_second=0)
+        custom = PeriodAnchors(monthly_monthday=31, monthly_hour=12, monthly_minute=0, monthly_second=0)
 
         # February case - should round to Feb 28th (or 29th in leap year) but instead will incorrectly handle this
         dt = datetime(2025, 2, 15, 10, 0, 0, tzinfo=self.tz)

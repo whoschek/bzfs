@@ -213,6 +213,7 @@ enable  = ["R0401"]      # ...then re-enable just the detection of cyclic import
 
 [tool.mypy]
 python_version = "3.8"
+strict = false
 disallow_untyped_defs = true
 check_untyped_defs = true
 warn_return_any = true

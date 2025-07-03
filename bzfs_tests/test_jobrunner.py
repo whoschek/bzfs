@@ -28,7 +28,7 @@ from typing import Union, cast
 from unittest.mock import MagicMock, patch
 
 from bzfs_main import bzfs_jobrunner
-from bzfs_main.bzfs_jobrunner import die_status
+from bzfs_main.utils import die_status
 from bzfs_tests.abstract_test import AbstractTest
 
 

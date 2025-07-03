@@ -30,7 +30,6 @@ from unittest.mock import (
 from bzfs_main import bzfs
 from bzfs_main.bzfs import (
     LogParams,
-    log_trace,
 )
 from bzfs_main.loggers import (
     get_default_logger,
@@ -48,6 +47,7 @@ from bzfs_main.utils import (
     get_home_directory,
     log_stderr,
     log_stdout,
+    log_trace,
 )
 from bzfs_tests.abstract_test import AbstractTest
 

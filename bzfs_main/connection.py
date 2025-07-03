@@ -197,7 +197,7 @@ def maybe_inject_error(job: Job, cmd: list[str], error_trigger: str | None = Non
                     raise
 
 
-def decrement_injection_counter(job: Job, counter: Counter, trigger: str) -> bool:
+def decrement_injection_counter(job: Job, counter: Counter[str], trigger: str) -> bool:
     """For testing only."""
     with job.injection_lock:
         if counter[trigger] <= 0:
@@ -257,7 +257,9 @@ class ConnectionPool:
         assert max_concurrent_ssh_sessions_per_tcp_connection > 0
         self.remote: Remote = copy.copy(remote)  # shallow copy for immutability (Remote is mutable)
         self.capacity: int = max_concurrent_ssh_sessions_per_tcp_connection
-        self.priority_queue: SmallPriorityQueue = SmallPriorityQueue(reverse=True)  # sorted by #free slots and last_modified
+        self.priority_queue: SmallPriorityQueue[Connection] = SmallPriorityQueue(
+            reverse=True  # sorted by #free slots and last_modified
+        )
         self.last_modified: int = 0  # monotonically increasing sequence number
         self.cid: int = 0  # monotonically increasing connection number
         self._lock: threading.Lock = threading.Lock()

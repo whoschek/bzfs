@@ -61,7 +61,7 @@ log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
 
-RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
+RegexList = List[Tuple[re.Pattern[str], bool]]  # Type alias
 
 
 def getenv_any(key: str, default: str | None = None) -> str | None:
@@ -90,7 +90,7 @@ def cut(field: int = -1, separator: str = "\t", lines: list[str] | None = None) 
         raise ValueError("Unsupported parameter value")
 
 
-def drain(iterable: Iterable) -> None:
+def drain(iterable: Iterable[Any]) -> None:
     """Consumes all items in the iterable, effectively draining it."""
     deque(iterable, maxlen=0)
 
@@ -296,7 +296,7 @@ def is_descendant(dataset: str, of_root_dataset: str) -> bool:
     return (dataset + "/").startswith(of_root_dataset + "/")
 
 
-def has_duplicates(sorted_list: list) -> bool:
+def has_duplicates(sorted_list: list[Any]) -> bool:
     """Returns True if any adjacent items within the given sorted sequence are equal."""
     return any(a == b for a, b in zip(sorted_list, sorted_list[1:]))
 
@@ -362,7 +362,7 @@ def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
     return compiled_regexes
 
 
-def list_formatter(iterable: Iterable, separator: str = " ", lstrip: bool = False) -> Any:
+def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool = False) -> Any:
     # For lazy/noop evaluation in disabled log levels
     class CustomListFormatter:
         def __str__(self) -> str:

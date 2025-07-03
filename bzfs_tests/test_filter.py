@@ -44,9 +44,12 @@ from bzfs_main.filter import (
     filter_properties,
     filter_snapshots,
     filter_snapshots_by_regex,
+    snapshot_regex_filter_name,
 )
+from bzfs_main.loggers import get_logger, reset_logger
 from bzfs_main.utils import (
     compile_regexes,
+    log_debug,
 )
 from bzfs_tests.abstract_test import AbstractTest
 
@@ -74,14 +77,14 @@ class CommonTest(AbstractTest):
         log_params = bzfs.LogParams(args)
         try:
             job = bzfs.Job()
-            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            job.params = Params(args, log_params=log_params, log=get_logger(log_params, args))
             job.params.log.setLevel(loglevel)
             snapshots = [f"{i}\t" + snapshot for i, snapshot in enumerate(snapshots)]  # simulate creation time
             results = filter_snapshots(job, snapshots)
             results = [result.split("\t", 1)[1] for result in results]  # drop creation time
             return results
         finally:
-            bzfs.reset_logger()
+            reset_logger()
 
 
 #############################################################################
@@ -126,15 +129,15 @@ class TestHelperFunctions(CommonTest):
     def test_filter_datasets_with_test_mode_is_false(self) -> None:
         # test with Job.is_test_mode == False for coverage with the assertion therein disabled
         args = self.argparser_parse_args(args=["src", "dst"])
-        p = bzfs.Params(args)
+        p = Params(args)
         log_params = bzfs.LogParams(args)
         try:
             job = bzfs.Job()
-            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            job.params = Params(args, log_params=log_params, log=get_logger(log_params, args))
             src = bzfs.Remote("src", args, p)
             filter_datasets(job, src, ["dataset1"])
         finally:
-            bzfs.reset_logger()
+            reset_logger()
 
     def test_dataset_regexes(self) -> None:
         mock_src = MagicMock(spec=Remote, root_dataset="tank/src")
@@ -162,11 +165,11 @@ class TestHelperFunctions(CommonTest):
     def test_filter_snapshots_by_regex_debug(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger("debug_snapshots")
-        log.setLevel(bzfs.log_debug)
+        log.setLevel(log_debug)
         stream = io.StringIO()
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
-        job.params = bzfs.Params(args, log=log)
+        job.params = Params(args, log=log)
         snapshots = ["\tds@a1", "\tds@b2", "\tds@c3", "\tds@other", "\tds#bookmark"]
         regexes = (
             compile_regexes(["c3"]),
@@ -188,11 +191,11 @@ class TestHelperFunctions(CommonTest):
     def test_filter_properties_debug(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger("debug_props")
-        log.setLevel(bzfs.log_debug)
+        log.setLevel(log_debug)
         stream = io.StringIO()
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
-        job.params = bzfs.Params(args, log=log)
+        job.params = Params(args, log=log)
         props: dict[str, str | None] = {"a1": "v1", "a2": "v2", "skip": "v"}
         include_regexes = compile_regexes(["a.*"])
         exclude_regexes = compile_regexes(["a2"])
@@ -336,50 +339,50 @@ class TestTimeRangeAction(CommonTest):
         wildcards = ["*", "anytime"]
 
         args = self.argparser_parse_args(args=["src", "dst"])
-        p = bzfs.Params(args)
+        p = Params(args)
         self.assertListEqual([[]], p.snapshot_filters)
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
-        p = bzfs.Params(args)
+        p = Params(args)
         self.assertListEqual([[]], p.snapshot_filters)
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "anytime..anytime"])
-        p = bzfs.Params(args)
+        p = Params(args)
         self.assertListEqual([[]], p.snapshot_filters)
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "notime"])
-        p = bzfs.Params(args)
+        p = Params(args)
         self.assertEqual((0, 0), p.snapshot_filters[0][0].timerange)
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
-        p = bzfs.Params(args)
+        p = Params(args)
         self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
-        p = bzfs.Params(args)
+        p = Params(args)
         self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
-        p = bzfs.Params(args)
+        p = Params(args)
         timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
         self.assertEqual(timedelta(seconds=0), timerange[0])
         self.assertEqual(timedelta(seconds=60), timerange[1])
 
         args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1secs ago..60secs ago"])
-        p = bzfs.Params(args)
+        p = Params(args)
         timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
         self.assertEqual(timedelta(seconds=1), timerange[0])
         self.assertEqual(timedelta(seconds=60), timerange[1])
 
         for wildcard in wildcards:
             args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
-            p = bzfs.Params(args)
+            p = Params(args)
             timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
             self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), timerange[0])
             self.assertLess(int(time.time() + 86400 * 365 * 1000), cast(int, timerange[1]))
 
             args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + wildcard + "..2024-01-01"])
-            p = bzfs.Params(args)
+            p = Params(args)
             timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
             self.assertEqual(0, timerange[0])
             self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), cast(int, timerange[1]))
@@ -575,7 +578,7 @@ class TestRankRangeAction(CommonTest):
 
     def get_snapshot_filters(self, cli: list[str]) -> Any:
         args = self.argparser_parse_args(args=["src", "dst", *cli])
-        return bzfs.Params(args).snapshot_filters[0]
+        return Params(args).snapshot_filters[0]
 
     def test_merge_adjacent_snapshot_regexes_and_filters0(self) -> None:
         ranks = "--include-snapshot-times-and-ranks"
@@ -621,7 +624,7 @@ class TestRankRangeAction(CommonTest):
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
         self.assertEqual((0, 9), times_filter.timerange)
-        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual((["w", "m"], ["f", "d", "h"]), regex_filter.options)
 
     def test_merge_adjacent_snapshot_regexes_doesnt_merge_across_groups(self) -> None:
@@ -630,12 +633,12 @@ class TestRankRangeAction(CommonTest):
         ranks = "--include-snapshot-times-and-ranks"
         cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", ranks, "0..0", "oldest 5%", exclude, ".*m"]
         regex_filter1, ranks_filter, regex_filter2 = self.get_snapshot_filters(cli)
-        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter1.name)
+        self.assertEqual(snapshot_regex_filter_name, regex_filter1.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter1.options)
         self.assertEqual((0, 0), ranks_filter.timerange)
         self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 5, True)), ranks_filter.options[0])
-        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter2.name)
+        self.assertEqual(snapshot_regex_filter_name, regex_filter2.name)
         self.assertEqual(([".*m"], []), regex_filter2.options)
 
     def test_reorder_snapshot_times_simple(self) -> None:
@@ -645,7 +648,7 @@ class TestRankRangeAction(CommonTest):
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
         self.assertEqual((0, 9), times_filter.timerange)
-        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([], [".*daily"]), regex_filter.options)
 
     def test_reorder_snapshot_times_complex(self) -> None:
@@ -657,7 +660,7 @@ class TestRankRangeAction(CommonTest):
         times_filter, regex_filter, ranks_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
         self.assertEqual((0, 9), times_filter.timerange)
-        self.assertEqual(bzfs.snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(snapshot_regex_filter_name, regex_filter.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter.options)
         self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 1, False)), ranks_filter.options[0])

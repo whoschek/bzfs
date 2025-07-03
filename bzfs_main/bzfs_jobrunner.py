@@ -46,12 +46,23 @@ from logging import Logger
 from subprocess import DEVNULL, PIPE
 from typing import Any, Iterable, TypeVar, Union
 
+import bzfs_main.utils
 from bzfs_main import bzfs
-from bzfs_main.bzfs import die_status, log_trace
-from bzfs_main.bzfs import prog_name as bzfs_prog_name
 from bzfs_main.check_range import CheckRange
-from bzfs_main.parallel_engine import BARRIER_CHAR, process_datasets_in_parallel_and_fault_tolerant
-from bzfs_main.utils import human_readable_duration, percent, shuffle_dict
+from bzfs_main.detect import dummy_dataset
+from bzfs_main.loggers import get_simple_logger
+from bzfs_main.parallel_engine import (
+    BARRIER_CHAR,
+    process_datasets_in_parallel_and_fault_tolerant,
+)
+from bzfs_main.utils import (
+    die_status,
+    human_readable_duration,
+    log_trace,
+    percent,
+    shuffle_dict,
+)
+from bzfs_main.utils import prog_name as bzfs_prog_name
 
 # constants:
 prog_name = "bzfs_jobrunner"
@@ -414,7 +425,7 @@ class Job:
         # immutable variables:
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
-        self.log: Logger = log if log is not None else bzfs.get_simple_logger(prog_name)
+        self.log: Logger = log if log is not None else get_simple_logger(prog_name)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
         self.loopback_address: str = detect_loopback_address()
@@ -550,7 +561,7 @@ class Job:
             bzfs.validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
-        dummy: str = bzfs.dummy_dataset
+        dummy: str = dummy_dataset
         lhn = localhostname
         bzfs_prog_header = [bzfs_prog_name, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
@@ -1077,7 +1088,7 @@ class Job:
 
     def die(self, msg: str) -> None:
         self.log.error("%s", msg)
-        bzfs.die(msg)
+        bzfs_main.utils.die(msg)
 
     def get_localhost_ips(self) -> set[str]:
         """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces,
