@@ -224,7 +224,7 @@ class ParametrizedTestCase(AbstractTest):
 
 
 #############################################################################
-class BZFSTestCase(ParametrizedTestCase):
+class IntegrationTestCase(ParametrizedTestCase):
 
     def setUp(self, pool_size_bytes: int = pool_size_bytes_default) -> None:
         global src_pool, dst_pool
@@ -653,7 +653,7 @@ class BZFSTestCase(ParametrizedTestCase):
 
 
 #############################################################################
-class SmokeTestCase(BZFSTestCase):
+class SmokeTestCase(IntegrationTestCase):
     """Runs only a small subset of tests."""
 
     def test_include_snapshots_plan(self) -> None:
@@ -676,7 +676,7 @@ class SmokeTestCase(BZFSTestCase):
 
 
 #############################################################################
-class AdhocTestCase(BZFSTestCase):
+class AdhocTestCase(IntegrationTestCase):
     """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
     The current list is arbitrary and subject to change at any time."""
 
@@ -748,7 +748,7 @@ class AdhocTestCase(BZFSTestCase):
 
 
 #############################################################################
-class IncrementalSendStepsTestCase(BZFSTestCase):
+class IncrementalSendStepsTestCase(IntegrationTestCase):
 
     def test_snapshot_series_excluding_hourlies(self) -> None:
         testcase = {None: ["d1", "h1", "d2", "d3", "d4"]}
@@ -872,7 +872,7 @@ class IncrementalSendStepsTestCase(BZFSTestCase):
 
 
 #############################################################################
-class TestSSHLatency(BZFSTestCase):
+class TestSSHLatency(IntegrationTestCase):
 
     def run_latency_cmd(self, cmd: list[str], *, close_fds: bool = True) -> tuple[str, str]:
         process = subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, check=True, close_fds=close_fds)
@@ -958,7 +958,7 @@ class TestSSHLatency(BZFSTestCase):
 
 
 #############################################################################
-class LocalTestCase(BZFSTestCase):
+class LocalTestCase(IntegrationTestCase):
 
     def test_basic_snapshotting_flat_simple(self) -> None:
         destroy(dst_root_dataset, recursive=True)
@@ -5027,16 +5027,6 @@ class LocalTestCase(BZFSTestCase):
 
     def test_jobrunner_flat_simple(self) -> None:
 
-        def is_ipv6_loopback_possible() -> bool:
-            """Detects if a loopback connection over IPv6 is possible."""
-            try:
-                addr = "::1"
-                with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
-                    s.bind((addr, 0))
-                return True
-            except BaseException:
-                return False
-
         def run_jobrunner(*args: str, **kwargs: Any) -> bzfs_jobrunner.Job:
             return self.run_bzfs_jobrunner(
                 *args,
@@ -5335,6 +5325,9 @@ class LocalTestCase(BZFSTestCase):
                 self.assertEqual(1, len(bookmarks(src_root_dataset)))
                 self.assertEqual(1, len(snapshots(dst_root_dataset)))
 
+                if platform.system() != "Linux":
+                    continue  # only Linux supports 127.0.0.2 and 127.0.0.1 test scenario simultaneously by default
+
                 # push replicate successfully from src to dst:
                 run_jobrunner("--replicate=push", "--workers=1", *push_args)
                 self.assertEqual(2, len(snapshots(src_root_dataset)))
@@ -5471,7 +5464,7 @@ class LocalTestCase(BZFSTestCase):
 
 
 #############################################################################
-class MinimalRemoteTestCase(BZFSTestCase):
+class MinimalRemoteTestCase(IntegrationTestCase):
     def test_basic_replication_flat_simple(self) -> None:
         LocalTestCase(param=self.param).test_basic_replication_flat_simple()
 
