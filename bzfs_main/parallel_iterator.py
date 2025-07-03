@@ -34,7 +34,8 @@ def parallel_iterator(
     """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         iterators: list[Iterator[Future]] = iterator_generator(executor)
-        iterator = itertools.chain(*iterators)
+        assert isinstance(iterators, list)
+        iterator: Iterator[Future] = itertools.chain(*iterators)
         iterators.clear()  # help gc
         # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
         fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))

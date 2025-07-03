@@ -26,8 +26,9 @@ from typing import (
 )
 from unittest.mock import MagicMock, patch
 
-from bzfs_main import bzfs, progress_reporter, utils
+from bzfs_main import bzfs, progress_reporter
 from bzfs_main.progress_reporter import ProgressReporter, count_num_bytes_transferred_by_zfs_send, pv_file_thread_separator
+from bzfs_main.utils import tail
 from bzfs_tests.test_utils import stop_on_failure_subtest
 
 
@@ -85,7 +86,7 @@ class TestHelperFunctions(unittest.TestCase):
         try:
             subprocess.run(cmd, shell=True, check=True)
             num_bytes = count_num_bytes_transferred_by_zfs_send(pv_file)
-            print("pv_log_file: " + "\n".join(utils.tail(pv_file, 10)))
+            print("pv_log_file: " + "\n".join(tail(pv_file, 10)))
             self.assertEqual(16 * 1024, num_bytes)
         finally:
             Path(pv_file).unlink(missing_ok=True)
@@ -359,7 +360,7 @@ class TestHelperFunctions(unittest.TestCase):
                 raise FileNotFoundError(f"File {pv_log_file} disappeared before opening.")
             return open(*args, **kwargs)
 
-        with patch("bzfs_main.utils.open_nofollow", mock_open):
+        with patch.object(progress_reporter, "open_nofollow", mock_open):
             reporter.start()
             time.sleep(0.1)  # Give the reporter thread a moment to attempt to open the file
             reporter.stop()
