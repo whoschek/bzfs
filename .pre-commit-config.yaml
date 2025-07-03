@@ -34,7 +34,7 @@ repos:
       - id: trailing-whitespace  # Remove whitespace from the end of lines
       - id: detect-private-key  # Prevent the accidental inclusion of private keys in your commits
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.1
+    rev: v0.12.2
     hooks:
       - id: ruff-check  # Run linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml

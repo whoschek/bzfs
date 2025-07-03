@@ -59,7 +59,7 @@ Distribution = "https://pypi.org/project/bzfs"
 [project.optional-dependencies]
 dev = [  # for development only
   "black==25.1",  # see https://github.com/psf/black
-  "ruff==0.12.1",  # see https://github.com/astral-sh/ruff
+  "ruff==0.12.2",  # see https://github.com/astral-sh/ruff
   "pylint==3.3.7",  # see https://github.com/pycqa/pylint
   "coverage>=7.6",  # see https://github.com/nedbat/coveragepy
   "mypy==1.16.1",  # see https://github.com/python/mypy
@@ -110,9 +110,9 @@ target_version = ["py38", "py39", "py310", "py311", "py312", "py313"]
 [tool.ruff]
 target-version = "py38"
 line-length = 125
-fix = true  # allow safe auto-fixes?
+fix = true            # allow safe auto-fixes?
 unsafe-fixes = false  # allow FA100 and similar "unsafe" auto-fixes?
-show-fixes = true
+show-fixes = true     # display which rule triggered an auto-fix
 exclude = [   # toggles to exclude overly strict `ruff` checks of these Python source code directories in development mode:
 #    "bzfs_main",
 #    "bzfs_tests",
@@ -151,9 +151,9 @@ select = [  # see https://docs.astral.sh/ruff/rules/
 #    "UP045",  # pyupgrade
     "YTT",  # flake8-2020
 ]
-preview = true
-explicit-preview-rules = true
-extend-select = ["CPY001"]   # copyright
+preview = true                 # enable preview rules
+explicit-preview-rules = true  # only opt into specific preview rules via extend-select whitelist (no blank opt-in)
+extend-select = ["CPY001"]     # copyright
 ignore = [  # toggles to exclude overly strict `ruff` checks:
     "G004",     # logging statement uses f-string
     "PLC0415",  # `import` should be at the top-level of a file
