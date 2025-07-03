@@ -27,13 +27,13 @@ from typing import (
 
 
 def parallel_iterator(
-    iterator_generator: Callable[[ThreadPoolExecutor], list[Iterator[Future[Any]]]],
+    iterator_builder: Callable[[ThreadPoolExecutor], list[Iterator[Future[Any]]]],
     max_workers: int = os.cpu_count() or 1,
     ordered: bool = True,
 ) -> Generator[Any, None, Any]:
     """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        iterators: list[Iterator[Future[Any]]] = iterator_generator(executor)
+        iterators: list[Iterator[Future[Any]]] = iterator_builder(executor)
         assert isinstance(iterators, list)
         iterator: Iterator[Future[Any]] = itertools.chain(*iterators)
         iterators.clear()  # help gc

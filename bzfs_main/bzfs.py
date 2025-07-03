@@ -4888,7 +4888,7 @@ class Job:
     ) -> Generator[Any, None, Any]:
         """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
         return parallel_iterator(
-            iterator_generator=lambda executor: [
+            iterator_builder=lambda executor: [
                 self.itr_ssh_cmd_batched(
                     r, cmd, cmd_args, lambda batch, cmd=cmd: executor.submit(fn, cmd, batch), max_batch_items=max_batch_items  # type: ignore[misc]
                 )
