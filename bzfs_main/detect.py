@@ -169,7 +169,6 @@ def disable_program(p: Params, program: str, locations: list[str]) -> None:
 def find_available_programs(p: Params) -> str:
     """POSIX shell script that checks for the existence of various programs. It uses `if` statements instead of `&&` plus
     `printf` instead of `echo` to ensure maximum compatibility across shells."""
-    # p = self.params
     cmds = []
     cmds.append("printf 'default_shell-%s\n' \"$SHELL\"")
     cmds.append("if command -v echo > /dev/null; then printf 'echo\n'; fi")

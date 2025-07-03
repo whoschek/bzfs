@@ -2322,7 +2322,7 @@ class Job:
         self.timeout_nanos: int | None = None
 
         self.is_test_mode: bool = False  # for testing only
-        self.creation_prefix = ""  # for testing only
+        self.creation_prefix: str = ""  # for testing only
         self.isatty: bool | None = None  # for testing only
         self.use_select: bool = False  # for testing only
         self.progress_update_intervals: tuple[float, float] | None = None  # for testing only

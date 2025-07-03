@@ -179,7 +179,7 @@ class TestProcessDatasetsInParallel(AbstractTest):
             return True
 
         self.default_kwargs["retry_policy"] = RetryPolicy(
-            argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=1)
+            argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0)
         )
         failed = process_datasets_in_parallel_and_fault_tolerant(
             datasets=[],

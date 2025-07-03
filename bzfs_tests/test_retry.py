@@ -66,7 +66,7 @@ class TestRunWithRetries(AbstractTest):
 
     @patch("time.sleep")
     def test_run_with_retries_no_retries(self, mock_sleep: MagicMock) -> None:
-        args = argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=1)
+        args = argparse.Namespace(retries=0, retry_min_sleep_secs=0, retry_max_sleep_secs=0, retry_max_elapsed_secs=0)
         retry_policy = RetryPolicy(args)
         mock_log = MagicMock(spec=Logger)
 
