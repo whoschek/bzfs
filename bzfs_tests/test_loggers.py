@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from __future__ import annotations
-import argparse
 import json
 import logging
 import os
@@ -47,17 +46,10 @@ from bzfs_main.loggers import (
 from bzfs_main.utils import (
     die_status,
     get_home_directory,
-    getenv_any,
     log_stderr,
     log_stdout,
 )
-
-# constants:
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
-is_unit_test = test_mode == "unit"  # run only unit tests aka skip integration tests
-is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
-is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
-is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
+from bzfs_tests.abstract_test import AbstractTest
 
 
 #############################################################################
@@ -69,14 +61,8 @@ def suite() -> unittest.TestSuite:
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
-def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-    return bzfs.argument_parser().parse_args(
-        args + ["--log-dir", os.path.join(get_home_directory(), bzfs.log_dir_default + "-test")]
-    )
-
-
 #############################################################################
-class TestHelperFunctions(unittest.TestCase):
+class TestHelperFunctions(AbstractTest):
 
     def test_logdir_basename_prefix(self) -> None:
         """Basename of --log-dir must start with prefix 'bzfs-logs'"""
@@ -114,14 +100,14 @@ class TestHelperFunctions(unittest.TestCase):
 
         reset_logger()
         prefix = "test_get_logger:"
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         root_logger = logging.getLogger()
         log_params = LogParams(args)
         log = get_logger(log_params, args, root_logger)
         self.assertTrue(log is root_logger)
         log.info(f"{prefix}aaa1")
 
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         log_params = LogParams(args)
         log = get_logger(log_params, args)
         log.log(log_stderr, "%s", prefix + "bbbe1")
@@ -137,7 +123,7 @@ class TestHelperFunctions(unittest.TestCase):
         files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
-        args = argparser_parse_args(args=["src", "dst", "-v"])
+        args = self.argparser_parse_args(args=["src", "dst", "-v"])
         log_params = LogParams(args)
         log = get_logger(log_params, args)
         self.assertIsNotNone(log)
@@ -149,14 +135,14 @@ class TestHelperFunctions(unittest.TestCase):
         files.clear()
         check(log, files)
 
-        args = argparser_parse_args(args=["src", "dst", "-v", "-v"])
+        args = self.argparser_parse_args(args=["src", "dst", "-v", "-v"])
         log_params = LogParams(args)
         log = get_logger(log_params, args)
         self.assertIsNotNone(log)
         files.add(os.path.abspath(log_params.log_file))
         check(log, files)
 
-        args = argparser_parse_args(args=["src", "dst", "--quiet"])
+        args = self.argparser_parse_args(args=["src", "dst", "--quiet"])
         log_params = LogParams(args)
         log = get_logger(log_params, args)
         self.assertIsNotNone(log)
@@ -179,17 +165,17 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertIsNotNone(validate_log_config_variable(var))
 
     def test_log_config_file_validation(self) -> None:
-        args = argparser_parse_args(["src", "dst", "--log-config-file", "+bad_file_name.txt"])
+        args = self.argparser_parse_args(["src", "dst", "--log-config-file", "+bad_file_name.txt"])
         log_params = LogParams(args)
         with self.assertRaises(SystemExit):
             get_dict_config_logger(log_params, args)
 
 
 #############################################################################
-class TestLogging(unittest.TestCase):
+class TestLogging(AbstractTest):
 
     def test_get_default_logger(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         lp = LogParams(args)
         logging.getLogger(get_logger_subname()).handlers.clear()
         logging.getLogger(bzfs.__name__).handlers.clear()
@@ -198,7 +184,7 @@ class TestLogging(unittest.TestCase):
         self.assertTrue(any(isinstance(h, logging.FileHandler) for h in log.handlers))
 
     def test_get_default_logger_considers_existing_sublog_handlers(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         lp = LogParams(args)
         sublog = logging.getLogger(get_logger_subname())
         sublog.handlers.clear()
@@ -223,7 +209,7 @@ class TestLogging(unittest.TestCase):
 
     @patch("logging.handlers.SysLogHandler")
     def test_get_default_logger_syslog_warning(self, mock_syslog: MagicMock) -> None:
-        args = argparser_parse_args(
+        args = self.argparser_parse_args(
             [
                 "src",
                 "dst",
@@ -271,7 +257,7 @@ class TestLogging(unittest.TestCase):
             )
             path = f.name
         try:
-            args = argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
+            args = self.argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
             lp = LogParams(args)
             with patch("logging.config.dictConfig") as m:
                 get_dict_config_logger(lp, args)
@@ -284,7 +270,7 @@ class TestLogging(unittest.TestCase):
             '{"version": 1, "handlers": {"h": {"class": "logging.StreamHandler"}}, '
             '"root": {"level": "${missing:DEBUG}", "handlers": ["h"]}}'
         )
-        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        args = self.argparser_parse_args(["src", "dst", "--log-config-file", config])
         lp = LogParams(args)
         with patch("logging.config.dictConfig") as m:
             get_dict_config_logger(lp, args)
@@ -292,14 +278,14 @@ class TestLogging(unittest.TestCase):
 
     def test_get_dict_config_logger_missing_default_raises(self) -> None:
         config = '{"version": 1, "root": {"level": "${missing}"}}'
-        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        args = self.argparser_parse_args(["src", "dst", "--log-config-file", config])
         lp = LogParams(args)
         with self.assertRaises(ValueError):
             get_dict_config_logger(lp, args)
 
     def test_get_dict_config_logger_invalid_name_raises(self) -> None:
         config = '{"version": 1, "root": {"level": "${bad name:INFO}"}}'
-        args = argparser_parse_args(["src", "dst", "--log-config-file", config])
+        args = self.argparser_parse_args(["src", "dst", "--log-config-file", config])
         lp = LogParams(args)
         with self.assertRaises(ValueError):
             get_dict_config_logger(lp, args)
@@ -309,7 +295,7 @@ class TestLogging(unittest.TestCase):
             f.write("{}")
             path = f.name
         try:
-            args = argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
+            args = self.argparser_parse_args(["src", "dst", f"--log-config-file=+{path}"])
             lp = LogParams(args)
             with self.assertRaises(SystemExit):
                 get_dict_config_logger(lp, args)
@@ -324,7 +310,7 @@ class TestLogging(unittest.TestCase):
             "root": {"handlers": ["safe_handler", {"()": "os.system", "command": "echo pwned > /dev/null"}]},
         }
         malicious_config_str = json.dumps(malicious_config)
-        args = argparser_parse_args(["src", "dst", "--skip-replication", "--log-config-file", malicious_config_str])
+        args = self.argparser_parse_args(["src", "dst", "--skip-replication", "--log-config-file", malicious_config_str])
         lp = LogParams(args)
         with patch("os.system") as mock_system:
             # The fixed code should detect the disallowed callable and exit.

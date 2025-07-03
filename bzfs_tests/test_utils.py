@@ -68,6 +68,7 @@ from bzfs_main.utils import (
     terminate_process_subtree,
     xfinally,
 )
+from bzfs_tests.abstract_test import AbstractTest
 
 
 #############################################################################
@@ -95,7 +96,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestHelperFunctions(unittest.TestCase):
+class TestHelperFunctions(AbstractTest):
     def test_has_duplicates(self) -> None:
         self.assertFalse(has_duplicates([]))
         self.assertFalse(has_duplicates([42]))
@@ -159,7 +160,7 @@ class TestHelperFunctions(unittest.TestCase):
 
 
 #############################################################################
-class TestCut(unittest.TestCase):
+class TestCut(AbstractTest):
 
     def test_cut(self) -> None:
         lines = ["34\td1@s1", "56\td2@s2"]
@@ -195,7 +196,7 @@ class TestCut(unittest.TestCase):
 
 
 #############################################################################
-class TestDrain(unittest.TestCase):
+class TestDrain(AbstractTest):
 
     def test_drain(self) -> None:
         itr = iter(["foo", "bar"])
@@ -205,7 +206,7 @@ class TestDrain(unittest.TestCase):
 
 
 #############################################################################
-class TestShuffleDict(unittest.TestCase):
+class TestShuffleDict(AbstractTest):
 
     def test_shuffle_dict_preserves_items(self) -> None:
         d = {"a": 1, "b": 2, "c": 3}
@@ -223,7 +224,7 @@ class TestShuffleDict(unittest.TestCase):
 
 
 #############################################################################
-class TestSortedDict(unittest.TestCase):
+class TestSortedDict(AbstractTest):
 
     def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
         result: dict[str, int] = sorted_dict({})
@@ -247,7 +248,7 @@ class TestSortedDict(unittest.TestCase):
 
 
 #############################################################################
-class TestTail(unittest.TestCase):
+class TestTail(AbstractTest):
 
     def test_tail(self) -> None:
         fd, file = tempfile.mkstemp(prefix="test_bzfs.tail_")
@@ -262,7 +263,7 @@ class TestTail(unittest.TestCase):
 
 
 #############################################################################
-class TestGetHomeDirectory(unittest.TestCase):
+class TestGetHomeDirectory(AbstractTest):
     def test_get_home_directory(self) -> None:
         old_home = os.environ.get("HOME")
         if old_home is not None:
@@ -275,7 +276,7 @@ class TestGetHomeDirectory(unittest.TestCase):
 
 
 #############################################################################
-class TestHumanReadable(unittest.TestCase):
+class TestHumanReadable(AbstractTest):
 
     def assert_human_readable_float(self, actual: float, expected: str) -> None:
         self.assertEqual(human_readable_float(actual), expected)
@@ -404,7 +405,7 @@ class TestHumanReadable(unittest.TestCase):
 
 
 #############################################################################
-class TestOpenNoFollow(unittest.TestCase):
+class TestOpenNoFollow(AbstractTest):
     def setUp(self) -> None:
         self.tmpdir = tempfile.mkdtemp()
         self.real_path = os.path.join(self.tmpdir, "file.txt")
@@ -528,7 +529,7 @@ class TestOpenNoFollow(unittest.TestCase):
 
 
 #############################################################################
-class TestFindMatch(unittest.TestCase):
+class TestFindMatch(AbstractTest):
 
     def test_basic(self) -> None:
         def condition(arg: str) -> bool:
@@ -656,7 +657,7 @@ class TestFindMatch(unittest.TestCase):
 
 
 #############################################################################
-class TestReplaceCapturingGroups(unittest.TestCase):
+class TestReplaceCapturingGroups(AbstractTest):
     @staticmethod
     def replace_capturing_group(regex: str) -> str:
         return replace_capturing_groups_with_non_capturing_groups(regex)
@@ -709,7 +710,7 @@ class TestReplaceCapturingGroups(unittest.TestCase):
 
 
 #############################################################################
-class TestSubprocessRun(unittest.TestCase):
+class TestSubprocessRun(AbstractTest):
     def test_successful_command(self) -> None:
         result = subprocess_run(["true"], stdout=PIPE, stderr=subprocess.PIPE)
         self.assertEqual(0, result.returncode)
@@ -761,7 +762,7 @@ class TestSubprocessRun(unittest.TestCase):
 
 
 #############################################################################
-class TestPIDExists(unittest.TestCase):
+class TestPIDExists(AbstractTest):
 
     def test_pid_exists(self) -> None:
         self.assertTrue(pid_exists(os.getpid()))
@@ -786,7 +787,7 @@ class TestPIDExists(unittest.TestCase):
 
 
 #############################################################################
-class TestTerminateProcessSubtree(unittest.TestCase):
+class TestTerminateProcessSubtree(AbstractTest):
     def setUp(self) -> None:
         self.children: list[subprocess.Popen[Any]] = []
 
@@ -816,7 +817,7 @@ class TestTerminateProcessSubtree(unittest.TestCase):
 
 
 #############################################################################
-class TestSmallPriorityQueue(unittest.TestCase):
+class TestSmallPriorityQueue(AbstractTest):
     def setUp(self) -> None:
         self.pq: SmallPriorityQueue[int] = SmallPriorityQueue()
         self.pq_reverse: SmallPriorityQueue[int] = SmallPriorityQueue(reverse=True)
@@ -944,7 +945,7 @@ class TestSmallPriorityQueue(unittest.TestCase):
 
 
 #############################################################################
-class TestSynchronizedBool(unittest.TestCase):
+class TestSynchronizedBool(AbstractTest):
     def test_initialization(self) -> None:
         b = SynchronizedBool(True)
         self.assertTrue(b.value)
@@ -1000,7 +1001,7 @@ class TestSynchronizedBool(unittest.TestCase):
 
 
 #############################################################################
-class TestSynchronizedDict(unittest.TestCase):
+class TestSynchronizedDict(AbstractTest):
     def setUp(self) -> None:
         self.sync_dict: SynchronizedDict = SynchronizedDict({"a": 1, "b": 2, "c": 3})
 
@@ -1054,7 +1055,7 @@ class TestSynchronizedDict(unittest.TestCase):
 
 
 #############################################################################
-class TestXFinally(unittest.TestCase):
+class TestXFinally(AbstractTest):
 
     def test_xfinally_executes_cleanup_on_success(self) -> None:
         cleanup = MagicMock()

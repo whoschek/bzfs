@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import io
 import logging
-import os
 import sys
 import time
 import unittest
@@ -49,6 +48,7 @@ from bzfs_main.filter import (
 from bzfs_main.utils import (
     compile_regexes,
 )
+from bzfs_tests.abstract_test import AbstractTest
 
 
 #############################################################################
@@ -61,14 +61,31 @@ def suite() -> unittest.TestSuite:
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
-def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-    return bzfs.argument_parser().parse_args(
-        args + ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
-    )
+#############################################################################
+class CommonTest(AbstractTest):
+
+    def __init__(self, methodName: str = "runTest") -> None:  # noqa: N803
+        super().__init__(methodName)
+
+    def filter_snapshots_by_times_and_rank(
+        self, snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
+    ) -> list[str]:
+        args = self.argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks])
+        log_params = bzfs.LogParams(args)
+        try:
+            job = bzfs.Job()
+            job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
+            job.params.log.setLevel(loglevel)
+            snapshots = [f"{i}\t" + snapshot for i, snapshot in enumerate(snapshots)]  # simulate creation time
+            results = filter_snapshots(job, snapshots)
+            results = [result.split("\t", 1)[1] for result in results]  # drop creation time
+            return results
+        finally:
+            bzfs.reset_logger()
 
 
 #############################################################################
-class TestHelperFunctions(unittest.TestCase):
+class TestHelperFunctions(CommonTest):
 
     def test_filter_lines(self) -> None:
         input_list = ["apple\tred", "banana\tyellow", "cherry\tred", "date\tbrown"]
@@ -108,7 +125,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_filter_datasets_with_test_mode_is_false(self) -> None:
         # test with Job.is_test_mode == False for coverage with the assertion therein disabled
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         log_params = bzfs.LogParams(args)
         try:
@@ -143,7 +160,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(["\tds@a1", "\tds@b2"], filter_snapshots_by_regex(job, snapshots, regexes))
 
     def test_filter_snapshots_by_regex_debug(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger("debug_snapshots")
         log.setLevel(bzfs.log_debug)
         stream = io.StringIO()
@@ -169,7 +186,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual({"p1": "v1"}, filter_properties(job, props, include_regexes, exclude_regexes))
 
     def test_filter_properties_debug(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger("debug_props")
         log.setLevel(bzfs.log_debug)
         stream = io.StringIO()
@@ -187,7 +204,7 @@ class TestHelperFunctions(unittest.TestCase):
 
 
 #############################################################################
-class TestTimeRangeAction(unittest.TestCase):
+class TestTimeRangeAction(CommonTest):
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
         self.parser.add_argument("--time-n-ranks", action=bzfs.TimeRangeAndRankRangeAction, nargs="+")
@@ -318,50 +335,50 @@ class TestTimeRangeAction(unittest.TestCase):
         times_and_ranks_opt = "--include-snapshot-times-and-ranks="
         wildcards = ["*", "anytime"]
 
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         self.assertListEqual([[]], p.snapshot_filters)
 
-        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
+        args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "*..*"])
         p = bzfs.Params(args)
         self.assertListEqual([[]], p.snapshot_filters)
 
-        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "anytime..anytime"])
+        args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "anytime..anytime"])
         p = bzfs.Params(args)
         self.assertListEqual([[]], p.snapshot_filters)
 
-        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "notime"])
+        args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "notime"])
         p = bzfs.Params(args)
         self.assertEqual((0, 0), p.snapshot_filters[0][0].timerange)
 
-        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
+        args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000000..1700000001"])
         p = bzfs.Params(args)
         self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
 
-        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
+        args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1700000001..1700000000"])
         p = bzfs.Params(args)
         self.assertEqual((1700000000, 1700000001), p.snapshot_filters[0][0].timerange)
 
-        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
+        args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "0secs ago..60secs ago"])
         p = bzfs.Params(args)
         timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
         self.assertEqual(timedelta(seconds=0), timerange[0])
         self.assertEqual(timedelta(seconds=60), timerange[1])
 
-        args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1secs ago..60secs ago"])
+        args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "1secs ago..60secs ago"])
         p = bzfs.Params(args)
         timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
         self.assertEqual(timedelta(seconds=1), timerange[0])
         self.assertEqual(timedelta(seconds=60), timerange[1])
 
         for wildcard in wildcards:
-            args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
+            args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + "2024-01-01.." + wildcard])
             p = bzfs.Params(args)
             timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
             self.assertEqual(int(datetime.fromisoformat("2024-01-01").timestamp()), timerange[0])
             self.assertLess(int(time.time() + 86400 * 365 * 1000), cast(int, timerange[1]))
 
-            args = argparser_parse_args(args=["src", "dst", times_and_ranks_opt + wildcard + "..2024-01-01"])
+            args = self.argparser_parse_args(args=["src", "dst", times_and_ranks_opt + wildcard + "..2024-01-01"])
             p = bzfs.Params(args)
             timerange = cast(Tuple[Union[timedelta, int], Union[timedelta, int]], p.snapshot_filters[0][0].timerange)
             self.assertEqual(0, timerange[0])
@@ -382,32 +399,14 @@ class TestTimeRangeAction(unittest.TestCase):
             ["\td#1", "\td@2"], self.filter_snapshots_by_times_and_rank1(lst1, "1..3", loglevel=logging.INFO)
         )
 
-    @staticmethod
     def filter_snapshots_by_times_and_rank1(
-        snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
+        self, snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
     ) -> list[str]:
-        return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
-
-
-def filter_snapshots_by_times_and_rank(
-    snapshots: list[str], timerange: str, ranks: list[str] = [], loglevel: int = logging.DEBUG  # noqa: B006
-) -> list[str]:
-    args = argparser_parse_args(args=["src", "dst", "--include-snapshot-times-and-ranks", timerange, *ranks])
-    log_params = bzfs.LogParams(args)
-    try:
-        job = bzfs.Job()
-        job.params = bzfs.Params(args, log_params=log_params, log=bzfs.get_logger(log_params, args))
-        job.params.log.setLevel(loglevel)
-        snapshots = [f"{i}\t" + snapshot for i, snapshot in enumerate(snapshots)]  # simulate creation time
-        results = filter_snapshots(job, snapshots)
-        results = [result.split("\t", 1)[1] for result in results]  # drop creation time
-        return results
-    finally:
-        bzfs.reset_logger()
+        return self.filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
 
 
 #############################################################################
-class TestRankRangeAction(unittest.TestCase):
+class TestRankRangeAction(CommonTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -469,7 +468,7 @@ class TestRankRangeAction(unittest.TestCase):
     def filter_snapshots_by_rank(
         self, snapshots: list[str], ranks: list[str], timerange: str = "0..0", loglevel: int = logging.DEBUG
     ) -> list[str]:
-        return filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
+        return self.filter_snapshots_by_times_and_rank(snapshots, timerange=timerange, ranks=ranks, loglevel=loglevel)
 
     def test_filter_snapshots_by_rank(self) -> None:
         lst1 = ["\t" + snapshot for snapshot in ["d@0", "d@1", "d@2", "d@3"]]
@@ -574,9 +573,8 @@ class TestRankRangeAction(unittest.TestCase):
         results = self.filter_snapshots_by_rank(lst1, ["oldest1..oldest2", "latest 1"], timerange="4..11")
         self.assertListEqual(["\td#1", "\td@2", "\td@4"], results)
 
-    @staticmethod
-    def get_snapshot_filters(cli: list[str]) -> Any:
-        args = argparser_parse_args(args=["src", "dst", *cli])
+    def get_snapshot_filters(self, cli: list[str]) -> Any:
+        args = self.argparser_parse_args(args=["src", "dst", *cli])
         return bzfs.Params(args).snapshot_filters[0]
 
     def test_merge_adjacent_snapshot_regexes_and_filters0(self) -> None:

@@ -13,10 +13,8 @@
 # limitations under the License.
 
 from __future__ import annotations
-import argparse
 import itertools
 import logging
-import os
 import random
 import time
 import unittest
@@ -37,16 +35,7 @@ from bzfs_main.connection import (
     ConnectionPool,
     ConnectionPools,
 )
-from bzfs_main.utils import (
-    getenv_any,
-)
-
-# constants:
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
-is_unit_test = test_mode == "unit"  # run only unit tests aka skip integration tests
-is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
-is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
-is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
+from bzfs_tests.abstract_test import AbstractTest
 
 
 #############################################################################
@@ -55,12 +44,6 @@ def suite() -> unittest.TestSuite:
         TestConnectionPool,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
-
-
-def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-    return bzfs.argument_parser().parse_args(
-        args + ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
-    )
 
 
 #############################################################################
@@ -97,9 +80,9 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
 
 
 #############################################################################
-class TestConnectionPool(unittest.TestCase):
+class TestConnectionPool(AbstractTest):
     def setUp(self) -> None:
-        args = argparser_parse_args(args=["src", "dst", "-v"])
+        args = self.argparser_parse_args(args=["src", "dst", "-v"])
         p = bzfs.Params(args, log=bzfs.get_logger(bzfs.LogParams(args), args))
         self.src = p.src
         self.dst = p.dst
@@ -285,7 +268,7 @@ class TestConnectionPool(unittest.TestCase):
         # loglevel = logging.DEBUG
         loglevel = log_trace
         is_logging = log.isEnabledFor(loglevel)
-        num_steps = 75 if is_unit_test or is_smoke_test or is_functional_test or is_adhoc_test else 1000
+        num_steps = 75 if self.is_unit_test or self.is_smoke_test or self.is_functional_test or self.is_adhoc_test else 1000
         log.info(f"num_random_steps: {num_steps}")
         start_time_nanos = time.time_ns()
         for maxsessions in range(1, 10 + 1):

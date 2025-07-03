@@ -55,6 +55,7 @@ from bzfs_main.utils import (
     getenv_any,
     getenv_bool,
 )
+from bzfs_tests.abstract_test import AbstractTest
 from bzfs_tests.test_incremental_send_steps import (
     TestIncrementalSendSteps,
 )
@@ -117,15 +118,11 @@ if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.syst
     sudo_cmd = ["sudo", "-n"]
     set_sudo_cmd(["sudo", "-n"])
 
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing isolated code changes
-
 
 def suite() -> unittest.TestSuite:
-    is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
-    is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
-    is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
+    ttype = AbstractTest()
     suite = unittest.TestSuite()
-    if not (is_smoke_test or is_functional_test or is_adhoc_test):
+    if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
         suite.addTest(ParametrizedTestCase.parametrize(IncrementalSendStepsTestCase, {"verbose": True}))
         suite.addTest(ParametrizedTestCase.parametrize(TestSSHLatency))
 
@@ -137,11 +134,11 @@ def suite() -> unittest.TestSuite:
             for affix in [""]:
                 # no_privilege_elevation_modes = []
                 no_privilege_elevation_modes = [False]
-                if not (os.geteuid() == 0 or is_smoke_test or is_functional_test or is_adhoc_test):
+                if not (os.geteuid() == 0 or ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
                     no_privilege_elevation_modes.append(True)
                 for no_privilege_elevation in no_privilege_elevation_modes:
                     encrypted_datasets = [False]
-                    if not (is_smoke_test or is_functional_test or is_adhoc_test):
+                    if not (ttype.is_smoke_test or ttype.is_functional_test or ttype.is_adhoc_test):
                         encrypted_datasets += [True]
                     for encrypted_dataset in encrypted_datasets:
                         params = {
@@ -153,13 +150,13 @@ def suite() -> unittest.TestSuite:
                             "no_privilege_elevation": no_privilege_elevation,
                             "encrypted_dataset": encrypted_dataset,
                         }
-                        if is_smoke_test:
+                        if ttype.is_smoke_test:
                             suite.addTest(ParametrizedTestCase.parametrize(SmokeTestCase, params))
-                        elif is_adhoc_test:
+                        elif ttype.is_adhoc_test:
                             suite.addTest(ParametrizedTestCase.parametrize(AdhocTestCase, params))
                         else:
                             suite.addTest(ParametrizedTestCase.parametrize(LocalTestCase, params))
-    if is_smoke_test or is_adhoc_test:
+    if ttype.is_smoke_test or ttype.is_adhoc_test:
         return suite
 
     # ssh_modes = []
@@ -167,10 +164,10 @@ def suite() -> unittest.TestSuite:
     # ssh_modes = ["local", "pull-push", "push", "pull"]
     # ssh_modes = ["local"]
     ssh_modes = ["local", "pull-push"]
-    ssh_modes = ["local"] if is_functional_test else ssh_modes
+    ssh_modes = ["local"] if ttype.is_functional_test else ssh_modes
     for ssh_mode in ssh_modes:
         min_pipe_transfer_sizes = [0, 1024**2]
-        min_pipe_transfer_sizes = [0] if is_functional_test else min_pipe_transfer_sizes
+        min_pipe_transfer_sizes = [0] if ttype.is_functional_test else min_pipe_transfer_sizes
         for min_pipe_transfer_size in min_pipe_transfer_sizes:
             # for affix in [""]:
             # for affix in ["", ".  -"]:
@@ -189,7 +186,7 @@ def suite() -> unittest.TestSuite:
                         }
                         suite.addTest(ParametrizedTestCase.parametrize(FullRemoteTestCase, params))
 
-    if os.geteuid() != 0 and not is_functional_test:
+    if os.geteuid() != 0 and not ttype.is_functional_test:
         for ssh_mode in ["pull-push", "pull", "push"]:
             for min_pipe_transfer_size in [0]:
                 for affix in [""]:
@@ -210,7 +207,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class ParametrizedTestCase(unittest.TestCase):
+class ParametrizedTestCase(AbstractTest):
 
     def __init__(self, methodName: str = "runTest", param: dict[str, Any] | None = None) -> None:  # noqa: N803
         super().__init__(methodName)
@@ -1167,7 +1164,7 @@ class LocalTestCase(BZFSTestCase):
                     self.assert_snapshotting_generates_identical_createtxg()
 
     def test_big_snapshotting_generates_identical_createtxg_despite_incompatible_pruning(self) -> None:
-        if test_mode == "functional":
+        if self.test_mode == "functional":
             self.skipTest("Skipping slow test")
         # k = 50
         k = 1

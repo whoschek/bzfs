@@ -19,6 +19,7 @@ from logging import Logger
 from unittest.mock import MagicMock, patch
 
 from bzfs_main.retry import Retry, RetryableError, RetryPolicy, run_with_retries
+from bzfs_tests.abstract_test import AbstractTest
 
 
 #############################################################################
@@ -30,7 +31,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestRunWithRetries(unittest.TestCase):
+class TestRunWithRetries(AbstractTest):
 
     def test_retry_policy_repr(self) -> None:
         args = argparse.Namespace(retries=2, retry_min_sleep_secs=0.1, retry_max_sleep_secs=0.5, retry_max_elapsed_secs=1)

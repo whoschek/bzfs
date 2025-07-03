@@ -52,18 +52,11 @@ from bzfs_main.detect import (
 )
 from bzfs_main.utils import (
     die_status,
-    getenv_any,
 )
+from bzfs_tests.abstract_test import AbstractTest
 from bzfs_tests.zfs_util import (
     is_solaris_zfs,
 )
-
-# constants:
-test_mode = getenv_any("test_mode", "")  # Consider toggling this when testing
-is_unit_test = test_mode == "unit"  # run only unit tests aka skip integration tests
-is_smoke_test = test_mode == "smoke"  # run only a small subset of tests
-is_functional_test = test_mode == "functional"  # run most tests but only in a single local config combination
-is_adhoc_test = test_mode == "adhoc"  # run only a few isolated changes
 
 
 #############################################################################
@@ -92,14 +85,8 @@ def suite() -> unittest.TestSuite:
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
-def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-    return bzfs.argument_parser().parse_args(
-        args + ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
-    )
-
-
 #############################################################################
-class TestHelperFunctions(unittest.TestCase):
+class TestHelperFunctions(AbstractTest):
     s = "s"
     d = "d"
     a = "a"
@@ -153,7 +140,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.validate_port("xxx47", "msg")
 
     def test_validate_quoting(self) -> None:
-        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         params.validate_quoting([""])
         params.validate_quoting(["foo"])
         with self.assertRaises(SystemExit):
@@ -164,7 +151,7 @@ class TestHelperFunctions(unittest.TestCase):
             params.validate_quoting(["foo`"])
 
     def test_validate_arg(self) -> None:
-        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         params.validate_arg("")
         params.validate_arg("foo")
         with self.assertRaises(SystemExit):
@@ -198,7 +185,7 @@ class TestHelperFunctions(unittest.TestCase):
         params.validate_arg(" foo  bar ", allow_all=True)
 
     def test_validate_program_name_must_not_be_empty(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         args.zpool_program = ""
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
@@ -207,7 +194,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.Params(args)
 
     def test_validate_program_name_must_not_contain_special_chars(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         args.zpool_program = "true;false"
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
@@ -225,7 +212,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.Params(args)
 
     def test_split_args(self) -> None:
-        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.split_args(""))
         self.assertEqual([], params.split_args("  "))
         self.assertEqual(["foo", "bar", "baz"], params.split_args("foo  bar baz"))
@@ -253,7 +240,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual("\"{'a': 1}\"", bzfs.format_dict({"a": 1}))
 
     def test_pretty_print_formatter(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
         self.assertIsNotNone(str(bzfs.pretty_print_formatter(params)))
 
@@ -269,7 +256,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.parse_duration_to_milliseconds("foo", context="ctx")
 
     def test_fix_send_recv_opts(self) -> None:
-        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.fix_recv_opts(["-n"], frozenset())[0])
         self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"], frozenset())[0])
         self.assertEqual([""], params.fix_recv_opts([""], frozenset())[0])
@@ -298,7 +285,7 @@ class TestHelperFunctions(unittest.TestCase):
     def test_fix_recv_opts_with_preserve_properties(self) -> None:
         mp = "mountpoint"
         cr = "createtxg"
-        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         with self.assertRaises(SystemExit):
             params.fix_recv_opts(["-n", "-o", f"{mp}=foo"], frozenset([mp]))
         self.assertEqual(([], [mp]), params.fix_recv_opts(["-n"], frozenset([mp])))
@@ -410,7 +397,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_run_main_with_unexpected_exception(self) -> None:
         try:
-            args = argparser_parse_args(args=["src", "dst"])
+            args = self.argparser_parse_args(args=["src", "dst"])
             log_params = bzfs.LogParams(args)
             job = bzfs.Job()
             job.params = bzfs.Params(args, log_params=log_params)
@@ -484,7 +471,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
     def test_validate_default_shell(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         p = bzfs.Params(args)
         remote = bzfs.Remote("src", args, p)
         bzfs.validate_default_shell("/bin/sh", remote)
@@ -495,7 +482,7 @@ class TestHelperFunctions(unittest.TestCase):
             bzfs.validate_default_shell("/bin/tcsh", remote)
 
     def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
-        args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
+        args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
         with self.assertRaises(SystemExit):
             bzfs.Params(args)
 
@@ -524,7 +511,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(is_busy("zfs send " + ds + "@snap", ds))
 
     def test_pv_cmd(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         log_params = bzfs.LogParams(args)
         try:
             job = bzfs.Job()
@@ -673,7 +660,7 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertEqual(xperiods.suffix_milliseconds["millisecondly"], xperiods.label_milliseconds("foo_millisecondly"))
 
     def test_CreateSrcSnapshotConfig(self) -> None:  # noqa: N802
-        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         good_args = bzfs.argument_parser().parse_args(
             [
                 "src",
@@ -884,7 +871,7 @@ class TestHelperFunctions(unittest.TestCase):
         def plan(alerts: dict[str, Any]) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
-        params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         args = bzfs.argument_parser().parse_args(
             ["src", "dst", "--monitor-snapshots=" + plan({"latest": {"warning": "1 millis", "critical": "2 millis"}})]
         )
@@ -1002,7 +989,7 @@ class TestHelperFunctions(unittest.TestCase):
     @patch("bzfs_main.bzfs.Job.itr_ssh_cmd_parallel")
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
         job = bzfs.Job()
-        job.params = bzfs.Params(argparser_parse_args(args=["src", "dst"]))
+        job.params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
         self.mock_remote = MagicMock(spec=bzfs.Remote)  # spec helps catch calls to non-existent attrs
 
         mock_itr_parallel.return_value = [  # normal input
@@ -1059,17 +1046,17 @@ class TestHelperFunctions(unittest.TestCase):
 
 
 #############################################################################
-class TestAdditionalHelpers(unittest.TestCase):
+class TestAdditionalHelpers(AbstractTest):
 
     def test_params_verbose_zfs_and_bwlimit(self) -> None:
-        args = argparser_parse_args(["src", "dst", "-v", "-v", "--bwlimit", "20m"])
+        args = self.argparser_parse_args(["src", "dst", "-v", "-v", "--bwlimit", "20m"])
         params = bzfs.Params(args)
         self.assertIn("-v", params.zfs_send_program_opts)
         self.assertIn("-v", params.zfs_recv_program_opts)
         self.assertIn("--rate-limit=20m", params.pv_program_opts)
 
     def test_program_name_injections(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         p1 = bzfs.Params(args, inject_params={"inject_unavailable_ssh": True})
         self.assertEqual("ssh-xxx", p1.program_name("ssh"))
         p2 = bzfs.Params(args, inject_params={"inject_failing_ssh": True})
@@ -1077,7 +1064,7 @@ class TestAdditionalHelpers(unittest.TestCase):
 
     def test_unset_matching_env_vars(self) -> None:
         with patch.dict(os.environ, {"FOO_BAR": "x"}):
-            args = argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
+            args = self.argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
             params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
             params.unset_matching_env_vars(args)
             self.assertNotIn("FOO_BAR", os.environ)
@@ -1086,7 +1073,7 @@ class TestAdditionalHelpers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = os.path.join(tmpdir, "bzfs_ssh_config")
             Path(cfg).touch()
-            args = argparser_parse_args(["src", "dst", "--ssh-src-config-file", cfg])
+            args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", cfg])
             args.ssh_src_port = 2222
             p = bzfs.Params(args)
             r = bzfs.Remote("src", args, p)
@@ -1106,7 +1093,7 @@ class TestAdditionalHelpers(unittest.TestCase):
             cmd = r.local_ssh_command()
             self.assertNotIn("-S", cmd)
 
-            args = argparser_parse_args(["src", "dst", "--ssh-program", "-"])
+            args = self.argparser_parse_args(["src", "dst", "--ssh-program", "-"])
             p = bzfs.Params(args)
             r = bzfs.Remote("src", args, p)
             r.ssh_user_host = "u@h"
@@ -1116,13 +1103,15 @@ class TestAdditionalHelpers(unittest.TestCase):
             self.assertEqual([], r.local_ssh_command())
 
     def test_params_zfs_recv_program_opt(self) -> None:
-        args = argparser_parse_args(["src", "dst", "--zfs-recv-program-opt=-o", "--zfs-recv-program-opt=org.test=value"])
+        args = self.argparser_parse_args(
+            ["src", "dst", "--zfs-recv-program-opt=-o", "--zfs-recv-program-opt=org.test=value"]
+        )
         params = bzfs.Params(args)
         self.assertIn("-o", params.zfs_recv_program_opts)
         self.assertIn("org.test=value", params.zfs_recv_program_opts)
 
     def test_copy_properties_config_repr(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         params = bzfs.Params(args)
         conf = bzfs.CopyPropertiesConfig("zfs_recv_o", "-o", args, params)
         rep = repr(conf)
@@ -1139,7 +1128,7 @@ class TestAdditionalHelpers(unittest.TestCase):
     @patch("bzfs_main.bzfs.argument_parser")
     @patch("bzfs_main.bzfs.run_main")
     def test_main_handles_calledprocesserror(self, mock_run_main: MagicMock, mock_arg_parser: MagicMock) -> None:
-        mock_arg_parser.return_value.parse_args.return_value = argparser_parse_args(["src", "dst"])
+        mock_arg_parser.return_value.parse_args.return_value = self.argparser_parse_args(["src", "dst"])
         mock_run_main.side_effect = subprocess.CalledProcessError(returncode=5, cmd=["cmd"])
         with self.assertRaises(SystemExit) as ctx:
             bzfs.main()
@@ -1147,7 +1136,7 @@ class TestAdditionalHelpers(unittest.TestCase):
 
     @patch("bzfs_main.bzfs.Job.run_main")
     def test_run_main_delegates_to_job(self, mock_run_main: MagicMock) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         bzfs.run_main(args=args, sys_argv=["p"])
         mock_run_main.assert_called_once_with(args, ["p"], None)
 
@@ -1155,19 +1144,19 @@ class TestAdditionalHelpers(unittest.TestCase):
         """Confirms that initialization fails if --pv-program-opts contains the forbidden -f or --log-file options."""
         # Test Case 1: The short-form option '-f' should be rejected.
         malicious_opts_short = "--bytes -f /etc/hosts"
-        args_short = argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_short}"])
+        args_short = self.argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_short}"])
         with self.assertRaises(SystemExit):
             bzfs.Params(args_short)
 
         # Test Case 2: The long-form option '--log-file' should be rejected.
         malicious_opts_long = "--progress --log-file /etc/shadow"
-        args_long = argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_long}"])
+        args_long = self.argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_long}"])
         with self.assertRaises(SystemExit):
             bzfs.Params(args_long)
 
         # Test Case 3: A valid set of options should instantiate successfully.
         valid_opts = "--bytes --progress --rate"
-        args_valid = argparser_parse_args(["src", "dst", f"--pv-program-opts={valid_opts}"])
+        args_valid = self.argparser_parse_args(["src", "dst", f"--pv-program-opts={valid_opts}"])
 
         # This should not raise an exception.
         params_valid = bzfs.Params(args_valid)
@@ -1175,34 +1164,34 @@ class TestAdditionalHelpers(unittest.TestCase):
 
     def test_compression_program_opts_disallows_dangerous_options(self) -> None:
         malicious_opts_short = "-o /etc/hosts"
-        args_short = argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_short}"])
+        args_short = self.argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_short}"])
         with self.assertRaises(SystemExit):
             bzfs.Params(args_short)
 
         malicious_opts_long = "--output-file /etc/hosts"
-        args_long = argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_long}"])
+        args_long = self.argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_long}"])
         with self.assertRaises(SystemExit):
             bzfs.Params(args_long)
 
         valid_opts = "-9"
-        args_valid = argparser_parse_args(["src", "dst", f"--compression-program-opts={valid_opts}"])
+        args_valid = self.argparser_parse_args(["src", "dst", f"--compression-program-opts={valid_opts}"])
         params_valid = bzfs.Params(args_valid)
         self.assertIn("-9", params_valid.compression_program_opts)
 
     def test_mbuffer_program_opts_disallows_dangerous_options(self) -> None:
         malicious_opts = "-o /etc/hosts"
-        args_short = argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={malicious_opts}"])
+        args_short = self.argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={malicious_opts}"])
         with self.assertRaises(SystemExit):
             bzfs.Params(args_short)
 
         valid_opts = "-q"
-        args_valid = argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={valid_opts}"])
+        args_valid = self.argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={valid_opts}"])
         params_valid = bzfs.Params(args_valid)
         self.assertIn("-q", params_valid.mbuffer_program_opts)
 
 
 #############################################################################
-class TestParseDatasetLocator(unittest.TestCase):
+class TestParseDatasetLocator(AbstractTest):
     def run_test(
         self,
         input_value: str,
@@ -1361,7 +1350,7 @@ class TestParseDatasetLocator(unittest.TestCase):
 
 
 #############################################################################
-class TestCurrentDateTime(unittest.TestCase):
+class TestCurrentDateTime(AbstractTest):
 
     def setUp(self) -> None:
         self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)  # in no timezone
@@ -1480,7 +1469,7 @@ class TestCurrentDateTime(unittest.TestCase):
 
 
 #############################################################################
-class TestArgumentParser(unittest.TestCase):
+class TestArgumentParser(AbstractTest):
 
     def test_help(self) -> None:
         if is_solaris_zfs():
@@ -1516,10 +1505,10 @@ class TestArgumentParser(unittest.TestCase):
 
 
 ###############################################################################
-class TestAddRecvPropertyOptions(unittest.TestCase):
+class TestAddRecvPropertyOptions(AbstractTest):
 
     def setUp(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         self.p = bzfs.Params(args)
         self.p.src = bzfs.Remote("src", args, self.p)
         self.p.dst = bzfs.Remote("dst", args, self.p)
@@ -1547,7 +1536,7 @@ class TestAddRecvPropertyOptions(unittest.TestCase):
 
 
 #############################################################################
-class TestDatasetPairsAction(unittest.TestCase):
+class TestDatasetPairsAction(AbstractTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1615,9 +1604,9 @@ class TestDatasetPairsAction(unittest.TestCase):
 
 
 #############################################################################
-class TestPreservePropertiesValidation(unittest.TestCase):
+class TestPreservePropertiesValidation(AbstractTest):
     def setUp(self) -> None:
-        self.args = argparser_parse_args(
+        self.args = self.argparser_parse_args(
             [
                 "src",
                 "dst",
@@ -1697,7 +1686,7 @@ class TestPreservePropertiesValidation(unittest.TestCase):
 
 
 #############################################################################
-class TestFileOrLiteralAction(unittest.TestCase):
+class TestFileOrLiteralAction(AbstractTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1738,7 +1727,7 @@ class TestFileOrLiteralAction(unittest.TestCase):
 
 
 #############################################################################
-class TestNewSnapshotFilterGroupAction(unittest.TestCase):
+class TestNewSnapshotFilterGroupAction(AbstractTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1754,7 +1743,7 @@ class TestNewSnapshotFilterGroupAction(unittest.TestCase):
 
 
 #############################################################################
-class TestNonEmptyStringAction(unittest.TestCase):
+class TestNonEmptyStringAction(AbstractTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1766,7 +1755,7 @@ class TestNonEmptyStringAction(unittest.TestCase):
 
 
 #############################################################################
-class TestLogConfigVariablesAction(unittest.TestCase):
+class TestLogConfigVariablesAction(AbstractTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1782,7 +1771,7 @@ class TestLogConfigVariablesAction(unittest.TestCase):
 
 
 #############################################################################
-class SSHConfigFileNameAction(unittest.TestCase):
+class SSHConfigFileNameAction(AbstractTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1808,7 +1797,7 @@ class SSHConfigFileNameAction(unittest.TestCase):
 
 
 #############################################################################
-class TestSafeFileNameAction(unittest.TestCase):
+class TestSafeFileNameAction(AbstractTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
@@ -1848,7 +1837,7 @@ class TestSafeFileNameAction(unittest.TestCase):
 
 
 #############################################################################
-class TestSafeDirectoryNameAction(unittest.TestCase):
+class TestSafeDirectoryNameAction(AbstractTest):
     def test_valid_directory_name_is_accepted(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
@@ -1875,7 +1864,7 @@ class TestSafeDirectoryNameAction(unittest.TestCase):
 
 
 #############################################################################
-class TestCheckRange(unittest.TestCase):
+class TestCheckRange(AbstractTest):
 
     def test_valid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
@@ -2001,7 +1990,7 @@ class TestCheckRange(unittest.TestCase):
 
 
 #############################################################################
-class TestCheckPercentRange(unittest.TestCase):
+class TestCheckPercentRange(AbstractTest):
 
     def test_valid_range_min(self) -> None:
         parser = argparse.ArgumentParser()
@@ -2031,7 +2020,7 @@ class TestCheckPercentRange(unittest.TestCase):
 
 
 #############################################################################
-class TestPythonVersionCheck(unittest.TestCase):
+class TestPythonVersionCheck(AbstractTest):
     """Test version check near top of program:
     if sys.version_info < (3, 8):
         print(f"ERROR: {prog_name} requires Python version >= 3.8!", file=sys.stderr)
@@ -2061,7 +2050,7 @@ class TestPythonVersionCheck(unittest.TestCase):
 
 
 #############################################################################
-class TestPerformance(unittest.TestCase):
+class TestPerformance(AbstractTest):
 
     def test_close_fds(self) -> None:
         """see https://bugs.python.org/issue42738

@@ -13,8 +13,6 @@
 # limitations under the License.
 
 from __future__ import annotations
-import argparse
-import os
 import time
 import unittest
 from unittest.mock import (
@@ -33,6 +31,7 @@ from bzfs_main.detect import (
     RemoteConfCacheItem,
     detect_available_programs,
 )
+from bzfs_tests.abstract_test import AbstractTest
 
 
 #############################################################################
@@ -43,17 +42,11 @@ def suite() -> unittest.TestSuite:
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
 
-def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-    return bzfs.argument_parser().parse_args(
-        args + ["--log-dir", os.path.join(bzfs.get_home_directory(), bzfs.log_dir_default + "-test")]
-    )
-
-
 #############################################################################
-class TestRemoteConfCache(unittest.TestCase):
+class TestRemoteConfCache(AbstractTest):
 
     def test_remote_conf_cache_hit_skips_detection(self) -> None:
-        args = argparser_parse_args(["src", "dst"])
+        args = self.argparser_parse_args(["src", "dst"])
         p = bzfs.Params(args)
         p.log = MagicMock()
         job = bzfs.Job()
@@ -77,7 +70,7 @@ class TestRemoteConfCache(unittest.TestCase):
             d2.assert_not_called()
 
     def test_remote_conf_cache_miss_runs_detection(self) -> None:
-        args = argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "10 milliseconds"])
+        args = self.argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "10 milliseconds"])
         p = bzfs.Params(args)
         p.log = MagicMock()
         job = bzfs.Job()

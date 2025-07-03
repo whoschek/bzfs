@@ -21,6 +21,7 @@ import bzfs_main.incremental_send_steps
 from bzfs_main.incremental_send_steps import (
     send_step_to_str,
 )
+from bzfs_tests.abstract_test import AbstractTest
 from bzfs_tests.test_utils import (
     stop_on_failure_subtest,
 )
@@ -35,7 +36,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestIncrementalSendSteps(unittest.TestCase):
+class TestIncrementalSendSteps(AbstractTest):
 
     def test_basic1(self) -> None:
         input_snapshots = ["d1", "h1", "d2", "d3", "d4"]

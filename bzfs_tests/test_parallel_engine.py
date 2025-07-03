@@ -23,6 +23,7 @@ from unittest.mock import MagicMock
 
 from bzfs_main.parallel_engine import BARRIER_CHAR, Tree, build_dataset_tree, process_datasets_in_parallel_and_fault_tolerant
 from bzfs_main.retry import Retry, RetryPolicy
+from bzfs_tests.abstract_test import AbstractTest
 from bzfs_tests.test_utils import stop_on_failure_subtest
 
 
@@ -36,7 +37,7 @@ def suite() -> unittest.TestSuite:
 
 
 #############################################################################
-class TestBuildTree(unittest.TestCase):
+class TestBuildTree(AbstractTest):
     def assert_keys_sorted(self, tree: dict[str, Any]) -> None:
         keys = list(tree.keys())
         self.assertEqual(keys, sorted(keys), f"Keys are not sorted: {keys}")
@@ -156,7 +157,7 @@ class TestBuildTree(unittest.TestCase):
 
 
 #############################################################################
-class TestProcessDatasetsInParallel(unittest.TestCase):
+class TestProcessDatasetsInParallel(AbstractTest):
     def setUp(self) -> None:
         self.lock: threading.Lock = threading.Lock()
         self.default_kwargs: dict[str, Any] = {

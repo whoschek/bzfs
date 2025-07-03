@@ -13,8 +13,6 @@
 # limitations under the License.
 
 from __future__ import annotations
-import argparse
-import os
 import time
 import unittest
 
@@ -28,9 +26,7 @@ from bzfs_main.connection import (
     ConnectionPools,
 )
 from bzfs_main.loggers import reset_logger
-from bzfs_main.utils import (
-    get_home_directory,
-)
+from bzfs_tests.abstract_test import AbstractTest
 
 
 #############################################################################
@@ -39,12 +35,6 @@ def suite() -> unittest.TestSuite:
         TestParallelIterator,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
-
-
-def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-    return bzfs.argument_parser().parse_args(
-        args + ["--log-dir", os.path.join(get_home_directory(), bzfs.log_dir_default + "-test")]
-    )
 
 
 def dummy_fn_ordered(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
@@ -75,9 +65,9 @@ def dummy_fn_race(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str
     return cmd, batch
 
 
-class TestParallelIterator(unittest.TestCase):
+class TestParallelIterator(AbstractTest):
     def setUp(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
+        args = self.argparser_parse_args(args=["src", "dst"])
         p = Params(args)
         job = bzfs.Job()
         job.params = p
