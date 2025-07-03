@@ -61,7 +61,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
@@ -75,6 +75,7 @@ from typing import (
     IO,
     Any,
     Callable,
+    Counter,
     Final,
     Generator,
     Iterable,

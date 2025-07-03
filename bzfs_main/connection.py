@@ -25,11 +25,11 @@ import shlex
 import subprocess
 import threading
 import time
-from collections import Counter
 from dataclasses import dataclass
 from subprocess import DEVNULL, PIPE, CalledProcessError
 from typing import (
     TYPE_CHECKING,
+    Counter,
 )
 
 from bzfs_main.retry import (
