@@ -42,7 +42,6 @@ from __future__ import annotations
 import argparse
 import ast
 import collections
-import concurrent
 import contextlib
 import dataclasses
 import fcntl
@@ -62,8 +61,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections import Counter, defaultdict, deque
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, tzinfo
 from logging import Logger
@@ -138,6 +136,10 @@ from bzfs_main.loggers import (
 )
 from bzfs_main.parallel_engine import (
     process_datasets_in_parallel_and_fault_tolerant,
+)
+from bzfs_main.parallel_iterator import (
+    parallel_iterator,
+    run_in_parallel,
 )
 from bzfs_main.period_anchors import (
     PeriodAnchors,
@@ -2818,7 +2820,7 @@ class Job:
                     src_cmd = None
                 dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
-                src_snaps_with_guids, dst_snaps_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
+                src_snaps_with_guids, dst_snaps_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
                     lambda: set(self.run_ssh_command(src, log_trace, cmd=src_cmd).splitlines() if src_cmd else []),
                     lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd),
                 )
@@ -2972,7 +2974,7 @@ class Job:
             num_cache_hits = self.num_cache_hits
             num_cache_misses = self.num_cache_misses
             start_time_nanos = time.monotonic_ns()
-            self.run_in_parallel(
+            run_in_parallel(
                 lambda: self.monitor_snapshots(dst, dst_datasets), lambda: self.monitor_snapshots(src, src_datasets)
             )
             elapsed = human_readable_duration(time.monotonic_ns() - start_time_nanos)
@@ -3253,7 +3255,7 @@ class Job:
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
         src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
-        src_snapshots_and_bookmarks, dst_snapshots_with_guids = self.run_in_parallel(  # list src+dst snapshots in parallel
+        src_snapshots_and_bookmarks, dst_snapshots_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
             lambda: self.try_ssh_command(src, log_trace, cmd=src_cmd),
             lambda: self.try_ssh_command(dst, log_trace, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
         )
@@ -4743,7 +4745,7 @@ class Job:
         for i, item in enumerate(choices):
             if item in choice:
                 flags |= 1 << i
-        src_next, dst_next = self.run_in_parallel(lambda: next(src_itr, None), lambda: next(dst_itr, None))
+        src_next, dst_next = run_in_parallel(lambda: next(src_itr, None), lambda: next(dst_itr, None))
         while not (src_next is None and dst_next is None):
             if src_next == dst_next:
                 n = 2
@@ -4885,38 +4887,16 @@ class Job:
         ordered: bool = True,
     ) -> Generator[Any, None, Any]:
         """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
-        max_workers = self.max_workers[r.location]
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            iterators = [
+        return parallel_iterator(
+            iterator_generator=lambda executor: [
                 self.itr_ssh_cmd_batched(
                     r, cmd, cmd_args, lambda batch, cmd=cmd: executor.submit(fn, cmd, batch), max_batch_items=max_batch_items  # type: ignore[misc]
                 )
                 for cmd, cmd_args in cmd_args_list
-            ]
-            iterator = itertools.chain(*iterators)
-            iterators.clear()  # help gc
-            # Materialize the next N futures into a buffer, causing submission + parallel execution of their CLI calls
-            fifo_buffer: deque[Future] = deque(itertools.islice(iterator, max_workers))
-            next_future: Future | None
-
-            if ordered:
-                while fifo_buffer:  # submit the next CLI call whenever the current CLI call returns
-                    curr_future: Future = fifo_buffer.popleft()
-                    next_future = next(iterator, None)  # causes the next CLI call to be submitted
-                    if next_future is not None:
-                        fifo_buffer.append(next_future)
-                    yield curr_future.result()  # blocks until CLI returns
-            else:
-                todo_futures: set[Future] = set(fifo_buffer)
-                fifo_buffer.clear()  # help gc
-                while todo_futures:
-                    done_futures, todo_futures = concurrent.futures.wait(todo_futures, return_when=FIRST_COMPLETED)  # blocks
-                    for done_future in done_futures:  # submit the next CLI call whenever a CLI call returns
-                        next_future = next(iterator, None)  # causes the next CLI call to be submitted
-                        if next_future is not None:
-                            todo_futures.add(next_future)
-                        yield done_future.result()  # does not block as processing has already completed
-            assert next(iterator, None) is None
+            ],
+            max_workers=self.max_workers[r.location],
+            ordered=ordered,
+        )
 
     def zfs_list_snapshots_in_parallel(
         self, r: Remote, cmd: list[str], datasets: list[str], ordered: bool = True
@@ -4936,15 +4916,6 @@ class Job:
             ),
             ordered=ordered,
         )
-
-    @staticmethod
-    def run_in_parallel(fn1: Callable[[], Any], fn2: Callable[[], Any]) -> tuple[Any, Any]:
-        """perf: Runs both I/O functions in parallel/concurrently."""
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future: Future = executor.submit(fn2)  # async fn2
-            result1 = fn1()  # blocks until fn1 call returns
-            result2 = future.result()  # blocks until fn2 call returns
-            return result1, result2
 
     def get_max_command_line_bytes(self, location: str, os_name: str | None = None) -> int:
         """Remote flavor of os.sysconf("SC_ARG_MAX") - size(os.environb) - safety margin"""
@@ -5117,7 +5088,7 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
 
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
     rel_path = os.path.relpath(src, start=dst_dir)
-    os.symlink(rel_path, os.path.join(dst_dir, dst))
+    os.symlink(src=rel_path, dst=os.path.join(dst_dir, dst))
 
 
 def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:

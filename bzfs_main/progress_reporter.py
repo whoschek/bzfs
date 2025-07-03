@@ -31,8 +31,7 @@ from typing import (
     NamedTuple,
 )
 
-import bzfs_main.utils
-from bzfs_main.utils import InterruptibleSleep, human_readable_bytes
+from bzfs_main.utils import InterruptibleSleep, human_readable_bytes, open_nofollow
 
 # constants
 pv_file_thread_separator = "_"
@@ -175,7 +174,7 @@ class ProgressReporter:
             for pv_log_file in local_file_name_queue:
                 try:
                     Path(pv_log_file).touch()
-                    fd = bzfs_main.utils.open_nofollow(pv_log_file, mode="r", newline="", encoding="utf-8")
+                    fd = open_nofollow(pv_log_file, mode="r", newline="", encoding="utf-8")
                 except FileNotFoundError:  # a third party has somehow deleted the log file or directory
                     with self.lock:
                         self.file_name_set.discard(pv_log_file)  # enable re-adding the file later via enqueue_pv_log_file()
@@ -299,7 +298,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     for file in files:
         if os.path.isfile(file):
             try:
-                with bzfs_main.utils.open_nofollow(file, mode="r", newline="", encoding="utf-8") as fd:
+                with open_nofollow(file, mode="r", newline="", encoding="utf-8") as fd:
                     line = None
                     for line in fd:
                         if line.endswith("\r"):

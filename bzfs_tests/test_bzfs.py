@@ -43,8 +43,6 @@ from bzfs_main.check_range import (
     CheckRange,
 )
 from bzfs_main.connection import (
-    DEDICATED,
-    SHARED,
     ConnectionPools,
 )
 from bzfs_main.detect import (
@@ -89,7 +87,6 @@ def suite() -> unittest.TestSuite:
         TestCheckRange,
         TestCheckPercentRange,
         TestPythonVersionCheck,
-        TestItrSSHCmdParallel,
         # TestPerformance,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
@@ -2061,159 +2058,6 @@ class TestPythonVersionCheck(unittest.TestCase):
 
         importlib.reload(bzfs)  # Reload module to apply version patch
         mock_exit.assert_not_called()
-
-
-#############################################################################
-# class TestItrSSHCmdParallel(unittest.TestCase)
-def dummy_fn_ordered(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
-    return cmd, batch
-
-
-def dummy_fn_unordered(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
-    if cmd[0] == "zfslist1":
-        time.sleep(0.2)
-    elif cmd[0] == "zfslist2":
-        time.sleep(0.1)
-    return cmd, batch
-
-
-def dummy_fn_raise(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
-    if cmd[0] == "fail":
-        raise ValueError("Intentional failure")
-    return cmd, batch
-
-
-def dummy_fn_race(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str]]:
-    if cmd[0] == "zfslist1":
-        time.sleep(0.3)
-    elif cmd[0] == "zfslist2":
-        time.sleep(0.2)
-    elif cmd[0] == "zfslist3":
-        time.sleep(0.1)
-    return cmd, batch
-
-
-class TestItrSSHCmdParallel(unittest.TestCase):
-    def setUp(self) -> None:
-        args = argparser_parse_args(args=["src", "dst"])
-        p = bzfs.Params(args)
-        job = bzfs.Job()
-        job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        job.params.connection_pools["src"] = ConnectionPools(
-            p.src, {SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
-        )
-        job.max_workers = {"src": 2}
-        job.params.available_programs = {"src": {"os": "Linux"}, "local": {"os": "Linux"}}
-        self.job = job
-        self.r = p.src
-
-        # Test data with max_batch_items=2
-        self.cmd_args_list_2 = [(["zfslist1"], ["d1", "d2", "d3", "d4"]), (["zfslist2"], ["d5", "d6", "d7", "d8"])]
-        self.expected_ordered_2 = [
-            (["zfslist1"], ["d1", "d2"]),
-            (["zfslist1"], ["d3", "d4"]),
-            (["zfslist2"], ["d5", "d6"]),
-            (["zfslist2"], ["d7", "d8"]),
-        ]
-
-        # Test data with max_batch_items=3
-        self.cmd_args_list_3 = [(["zfslist1"], ["a1", "a2", "a3", "a4"]), (["zfslist2"], ["b1", "b2", "b3", "b4", "b5"])]
-        self.expected_ordered_3 = [
-            (["zfslist1"], ["a1", "a2", "a3"]),
-            (["zfslist1"], ["a4"]),
-            (["zfslist2"], ["b1", "b2", "b3"]),
-            (["zfslist2"], ["b4", "b5"]),
-        ]
-
-    def tearDown(self) -> None:
-        bzfs.reset_logger()
-
-    def test_ordered_with_max_batch_items_2(self) -> None:
-        results = list(
-            self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_2, dummy_fn_ordered, max_batch_items=2, ordered=True)
-        )
-        self.assertEqual(results, self.expected_ordered_2)
-
-    def test_unordered_with_max_batch_items_2(self) -> None:
-        results = list(
-            self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_2, dummy_fn_unordered, max_batch_items=2, ordered=False)
-        )
-        self.assertEqual(sorted(results), sorted(self.expected_ordered_2))
-
-    def test_ordered_with_max_batch_items_3(self) -> None:
-        results = list(
-            self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_3, dummy_fn_ordered, max_batch_items=3, ordered=True)
-        )
-        self.assertEqual(results, self.expected_ordered_3)
-
-    def test_unordered_with_max_batch_items_3(self) -> None:
-        results = list(
-            self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_3, dummy_fn_unordered, max_batch_items=3, ordered=False)
-        )
-        self.assertEqual(sorted(results), sorted(self.expected_ordered_3))
-
-    def test_exception_propagation_ordered(self) -> None:
-        cmd_args_list = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
-        gen = self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=True)
-        result = next(gen)
-        self.assertEqual(result, (["ok"], ["a1", "a2"]))
-        with self.assertRaises(ValueError) as context:
-            next(gen)
-        self.assertEqual(str(context.exception), "Intentional failure")
-
-    def test_exception_propagation_unordered(self) -> None:
-        cmd_args_list = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
-        gen = self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=False)
-        caught_exception = False
-        results = []
-        try:
-            for r in gen:
-                results.append(r)
-        except ValueError as e:
-            caught_exception = True
-            self.assertEqual(str(e), "Intentional failure")
-        self.assertTrue(caught_exception, "Expected exception was not raised in unordered mode..")
-
-    def test_unordered_thread_scheduling(self) -> None:
-        cmd_args_list = [
-            (["zfslist1"], ["a1"]),
-            (["zfslist2"], ["b1"]),
-            (["zfslist3"], ["c1"]),
-        ]
-        expected_ordered = [
-            (["zfslist1"], ["a1"]),
-            (["zfslist2"], ["b1"]),
-            (["zfslist3"], ["c1"]),
-        ]
-        unordered_results = list(
-            self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_race, max_batch_items=1, ordered=False)
-        )
-        self.assertEqual(sorted(unordered_results), sorted(expected_ordered))
-
-    def test_empty_cmd_args_list_ordered(self) -> None:
-        results = list(self.job.itr_ssh_cmd_parallel(self.r, [], dummy_fn_ordered, max_batch_items=2, ordered=True))
-        self.assertEqual(results, [])
-
-    def test_empty_cmd_args_list_unordered(self) -> None:
-        results = list(self.job.itr_ssh_cmd_parallel(self.r, [], dummy_fn_ordered, max_batch_items=2, ordered=False))
-        self.assertEqual(results, [])
-
-    def test_cmd_with_empty_arguments_ordered(self) -> None:
-        cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
-        expected_ordered = [(["zfslist2"], ["d1", "d2"])]
-        results = list(
-            self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=True)
-        )
-        self.assertEqual(results, expected_ordered)
-
-    def test_cmd_with_empty_arguments_unordered(self) -> None:
-        cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
-        expected_ordered = [(["zfslist2"], ["d1", "d2"])]
-        results = list(
-            self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)
-        )
-        self.assertEqual(results, expected_ordered)
 
 
 #############################################################################

@@ -44,7 +44,7 @@ from bzfs_main.utils import (
     unixtime_infinity_secs,
 )
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from bzfs_main.bzfs import Job, Remote
 
 # constants:

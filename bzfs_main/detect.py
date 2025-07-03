@@ -42,7 +42,7 @@ from bzfs_main.utils import (
     prog_name,
 )
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from bzfs_main.bzfs import Job, Params, Remote
 
 # constants:

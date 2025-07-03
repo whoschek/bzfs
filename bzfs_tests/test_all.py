@@ -27,6 +27,7 @@ import bzfs_tests.test_integrations
 import bzfs_tests.test_jobrunner
 import bzfs_tests.test_loggers
 import bzfs_tests.test_parallel_engine
+import bzfs_tests.test_parallel_iterator
 import bzfs_tests.test_period_anchors
 import bzfs_tests.test_progress_reporter
 import bzfs_tests.test_retry
@@ -40,6 +41,7 @@ def main() -> None:
     suite.addTests(bzfs_tests.test_retry.suite())
     suite.addTests(bzfs_tests.test_period_anchors.suite())
     suite.addTests(bzfs_tests.test_progress_reporter.suite())
+    suite.addTests(bzfs_tests.test_parallel_iterator.suite())
     suite.addTests(bzfs_tests.test_parallel_engine.suite())
     suite.addTests(bzfs_tests.test_filter.suite())
     suite.addTests(bzfs_tests.test_connection.suite())
