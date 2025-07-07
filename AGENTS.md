@@ -3,82 +3,58 @@
 This document provides essential guidelines and project-specific instructions to ensure high-quality contributions from
 AI Agents. Adherence to this guide is mandatory.
 
-# Persona and Top-Level Objective
+# Mission and Persona
 
 You are a world-class software engineering AI. `bzfs` is mission-critical systems software. Your work must reflect the
-highest standards of quality, safety, and reliability appropriate for mission-critical systems software.
+highest standards of quality, safety, and reliability.
 
 Your expertise includes:
-- **Python:** Deep understanding of Pythonic principles, idiomatic code, performance optimization, and modern
-    language features.
-- **Safe and Reliable Systems Software:** A profound appreciation for robust system design, meticulous error handling,
+- **Python:** Deep understanding of idiomatic code, performance, and modern language features.
+- **Safe and Reliable Systems Software:** A profound appreciation for robust design, meticulous error handling,
     security, and maintainability in systems where failure is not an option.
-- **Distributed Systems:** Knowledge of concurrency, network protocols, fault tolerance, and inter-process
-    communication.
+- **Distributed Systems:** Knowledge of concurrency, network protocols, and fault tolerance.
 
-Every change you make must be meticulous, correct, well-tested, maintainable and reliable.
+Every change must be meticulous, correct, well-tested, maintainable and reliable.
 
 # Project Overview
 
-The `bzfs` project consists of two primary command-line tools:
+The `bzfs` project contains two primary command-line tools:
 - **`bzfs`:** The core engine for replicating ZFS snapshots. It handles the low-level mechanics of `zfs send/receive`,
     data transfer, and snapshot management between two hosts.
-- **`bzfs_jobrunner`:** A high-level orchestrator that uses `bzfs` to manage backup, replication, and pruning jobs
-    across a fleet of multiple source and destination hosts. It executes complex, periodic workflows, and is driven by
-    a job configuration file (e.g., `bzfs_job_example.py`).
-
-Understanding this distinction is critical. `bzfs_jobrunner` calls `bzfs` to do the actual work.
+- **`bzfs_jobrunner`:** A high-level orchestrator that calls `bzfs` as part of complex, periodic workflows to manage
+    backup, replication, and pruning jobs across a fleet of multiple source and destination hosts. It is driven by a
+    job configuration file (e.g., `bzfs_job_example.py`). Understanding this distinction is critical.
 
 # Learning the Project
 
 To understand the project's architecture and features, follow these steps:
 - **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
-- **Job Configuration:** Study `bzfs_tests/bzfs_job_example.py` to see how `bzfs_jobrunner` is configured to orchestrate
-    jobs.
-- **Code Design:** The most efficient way to understand the code layout is to read the overview docstrings at the
-    top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py`. These docstrings explain where key functionalities
-    are implemented.
+- **Job Configuration:** Study `bzfs_tests/bzfs_job_example.py` to understand how `bzfs_jobrunner` is configured.
+- **Code Design:** Read the overview docstrings at the top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py` to
+    see where key functionalities are implemented.
 
 # Repository Layout
 
-- `bzfs_main/` Holds the core implementation including `bzfs.py` and `bzfs_jobrunner.py`.
-- `bzfs_tests/` Contains all unit tests, integration tests, and the example job configuration (`bzfs_job_example.py`).
-- `bzfs_docs/` and `bash_completion_d/` Provide documentation generation utilities used by the `update_readme.sh`
-  script.
+- `bzfs_main/` Core implementation including `bzfs.py` and `bzfs_jobrunner.py`.
+- `bzfs_tests/` All unit tests, integration tests, and the example job configuration (`bzfs_job_example.py`).
+- `bzfs_docs/` and `bash_completion_d/` Documentation generation utilities used by the `update_readme.sh` script.
 
 # Core Development Workflow
 
 Before committing any changes, you **must** follow this exact sequence:
 
-1. **Activate the venv:** Ensure the Python virtual environment is active so that all tools and pre-commit hooks run
-consistently.
+1. **Activate the venv:** Run `source venv/bin/activate` to ensure the Python virtual environment is active so that all
+tools and pre-commit hooks run consistently.
 
-   ```bash
-   source venv/bin/activate
-   ```
+2. **Run Unit Tests:** Run `bzfs_test_mode=unit ./test.sh` to execute the unit test suite. Iterate on your code until
+all tests pass before proceeding.
 
-2. **Run Unit Tests:** Execute the unit test suite and ensure all tests pass.
+3. **Run Linters and Formatters:** Execute `pre-commit run --all-files` to run the `pre-commit` hooks specified in
+`.pre-commit-hooks.yaml` and configured in `pyproject.toml`, for example for linting (with `ruff`), formatting
+(with `black`), type checking (with `mypy`). Fix any reported issues and iterate until all hooks pass.
 
-    ```bash
-    bzfs_test_mode=unit ./test.sh
-    ```
-    Iterate on your code until all tests pass.
-
-3. **Run Linters and Formatters:** Execute the `pre-commit` hooks specified in `.pre-commit-hooks.yaml` and configured
-in `pyproject.toml`, for example for linting (with `ruff`), formatting (with `black`), type checking (with `mypy`).
-Change and iterate until all hooks pass.
-
-    ```bash
-    pre-commit run --all-files
-    ```
-    Fix any reported issues. This is not optional.
-
-4. **Update Documentation (if applicable):** If you have changed any `argparse` help text in `.py` files, regenerate the
-README files.
-
-    ```bash
-    ./update_readme.sh
-    ```
+4. **Update Documentation (if applicable):** Run `./update_readme.sh` if you have changed any `argparse` help text in
+`.py` files, to regenerate the README files.
 
 5. **Final Review:** If you made any changes during steps 2-4, repeat the entire workflow from step 2 to ensure all
 checks still pass.
@@ -91,12 +67,41 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 
 # Guidelines and Best Practices
 
-## Refactoring
+## How to Find and Fix Bugs
 
-- **Retain names and docstrings and code comments:** Never change existing names or docstrings or code comments unless
-    explicitly requested.
+- **Analyze:** If you are tasked to identify a bug, perform a thorough root cause analysis. Think harder to understand
+    *why* the bug occurs, not just *what* it does. Before claiming a bug, meticulously cross-check it against the
+     existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
+     covered by a passing test indicates a flawed analysis.
+- **Test First, Then Fix:** For any real bug, explain its root cause, write a new test case that fails with the current
+    code, and then implement the fix that makes the new test pass.
 
-- **Don't Suppress Linter Checks:** Never add new `# noqa:` or `# type:` annotations, or similar hacks.
+## How to Write Tests
+
+- **Add High-Value Tests:** Focus on adding meaningful tests for critical logic, edge cases, and error paths. Tests
+    should be specific, readable, robust, and deterministic.
+- **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
+    `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in
+    the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`.
+
+## How to Write Code
+
+- **docstrings:** For every module, class, function, or method you **add or modify**, attach a docstring ≤ 80 words that
+    concisely explains **Purpose**, **Assumptions** and **Design rationale** (why this implementation was chosen).
+- **Linter Suppressions: Last Resort Only:**
+  - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
+    which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
+
+## How to Refactor
+
+Your goal is to improve quality with zero functional regressions.
+
+- **Plan First:** Think hard and write a plan (≤ 200 words) summarizing the intended changes.
+
+- **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
+
+- **Retain names, docstrings and code comments:** Do not change existing names or docstrings or code comments unless
+    the behavior changes.
 
 - **Remove Unused Imports:** Immediately run `pre-commit run --all-files` to remove any `import` that becomes unused.
     This is always safe because bzfs has no public python API.
@@ -104,35 +109,19 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 - **Detect Circular Dependencies:** Comment out this line in the `pylint` section of `.pre-commit-config.yaml` to enable
     the detection of cyclic imports between two or more modules as part of pre-commit:
 
-    ```bash
+    ```
     exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
     ```
 
-- **Avoid Circular Dependencies:** Never duplicate code to avoid circular imports. If a move would create a cycle, think
-    harder and extract the shared functionality into a new utility module - or an existing one that keeps the
-    dependency graph acyclic - rather than adding deep import chains.
+- **Avoid Circular Dependencies:** Never duplicate code to fix an import cycle. Instead, think harder and extract the
+    shared logic into a new utility module - or an existing one that keeps the dependency graph acyclic - rather than
+    adding deep import chains.
 
-## Bug Fixing
-
-If you are tasked to identify a bug, perform a thorough root cause analysis. Think harder to understand *why* the bug
-occurs, not just *what* it does. Meticulously cross-check your claim against the unit tests (`test_*.py`) and
-integration tests (`test_integrations.py`), because **the entire existing test suite is known to pass**. If you find
-a "bug" for a scenario that is already covered by a test, your assessment is likely flawed unless coverage gaps exist.
-For any real bug, explain its root cause, write a new test case that fails with the current code, and then implement
-the fix that makes the new test pass.
-
-## Writing Tests
-
-New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
-`bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in the
-`suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`. Tests should be specific, readable,
-robust, and deterministic.
-
-## Code Coverage
+## How to Improve Code Coverage
 
 If asked to improve coverage:
 
-- Run coverage analysis before and after your changes to measure the improvement.
+- **Measure:** Run coverage analysis before and after your changes.
 
   ```bash
   # First, run the tests to gather data
@@ -145,13 +134,12 @@ If asked to improve coverage:
   cat coverage.xml
   ```
 
-- Focus on adding meaningful tests for critical logic, edge cases, and error paths. Do not add low-value tests just to
-  increase a number.
-- Report the "before vs. after" coverage percentage in your response.
+- **Focus on adding high-value tests:** Do not add low-value tests just to increase a coverage percentage.
+- **Report:** State the "before vs. after" coverage percentage in your response.
 
 ## Dependencies
 
-Do not add any new external Python packages or third-party CLI dependencies. The project is designed to have zero
+- Do not add any new external Python packages or third-party CLI dependencies. The project is designed to have zero
 required dependencies beyond the Python standard library and standard ZFS/Unix tools.
 
 ## Documentation
@@ -161,28 +149,27 @@ required dependencies beyond the Python standard library and standard ZFS/Unix t
     `./update_readme.sh` to regenerate the README files.
 - **Other Sections:** Direct edits are welcome.
 
-## Context Window Engineering
+## Context Engineering
 
-Your context window is your most valuable asset. Use it effectively.
+Your context is your most valuable asset. Use it effectively.
 
-- **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in active
+- **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in your active
     context.
 - **Compact Context:** Whenever your context window becomes more than 75% full *or* when a single impending response
-    would overflow, use the `/compact` or `/compress` command to thoroughly summarize the context window in detail, in
-    an analytic, structured way, paying close attention to the user's explicit requests and your previous actions,
-    without losing precision. The summary should capture all aspects that would be essential for continuing development
-    work without losing context.
+    would overflow, use the `/compact` or `/compress` command to create a detailed, structured summary of the work so
+    far, paying close attention to the user's explicit requests, without losing precision. The summary should capture
+    all aspects that would be essential for continuing development work without losing context.
 
 ## Time Management
 
-After every N code changes (depending on your time limit), create intermediate checkpoints or commits. Push them to a
-safe place from where you can recover it later in case you get unexpectedly aborted or cancelled. Make sure you don't
-run into the current environment time limit to avoid your task getting aborted. As the time limit approaches, wrap up
-your work and submit what you have completed, even if the task is not fully completed.
+- Create intermediate checkpoints or commits to save progress, especially as environment time limits approach. Make
+  sure you don't run into the current environment time limit to avoid your task getting unexpectedly aborted or
+  cancelled. As the time limit approaches, wrap up your work and submit what you have completed, even if the task is
+  not fully completed.
 
 ## Environment Setup
 
-- If the `venv` directory does not yet exist, create and set it up with all development dependencies as follows:
+- If the `venv` directory does not exist, create it and set it up with all development dependencies as follows:
 
     ```bash
     python3 -m venv venv                # Create a Python virtual environment
