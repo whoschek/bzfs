@@ -5019,34 +5019,6 @@ def xappend(lst: list[TAPPEND], *items: TAPPEND | Iterable[TAPPEND]) -> list[TAP
     return lst
 
 
-def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
-    unit_milliseconds = {
-        "milliseconds": 1,
-        "millis": 1,
-        "seconds": 1000,
-        "secs": 1000,
-        "minutes": 60 * 1000,
-        "mins": 60 * 1000,
-        "hours": 60 * 60 * 1000,
-        "days": 86400 * 1000,
-        "weeks": 7 * 86400 * 1000,
-        "months": round(30.5 * 86400 * 1000),
-        "years": 365 * 86400 * 1000,
-    }
-    match = re.fullmatch(
-        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
-    )
-    if not match:
-        if context:
-            die(f"Invalid duration format: {duration} within {context}")
-        else:
-            raise ValueError(f"Invalid duration format: {duration}")
-    assert match
-    quantity = int(match.group(1))
-    unit = match.group(2)
-    return quantity * unit_milliseconds[unit]
-
-
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
     rel_path = os.path.relpath(src, start=dst_dir)
     os.symlink(src=rel_path, dst=os.path.join(dst_dir, dst))
@@ -5102,6 +5074,34 @@ def nsuffix(s: str) -> str:
 
 def format_dict(dictionary: dict[Any, Any]) -> str:
     return f'"{dictionary}"'
+
+
+def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
+    unit_milliseconds = {
+        "milliseconds": 1,
+        "millis": 1,
+        "seconds": 1000,
+        "secs": 1000,
+        "minutes": 60 * 1000,
+        "mins": 60 * 1000,
+        "hours": 60 * 60 * 1000,
+        "days": 86400 * 1000,
+        "weeks": 7 * 86400 * 1000,
+        "months": round(30.5 * 86400 * 1000),
+        "years": 365 * 86400 * 1000,
+    }
+    match = re.fullmatch(
+        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
+    )
+    if not match:
+        if context:
+            die(f"Invalid duration format: {duration} within {context}")
+        else:
+            raise ValueError(f"Invalid duration format: {duration}")
+    assert match
+    quantity = int(match.group(1))
+    unit = match.group(2)
+    return quantity * unit_milliseconds[unit]
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
