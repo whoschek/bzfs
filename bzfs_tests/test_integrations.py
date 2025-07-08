@@ -674,6 +674,9 @@ class SmokeTestCase(IntegrationTestCase):
     def test_xbasic_replication_flat_with_bookmarks1(self) -> None:
         LocalTestCase(param=self.param).test_xbasic_replication_flat_with_bookmarks1()
 
+    def test_compare_snapshot_lists(self) -> None:
+        LocalTestCase(param=self.param).test_compare_snapshot_lists()
+
 
 #############################################################################
 class AdhocTestCase(IntegrationTestCase):
@@ -3744,6 +3747,10 @@ class LocalTestCase(IntegrationTestCase):
                         self.assertEqual(3 if "src" in cmp else 0, n_src)
                         self.assertEqual(0, n_dst)
                         self.assertEqual(0, n_all)
+                        if self.is_smoke_test:
+                            break
+                    if self.is_smoke_test:
+                        continue
 
                     job = self.run_bzfs(src_root_dataset, dst_root_dataset, "--compare-snapshot-lists")
                     n_src, n_dst, n_all = stats(job)
