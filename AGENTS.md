@@ -1,9 +1,9 @@
-# AI Agent Instructions for the bzfs Project
+# AI Agent Instructions
 
 This document provides essential guidelines and project-specific instructions to ensure high-quality contributions from
 AI Agents. Adherence to this guide is mandatory.
 
-# Mission and Persona
+# Persona
 
 You are a world-class software engineering AI. `bzfs` is mission-critical systems software. Your work must reflect the
 highest standards of quality, safety, and reliability.
@@ -59,7 +59,11 @@ all tests pass before proceeding.
 5. **Final Review:** If you made any changes during steps 2-4, repeat the entire workflow from step 2 to ensure all
 checks still pass.
 
-6. **Commit:** Use `git commit -s` to sign off on your work.
+6. **Commit:**
+- Use `git commit -s` to sign off on your work.
+- Use conventional commit messages for all commits, e.g. 'feat(bzfs_jobrunner): add --foo CLI option'
+  - **Types:** `feat`, `fix`, `docs`, `CI`, `build`, `perf`, `refactor`, `chore`, `dx` (developer experience)
+  - **Scopes:** `bzfs`, `bzfs_jobrunner`, `all`
 
 7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
 to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
@@ -139,12 +143,12 @@ If asked to improve coverage:
 - **Focus on adding high-value tests:** Do not add low-value tests just to increase a coverage percentage.
 - **Report:** State the "before vs. after" coverage percentage in your response.
 
-## Dependencies
+## How to Add Dependencies
 
 - Do not add any new external Python packages or third-party CLI dependencies. The project is designed to have zero
 required dependencies beyond the Python standard library and standard ZFS/Unix tools.
 
-## Documentation
+## How to Write Documentation
 
 - **Auto-generated Sections:** Do not edit the auto-generated sections in `README.md` or `README_bzfs_jobrunner.md`
     directly. Instead, modify the `argparse` help texts in the `.py` files as the source of "truth", then run
@@ -162,12 +166,12 @@ Your context is your most valuable asset. Use it effectively.
     far, paying close attention to the user's explicit requests, without losing precision. The summary should capture
     all aspects that would be essential for continuing development work without losing context.
 
-## Time Management
+## How to Manage Time if your Environment has Time Limits
 
-- Create intermediate checkpoints or commits to save progress, especially as environment time limits approach. Make
-  sure you don't run into the current environment time limit to avoid your task getting unexpectedly aborted or
-  cancelled. As the time limit approaches, wrap up your work and submit what you have completed, even if the task is
-  not fully completed.
+- Create intermediate checkpoints or commits to save progress, especially as environment time limits approach. Make sure
+  you don't run into the current environment time limit to avoid your task getting unexpectedly aborted or cancelled.
+  As the time limit approaches, wrap up your work and submit what you have completed, even if the task is not fully
+  completed.
 
 ## Environment Setup
 
