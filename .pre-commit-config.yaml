@@ -5,7 +5,7 @@
 #   1. Install the helper tool:
 #        pip install pre-commit
 #   2. From the project root directory run:
-#        pre-commit install
+#        pre-commit install --install-hooks
 #      This writes an executable hook into .git/hooks/pre-commit that will
 #      run the checks defined below every time you commit.
 #   3. After updating this YAML file, run the same command again so the hook picks
@@ -20,6 +20,10 @@
 # ---------------------------------------------------------------------------
 fail_fast: true  # abort on first failing hook
 repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.27.2
+    hooks:  # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
+      - id: gitleaks  # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
