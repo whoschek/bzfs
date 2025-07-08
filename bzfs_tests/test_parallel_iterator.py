@@ -105,34 +105,34 @@ class TestParallelIterator(AbstractTestCase):
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_2, dummy_fn_ordered, max_batch_items=2, ordered=True)
         )
-        self.assertEqual(results, self.expected_ordered_2)
+        self.assertEqual(self.expected_ordered_2, results)
 
     def test_unordered_with_max_batch_items_2(self) -> None:
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_2, dummy_fn_unordered, max_batch_items=2, ordered=False)
         )
-        self.assertEqual(sorted(results), sorted(self.expected_ordered_2))
+        self.assertEqual(sorted(self.expected_ordered_2), sorted(results))
 
     def test_ordered_with_max_batch_items_3(self) -> None:
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_3, dummy_fn_ordered, max_batch_items=3, ordered=True)
         )
-        self.assertEqual(results, self.expected_ordered_3)
+        self.assertEqual(self.expected_ordered_3, results)
 
     def test_unordered_with_max_batch_items_3(self) -> None:
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, self.cmd_args_list_3, dummy_fn_unordered, max_batch_items=3, ordered=False)
         )
-        self.assertEqual(sorted(results), sorted(self.expected_ordered_3))
+        self.assertEqual(sorted(self.expected_ordered_3), sorted(results))
 
     def test_exception_propagation_ordered(self) -> None:
         cmd_args_list = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
         gen = self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_raise, max_batch_items=2, ordered=True)
         result = next(gen)
-        self.assertEqual(result, (["ok"], ["a1", "a2"]))
+        self.assertEqual((["ok"], ["a1", "a2"]), result)
         with self.assertRaises(ValueError) as context:
             next(gen)
-        self.assertEqual(str(context.exception), "Intentional failure")
+        self.assertEqual("Intentional failure", str(context.exception))
 
     def test_exception_propagation_unordered(self) -> None:
         cmd_args_list = [(["ok"], ["a1", "a2"]), (["fail"], ["b1", "b2"])]
@@ -144,7 +144,7 @@ class TestParallelIterator(AbstractTestCase):
                 results.append(r)
         except ValueError as e:
             caught_exception = True
-            self.assertEqual(str(e), "Intentional failure")
+            self.assertEqual("Intentional failure", str(e))
         self.assertTrue(caught_exception, "Expected exception was not raised in unordered mode..")
 
     def test_unordered_thread_scheduling(self) -> None:
@@ -161,15 +161,15 @@ class TestParallelIterator(AbstractTestCase):
         unordered_results = list(
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_race, max_batch_items=1, ordered=False)
         )
-        self.assertEqual(sorted(unordered_results), sorted(expected_ordered))
+        self.assertEqual(sorted(expected_ordered), sorted(unordered_results))
 
     def test_empty_cmd_args_list_ordered(self) -> None:
         results = list(self.job.itr_ssh_cmd_parallel(self.r, [], dummy_fn_ordered, max_batch_items=2, ordered=True))
-        self.assertEqual(results, [])
+        self.assertEqual([], results)
 
     def test_empty_cmd_args_list_unordered(self) -> None:
         results = list(self.job.itr_ssh_cmd_parallel(self.r, [], dummy_fn_ordered, max_batch_items=2, ordered=False))
-        self.assertEqual(results, [])
+        self.assertEqual([], results)
 
     def test_cmd_with_empty_arguments_ordered(self) -> None:
         cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
@@ -177,7 +177,7 @@ class TestParallelIterator(AbstractTestCase):
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=True)
         )
-        self.assertEqual(results, expected_ordered)
+        self.assertEqual(expected_ordered, results)
 
     def test_cmd_with_empty_arguments_unordered(self) -> None:
         cmd_args_list = [(["zfslist1"], []), (["zfslist2"], ["d1", "d2"])]
@@ -185,4 +185,4 @@ class TestParallelIterator(AbstractTestCase):
         results = list(
             self.job.itr_ssh_cmd_parallel(self.r, cmd_args_list, dummy_fn_ordered, max_batch_items=2, ordered=False)
         )
-        self.assertEqual(results, expected_ordered)
+        self.assertEqual(expected_ordered, results)

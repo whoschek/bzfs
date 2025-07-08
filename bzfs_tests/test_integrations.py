@@ -1653,13 +1653,13 @@ class LocalTestCase(IntegrationTestCase):
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
                     compression_prop = dataset_property(dst_root_dataset + "/foo", "compression")
-                    self.assertEqual(compression_prop, "on")
+                    self.assertEqual("on", compression_prop)
                     encryption_prop = dataset_property(dst_root_dataset, "encryption")
-                    self.assertEqual(encryption_prop, "off")
+                    self.assertEqual("off", encryption_prop)
                     encryption_prop = dataset_property(dst_root_dataset + "/foo", "encryption")
-                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else "off")
+                    self.assertEqual(encryption_algo if self.is_encryption_mode() else "off", encryption_prop)
                     encryption_prop = dataset_property(dst_root_dataset + "/foo/a", "encryption")
-                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else "off")
+                    self.assertEqual(encryption_algo if self.is_encryption_mode() else "off", encryption_prop)
 
     def test_basic_replication_recursive_parallel(self) -> None:
         self.assertTrue(dataset_exists(dst_root_dataset))
@@ -2086,7 +2086,7 @@ class LocalTestCase(IntegrationTestCase):
     def test_basic_replication_with_no_datasets_2(self) -> None:
         with self.assertRaises(SystemExit) as e:
             bzfs.main()
-        self.assertEqual(e.exception.code, 2)
+        self.assertEqual(2, e.exception.code)
 
     def test_basic_replication_dataset_with_spaces(self) -> None:
         d1 = " foo  zoo  "
@@ -2206,13 +2206,13 @@ class LocalTestCase(IntegrationTestCase):
                     self.assertFalse(dataset_exists(dst_root_dataset + "/foo/b"))  # b/c src has no snapshots
 
                     compression_prop = dataset_property(dst_root_dataset + "/foo", "compression")
-                    self.assertEqual(compression_prop, "on")
+                    self.assertEqual("on", compression_prop)
                     encryption_prop = dataset_property(dst_root_dataset, "encryption")
-                    self.assertEqual(encryption_prop, "off")
+                    self.assertEqual("off", encryption_prop)
                     encryption_prop = dataset_property(dst_root_dataset + "/foo", "encryption")
-                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else "off")
+                    self.assertEqual(encryption_algo if self.is_encryption_mode() else "off", encryption_prop)
                     encryption_prop = dataset_property(dst_root_dataset + "/foo/a", "encryption")
-                    self.assertEqual(encryption_prop, encryption_algo if self.is_encryption_mode() else "off")
+                    self.assertEqual(encryption_algo if self.is_encryption_mode() else "off", encryption_prop)
 
     def test_basic_replication_flat_send_recv_flags(self) -> None:
         if self.is_no_privilege_elevation():

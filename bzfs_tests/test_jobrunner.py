@@ -530,9 +530,9 @@ class TestSkipDatasetsWithNonExistingDstPool(AbstractTestCase):
         # zfs list should be called for both local1 and local2
         expected_cmd_parts = "zfs list -t filesystem,volume -Hp -o name".split(" ")
         # Order of pools in the command might vary, so check args more flexibly
-        self.assertEqual(mock_run.call_count, 1)
+        self.assertEqual(1, mock_run.call_count)
         called_cmd = mock_run.call_args[0][0]
-        self.assertEqual(called_cmd[: len(expected_cmd_parts)], expected_cmd_parts)
+        self.assertEqual(expected_cmd_parts, called_cmd[: len(expected_cmd_parts)])
         self.assertCountEqual(sorted(["local1", "local2"]), sorted(called_cmd[len(expected_cmd_parts) :]))
 
         self.log_mock.warning.assert_called_once_with(

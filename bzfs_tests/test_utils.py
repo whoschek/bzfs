@@ -174,12 +174,12 @@ class TestCut(AbstractTestCase):
     def test_cut_field1(self) -> None:
         lines = ["a\tb\tc", "d\te\tf"]
         expected = ["a", "d"]
-        self.assertEqual(cut(field=1, lines=lines), expected)
+        self.assertEqual(expected, cut(field=1, lines=lines))
 
     def test_cut_field2(self) -> None:
         lines = ["a\tb\tc", "d\te\tf"]
         expected = ["b\tc", "e\tf"]
-        self.assertEqual(cut(field=2, lines=lines), expected)
+        self.assertEqual(expected, cut(field=2, lines=lines))
 
     def test_cut_invalid_field(self) -> None:
         lines = ["a\tb\tc"]
@@ -187,12 +187,12 @@ class TestCut(AbstractTestCase):
             cut(field=3, lines=lines)
 
     def test_cut_empty_lines(self) -> None:
-        self.assertEqual(cut(field=1, lines=[]), [])
+        self.assertEqual([], cut(field=1, lines=[]))
 
     def test_cut_different_separator(self) -> None:
         lines = ["a,b,c", "d,e,f"]
         expected = ["a", "d"]
-        self.assertEqual(cut(field=1, separator=",", lines=lines), expected)
+        self.assertEqual(expected, cut(field=1, separator=",", lines=lines))
 
 
 #############################################################################
@@ -228,19 +228,19 @@ class TestSortedDict(AbstractTestCase):
 
     def test_sorted_dict_empty_dictionary_returns_empty(self) -> None:
         result: dict[str, int] = sorted_dict({})
-        self.assertEqual(result, {})
+        self.assertEqual({}, result)
 
     def test_sorted_dict_single_key_value_pair_is_sorted_correctly(self) -> None:
         result: dict[str, int] = sorted_dict({"a": 1})
-        self.assertEqual(result, {"a": 1})
+        self.assertEqual({"a": 1}, result)
 
     def test_sorted_dict_multiple_key_value_pairs_are_sorted_by_keys(self) -> None:
         result: dict[str, int] = sorted_dict({"b": 2, "a": 1, "c": 3})
-        self.assertEqual(result, {"a": 1, "b": 2, "c": 3})
+        self.assertEqual({"a": 1, "b": 2, "c": 3}, result)
 
     def test_sorted_dict_with_numeric_keys_is_sorted_correctly(self) -> None:
         result: dict[int, str] = sorted_dict({3: "three", 1: "one", 2: "two"})
-        self.assertEqual(result, {1: "one", 2: "two", 3: "three"})
+        self.assertEqual({1: "one", 2: "two", 3: "three"}, result)
 
     def test_sorted_dict_with_mixed_key_types_raises_error(self) -> None:
         with self.assertRaises(TypeError):
@@ -279,8 +279,8 @@ class TestGetHomeDirectory(AbstractTestCase):
 class TestHumanReadable(AbstractTestCase):
 
     def assert_human_readable_float(self, actual: float, expected: str) -> None:
-        self.assertEqual(human_readable_float(actual), expected)
-        self.assertEqual(human_readable_float(-actual), "-" + expected)
+        self.assertEqual(expected, human_readable_float(actual))
+        self.assertEqual("-" + expected, human_readable_float(-actual))
 
     def test_human_readable_float_with_one_digit_before_decimal(self) -> None:
         self.assert_human_readable_float(3.14159, "3.14")
@@ -308,10 +308,10 @@ class TestHumanReadable(AbstractTestCase):
         self.assert_human_readable_float(999.99, "1000")
 
     def test_human_readable_float_with_zero(self) -> None:
-        self.assertEqual(human_readable_float(0.0), "0")
-        self.assertEqual(human_readable_float(-0.0), "0")
-        self.assertEqual(human_readable_float(0.001), "0")
-        self.assertEqual(human_readable_float(-0.001), "0")
+        self.assertEqual("0", human_readable_float(0.0))
+        self.assertEqual("0", human_readable_float(-0.0))
+        self.assertEqual("0", human_readable_float(0.001))
+        self.assertEqual("0", human_readable_float(-0.001))
 
     def test_human_readable_float_with_halfway_rounding_behavior(self) -> None:
         # For |n| < 10 => 2 decimals
@@ -420,26 +420,26 @@ class TestOpenNoFollow(AbstractTestCase):
     def test_read_text(self) -> None:
         with open_nofollow(self.real_path, "r", encoding="utf-8") as f:
             data = f.read()
-        self.assertEqual(data, "hello")
+        self.assertEqual("hello", data)
 
     def test_read_binary(self) -> None:
         with open(self.real_path, "rb") as f:
             raw = f.read()
         with open_nofollow(self.real_path, "rb") as f:
             data = f.read()
-        self.assertEqual(data, raw)
+        self.assertEqual(raw, data)
 
     def test_write_truncate(self) -> None:
         with open_nofollow(self.real_path, "w", encoding="utf-8") as f:
             f.write("world")
         with open(self.real_path, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read(), "world")
+            self.assertEqual("world", f.read())
 
     def test_append(self) -> None:
         with open_nofollow(self.real_path, "a", encoding="utf-8") as f:
             f.write(" world")
         with open(self.real_path, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read(), "hello world")
+            self.assertEqual("hello world", f.read())
 
     def test_exclusive_create(self) -> None:
         new_path = os.path.join(self.tmpdir, "new.txt")
@@ -453,11 +453,11 @@ class TestOpenNoFollow(AbstractTestCase):
     def test_plus_mode(self) -> None:
         with open_nofollow(self.real_path, "r+") as f:
             content = f.read()
-            self.assertEqual(content, "hello")
+            self.assertEqual("hello", content)
             f.seek(0)
             f.write("HELLO")
         with open(self.real_path, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read(), "HELLO")
+            self.assertEqual("HELLO", f.read())
 
     def test_symlink_blocked(self) -> None:
         with self.assertRaises(OSError) as cm:
@@ -476,7 +476,7 @@ class TestOpenNoFollow(AbstractTestCase):
             new_path = os.path.join(self.tmpdir, "perm.txt")
             open_nofollow(new_path, "w", perm=0o600).close()
             mode = stat.S_IMODE(os.stat(new_path).st_mode)
-            self.assertEqual(mode, 0o600)
+            self.assertEqual(0o600, mode)
         finally:
             os.umask(old_umask)
 
@@ -501,7 +501,7 @@ class TestOpenNoFollow(AbstractTestCase):
         """check_owner=False should skip ownership verification"""
         with mock.patch("os.fstat", side_effect=AssertionError("should not call")) as m_fstat:
             with open_nofollow(self.real_path, "r", check_owner=False, encoding="utf-8") as f:
-                self.assertEqual(f.read(), "hello")
+                self.assertEqual("hello", f.read())
         m_fstat.assert_not_called()
 
     def test_owner_mismatch_raises_and_closes_fd(self) -> None:
@@ -663,50 +663,53 @@ class TestReplaceCapturingGroups(AbstractTestCase):
         return replace_capturing_groups_with_non_capturing_groups(regex)
 
     def test_basic_case(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(abc)"), "(?:abc)")
+        self.assertEqual("(?:abc)", self.replace_capturing_group("(abc)"))
 
     def test_nested_groups(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(a(bc)d)"), "(?:a(?:bc)d)")
+        self.assertEqual("(?:a(?:bc)d)", self.replace_capturing_group("(a(bc)d)"))
 
     def test_preceding_backslash(self) -> None:
-        self.assertEqual(self.replace_capturing_group("\\(abc)"), "\\(abc)")
+        self.assertEqual("\\(abc)", self.replace_capturing_group("\\(abc)"))
 
     def test_group_starting_with_question_mark(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(?abc)"), "(?abc)")
+        self.assertEqual("(?abc)", self.replace_capturing_group("(?abc)"))
 
     def test_multiple_groups(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(abc)(def)"), "(?:abc)(?:def)")
+        self.assertEqual("(?:abc)(?:def)", self.replace_capturing_group("(abc)(def)"))
 
     def test_mixed_cases(self) -> None:
-        self.assertEqual(self.replace_capturing_group("a(bc\\(de)f(gh)?i"), "a(?:bc\\(de)f(?:gh)?i")
+        self.assertEqual(
+            "a(?:bc\\(de)f(?:gh)?i",
+            self.replace_capturing_group("a(bc\\(de)f(gh)?i"),
+        )
 
     def test_empty_group(self) -> None:
-        self.assertEqual(self.replace_capturing_group("()"), "(?:)")
+        self.assertEqual("(?:)", self.replace_capturing_group("()"))
 
     def test_group_with_named_group(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(?P<name>abc)"), "(?P<name>abc)")
+        self.assertEqual("(?P<name>abc)", self.replace_capturing_group("(?P<name>abc)"))
 
     def test_group_with_non_capturing_group(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(a(?:bc)d)"), "(?:a(?:bc)d)")
+        self.assertEqual("(?:a(?:bc)d)", self.replace_capturing_group("(a(?:bc)d)"))
 
     def test_group_with_lookahead(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(abc)(?=def)"), "(?:abc)(?=def)")
+        self.assertEqual("(?:abc)(?=def)", self.replace_capturing_group("(abc)(?=def)"))
 
     def test_group_with_lookbehind(self) -> None:
-        self.assertEqual(self.replace_capturing_group("(?<=abc)(def)"), "(?<=abc)(?:def)")
+        self.assertEqual("(?<=abc)(?:def)", self.replace_capturing_group("(?<=abc)(def)"))
 
     def test_escaped_characters(self) -> None:
         pattern = re.escape("(abc)")
-        self.assertEqual(self.replace_capturing_group(pattern), pattern)
+        self.assertEqual(pattern, self.replace_capturing_group(pattern))
 
     def test_complex_pattern_with_escape(self) -> None:
         complex_pattern = re.escape("(a[b]c{d}e|f.g)")
-        self.assertEqual(self.replace_capturing_group(complex_pattern), complex_pattern)
+        self.assertEqual(complex_pattern, self.replace_capturing_group(complex_pattern))
 
     def test_complex_pattern(self) -> None:
         complex_pattern = "(a[b]c{d}e|f.g)(h(i|j)k)?(\\(l\\))"
         expected_result = "(?:a[b]c{d}e|f.g)(?:h(?:i|j)k)?(?:\\(l\\))"
-        self.assertEqual(self.replace_capturing_group(complex_pattern), expected_result)
+        self.assertEqual(expected_result, self.replace_capturing_group(complex_pattern))
 
 
 #############################################################################
@@ -833,15 +836,15 @@ class TestSmallPriorityQueue(AbstractTestCase):
         self.assertTrue(1 in self.pq)
         self.assertFalse(0 in self.pq)
         self.pq.clear()
-        self.assertEqual(len(self.pq), 0)
+        self.assertEqual(0, len(self.pq))
 
     def test_push_and_pop(self) -> None:
         self.pq.push(3)
         self.pq.push(1)
         self.pq.push(2)
-        self.assertEqual(self.pq._lst, [1, 2, 3])
-        self.assertEqual(self.pq.pop(), 1)
-        self.assertEqual(self.pq._lst, [2, 3])
+        self.assertEqual([1, 2, 3], self.pq._lst)
+        self.assertEqual(1, self.pq.pop())
+        self.assertEqual([2, 3], self.pq._lst)
 
     def test_pop_empty(self) -> None:
         with self.assertRaises(IndexError):  # Generic IndexError from list.pop()
@@ -852,10 +855,10 @@ class TestSmallPriorityQueue(AbstractTestCase):
         self.pq.push(1)
         self.pq.push(2)
         self.pq.remove(2)
-        self.assertEqual(self.pq._lst, [1, 3])
+        self.assertEqual([1, 3], self.pq._lst)
         self.assertFalse(self.pq.remove(0))
         self.assertTrue(self.pq.remove(1))
-        self.assertEqual(self.pq._lst, [3])
+        self.assertEqual([3], self.pq._lst)
 
     def test_remove_nonexistent_element(self) -> None:
         self.pq.push(1)
@@ -869,13 +872,13 @@ class TestSmallPriorityQueue(AbstractTestCase):
         self.pq.push(3)
         self.pq.push(1)
         self.pq.push(2)
-        self.assertEqual(self.pq.peek(), 1)
-        self.assertEqual(self.pq._lst, [1, 2, 3])
+        self.assertEqual(1, self.pq.peek())
+        self.assertEqual([1, 2, 3], self.pq._lst)
         self.pq_reverse.push(3)
         self.pq_reverse.push(1)
         self.pq_reverse.push(2)
-        self.assertEqual(self.pq_reverse.peek(), 3)
-        self.assertEqual(self.pq_reverse._lst, [1, 2, 3])
+        self.assertEqual(3, self.pq_reverse.peek())
+        self.assertEqual([1, 2, 3], self.pq_reverse._lst)
 
     def test_peek_empty(self) -> None:
         with self.assertRaises(IndexError):  # Generic IndexError from list indexing
@@ -888,8 +891,8 @@ class TestSmallPriorityQueue(AbstractTestCase):
         self.pq_reverse.push(1)
         self.pq_reverse.push(3)
         self.pq_reverse.push(2)
-        self.assertEqual(self.pq_reverse.pop(), 3)
-        self.assertEqual(self.pq_reverse._lst, [1, 2])
+        self.assertEqual(3, self.pq_reverse.pop())
+        self.assertEqual([1, 2], self.pq_reverse._lst)
 
     def test_iter(self) -> None:
         self.pq.push(3)
@@ -907,41 +910,41 @@ class TestSmallPriorityQueue(AbstractTestCase):
         self.pq.push(2)
         self.pq.push(2)
         self.pq.push(1)
-        self.assertEqual(self.pq._lst, [1, 2, 2])
+        self.assertEqual([1, 2, 2], self.pq._lst)
 
         # Pop should remove the smallest duplicate first
-        self.assertEqual(self.pq.pop(), 1)
-        self.assertEqual(self.pq._lst, [2, 2])
+        self.assertEqual(1, self.pq.pop())
+        self.assertEqual([2, 2], self.pq._lst)
 
         # Remove one duplicate, leaving another
         self.pq.remove(2)
-        self.assertEqual(self.pq._lst, [2])
+        self.assertEqual([2], self.pq._lst)
 
         # Peek and pop should now work on the remaining duplicate
-        self.assertEqual(self.pq.peek(), 2)
-        self.assertEqual(self.pq.pop(), 2)
-        self.assertEqual(len(self.pq), 0)
+        self.assertEqual(2, self.pq.peek())
+        self.assertEqual(2, self.pq.pop())
+        self.assertEqual(0, len(self.pq))
 
     def test_reverse_with_duplicates(self) -> None:
         self.pq_reverse.push(2)
         self.pq_reverse.push(2)
         self.pq_reverse.push(3)
         self.pq_reverse.push(1)
-        self.assertEqual(self.pq_reverse._lst, [1, 2, 2, 3])
+        self.assertEqual([1, 2, 2, 3], self.pq_reverse._lst)
 
         # Pop the largest first in reverse order
-        self.assertEqual(self.pq_reverse.pop(), 3)
-        self.assertEqual(self.pq_reverse._lst, [1, 2, 2])
+        self.assertEqual(3, self.pq_reverse.pop())
+        self.assertEqual([1, 2, 2], self.pq_reverse._lst)
 
         # Remove a duplicate
         self.pq_reverse.remove(2)
-        self.assertEqual(self.pq_reverse._lst, [1, 2])
+        self.assertEqual([1, 2], self.pq_reverse._lst)
 
         # Peek and pop the remaining elements
-        self.assertEqual(self.pq_reverse.peek(), 2)
-        self.assertEqual(self.pq_reverse.pop(), 2)
-        self.assertEqual(self.pq_reverse.pop(), 1)
-        self.assertEqual(len(self.pq_reverse), 0)
+        self.assertEqual(2, self.pq_reverse.peek())
+        self.assertEqual(2, self.pq_reverse.pop())
+        self.assertEqual(1, self.pq_reverse.pop())
+        self.assertEqual(0, len(self.pq_reverse))
 
 
 #############################################################################
@@ -992,12 +995,12 @@ class TestSynchronizedBool(AbstractTestCase):
 
     def test_str_and_repr(self) -> None:
         b = SynchronizedBool(True)
-        self.assertEqual(str(b), "True")
-        self.assertEqual(repr(b), "True")
+        self.assertEqual("True", str(b))
+        self.assertEqual("True", repr(b))
 
         b.value = False
-        self.assertEqual(str(b), "False")
-        self.assertEqual(repr(b), "False")
+        self.assertEqual("False", str(b))
+        self.assertEqual("False", repr(b))
 
 
 #############################################################################
@@ -1006,12 +1009,12 @@ class TestSynchronizedDict(AbstractTestCase):
         self.sync_dict: SynchronizedDict = SynchronizedDict({"a": 1, "b": 2, "c": 3})
 
     def test_getitem(self) -> None:
-        self.assertEqual(self.sync_dict["a"], 1)
-        self.assertEqual(self.sync_dict["b"], 2)
+        self.assertEqual(1, self.sync_dict["a"])
+        self.assertEqual(2, self.sync_dict["b"])
 
     def test_setitem(self) -> None:
         self.sync_dict["d"] = 4
-        self.assertEqual(self.sync_dict["d"], 4)
+        self.assertEqual(4, self.sync_dict["d"])
 
     def test_delitem(self) -> None:
         del self.sync_dict["a"]
@@ -1022,32 +1025,32 @@ class TestSynchronizedDict(AbstractTestCase):
         self.assertFalse("z" in self.sync_dict)
 
     def test_len(self) -> None:
-        self.assertEqual(len(self.sync_dict), 3)
+        self.assertEqual(3, len(self.sync_dict))
         del self.sync_dict["a"]
-        self.assertEqual(len(self.sync_dict), 2)
+        self.assertEqual(2, len(self.sync_dict))
 
     def test_repr(self) -> None:
-        self.assertEqual(repr(self.sync_dict), repr({"a": 1, "b": 2, "c": 3}))
+        self.assertEqual(repr({"a": 1, "b": 2, "c": 3}), repr(self.sync_dict))
 
     def test_str(self) -> None:
-        self.assertEqual(str(self.sync_dict), str({"a": 1, "b": 2, "c": 3}))
+        self.assertEqual(str({"a": 1, "b": 2, "c": 3}), str(self.sync_dict))
 
     def test_get(self) -> None:
-        self.assertEqual(self.sync_dict.get("a"), 1)
-        self.assertEqual(self.sync_dict.get("z", 42), 42)
+        self.assertEqual(1, self.sync_dict.get("a"))
+        self.assertEqual(42, self.sync_dict.get("z", 42))
 
     def test_pop(self) -> None:
         value = self.sync_dict.pop("b")
-        self.assertEqual(value, 2)
+        self.assertEqual(2, value)
         self.assertNotIn("b", self.sync_dict)
 
     def test_clear(self) -> None:
         self.sync_dict.clear()
-        self.assertEqual(len(self.sync_dict), 0)
+        self.assertEqual(0, len(self.sync_dict))
 
     def test_items(self) -> None:
         items = self.sync_dict.items()
-        self.assertEqual(set(items), {("a", 1), ("b", 2), ("c", 3)})
+        self.assertEqual({("a", 1), ("b", 2), ("c", 3)}, set(items))
 
     def test_loop(self) -> None:
         self.sync_dict["key"] = 1

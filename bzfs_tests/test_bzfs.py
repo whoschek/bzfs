@@ -1544,7 +1544,7 @@ class TestDatasetPairsAction(AbstractTestCase):
 
     def test_direct_value(self) -> None:
         args = self.parser.parse_args(["--input", "src1", "dst1"])
-        self.assertEqual(args.input, [("src1", "dst1")])
+        self.assertEqual([("src1", "dst1")], args.input)
 
     def test_direct_value_without_corresponding_dst(self) -> None:
         with self.assertRaises(SystemExit):
@@ -1553,27 +1553,27 @@ class TestDatasetPairsAction(AbstractTestCase):
     def test_file_input(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
+            self.assertEqual([("src1", "dst1"), ("src2", "dst2")], args.input)
 
     def test_file_input_without_trailing_newline(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
+            self.assertEqual([("src1", "dst1"), ("src2", "dst2")], args.input)
 
     def test_mixed_input(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "src0", "dst0", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, [("src0", "dst0"), ("src1", "dst1"), ("src2", "dst2")])
+            self.assertEqual([("src0", "dst0"), ("src1", "dst1"), ("src2", "dst2")], args.input)
 
     def test_file_skip_comments_and_empty_lines(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="\n\n#comment\nsrc1\tdst1\nsrc2\tdst2\n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, [("src1", "dst1"), ("src2", "dst2")])
+            self.assertEqual([("src1", "dst1"), ("src2", "dst2")], args.input)
 
     def test_file_skip_stripped_empty_lines(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data=" \t \nsrc1\tdst1")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, [("src1", "dst1")])
+            self.assertEqual([("src1", "dst1")], args.input)
 
     def test_file_missing_tab(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\nsrc2")):
@@ -1694,22 +1694,22 @@ class TestFileOrLiteralAction(AbstractTestCase):
 
     def test_direct_value(self) -> None:
         args = self.parser.parse_args(["--input", "literalvalue"])
-        self.assertEqual(args.input, ["literalvalue"])
+        self.assertEqual(["literalvalue"], args.input)
 
     def test_file_input(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line 1\nline 2  \n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, ["line 1", "line 2  "])
+            self.assertEqual(["line 1", "line 2  "], args.input)
 
     def test_mixed_input(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line 1\nline 2")):
             args = self.parser.parse_args(["--input", "literalvalue", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, ["literalvalue", "line 1", "line 2"])
+            self.assertEqual(["literalvalue", "line 1", "line 2"], args.input)
 
     def test_skip_comments_and_empty_lines(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="\n\n#comment\nline 1\n\n\nline 2\n")):
             args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(args.input, ["line 1", "line 2"])
+            self.assertEqual(["line 1", "line 2"], args.input)
 
     def test_file_not_found(self) -> None:
         with patch("bzfs_main.bzfs.open_nofollow", side_effect=FileNotFoundError):
@@ -1763,7 +1763,7 @@ class TestLogConfigVariablesAction(AbstractTestCase):
 
     def test_basic(self) -> None:
         args = self.parser.parse_args(["--log-config-var", "name1:val1", "name2:val2"])
-        self.assertEqual(args.log_config_var, ["name1:val1", "name2:val2"])
+        self.assertEqual(["name1:val1", "name2:val2"], args.log_config_var)
 
         for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
             with self.assertRaises(SystemExit):
@@ -1779,7 +1779,7 @@ class SSHConfigFileNameAction(AbstractTestCase):
 
     def test_safe_filename(self) -> None:
         args = self.parser.parse_args(["file1.txt"])
-        self.assertEqual(args.filename, "file1.txt")
+        self.assertEqual("file1.txt", args.filename)
 
     def test_empty_filename(self) -> None:
         with self.assertRaises(SystemExit):
@@ -1805,11 +1805,11 @@ class TestSafeFileNameAction(AbstractTestCase):
 
     def test_safe_filename(self) -> None:
         args = self.parser.parse_args(["file1.txt"])
-        self.assertEqual(args.filename, "file1.txt")
+        self.assertEqual("file1.txt", args.filename)
 
     def test_empty_filename(self) -> None:
         args = self.parser.parse_args([""])
-        self.assertEqual(args.filename, "")
+        self.assertEqual("", args.filename)
 
     def test_filename_in_subdirectory(self) -> None:
         with self.assertRaises(SystemExit):
@@ -1870,13 +1870,13 @@ class TestCheckRange(AbstractTestCase):
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange, min=0, max=100)
         args = parser.parse_args(["--age", "50"])
-        self.assertEqual(args.age, 50)
+        self.assertEqual(50, args.age)
 
     def test_valid_range_inf_sup(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange, inf=0, sup=100)
         args = parser.parse_args(["--age", "50"])
-        self.assertEqual(args.age, 50)
+        self.assertEqual(50, args.age)
 
     def test_invalid_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
@@ -1904,7 +1904,7 @@ class TestCheckRange(AbstractTestCase):
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "50.5"])
-        self.assertEqual(args.age, 50.5)
+        self.assertEqual(50.5, args.age)
 
     def test_invalid_float_range_min_max(self) -> None:
         parser = argparse.ArgumentParser()
@@ -1916,13 +1916,13 @@ class TestCheckRange(AbstractTestCase):
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "0.0"])
-        self.assertEqual(args.age, 0.0)
+        self.assertEqual(0.0, args.age)
 
     def test_valid_edge_case_max(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
         args = parser.parse_args(["--age", "100.0"])
-        self.assertEqual(args.age, 100.0)
+        self.assertEqual(100.0, args.age)
 
     def test_invalid_edge_case_sup(self) -> None:
         parser = argparse.ArgumentParser()
@@ -1940,53 +1940,53 @@ class TestCheckRange(AbstractTestCase):
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange)
         args = parser.parse_args(["--age", "150"])
-        self.assertEqual(args.age, 150)
+        self.assertEqual(150, args.age)
 
     def test_no_range_constraints_float(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=float, action=CheckRange)
         args = parser.parse_args(["--age", "150.5"])
-        self.assertEqual(args.age, 150.5)
+        self.assertEqual(150.5, args.age)
 
     def test_very_large_value(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange, max=10**18)
         args = parser.parse_args(["--age", "999999999999999999"])
-        self.assertEqual(args.age, 999999999999999999)
+        self.assertEqual(999999999999999999, args.age)
 
     def test_very_small_value(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange, min=-(10**18))
         args = parser.parse_args(["--age", "-999999999999999999"])
-        self.assertEqual(args.age, -999999999999999999)
+        self.assertEqual(-999999999999999999, args.age)
 
     def test_default_interval(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange)
         action = CheckRange(option_strings=["--age"], dest="age")
-        self.assertEqual(action.interval(), "valid range: (-infinity, +infinity)")
+        self.assertEqual("valid range: (-infinity, +infinity)", action.interval())
 
     def test_interval_with_inf_sup(self) -> None:
         action = CheckRange(option_strings=["--age"], dest="age", inf=0, sup=100)
-        self.assertEqual(action.interval(), "valid range: (0, 100)")
+        self.assertEqual("valid range: (0, 100)", action.interval())
 
     def test_interval_with_min_max(self) -> None:
         action = CheckRange(option_strings=["--age"], dest="age", min=0, max=100)
-        self.assertEqual(action.interval(), "valid range: [0, 100]")
+        self.assertEqual("valid range: [0, 100]", action.interval())
 
     def test_interval_with_min(self) -> None:
         action = CheckRange(option_strings=["--age"], dest="age", min=0)
-        self.assertEqual(action.interval(), "valid range: [0, +infinity)")
+        self.assertEqual("valid range: [0, +infinity)", action.interval())
 
     def test_interval_with_max(self) -> None:
         action = CheckRange(option_strings=["--age"], dest="age", max=100)
-        self.assertEqual(action.interval(), "valid range: (-infinity, 100]")
+        self.assertEqual("valid range: (-infinity, 100]", action.interval())
 
     def test_call_without_range_constraints(self) -> None:
         parser = argparse.ArgumentParser()
         parser.add_argument("--age", type=int, action=CheckRange)
         args = parser.parse_args(["--age", "50"])
-        self.assertEqual(args.age, 50)
+        self.assertEqual(50, args.age)
 
 
 #############################################################################
@@ -1997,7 +1997,7 @@ class TestCheckPercentRange(AbstractTestCase):
         parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
         args = parser.parse_args(["--threads", "1"])
         threads, is_percent = args.threads
-        self.assertEqual(threads, 1.0)
+        self.assertEqual(1.0, threads)
         self.assertFalse(is_percent)
 
     def test_valid_range_percent(self) -> None:
@@ -2005,7 +2005,7 @@ class TestCheckPercentRange(AbstractTestCase):
         parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
         args = parser.parse_args(["--threads", "5.2%"])
         threads, is_percent = args.threads
-        self.assertEqual(threads, 5.2)
+        self.assertEqual(5.2, threads)
         self.assertTrue(is_percent)
 
     def test_invalid(self) -> None:

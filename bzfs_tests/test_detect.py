@@ -93,5 +93,5 @@ class TestRemoteConfCache(AbstractTestCase):
             d1.side_effect = lambda p, r, programs, host: programs.__setitem__(r.location, {"ssh": ""})
             d2.side_effect = lambda p, r: job.params.zpool_features.__setitem__(r.location, {"feat": "on"})
             detect_available_programs(job)
-            self.assertEqual(d1.call_count, 2)
-            self.assertEqual(d2.call_count, 2)
+            self.assertEqual(2, d1.call_count)
+            self.assertEqual(2, d2.call_count)

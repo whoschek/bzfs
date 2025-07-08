@@ -289,8 +289,8 @@ class TestHelperFunctions(AbstractTestCase):
                     read_lines_after_append_from_original_iterator.append(line)
 
                 self.assertEqual(
-                    read_lines_after_append_from_original_iterator,
                     ["line3_appended\n", "line4_appended\n"],
+                    read_lines_after_append_from_original_iterator,
                     "Exhausted iterator (on an still-open file) should yiels new lines even if the underlying file "
                     "was appended to.",
                 )
@@ -324,9 +324,9 @@ class TestHelperFunctions(AbstractTestCase):
             delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
             total_bytes_op1 += delta_bytes
             current_time_ns += 1000  # Advance time slightly
-        self.assertEqual(total_bytes_op1, 100 * 1024, "Total bytes for Op1 incorrect")
+        self.assertEqual(100 * 1024, total_bytes_op1, "Total bytes for Op1 incorrect")
         # After op1 final line (ends with \n), bytes_in_flight in stat_obj_for_pv_log_file should be 0
-        self.assertEqual(stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op1")
+        self.assertEqual(0, stat_obj_for_pv_log_file.bytes_in_flight, "bytes_in_flight should be 0 after final line of Op1")
 
         # Simulate Second PV Operation (reusing the same pv_log_file_base name)
         # If the pv_log_file name is not unique per op, the reporter continues to use the *same* stat_obj_for_pv_log_file
@@ -341,8 +341,8 @@ class TestHelperFunctions(AbstractTestCase):
             delta_bytes = reporter.update_transfer_stat(line, stat_obj_for_pv_log_file, current_time_ns)
             total_bytes_op2 += delta_bytes
             current_time_ns += 1000
-        self.assertEqual(total_bytes_op2, 200 * 1024, "Total bytes for Op2 incorrect")
-        self.assertEqual(stat_obj_for_pv_log_file.bytes_in_flight, 0, "bytes_in_flight should be 0 after final line of Op2")
+        self.assertEqual(200 * 1024, total_bytes_op2, "Total bytes for Op2 incorrect")
+        self.assertEqual(0, stat_obj_for_pv_log_file.bytes_in_flight, "bytes_in_flight should be 0 after final line of Op2")
 
     def test_reporter_handles_pv_log_file_disappearing_before_initial_open(self) -> None:
         mock_log = MagicMock(spec=Logger)
