@@ -28,6 +28,7 @@ from typing import (
 )
 from unittest.mock import (
     MagicMock,
+    patch,
 )
 
 from bzfs_main import bzfs
@@ -39,6 +40,7 @@ from bzfs_main.bzfs import (
 from bzfs_main.filter import (
     dataset_regexes,
     filter_datasets,
+    filter_datasets_by_exclude_property,
     filter_lines,
     filter_lines_except,
     filter_properties,
@@ -60,6 +62,8 @@ def suite() -> unittest.TestSuite:
         TestHelperFunctions,
         TestTimeRangeAction,
         TestRankRangeAction,
+        TestFilterDatasets,
+        TestFilterDatasetsByExcludeProperty,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -204,6 +208,18 @@ class TestHelperFunctions(CommonTest):
         log_output = stream.getvalue()
         self.assertIn("Including b/c property regex", log_output)
         self.assertIn("Excluding b/c property regex", log_output)
+
+    def test_filter_snapshots_calls_regex_filter(self) -> None:
+        args = self.argparser_parse_args(["src", "dst"])
+        job = bzfs.Job()
+        job.params = Params(args, log=logging.getLogger("snap_call"))
+        regexes = (compile_regexes([]), compile_regexes(["keep"]))
+        job.params.snapshot_filters = [[bzfs.SnapshotFilter(snapshot_regex_filter_name, None, regexes)]]
+        snapshots = ["0\tds@keep", "0\tds@other"]
+        with patch("bzfs_main.filter.filter_snapshots_by_regex", return_value=[snapshots[0]]) as mock_f:
+            result = filter_snapshots(job, snapshots)
+            mock_f.assert_called_once_with(job, snapshots, regexes=regexes)
+        self.assertEqual([snapshots[0]], result)
 
 
 #############################################################################
@@ -665,3 +681,178 @@ class TestRankRangeAction(CommonTest):
         self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 1, False)), ranks_filter.options[0])
         self.assertEqual((0, 0), ranks_filter.timerange)
+
+
+#############################################################################
+class TestFilterDatasets(CommonTest):
+    def make_job(
+        self,
+        include: list[str] | None = None,
+        exclude: list[str] | None = None,
+        skip_parent: bool = False,
+        exclude_property: str | None = None,
+        debug: bool = False,
+        test_mode: bool = False,
+    ) -> tuple[Job, Remote]:
+        args = self.argparser_parse_args(["src", "dst"])
+        log = logging.getLogger(f"datasets_{id(self)}_{debug}")
+        log.setLevel(log_debug if debug else logging.INFO)
+        job = bzfs.Job()
+        job.params = Params(args, log=log)
+        job.is_test_mode = test_mode
+        p = job.params
+        p.include_dataset_regexes = compile_regexes(include or [".*"])
+        p.exclude_dataset_regexes = compile_regexes(exclude or [])
+        p.skip_parent = skip_parent
+        p.exclude_dataset_property = exclude_property
+        remote = MagicMock(spec=Remote, root_dataset="src", location="src")
+        return job, remote
+
+    def test_include_all(self) -> None:
+        job, remote = self.make_job()
+        datasets = ["src/a", "src/b"]
+        self.assertListEqual(datasets, filter_datasets(job, remote, datasets))
+
+    def test_exclude_matching(self) -> None:
+        job, remote = self.make_job(exclude=["foo"])
+        datasets = ["src/foo", "src/bar"]
+        self.assertListEqual(["src/bar"], filter_datasets(job, remote, datasets))
+
+    def test_include_specific(self) -> None:
+        job, remote = self.make_job(include=["bar$"])
+        datasets = ["src/bar", "src/foo"]
+        self.assertListEqual(["src/bar"], filter_datasets(job, remote, datasets))
+
+    def test_skip_parent(self) -> None:
+        job, remote = self.make_job(skip_parent=True)
+        datasets = ["src/a", "src/b"]
+        self.assertListEqual(["src/b"], filter_datasets(job, remote, datasets))
+
+    def test_property_filter_called(self) -> None:
+        job, remote = self.make_job(exclude_property="skip")
+        with patch("bzfs_main.filter.filter_datasets_by_exclude_property", return_value=["src/a"]) as m:
+            result = filter_datasets(job, remote, ["src/a", "src/b"])
+            m.assert_called_once()
+            self.assertEqual(["src/a"], result)
+
+    def test_debug_logging_off(self) -> None:
+        job, remote = self.make_job(debug=False)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        job.params.log.addHandler(handler)
+        filter_datasets(job, remote, ["src/a"])
+        self.assertNotIn("Finally included", stream.getvalue())
+
+    def test_debug_logging_on(self) -> None:
+        job, remote = self.make_job(debug=True)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        job.params.log.addHandler(handler)
+        filter_datasets(job, remote, ["src/a"])
+        self.assertIn("Finally included", stream.getvalue())
+
+    def test_test_mode_asserts(self) -> None:
+        job, remote = self.make_job(test_mode=True)
+        datasets = ["src/a", "src/a/b", "src/c"]
+        self.assertListEqual(datasets, filter_datasets(job, remote, datasets))
+
+    def test_relative_dataset_strip(self) -> None:
+        job, remote = self.make_job(include=["a/b"])
+        datasets = ["src/a/b"]
+        self.assertListEqual(["src/a/b"], filter_datasets(job, remote, datasets))
+
+    def test_dataset_not_included(self) -> None:
+        job, remote = self.make_job(include=["foo$"])
+        self.assertEqual([], filter_datasets(job, remote, ["src/bar"]))
+
+
+#############################################################################
+class TestFilterDatasetsByExcludeProperty(CommonTest):
+    def make_job(self, debug: bool = False) -> tuple[Job, Remote]:
+        args = self.argparser_parse_args(["src", "dst", "--exclude-dataset-property", "skip"])
+        log = logging.getLogger(f"prop_{id(self)}_{debug}")
+        log.setLevel(log_debug if debug else logging.INFO)
+        job = bzfs.Job()
+        job.params = Params(args, log=log)
+        remote = MagicMock(spec=Remote, location="src")
+        return job, remote
+
+    def run_filter(self, mapping: dict[str, str | None], debug: bool = False) -> list[str]:
+        job, remote = self.make_job(debug=debug)
+
+        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+            return mapping.get(cmd[-1])
+
+        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
+            with patch.object(job, "maybe_inject_delete"):
+                with patch("socket.gethostname", return_value="host1"):
+                    result = filter_datasets_by_exclude_property(job, remote, list(mapping.keys()))
+        return result
+
+    def test_include_empty_value(self) -> None:
+        mapping: dict[str, str | None] = {"a": "", "b": "-", "c": "true"}
+        self.assertListEqual(["a", "b", "c"], self.run_filter(mapping))
+
+    def test_exclude_false(self) -> None:
+        mapping: dict[str, str | None] = {"a": "false", "b": "true"}
+        self.assertListEqual(["b"], self.run_filter(mapping))
+
+    def test_include_host_match(self) -> None:
+        mapping: dict[str, str | None] = {"a": "host1"}
+        self.assertListEqual(["a"], self.run_filter(mapping))
+
+    def test_exclude_host_mismatch(self) -> None:
+        mapping: dict[str, str | None] = {"a": "host2"}
+        self.assertEqual([], self.run_filter(mapping))
+
+    def test_host_value_with_spaces(self) -> None:
+        mapping: dict[str, str | None] = {"a": "host1, host2"}
+        self.assertListEqual(["a"], self.run_filter(mapping))
+
+    def test_skip_descendant_after_exclude(self) -> None:
+        job, remote = self.make_job()
+        mapping: dict[str, str | None] = {"a": "false", "a/b": "true", "c": "true"}
+
+        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+            return mapping.get(cmd[-1])
+
+        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try) as mock_try:
+            with patch.object(job, "maybe_inject_delete"):
+                with patch("socket.gethostname", return_value="host1"):
+                    result = filter_datasets_by_exclude_property(job, remote, ["a", "a/b", "c"])
+        self.assertListEqual(["c"], result)
+        self.assertEqual(2, mock_try.call_count)
+
+    def test_property_none(self) -> None:
+        job, remote = self.make_job()
+        mapping: dict[str, str | None] = {"a": None, "b": "true"}
+
+        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+            return mapping.get(cmd[-1])
+
+        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
+            with patch.object(job, "maybe_inject_delete"):
+                with patch("socket.gethostname", return_value="host1"):
+                    result = filter_datasets_by_exclude_property(job, remote, ["a", "b"])
+        self.assertListEqual(["b"], result)
+
+    def test_debug_logging(self) -> None:
+        mapping: dict[str, str | None] = {"a": "host2"}
+        job, remote = self.make_job(debug=True)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        job.params.log.addHandler(handler)
+
+        def fake_try(job_: Job, remote_: Remote, level: int, cmd: list[str]) -> str | None:
+            return mapping.get(cmd[-1])
+
+        with patch("bzfs_main.filter.try_ssh_command", side_effect=fake_try):
+            with patch.object(job, "maybe_inject_delete"):
+                with patch("socket.gethostname", return_value="host1"):
+                    filter_datasets_by_exclude_property(job, remote, ["a"])
+        log_output = stream.getvalue()
+        self.assertIn("Excluding b/c dataset prop", log_output)
+
+    def test_case_insensitive_values(self) -> None:
+        mapping: dict[str, str | None] = {"a": "TrUe", "b": "FaLsE"}
+        self.assertListEqual(["a"], self.run_filter(mapping))

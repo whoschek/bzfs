@@ -16,15 +16,20 @@ from __future__ import annotations
 import itertools
 import logging
 import random
+import subprocess
+import threading
 import time
 import unittest
+from collections import Counter
+from types import SimpleNamespace
 from typing import (
     Any,
     cast,
 )
+from unittest import mock
 
 import bzfs_main.loggers
-from bzfs_main import bzfs
+from bzfs_main import bzfs, connection
 from bzfs_main.bzfs import (
     LogParams,
     Params,
@@ -37,6 +42,7 @@ from bzfs_main.connection import (
     ConnectionPool,
     ConnectionPools,
 )
+from bzfs_main.retry import RetryableError
 from bzfs_main.utils import log_trace
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
@@ -45,6 +51,12 @@ from bzfs_tests.abstract_testcase import AbstractTestCase
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestConnectionPool,
+        TestRunSshCommand,
+        TestTrySshCommand,
+        TestRefreshSshConnection,
+        TestTimeout,
+        TestMaybeInjectError,
+        TestDecrementInjectionCounter,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -320,3 +332,279 @@ class TestConnectionPool(AbstractTestCase):
                 # log.log(bzfs.log_debug, "cpool: %s", cpool)
         elapsed_secs = (time.time_ns() - start_time_nanos) / 1000_000_000
         log.info("random_walk took %s secs", elapsed_secs)
+
+
+#############################################################################
+class _FakeParams:
+    def __init__(self) -> None:
+        self.log = logging.getLogger(__name__)
+        self.ssh_program = "ssh"
+        self.connection_pools: dict[str, connection.ConnectionPools] = {}
+        self.timeout_nanos = None
+
+    def is_program_available(self, prog: str, loc: str) -> bool:
+        return True
+
+
+#############################################################################
+class _FakeRemote(SimpleNamespace):
+    def local_ssh_command(self) -> list[str]:
+        return ["ssh", self.ssh_user_host or "localhost"]
+
+
+#############################################################################
+class TestRunSshCommand(AbstractTestCase):
+    def setUp(self) -> None:
+        self.job = bzfs.Job()
+        self.job.params = cast(bzfs.Params, _FakeParams())
+        self.job.control_persist_secs = 90
+        self.job.control_persist_margin_secs = 2
+        self.job.timeout_nanos = None
+        self.remote = cast(
+            bzfs.Remote, _FakeRemote(location="dst", ssh_user_host="", reuse_ssh_connection=True, ssh_extra_opts=[])
+        )
+        self.conn = mock.Mock()
+        self.conn.ssh_cmd = ["ssh"]
+        self.conn.ssh_cmd_quoted = ["ssh"]
+        self.conn_pool = mock.Mock()
+        self.conn_pool.get_connection.return_value = self.conn
+        pool_wrapper = mock.Mock(pool=mock.Mock(return_value=self.conn_pool))
+        self.job.params.connection_pools = {"dst": pool_wrapper}
+
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_dry_run_skips_execution(self, mock_run: mock.Mock) -> None:
+        result = connection.run_ssh_command(self.job, self.remote, cmd=["ls"], is_dry=True)
+        self.assertEqual("", result)
+        mock_run.assert_not_called()
+        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+
+    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_remote_calls_refresh_and_executes(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+        self.remote.ssh_user_host = "host"
+        mock_run.return_value = mock.Mock(stdout="out", stderr="err")
+        result = connection.run_ssh_command(self.job, self.remote, cmd=["echo"], print_stdout=True, print_stderr=True)
+        self.assertEqual("out", result)
+        mock_refresh.assert_called_once_with(self.job, self.remote, self.conn)
+        mock_run.assert_called_once()
+        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+
+    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @mock.patch(
+        "bzfs_main.connection.subprocess_run",
+        side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", output="o", stderr="e"),
+    )
+    def test_calledprocesserror_propagates(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+        self.remote.ssh_user_host = "h"
+        with self.assertRaises(subprocess.CalledProcessError):
+            connection.run_ssh_command(self.job, self.remote, cmd=["boom"], print_stdout=True)
+        mock_run.assert_called_once()
+        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+
+    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @mock.patch(
+        "bzfs_main.connection.subprocess_run",
+        side_effect=subprocess.TimeoutExpired(cmd="cmd", timeout=1),
+    )
+    def test_timeout_expired_propagates(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+        self.remote.ssh_user_host = "h"
+        with self.assertRaises(subprocess.TimeoutExpired):
+            connection.run_ssh_command(self.job, self.remote, cmd=["sleep"], print_stdout=True)
+        mock_run.assert_called_once()
+        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+
+    @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
+    @mock.patch(
+        "bzfs_main.connection.subprocess_run",
+        side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
+    )
+    def test_unicode_error_propagates_without_logging(self, mock_run: mock.Mock, mock_refresh: mock.Mock) -> None:
+        self.remote.ssh_user_host = "h"
+        with self.assertRaises(UnicodeDecodeError):
+            connection.run_ssh_command(self.job, self.remote, cmd=["foo"])
+        mock_run.assert_called_once()
+        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+
+
+#############################################################################
+class TestTrySshCommand(AbstractTestCase):
+    def setUp(self) -> None:
+        self.job = bzfs.Job()
+        self.job.params = cast(bzfs.Params, _FakeParams())
+        self.remote = cast(
+            bzfs.Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
+        )
+
+    @mock.patch("bzfs_main.connection.run_ssh_command", return_value="ok")
+    @mock.patch("bzfs_main.connection.maybe_inject_error")
+    def test_success(self, mock_inject: mock.Mock, mock_run: mock.Mock) -> None:
+        result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["ls"])
+        self.assertEqual("ok", result)
+        mock_inject.assert_called_once()
+        mock_run.assert_called_once()
+
+    @mock.patch(
+        "bzfs_main.connection.run_ssh_command",
+        side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="zfs: dataset does not exist"),
+    )
+    def test_dataset_missing_returns_none(self, mock_run: mock.Mock) -> None:
+        result = connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=True)
+        self.assertIsNone(result)
+        mock_run.assert_called_once()
+
+    @mock.patch(
+        "bzfs_main.connection.run_ssh_command",
+        side_effect=subprocess.CalledProcessError(returncode=1, cmd="cmd", stderr="boom"),
+    )
+    def test_other_error_raises_retryable(self, mock_run: mock.Mock) -> None:
+        with self.assertRaises(RetryableError):
+            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["zfs"], exists=False)
+        mock_run.assert_called_once()
+
+    @mock.patch(
+        "bzfs_main.connection.run_ssh_command",
+        side_effect=UnicodeDecodeError("utf-8", b"x", 0, 1, "boom"),
+    )
+    def test_unicode_error_wrapped(self, mock_run: mock.Mock) -> None:
+        with self.assertRaises(RetryableError):
+            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
+        mock_run.assert_called_once()
+
+    @mock.patch("bzfs_main.connection.maybe_inject_error", side_effect=RetryableError("Subprocess failed"))
+    def test_injected_retryable_error_propagates(self, mock_inject: mock.Mock) -> None:
+        with self.assertRaises(RetryableError):
+            connection.try_ssh_command(self.job, self.remote, level=0, cmd=["x"])
+        mock_inject.assert_called_once()
+
+
+#############################################################################
+class TestRefreshSshConnection(AbstractTestCase):
+    def setUp(self) -> None:
+        self.job = bzfs.Job()
+        self.job.params = cast(bzfs.Params, _FakeParams())
+        self.job.control_persist_secs = 4
+        self.job.control_persist_margin_secs = 1
+        self.job.timeout_nanos = None
+        self.remote = cast(
+            bzfs.Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
+        )
+        self.conn = connection.Connection(self.remote, 1, 0)
+        self.conn.last_refresh_time = 0
+
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_local_mode_returns_immediately(self, mock_run: mock.Mock) -> None:
+        self.remote.ssh_user_host = ""
+        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        mock_run.assert_not_called()
+
+    @mock.patch("bzfs_main.connection.die", side_effect=SystemExit)
+    def test_ssh_unavailable_dies(self, mock_die: mock.Mock) -> None:
+        self.job.params.is_program_available = mock.Mock(return_value=False)  # type: ignore[method-assign]
+        with self.assertRaises(SystemExit):
+            connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        mock_die.assert_called_once()
+
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_reuse_disabled_no_action(self, mock_run: mock.Mock) -> None:
+        self.remote.reuse_ssh_connection = False
+        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        mock_run.assert_not_called()
+
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_connection_alive_fast_path(self, mock_run: mock.Mock) -> None:
+        self.conn.last_refresh_time = time.monotonic_ns()
+        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        mock_run.assert_not_called()
+
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_master_alive_refreshes_timestamp(self, mock_run: mock.Mock) -> None:
+        mock_run.return_value = mock.Mock(returncode=0)
+        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        mock_run.assert_called_once()
+        self.assertGreater(self.conn.last_refresh_time, 0)
+
+    @mock.patch("bzfs_main.connection.die", side_effect=SystemExit)
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_master_start_failure_dies(self, mock_run: mock.Mock, mock_die: mock.Mock) -> None:
+        mock_run.side_effect = [mock.Mock(returncode=1), mock.Mock(returncode=1, stderr="bad")]
+        with self.assertRaises(SystemExit):
+            connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        self.assertEqual(2, mock_run.call_count)
+        mock_die.assert_called_once()
+
+    @mock.patch("bzfs_main.connection.subprocess_run")
+    def test_verbose_option_limits_persist_time(self, mock_run: mock.Mock) -> None:
+        self.remote.ssh_extra_opts = ["-v"]
+        mock_run.side_effect = [mock.Mock(returncode=1), mock.Mock(returncode=0)]
+        connection.refresh_ssh_connection_if_necessary(self.job, self.remote, self.conn)
+        args = mock_run.call_args_list[1][0][0]
+        self.assertIn("-oControlPersist=1s", args)
+
+
+#############################################################################
+class TestTimeout(AbstractTestCase):
+    def setUp(self) -> None:
+        self.job = bzfs.Job()
+        self.job.params = cast(bzfs.Params, _FakeParams())
+
+    def test_no_timeout_returns_none(self) -> None:
+        self.job.timeout_nanos = None
+        self.assertIsNone(connection.timeout(self.job))
+
+    def test_expired_timeout_raises(self) -> None:
+        self.job.params.timeout_nanos = 1
+        self.job.timeout_nanos = time.monotonic_ns() - 1
+        with self.assertRaises(subprocess.TimeoutExpired):
+            connection.timeout(self.job)
+
+    def test_seconds_remaining_returned(self) -> None:
+        self.job.timeout_nanos = time.monotonic_ns() + 1_000_000_000
+        result = connection.timeout(self.job)
+        self.assertIsNotNone(result)
+        self.assertGreaterEqual(cast(float, result), 0.0)
+
+
+#############################################################################
+class TestMaybeInjectError(AbstractTestCase):
+    def setUp(self) -> None:
+        self.job = bzfs.Job()
+        self.job.injection_lock = threading.Lock()
+        self.job.error_injection_triggers = {"before": Counter()}
+
+    def test_no_trigger_noop(self) -> None:
+        connection.maybe_inject_error(self.job, ["cmd"])
+
+    def test_missing_counter_noop(self) -> None:
+        connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+
+    def test_counter_zero_noop(self) -> None:
+        self.job.error_injection_triggers["before"]["boom"] = 0
+        connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+        self.assertEqual(0, self.job.error_injection_triggers["before"]["boom"])
+
+    def test_nonretryable_error_raised(self) -> None:
+        self.job.error_injection_triggers["before"]["boom"] = 1
+        with self.assertRaises(subprocess.CalledProcessError):
+            connection.maybe_inject_error(self.job, ["cmd"], error_trigger="boom")
+        self.assertEqual(0, self.job.error_injection_triggers["before"]["boom"])
+
+    def test_retryable_error_raised(self) -> None:
+        self.job.error_injection_triggers["before"]["retryable_boom"] = 1
+        with self.assertRaises(RetryableError):
+            connection.maybe_inject_error(self.job, ["cmd"], error_trigger="retryable_boom")
+
+
+#############################################################################
+class TestDecrementInjectionCounter(AbstractTestCase):
+    def setUp(self) -> None:
+        self.job = bzfs.Job()
+        self.job.injection_lock = threading.Lock()
+
+    def test_zero_counter_returns_false(self) -> None:
+        counter: Counter = Counter()
+        self.assertFalse(connection.decrement_injection_counter(self.job, counter, "x"))
+
+    def test_positive_counter_decrements(self) -> None:
+        counter: Counter = Counter({"x": 2})
+        self.assertTrue(connection.decrement_injection_counter(self.job, counter, "x"))
+        self.assertEqual(1, counter["x"])

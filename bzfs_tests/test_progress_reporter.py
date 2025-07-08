@@ -13,16 +13,21 @@
 # limitations under the License.
 
 from __future__ import annotations
+import io
 import os
+import selectors
 import shutil
 import subprocess
 import tempfile
 import time
+import types
 import unittest
 from logging import Logger
 from pathlib import Path
 from typing import (
+    IO,
     Any,
+    cast,
 )
 from unittest.mock import MagicMock, patch
 
@@ -372,3 +377,221 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertSetEqual(set(), reporter.file_name_set)
         self.assertSetEqual(set(), reporter.file_name_queue)
         self.assertIsNone(reporter.exception)
+
+    def test_run_internal_returns_when_stopping(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
+        fds: list[IO] = []
+
+        class DummySelector:
+            def __init__(self) -> None:
+                self.select_called = False
+
+            def register(self, fd: IO, events: int, data: Any) -> None:
+                pass
+
+            def select(self, timeout: int = 0) -> list[tuple[Any, Any]]:
+                self.select_called = True
+                return []
+
+            def close(self) -> None:
+                pass
+
+        selector = DummySelector()
+        reporter.sleeper.is_stopping = True
+        reporter._run_internal(fds, cast(selectors.BaseSelector, selector))
+        self.assertFalse(selector.select_called)
+        self.assertEqual([], fds)
+
+    def test_run_internal_pause_sleep_amount(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
+        fds: list[IO] = []
+        sleep_args: list[int] = []
+
+        def fake_sleep(n: int) -> None:
+            sleep_args.append(n)
+            reporter.sleeper.interrupt()
+
+        reporter.sleeper.sleep = fake_sleep  # type: ignore[assignment]
+        with reporter.lock:
+            reporter.is_pausing = True
+        selector = MagicMock()
+        selector.select.return_value = []
+        with self.assertRaises(ValueError):
+            reporter.inject_error = True
+            reporter._run_internal(fds, selector)
+        self.assertEqual([round(0.01 * 1_000_000_000 / 2.5)], sleep_args)
+
+    def test_run_internal_reset_triggers_progress_output(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
+        fds: list[IO] = []
+        with reporter.lock:
+            reporter.is_resetting = True
+        selector = MagicMock()
+        selector.select.return_value = []
+        with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
+            with self.assertRaises(ValueError):
+                reporter.inject_error = True
+                reporter._run_internal(fds, selector)
+            self.assertTrue(write_mock.called)
+
+    def test_run_internal_logs_missing_file(self) -> None:
+        mock_log = MagicMock(spec=Logger)
+        reporter = ProgressReporter(mock_log, [], use_select=False, progress_update_intervals=(0.01, 0.02))
+        pv_file = "nonexist.pv"
+        with reporter.lock:
+            reporter.file_name_queue.add(pv_file)
+        selector = MagicMock()
+        selector.select.return_value = []
+        with patch.object(progress_reporter, "open_nofollow", side_effect=FileNotFoundError()), patch.object(
+            Path, "touch", lambda self: None
+        ):
+            with self.assertRaises(ValueError):
+                reporter.inject_error = True
+                reporter._run_internal([], selector)
+        mock_log.warning.assert_called_with(
+            "ProgressReporter: pv log file disappeared before initial open, skipping: %s", pv_file
+        )
+        self.assertNotIn(pv_file, reporter.file_name_set)
+
+    def test_run_internal_reads_lines(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
+        fds: list[IO] = []
+        fake_file = io.StringIO("a\nb\n")
+        stat = reporter.TransferStat(bytes_in_flight=0, eta=reporter.TransferStat.ETA(0, 0, ""))
+        key = types.SimpleNamespace(data=(iter(fake_file), stat))
+        selector = MagicMock()
+        selector.select.return_value = [(key, None)]
+        with patch.object(reporter, "update_transfer_stat", return_value=1) as upd_mock:
+            with self.assertRaises(ValueError):
+                reporter.inject_error = True
+                reporter._run_internal(fds, selector)
+            self.assertEqual(2, upd_mock.call_count)
+
+    def test_run_internal_progress_line_includes_latest_eta_line_tail(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
+        fds: list[IO] = []
+        fd1 = io.StringIO("x\n")
+        fd2 = io.StringIO("y\n")
+        eta1 = reporter.TransferStat.ETA(timestamp_nanos=1, seq_nr=0, line_tail="tail1")
+        eta2 = reporter.TransferStat.ETA(timestamp_nanos=2, seq_nr=-1, line_tail="tail2")
+        stat1 = reporter.TransferStat(bytes_in_flight=0, eta=eta1)
+        stat2 = reporter.TransferStat(bytes_in_flight=0, eta=eta2)
+        key1 = types.SimpleNamespace(data=(iter(fd1), stat1))
+        key2 = types.SimpleNamespace(data=(iter(fd2), stat2))
+        with reporter.lock:
+            reporter.file_name_queue.update({"f1", "f2"})
+
+        selector = MagicMock()
+        selector.select.return_value = [(key1, None), (key2, None)]
+
+        def open_side_effect(name: str, **_: Any) -> io.StringIO:
+            return fd1 if name.endswith("f1") else fd2
+
+        with patch.object(progress_reporter, "open_nofollow", side_effect=open_side_effect), patch.object(
+            Path, "touch", lambda self: None
+        ), patch.object(reporter, "update_transfer_stat", return_value=0):
+            with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
+                with self.assertRaises(ValueError):
+                    reporter.inject_error = True
+                    reporter._run_internal(fds, cast(selectors.BaseSelector, selector))
+                self.assertTrue(write_mock.called)
+
+    def test_run_internal_calls_sleep_when_no_lines(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(2, 2))
+        fds: list[IO] = []
+        with reporter.lock:
+            reporter.is_resetting = True
+        sleep_args: list[int] = []
+
+        def fake_sleep(n: int) -> None:
+            sleep_args.append(n)
+            reporter.sleeper.interrupt()
+
+        reporter.sleeper.sleep = fake_sleep  # type: ignore[assignment]
+        selector = MagicMock()
+        selector.select.return_value = []
+        reporter._run_internal(fds, selector)
+        self.assertEqual([round(2 * 1_000_000_000 / 2.5)], sleep_args)
+
+    def test_run_internal_inject_error_propagates(self) -> None:
+        reporter = ProgressReporter(
+            MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02), fail=True
+        )
+        with self.assertRaises(ValueError):
+            reporter._run_internal([], MagicMock())
+
+    def test_run_internal_registers_all_new_files(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
+        paths = ["f1", "f2"]
+        for p in paths:
+            with reporter.lock:
+                reporter.file_name_queue.add(p)
+        selector_calls: list[Any] = []
+
+        class DummySelector:
+            def register(self, fd: IO, events: int, data: Any) -> None:
+                selector_calls.append(fd)
+
+            def select(self, timeout: int = 0) -> list[tuple[Any, Any]]:
+                reporter.sleeper.interrupt()
+                return []
+
+            def close(self) -> None:
+                pass
+
+        with patch.object(progress_reporter, "open_nofollow", return_value=io.StringIO("")), patch.object(
+            Path, "touch", lambda self: None
+        ):
+            reporter._run_internal([], cast(selectors.BaseSelector, DummySelector()))
+        self.assertEqual(2, len(selector_calls))
+
+    def test_run_internal_status_line_without_etas(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
+        fds: list[IO] = []
+        with reporter.lock:
+            reporter.is_resetting = True
+        selector = MagicMock()
+        selector.select.return_value = []
+        with patch("sys.stdout.write") as write_mock, patch("sys.stdout.flush"):
+            with self.assertRaises(ValueError):
+                reporter.inject_error = True
+                reporter._run_internal(fds, selector)
+            written = "".join(call.args[0] for call in write_mock.mock_calls)
+            self.assertNotIn("ETA", written.split())
+
+    def test_pause_and_reset_flags(self) -> None:
+        reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=None)
+        reporter.pause()
+        with reporter.lock:
+            self.assertTrue(reporter.is_pausing)
+        reporter.reset()
+        with reporter.lock:
+            self.assertTrue(reporter.is_resetting)
+
+    def test_run_finally_closes_fds(self) -> None:
+        mock_log = MagicMock(spec=Logger)
+        reporter = ProgressReporter(mock_log, [], use_select=False, progress_update_intervals=None)
+        fake_fd = MagicMock()
+
+        def fake_run_internal(fds: list[IO], selector: Any) -> None:
+            fds.append(fake_fd)
+            raise ValueError()
+
+        selector = MagicMock()
+        with patch.object(reporter, "_run_internal", side_effect=fake_run_internal):
+            with patch("selectors.PollSelector", return_value=selector):
+                reporter._run()
+        fake_fd.close.assert_called_once()
+        selector.close.assert_called_once()
+        self.assertIsInstance(reporter.exception, ValueError)
+
+    def test_format_sent_bytes(self) -> None:
+        self.assertEqual(("0.00 B", "[0.00 B/s]"), ProgressReporter.format_sent_bytes(0, 1))
+        self.assertEqual(
+            ("1.00 MiB", "[512.00 KiB/s]"),
+            ProgressReporter.format_sent_bytes(1_048_576, 2_000_000_000),
+        )
+
+    def test_format_duration(self) -> None:
+        self.assertEqual("0:00:05", ProgressReporter.format_duration(5_000_000_000))
+        self.assertEqual("1:01:01", ProgressReporter.format_duration(3_661_000_000_000))

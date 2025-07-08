@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from __future__ import annotations
+import subprocess
 import time
 import unittest
 from unittest.mock import (
@@ -32,12 +33,16 @@ from bzfs_main.detect import (
     detect_available_programs,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
+from bzfs_tests.test_utils import stop_on_failure_subtest
 
 
 #############################################################################
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestRemoteConfCache,
+        TestDisableAndHelpers,
+        TestDetectAvailablePrograms,
+        TestDetectAvailableProgramsRemote,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -95,3 +100,193 @@ class TestRemoteConfCache(AbstractTestCase):
             detect_available_programs(job)
             self.assertEqual(2, d1.call_count)
             self.assertEqual(2, d2.call_count)
+
+
+#############################################################################
+class TestDisableAndHelpers(AbstractTestCase):
+    def test_disable_program(self) -> None:
+        args = self.argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        p.available_programs = {"local": {"zpool": ""}, "src": {"zpool": ""}}
+        bzfs_main.detect.disable_program(p, "zpool", ["local", "src"])
+        self.assertNotIn("zpool", p.available_programs["local"])
+        self.assertNotIn("zpool", p.available_programs["src"])
+
+    def test_find_available_programs_contains_commands(self) -> None:
+        args = self.argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        cmds = bzfs_main.detect.find_available_programs(p)
+        self.assertIn("default_shell-", cmds)
+        self.assertIn(f"command -v {p.zpool_program}", cmds)
+
+    def test_is_solaris_zfs_and_location(self) -> None:
+        args = self.argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        p.available_programs = {"src": {"zfs": "notOpenZFS"}}
+        with patch.object(bzfs_main.detect.platform, "system", return_value="SunOS"):
+            self.assertTrue(bzfs_main.detect.is_solaris_zfs_location(p, "local"))
+        self.assertTrue(bzfs_main.detect.is_solaris_zfs(p, p.src))
+
+    def test_is_dummy(self) -> None:
+        args = self.argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        r = bzfs.Remote("src", args, p)
+        r.root_dataset = bzfs_main.detect.dummy_dataset
+        self.assertTrue(bzfs_main.detect.is_dummy(r))
+        r.root_dataset = "nondummy"
+        self.assertFalse(bzfs_main.detect.is_dummy(r))
+
+
+#############################################################################
+class TestDetectAvailablePrograms(AbstractTestCase):
+    def _setup_job(self) -> bzfs.Job:
+        args = self.argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        p.dst = bzfs.Remote("dst", args, p)
+        job.params.available_programs = {"local": {"sh": ""}, "src": {}, "dst": {}}
+        job.params.zpool_features = {"src": {}, "dst": {}}
+        return job
+
+    def test_disable_flags_remove_programs(self) -> None:
+        job = self._setup_job()
+        p = job.params
+        for attr, prog in (
+            ("compression_program", "zstd"),
+            ("mbuffer_program", "mbuffer"),
+            ("ps_program", "ps"),
+            ("pv_program", "pv"),
+            ("shell_program", "sh"),
+            ("sudo_program", "sudo"),
+            ("zpool_program", "zpool"),
+        ):
+            with stop_on_failure_subtest(prog=prog):
+                setattr(p, attr, bzfs_main.detect.disable_prg)
+                p.available_programs = {"local": {prog: ""}, "src": {prog: ""}, "dst": {prog: ""}}
+                with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
+                    bzfs_main.detect, "detect_zpool_features"
+                ):
+                    detect_available_programs(job)
+                self.assertNotIn(prog, p.available_programs["local"])
+                self.assertNotIn(prog, p.available_programs["src"])
+                self.assertNotIn(prog, p.available_programs["dst"])
+
+    def test_local_shell_exit_codes(self) -> None:
+        job = self._setup_job()
+        p = job.params
+        outputs = [
+            subprocess.CompletedProcess([], 0, stdout="sh\n"),
+            subprocess.CompletedProcess([], 0, stdout=""),
+        ]
+        p.available_programs.pop("local", None)
+        with patch("subprocess.run", side_effect=outputs), patch.object(
+            bzfs_main.detect, "detect_available_programs_remote"
+        ), patch.object(bzfs_main.detect, "detect_zpool_features"):
+            detect_available_programs(job)
+        self.assertIn("sh", p.available_programs["local"])
+        job = self._setup_job()
+        p = job.params
+        outputs = [
+            subprocess.CompletedProcess([], 0, stdout="sh\n"),
+            subprocess.CompletedProcess([], 1, stdout=""),
+        ]
+        p.available_programs.pop("local", None)
+        with patch("subprocess.run", side_effect=outputs), patch.object(
+            bzfs_main.detect, "detect_available_programs_remote"
+        ), patch.object(bzfs_main.detect, "detect_zpool_features"):
+            detect_available_programs(job)
+        self.assertNotIn("sh", p.available_programs["local"])
+
+    def test_preserve_and_sudo_and_delegation(self) -> None:
+        job = self._setup_job()
+        p = job.params
+        p.args.preserve_properties = ["x"]
+        p.zfs_send_program_opts = ["--props"]
+        p.available_programs[p.dst.location] = {}
+        with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
+            bzfs_main.detect, "detect_zpool_features"
+        ), self.assertRaises(SystemExit):
+            detect_available_programs(job)
+
+        job = self._setup_job()
+        p = job.params
+        p.dst.sudo = "sudo -n"
+        p.available_programs[p.dst.location] = {}
+        with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
+            bzfs_main.detect, "detect_zpool_features"
+        ), self.assertRaises(SystemExit):
+            detect_available_programs(job)
+
+        job = self._setup_job()
+        p = job.params
+        p.dst.use_zfs_delegation = True
+        p.zpool_features[p.dst.location] = {"delegation": "off"}
+        with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
+            bzfs_main.detect, "detect_zpool_features"
+        ), self.assertRaises(SystemExit):
+            detect_available_programs(job)
+
+
+#############################################################################
+class TestDetectAvailableProgramsRemote(AbstractTestCase):
+    def _setup(self) -> tuple[bzfs.Job, bzfs.Remote]:
+        args = self.argparser_parse_args(["src", "dst"])
+        p = bzfs.Params(args)
+        p.log = MagicMock()
+        job = bzfs.Job()
+        job.params = p
+        p.src = bzfs.Remote("src", args, p)
+        return job, p.src
+
+    def test_zfs_version_parsing_and_shell(self) -> None:
+        job, remote = self._setup()
+        p = job.params
+
+        def run(*args: str, cmd: list[str] | None = None, **kw: str) -> str:
+            command = cmd if cmd is not None else args[0]
+            if "--version" in command:
+                return "zfs-2.2.3\n"
+            return "sh\n"
+
+        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=run):
+            bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
+        self.assertEqual("2.2.3", p.available_programs[remote.location]["zfs"])
+        self.assertIn("sh", p.available_programs[remote.location])
+        self.assertTrue(p.available_programs[remote.location][bzfs_main.detect.zfs_version_is_at_least_2_2_0])
+
+    def test_shell_program_disabled(self) -> None:
+        job, remote = self._setup()
+        p = job.params
+        p.shell_program = bzfs_main.detect.disable_prg
+        with patch.object(bzfs_main.detect, "run_ssh_command", return_value="zfs-2.1.0\n"):
+            bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
+        self.assertIn("zpool", p.available_programs[remote.location])
+        self.assertNotIn("sh", p.available_programs[remote.location])
+
+    def test_errors_raise_die(self) -> None:
+        job, remote = self._setup()
+        with patch.object(
+            bzfs_main.detect,
+            "run_ssh_command",
+            side_effect=FileNotFoundError(),
+        ), self.assertRaises(SystemExit):
+            bzfs_main.detect.detect_available_programs_remote(job, remote, job.params.available_programs, "host")
+
+    def test_not_openzfs_handling(self) -> None:
+        job, remote = self._setup()
+        p = job.params
+        err = subprocess.CalledProcessError(
+            returncode=1, cmd="zfs", output="", stderr="unrecognized command '--version'\nrun: zfs help"
+        )
+        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err):
+            bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
+        self.assertEqual("notOpenZFS", p.available_programs[remote.location]["zfs"])
+
+    def test_called_process_error_non_zfs(self) -> None:
+        job, remote = self._setup()
+        err = subprocess.CalledProcessError(returncode=1, cmd="zfs", output="bad", stderr="fail")
+        with patch.object(bzfs_main.detect, "run_ssh_command", side_effect=err), self.assertRaises(SystemExit):
+            bzfs_main.detect.detect_available_programs_remote(job, remote, job.params.available_programs, "host")
