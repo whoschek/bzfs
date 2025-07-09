@@ -11,6 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Computes efficient incremental ZFS send/receive steps.
+
+This helper derives a minimal sequence of ``zfs send`` commands from a list of
+snapshots and GUIDs to include. It favors fewer send steps for performance and
+works around resume and bookmark limitations.
+"""
 
 from __future__ import annotations
 
@@ -42,6 +49,7 @@ def incremental_send_steps(
     followed by zero or more -i/-I steps."""
 
     def append_run(i: int, label: str) -> int:
+        """Appends a run of snapshots as one or more send steps."""
         # step = ("-I", src_snapshots[start], src_snapshots[i], i - start)
         # print(f"{label} {self.send_step_to_str(step)}")
         is_not_resume = len(steps) > 0 or not is_resume
@@ -95,5 +103,6 @@ def incremental_send_steps(
 
 
 def send_step_to_str(step: tuple[str, str, str]) -> str:
+    """Returns a readable representation of an incremental send step."""
     # return str(step[1]) + ('-' if step[0] == '-I' else ':') + str(step[2])
     return str(step)

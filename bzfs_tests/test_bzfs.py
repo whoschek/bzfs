@@ -2053,7 +2053,7 @@ class TestPythonVersionCheck(AbstractTestCase):
 class TestPerformance(AbstractTestCase):
 
     def test_close_fds(self) -> None:
-        """see https://bugs.python.org/issue42738
+        """See https://bugs.python.org/issue42738
         and https://github.com/python/cpython/pull/113118/commits/654f63053aee162a6e59fa894b2cd8ee82a33a77"""
         iters = 2000
         runs = 3

@@ -13,16 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Allows you to validate open, closed, and half-open intervals on int as well as float arguments.
-# Each endpoint can be either a number or positive or negative infinity:
-# [a, b] --> min=a, max=b
-# [a, b) --> min=a, sup=b
-# (a, b] --> inf=a, max=b
-# (a, b) --> inf=a, sup=b
-# [a, +infinity) --> min=a
-# (a, +infinity) --> inf=a
-# (-infinity, b] --> max=b
-# (-infinity, b) --> sup=b
+"""Allows you to validate open, closed, and half-open intervals on int as well as float arguments.
+
+Each endpoint can be either a number or positive or negative infinity:
+[a, b] --> min=a, max=b
+[a, b) --> min=a, sup=b
+(a, b] --> inf=a, max=b
+(a, b) --> inf=a, sup=b
+[a, +infinity) --> min=a
+(a, +infinity) --> inf=a
+(-infinity, b] --> max=b
+(-infinity, b) --> sup=b
+"""
 
 from __future__ import annotations
 import argparse
@@ -32,6 +34,7 @@ from typing import Any
 
 # fmt: off
 class CheckRange(argparse.Action):
+    """Argparse action validating numeric ranges like ``(a,b]`` or ``[a,+∞)``."""
     ops = {'inf': operator.gt,  # noqa: RUF012
            'min': operator.ge,
            'sup': operator.lt,
@@ -50,6 +53,7 @@ class CheckRange(argparse.Action):
         super().__init__(*args, **kwargs)
 
     def interval(self) -> str:
+        """Returns a human-readable description of the allowed range."""
         if hasattr(self, 'min'):
             lo = f'[{self.min}'
         elif hasattr(self, 'inf'):
@@ -73,6 +77,7 @@ class CheckRange(argparse.Action):
         values: Any,
         option_string: str | None = None,
     ) -> None:
+        """Validate ``values`` against the configured interval and store result."""
         for name, op in self.ops.items():
             if hasattr(self, name) and not op(values, getattr(self, name)):
                 raise argparse.ArgumentError(self, self.interval())

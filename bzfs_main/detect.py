@@ -11,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""
-* Detection of runtime features and properties on local and remote hosts.
-"""
+#
+"""Detection of runtime features and properties on local and remote hosts."""
 
 from __future__ import annotations
 import platform
@@ -55,6 +53,8 @@ zfs_version_is_at_least_2_2_0 = "zfs>=2.2.0"
 #############################################################################
 @dataclass(frozen=True)
 class RemoteConfCacheItem:
+    """Caches detected programs, zpool features and connection pools, per remote."""
+
     connection_pools: ConnectionPools
     available_programs: dict[str, str]
     zpool_features: dict[str, str]
@@ -62,6 +62,7 @@ class RemoteConfCacheItem:
 
 
 def detect_available_programs(job: Job) -> None:
+    """Detects programs, zpool features and connection pools for local and remote hosts."""
     p = params = job.params
     log = p.log
     available_programs = params.available_programs
@@ -162,12 +163,13 @@ def detect_available_programs(job: Job) -> None:
 
 
 def disable_program(p: Params, program: str, locations: list[str]) -> None:
+    """Removes the given program from the available_programs mapping."""
     for location in locations:
         p.available_programs[location].pop(program, None)
 
 
 def find_available_programs(p: Params) -> str:
-    """POSIX shell script that checks for the existence of various programs. It uses `if` statements instead of `&&` plus
+    """POSIX shell script that checks for the existence of various programs; It uses `if` statements instead of `&&` plus
     `printf` instead of `echo` to ensure maximum compatibility across shells."""
     cmds = []
     cmds.append("printf 'default_shell-%s\n' \"$SHELL\"")
@@ -192,6 +194,7 @@ def find_available_programs(p: Params) -> str:
 
 
 def detect_available_programs_remote(job: Job, remote: Remote, available_programs: dict, ssh_user_host: str) -> None:
+    """Detects CLI tools available on ``remote`` and updates mapping correspondingly."""
     p, log = job.params, job.params.log
     location = remote.location
     available_programs_minimum = {"zpool": None, "sudo": None}
@@ -245,20 +248,24 @@ def detect_available_programs_remote(job: Job, remote: Remote, available_program
 
 
 def is_solaris_zfs(p: Params, remote: Remote) -> bool:
+    """Returns True if the remote ZFS implementation uses Solaris ZFS."""
     return is_solaris_zfs_location(p, remote.location)
 
 
 def is_solaris_zfs_location(p: Params, location: str) -> bool:
+    """Returns True if ``location`` uses Solaris ZFS."""
     if location == "local":
         return platform.system() == "SunOS"
     return p.available_programs[location].get("zfs") == "notOpenZFS"
 
 
 def is_dummy(r: Remote) -> bool:
+    """Returns True if ``remote`` refers to the synthetic dummy dataset."""
     return r.root_dataset == dummy_dataset
 
 
 def detect_zpool_features(job: Job, remote: Remote) -> None:
+    """Fills ``job.params.zpool_features`` with detected zpool capabilities."""
     p = params = job.params
     r, loc, log = remote, remote.location, p.log
     lines = []
@@ -286,16 +293,19 @@ def detect_zpool_features(job: Job, remote: Remote) -> None:
 
 
 def is_zpool_feature_enabled_or_active(p: Params, remote: Remote, feature: str) -> bool:
+    """Returns True if the given zpool feature is active or enabled on ``remote``."""
     return p.zpool_features[remote.location].get(feature) in ("active", "enabled")
 
 
 def are_bookmarks_enabled(p: Params, remote: Remote) -> bool:
+    """Checks if bookmark related features are enabled on ``remote``."""
     return is_zpool_feature_enabled_or_active(p, remote, "feature@bookmark_v2") and is_zpool_feature_enabled_or_active(
         p, remote, "feature@bookmark_written"
     )
 
 
 def is_caching_snapshots(p: Params, remote: Remote) -> bool:
+    """Returns True if snapshot caching is supported and enabled on ``remote``."""
     return (
         p.is_caching_snapshots
         and p.is_program_available(zfs_version_is_at_least_2_2_0, remote.location)
@@ -309,6 +319,7 @@ def is_version_at_least(version_str: str, min_version_str: str) -> bool:
 
 
 def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
+    """Fails if the remote user uses csh or tcsh as the default shell."""
     if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(

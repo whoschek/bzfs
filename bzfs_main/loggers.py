@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Logging helpers that build default and syslog-enabled loggers; Centralizes logger setup so that all bzfs tools share
+uniform formatting and configuration."""
 
 from __future__ import annotations
 import argparse
@@ -43,17 +46,19 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 def get_logger_name() -> str:
+    """Returns the canonical logger name used throughout bzfs."""
     from bzfs_main import bzfs
 
     return bzfs.__name__
 
 
 def get_logger_subname() -> str:
-    return get_logger_name() + ".sub"  # the logger name for use by --log-config-file
+    """Returns the logger name for use by --log-config-file."""
+    return get_logger_name() + ".sub"
 
 
 def reset_logger() -> None:
-    """Remove and close logging handlers (and close their files) and reset loggers to default state."""
+    """Removes and closes logging handlers (and closes their files) and resets loggers to default state."""
     for log in [logging.getLogger(get_logger_name()), logging.getLogger(get_logger_subname())]:
         for handler in log.handlers.copy():
             log.removeHandler(handler)
@@ -66,6 +71,7 @@ def reset_logger() -> None:
 
 
 def get_logger(log_params: LogParams, args: argparse.Namespace, log: Logger | None = None) -> Logger:
+    """Returns a logger configured from CLI arguments or an optional base logger."""
     add_trace_loglevel()
     logging.addLevelName(log_stderr, "STDERR")
     logging.addLevelName(log_stdout, "STDOUT")
@@ -81,6 +87,7 @@ def get_logger(log_params: LogParams, args: argparse.Namespace, log: Logger | No
 
 
 def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+    """Creates the default logger with stream, file and optional syslog handlers."""
     sublog = logging.getLogger(get_logger_subname())
     log = logging.getLogger(get_logger_name())
     log.setLevel(log_params.log_level)
@@ -133,13 +140,17 @@ log_level_prefixes = {
 
 
 def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = None) -> logging.Formatter:
+    """Returns a formatter for bzfs logs with optional prefix and column padding."""
     level_prefixes_ = log_level_prefixes
     log_stderr_ = log_stderr
     log_stdout_ = log_stdout
     terminal_cols = [0 if log_params is None else None]  # 'None' indicates "configure value later"
 
     class DefaultLogFormatter(logging.Formatter):
+        """Formatter adding timestamps and padding for progress output."""
+
         def format(self, record: logging.LogRecord) -> str:
+            """Formats the given record, adding timestamp and level prefix and padding."""
             levelno = record.levelno
             if levelno != log_stderr_ and levelno != log_stdout_:  # emit stdout and stderr "as-is" (no formatting)
                 timestamp = datetime.now().isoformat(sep=" ", timespec="seconds")  # 2024-09-03 12:26:15
@@ -167,6 +178,7 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
 
         @staticmethod
         def ljust_cols() -> int:
+            """Lazily determines padding width from ProgressReporter settings."""
             # lock-free yet thread-safe late configuration-based init for prettier ProgressReporter output
             # log_params.params and available_programs are not fully initialized yet before detect_available_programs() ends
             cols = 0
@@ -183,8 +195,13 @@ def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = N
 
 
 def get_simple_logger(program: str) -> Logger:
+    """Returns a minimal logger for simple tools."""
+
     class LevelFormatter(logging.Formatter):
+        """Injects level prefix and program name into log records."""
+
         def format(self, record: logging.LogRecord) -> str:
+            """Attaches extra fields before delegating to base formatter."""
             record.level_prefix = log_level_prefixes.get(record.levelno, "")
             record.program = program
             return super().format(record)
@@ -203,10 +220,12 @@ def get_simple_logger(program: str) -> Logger:
 
 
 def add_trace_loglevel() -> None:
+    """Registers a custom TRACE logging level with the standard python logging framework."""
     logging.addLevelName(log_trace, "TRACE")
 
 
 def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tuple[str, int], socket.SocketKind | None]:
+    """Normalizes syslog address to tuple form and returns socket type."""
     address = address.strip()
     socktype: socket.SocketKind | None = None
     if ":" in address:
@@ -218,6 +237,7 @@ def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tu
 
 
 def remove_json_comments(config_str: str) -> str:  # not standard but practical
+    """Strips line and end-of-line comments from a JSON string."""
     lines = []
     for line in config_str.splitlines():
         stripped = line.strip()
@@ -232,6 +252,7 @@ def remove_json_comments(config_str: str) -> str:  # not standard but practical
 
 
 def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> Logger:
+    """Creates a logger from a JSON config file with variable substitution."""
     import json
 
     prefix = prog_name + "."
@@ -256,9 +277,10 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
             log_config_file_str = fd.read()
 
     def substitute_log_config_vars(config_str: str, log_config_variables: dict[str, str]) -> str:
-        """Substitute ${name[:default]} placeholders within JSON with values from log_config_variables"""
+        """Substitutes ${name[:default]} placeholders within JSON with values from log_config_variables."""
 
         def substitute_fn(match: re.Match) -> str:
+            """Returns JSON replacement for variable placeholder."""
             varname = match.group(1)
             error_msg = validate_log_config_variable_name(varname)
             if error_msg:
@@ -293,6 +315,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
 
 
 def validate_log_config_variable(var: str) -> str | None:
+    """Returns error message if NAME:VALUE pair is malformed else ``None``."""
     if not var.strip():
         return "Invalid log config NAME:VALUE variable. Variable must not be empty: " + var
     if ":" not in var:
@@ -301,6 +324,7 @@ def validate_log_config_variable(var: str) -> str | None:
 
 
 def validate_log_config_variable_name(name: str) -> str | None:
+    """Validates log config variable name and return error message if invalid."""
     if not name:
         return "Invalid log config variable name. Name must not be empty: " + name
     bad_chars = "${} " + '"' + "'"
@@ -312,8 +336,8 @@ def validate_log_config_variable_name(name: str) -> str | None:
 
 
 def validate_log_config_dict(config: dict) -> None:
-    """Recursively scans the logging configuration dictionary to ensure that any instantiated objects via the '()' key are
-    on an approved whitelist. This prevents arbitrary code execution from a malicious config file."""
+    """Recursively scans the logging configuration dictionary to ensure that any instantiated objects via the '()' key are on
+    an approved whitelist; This prevents arbitrary code execution from a malicious config file."""
     whitelist = {
         "logging.StreamHandler",
         "logging.FileHandler",
@@ -336,17 +360,22 @@ def validate_log_config_dict(config: dict) -> None:
 
 #############################################################################
 class Tee:
+    """File-like object that duplicates writes to multiple streams."""
+
     def __init__(self, *files: IO) -> None:
         self.files = files
 
     def write(self, obj: str) -> None:
+        """Write ``obj`` to all target files and flush immediately."""
         for file in self.files:
             file.write(obj)
-            file.flush()  # Ensure each write is flushed immediately
+            file.flush()
 
     def flush(self) -> None:
+        """Flush all target streams."""
         for file in self.files:
             file.flush()
 
     def fileno(self) -> int:
+        """Return file descriptor of the first target stream."""
         return self.files[0].fileno()

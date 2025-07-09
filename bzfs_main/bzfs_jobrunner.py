@@ -17,7 +17,7 @@
 # requires-python = ">=3.8"
 # dependencies = []
 # ///
-
+#
 """
 * Overview of the bzfs_jobrunner.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing of CLI options/parameters.
@@ -72,6 +72,7 @@ sep = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
+    """Returns the CLI parser used by bzfs_jobrunner."""
     # fmt: off
     parser = argparse.ArgumentParser(
         prog=prog_name,
@@ -421,7 +422,10 @@ def main() -> None:
 
 #############################################################################
 class Job:
+    """Coordinates subjobs per the CLI flags; Each subjob handles one host pair and may run in its own process or thread."""
+
     def __init__(self, log: Logger | None = None) -> None:
+        """Initialize caches, parsers and logger shared across subjobs."""
         # immutable variables:
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
@@ -527,15 +531,19 @@ class Job:
         localhost_ids.add(localhostname)
 
         def zero_pad(number: int, width: int = 6) -> str:
-            return f"{number:0{width}d}"  # pad number with leading '0' chars to the given width
+            """Pads number with leading '0' chars to the given width."""
+            return f"{number:0{width}d}"
 
         def jpad(jj: int, tag: str) -> str:
+            """Returns ``tag`` prefixed with slash and zero padded index."""
             return "/" + zero_pad(jj) + tag
 
         def npad() -> str:
+            """Returns standardized subjob count suffix."""
             return sep + zero_pad(len(subjobs))
 
         def update_subjob_name(tag: str) -> str:
+            """Derives next subjob name based on ``tag`` and index ``j``."""
             if j <= 0:
                 return subjob_name
             elif j == 1:
@@ -544,6 +552,7 @@ class Job:
                 return subjob_name + "/" + BARRIER_CHAR
 
         def resolve_dataset(hostname: str, dataset: str, is_src: bool = True) -> str:
+            """Returns host:dataset string resolving IPv6 and localhost cases."""
             ssh_user = ssh_src_user if is_src else ssh_dst_user
             ssh_user = ssh_user if ssh_user else username
             lb = self.loopback_address
@@ -553,6 +562,7 @@ class Job:
             return f"{hostname}:{dataset}"
 
         def resolve_dst_dataset(dst_hostname: str, dst_dataset: str) -> str:
+            """Expands ``dst_dataset`` relative to ``dst_hostname`` roots."""
             root_dataset = dst_root_datasets.get(dst_hostname)
             assert root_dataset is not None, dst_hostname  # f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
             root_dataset = root_dataset.replace(src_magic_substitution_token, src_host)
@@ -611,6 +621,7 @@ class Job:
                 subjob_name = update_subjob_name(marker)
 
             def prune_src(opts: list[str], retention_plan: dict, tag: str) -> None:
+                """Creates prune subjob options for ``tag`` using ``retention_plan``."""
                 opts += [
                     "--skip-replication",
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
@@ -666,6 +677,7 @@ class Job:
                 subjob_name = update_subjob_name(marker)
 
             def monitor_snapshots_opts(tag: str, monitor_plan: dict, logsuffix: str) -> list[str]:
+                """Returns monitor subjob options for ``tag`` and ``monitor_plan``."""
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
                 opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
                 opts += [f"--log-file-infix={sep}{job_id}"]
@@ -674,8 +686,10 @@ class Job:
                 return opts
 
             def build_monitor_plan(monitor_plan: dict, snapshot_plan: dict, cycles_prefix: str) -> dict:
+                """Expands ``monitor_plan`` with cycle defaults from ``snapshot_plan``."""
 
                 def alert_dicts(alertdict: dict, cycles: int) -> dict:
+                    """Returns alert dictionaries with explicit ``cycles`` value."""
                     latest_dict = alertdict.copy()
                     for prefix in ("src_snapshot_", "dst_snapshot_", ""):
                         latest_dict.pop(f"{prefix}cycles", None)
@@ -752,6 +766,7 @@ class Job:
         job_id: str,
         job_run: str,
     ) -> list[str]:
+        """Returns CLI options for one replication subjob."""
         log = self.log
         log.debug("%s", f"Replicating targets {sorted(targets)} from {src_hostname} to {dst_hostname} ...")
         include_snapshot_plan = {  # only replicate targets that belong to the destination host and are relevant
@@ -783,6 +798,7 @@ class Job:
         """Skip datasets that point to removeable destination drives that are not currently (locally) attached, if any."""
 
         def zpool(dataset: str) -> str:
+            """Returns pool name portion of ``dataset``."""
             return dataset.split("/", 1)[0]
 
         assert len(root_dataset_pairs) > 0
@@ -821,6 +837,7 @@ class Job:
         ssh_src_config_file: str | None = None,
         ssh_dst_config_file: str | None = None,
     ) -> None:
+        """Appends ssh related options to ``opts`` if specified."""
         assert isinstance(opts, list)
         opts += [f"--ssh-src-user={ssh_src_user}"] if ssh_src_user else []
         opts += [f"--ssh-dst-user={ssh_dst_user}"] if ssh_dst_user else []
@@ -837,6 +854,7 @@ class Job:
         work_period_seconds: float,
         jitter: bool,
     ) -> None:
+        """Executes subjobs sequentially or in parallel, respecting barriers."""
         self.stats = Stats()
         self.stats.jobs_all = len(subjobs)
         log = self.log
@@ -891,6 +909,7 @@ class Job:
     def run_subjob(
         self, cmd: list[str], name: str, timeout_secs: float | None, spawn_process_per_job: bool
     ) -> int | None:  # thread-safe
+        """Executes one worker job and updates shared Stats."""
         start_time_nanos = time.monotonic_ns()
         returncode = None
         log = self.log
@@ -943,6 +962,7 @@ class Job:
             log.info("Progress: %s", msg)
 
     def run_worker_job_in_current_thread(self, cmd: list[str], timeout_secs: float | None) -> int | None:
+        """Runs ``bzfs`` in-process and return its exit code."""
         log = self.log
         if timeout_secs is not None:
             cmd = cmd[0:1] + [f"--timeout={round(1000 * timeout_secs)}milliseconds"] + cmd[1:]
@@ -960,11 +980,13 @@ class Job:
             return die_status
 
     def _bzfs_run_main(self, cmd: list[str]) -> None:
+        """Delegate execution to :mod:`bzfs` using parsed arguments."""
         bzfs_job = bzfs.Job()
         bzfs_job.is_test_mode = self.is_test_mode
         bzfs_job.run_main(self.bzfs_argument_parser.parse_args(cmd[1:]), cmd)
 
     def run_worker_job_spawn_process_per_job(self, cmd: list[str], timeout_secs: float | None) -> int | None:
+        """Spawns a subprocess for the worker job and waits for completion."""
         log = self.log
         if len(cmd) > 0 and cmd[0] == bzfs_prog_name:
             cmd = [sys.executable, "-m", "bzfs_main." + cmd[0]] + cmd[1:]
@@ -990,6 +1012,7 @@ class Job:
         return proc.returncode
 
     def validate_src_hosts(self, src_hosts: list[str]) -> list[str]:
+        """Checks ``src_hosts`` contains valid hostnames."""
         context = "--src-hosts"
         self.validate_type(src_hosts, list, context)
         for src_hostname in src_hosts:
@@ -997,6 +1020,7 @@ class Job:
         return src_hosts
 
     def validate_dst_hosts(self, dst_hosts: dict[str, list[str]]) -> dict[str, list[str]]:
+        """Checks destination hosts dictionary."""
         context = "--dst-hosts"
         self.validate_type(dst_hosts, dict, context)
         for dst_hostname, targets in dst_hosts.items():
@@ -1007,6 +1031,7 @@ class Job:
         return dst_hosts
 
     def validate_dst_root_datasets(self, dst_root_datasets: dict[str, str]) -> dict[str, str]:
+        """Checks that each destination root dataset string is valid."""
         context = "--dst-root-datasets"
         self.validate_type(dst_root_datasets, dict, context)
         for dst_hostname, dst_root_dataset in dst_root_datasets.items():
@@ -1017,6 +1042,7 @@ class Job:
     def validate_snapshot_plan(
         self, snapshot_plan: dict[str, dict[str, dict[str, int]]], context: str
     ) -> dict[str, dict[str, dict[str, int]]]:
+        """Checks snapshot plan structure and value types."""
         self.validate_type(snapshot_plan, dict, context)
         for org, target_periods in snapshot_plan.items():
             self.validate_type(org, str, f"{context} org")
@@ -1032,6 +1058,7 @@ class Job:
     def validate_monitor_snapshot_plan(
         self, monitor_snapshot_plan: dict[str, dict[str, dict[str, dict[str, str | int]]]]
     ) -> dict[str, dict[str, dict[str, dict[str, str | int]]]]:
+        """Checks snapshot monitoring plan configuration."""
         context = "--monitor-snapshot-plan"
         self.validate_type(monitor_snapshot_plan, dict, context)
         for org, target_periods in monitor_snapshot_plan.items():
@@ -1049,6 +1076,7 @@ class Job:
         return monitor_snapshot_plan
 
     def validate_is_subset(self, x: Iterable[str], y: Iterable[str], x_name: str, y_name: str) -> None:
+        """Raises error if ``x`` contains an item not present in ``y``."""
         if isinstance(x, str) or not isinstance(x, Iterable):
             self.die(f"{x_name} must be an Iterable")
         if isinstance(y, str) or not isinstance(y, Iterable):
@@ -1058,24 +1086,29 @@ class Job:
             self.die(f"{x_name} must be a subset of {y_name}. diff: {diff}, {x_name}: {sorted(x)}, {y_name}: {sorted(y)}")
 
     def validate_host_name(self, hostname: str, context: str) -> None:
+        """Checks host name string."""
         self.validate_non_empty_string(hostname, f"{context} hostname")
         bzfs.validate_host_name(hostname, context)
 
     def validate_non_empty_string(self, value: str, name: str) -> None:
+        """Checks that ``value`` is a non-empty string."""
         self.validate_type(value, str, name)
         if not value:
             self.die(f"{name} must not be empty!")
 
     def validate_non_negative_int(self, value: int, name: str) -> None:
+        """Checks ``value`` is an int >= 0."""
         self.validate_type(value, int, name)
         if value < 0:
             self.die(f"{name} must be a non-negative integer: {value}")
 
     def validate_true(self, expr: Any, msg: str) -> None:
+        """Raises error if ``expr`` evaluates to ``False``."""
         if not bool(expr):
             self.die(msg)
 
     def validate_type(self, value: Any, expected_type: Any, name: str) -> None:
+        """Checks ``value`` is instance of ``expected_type`` or union thereof."""
         if hasattr(expected_type, "__origin__") and expected_type.__origin__ is Union:  # for compat with python < 3.10
             union_types = expected_type.__args__
             for t in union_types:
@@ -1087,12 +1120,13 @@ class Job:
             self.die(f"{name} must be of type {expected_type.__name__} but got {type(value).__name__}: {value}")
 
     def die(self, msg: str) -> None:
+        """Log ``msg`` and exit the program."""
         self.log.error("%s", msg)
         bzfs_main.utils.die(msg)
 
     def get_localhost_ips(self) -> set[str]:
-        """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces,
-        without depending on name resolution."""
+        """Returns all network addresses of the local host, i.e. all configured addresses on all network interfaces, without
+        depending on name resolution."""
         if sys.platform == "linux":
             try:
                 proc = subprocess.run(["hostname", "-I"], stdin=DEVNULL, stdout=PIPE, text=True, check=True)  # noqa: S607
@@ -1105,6 +1139,8 @@ class Job:
 
 #############################################################################
 class Stats:
+    """Thread-safe counters summarizing subjob progress."""
+
     def __init__(self) -> None:
         self.lock: threading.Lock = threading.Lock()
         self.jobs_all: int = 0
@@ -1116,7 +1152,9 @@ class Stats:
         self.started_job_names: set[str] = set()
 
     def __repr__(self) -> str:
+
         def pct(number: int) -> str:
+            """Returns percentage string relative to total jobs."""
             return percent(number, total=self.jobs_all)
 
         al, started, completed, failed = self.jobs_all, self.jobs_started, self.jobs_completed, self.jobs_failed
@@ -1132,11 +1170,13 @@ class RejectArgumentAction(argparse.Action):
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Abort argument parsing if a protected option is seen."""
         parser.error(f"Security: Overriding protected argument '{option_string}' is not allowed.")
 
 
 #############################################################################
 def dedupe(root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Returns a list with duplicate dataset pairs removed while preserving order."""
     return list(dict.fromkeys(root_dataset_pairs).keys())
 
 
@@ -1144,26 +1184,34 @@ T = TypeVar("T")
 
 
 def flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
+    """Flattens an iterable of pairs into a single list."""
     return [item for pair in root_dataset_pairs for item in pair]
 
 
 def sanitize(filename: str) -> str:
+    """Replaces potentially problematic characters in ``filename`` with '!'."""
     for s in (" ", "..", "/", "\\", sep):
         filename = filename.replace(s, "!")
     return filename
 
 
 def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
+    """Returns a log file suffix in a format that contains the given hostnames."""
     sanitized_dst_hostname = sanitize(dst_hostname) if dst_hostname else ""
     return f"{sep}{sanitize(localhostname)}{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
 
 
 def format_dict(dictionary: dict[str, Any]) -> str:
+    """Pretty prints the given dictionary for logging and docs."""
     return bzfs.format_dict(dictionary)
 
 
-def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:  # For lazy/noop evaluation in disabled log levels
+def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
+    """Lazy JSON formatter used to avoid overhead in disabled log levels."""
+
     class PrettyPrintFormatter:
+        """Wrapper returning formatted JSON on ``str`` conversion."""
+
         def __str__(self) -> str:
             import json
 
@@ -1193,9 +1241,10 @@ def detect_loopback_address() -> str:
     return ""
 
 
-def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator ...
-    return hostname.replace(":", "|")  # ... and any colons that may be part of a (valid) ZFS dataset name
-    # Also see bzfs.convert_ipv6() for the reverse conversion
+def convert_ipv6(hostname: str) -> str:
+    """Supports IPv6 without getting confused by host:dataset colon separator and any colons that may be part of a (valid)
+    ZFS dataset name."""
+    return hostname.replace(":", "|")  # Also see bzfs.convert_ipv6() for the reverse conversion
 
 
 #############################################################################

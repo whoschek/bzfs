@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Emits a bash completion script such that typing bzfs <TAB> or bzfs_jobrunner <TAB> will auto-complete all flags.
 
-"""
-Emits a bash completion script such that typing bzfs <TAB> or bzfs_jobrunner <TAB> will auto-complete all flags.
 Usage: python3 -m bash_completion_d.shell-completion-generator > /etc/bash_completion.d/bzfs-shell-completion
 or     python3 -m bash_completion_d.shell-completion-generator > ~/.bash_completion.d/bzfs-shell-completion
 """
@@ -27,6 +27,7 @@ programs = ("bzfs", "bzfs_jobrunner")
 
 
 def version_line() -> str:
+    """Returns the program version string."""
     from bzfs_main import bzfs
 
     for act in bzfs.argument_parser()._actions:

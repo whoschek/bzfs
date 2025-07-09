@@ -635,7 +635,7 @@ class TestRunSubJobSpawnProcessPerJob(AbstractTestCase):
         self.assertListEqual([], logs)
 
     def test_dryrun(self) -> None:
-        """dryrun mode does not actually execute the CLI command."""
+        """Dryrun mode does not actually execute the CLI command."""
         self.job.jobrunner_dryrun = True
         code, logs = self.run_and_capture(["sh", "-c", "exit 3"], timeout_secs=None)
         self.assertEqual(0, code)
@@ -698,7 +698,7 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
         self.assertIsNone(result)
 
     def test_dryrun(self, mock_bzfs_run_main: MagicMock) -> None:
-        """dryrun mode does not actually execute the CLI command."""
+        """Dryrun mode does not actually execute the CLI command."""
         self.job.jobrunner_dryrun = True
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = SystemExit(3)

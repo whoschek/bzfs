@@ -13,6 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Generates README.md badges for zfs/os/python version.
+
+Called from within CI by coverage.sh with 'generate' option, and in a later CI phase again with 'merge' option.
+
+Requires
+https://smarie.github.io/python-genbadge/
+to be installed.
+ZFS CLI may or may not be available.
+Copes with network failures by producing badges locally.
+"""
 
 from __future__ import annotations
 import os
@@ -26,8 +37,7 @@ ROOT_DIR = "badges"
 
 
 def main() -> None:
-    """Generate README.md badges for zfs/os/python version. Called by coverage.sh.
-    Uses https://smarie.github.io/python-genbadge/"""
+    """API for command line clients."""
     if sys.argv[1] != "merge":
         from bzfs_tests.zfs_util import zfs_version
 
@@ -55,11 +65,14 @@ def main() -> None:
 
 
 def touch(output_dir: str, path: str) -> None:
+    """Creates an empty marker file representing a badge version."""
     os.makedirs(output_dir, exist_ok=True)
     Path(f"{output_dir}/{path}").touch()
 
 
 def merge_versions(input_dir: str, natsort: bool = False) -> str:
+    """Gathers all versions produced by previous jobs, via marker files, and returns a pipe-separated list of versions."""
+
     versions = [str(file) for file in os.listdir(input_dir)]
     if natsort:
         versions = sort_versions(versions)
@@ -72,6 +85,7 @@ def merge_versions(input_dir: str, natsort: bool = False) -> str:
 
 
 def sort_versions(version_list: list[str]) -> list[str]:
+    """Sorts a list of version strings in natural order."""
 
     def is_valid_version(version: str) -> re.Match | None:  # is in the form x.y.z ?
         return re.match(r"^\d+(\.\d+){0,2}$", version)
@@ -85,6 +99,8 @@ def sort_versions(version_list: list[str]) -> list[str]:
 
 
 def generate_badge(left_txt: str, right_txt: str, color: str) -> None:
+    """Writes an SVG badge for the given text."""
+
     from genbadge import Badge
 
     badge = Badge(left_txt=left_txt, right_txt=right_txt, color=color)
@@ -93,7 +109,7 @@ def generate_badge(left_txt: str, right_txt: str, color: str) -> None:
     output_file = f"{ROOT_DIR}/{left_txt}-badge.svg"
     try:
         badge.write_to(output_file, use_shields=True)
-    except Exception:  # no network connectivity (or other error)
+    except Exception:  # no network connectivity (or other error): produce badge locally
         badge.write_to(output_file, use_shields=False)
 
 

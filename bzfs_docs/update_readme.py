@@ -11,6 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""
+Run this script to update README.md from the help info contained in bzfs.py.
+Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main/bzfs.py README.md
+This essentially does the following steps:
+argparse-manpage --module bzfs_main.bzfs --function argument_parser > /tmp/manpage.1
+pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
+Then takes that output, auto-cleans it and auto-replaces certain sections of README.md with it.
+
+Before doing so install prerequisites:
+brew install pandoc  # OSX
+sudo apt-get -y install pandoc  # Linux
+pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
+"""
 
 from __future__ import annotations
 import os
@@ -24,19 +38,7 @@ from bzfs_main.utils import find_match
 
 
 def main() -> None:
-    """
-    Run this script to update README.md from the help info contained in bzfs.py.
-    Example usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main/bzfs.py README.md
-    This essentially does the following steps:
-    argparse-manpage --module bzfs_main.bzfs --function argument_parser > /tmp/manpage.1
-    pandoc -s -t markdown /tmp/manpage.1 -o /tmp/manpage.md
-    Then takes that output, auto-cleans it and auto-replaces certain sections of README.md with it.
-
-    Before doing so install prerequisites:
-    brew install pandoc  # OSX
-    sudo apt-get -y install pandoc  # Linux
-    pip install argparse-manpage  # see https://github.com/praiskup/argparse-manpage
-    """
+    """API for command line clients."""
     if len(sys.argv) != 3:
         print("Usage: cd ~/repos/bzfs; python3 -m bzfs_docs.update_readme bzfs_main.bzfs path/to/README.md")
         sys.exit(1)

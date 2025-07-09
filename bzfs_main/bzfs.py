@@ -17,7 +17,7 @@
 # requires-python = ">=3.8"
 # dependencies = []
 # ///
-
+#
 """
 * Overview of the bzfs.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing into a "Params" class.
@@ -225,6 +225,7 @@ SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 
 
 def argument_parser() -> argparse.ArgumentParser:
+    """Returns the CLI parser used by bzfs."""
     create_src_snapshots_plan_example1 = str({"test": {"": {"adhoc": 1}}}).replace(" ", "")
     create_src_snapshots_plan_example2 = str({"prod": {"us-west-1": {"hourly": 36, "daily": 31}}}).replace(" ", "")
     delete_dst_snapshots_except_plan_example1 = str(
@@ -1620,8 +1621,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 
 #############################################################################
 class LogParams:
+    """Option values for logging."""
+
     def __init__(self, args: argparse.Namespace) -> None:
-        """Option values for logging; reads from ArgumentParser via args."""
+        """Reads from ArgumentParser via args."""
         # immutable variables:
         if args.quiet:
             self.log_level = "ERROR"
@@ -1685,6 +1688,8 @@ class LogParams:
 
 #############################################################################
 class Params:
+    """All parsed CLI options combined into a single bundle; simplifies passing around numerous settings and defaults."""
+
     def __init__(
         self,
         args: argparse.Namespace,
@@ -1693,7 +1698,7 @@ class Params:
         log: Logger | None = None,
         inject_params: dict[str, bool] | None = None,
     ) -> None:
-        """Option values for all aspects; reads from ArgumentParser via args."""
+        """Reads from ArgumentParser via args."""
         # immutable variables:
         assert args is not None
         self.args: argparse.Namespace = args
@@ -1849,7 +1854,7 @@ class Params:
         return opts
 
     def validate_arg(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str | None:
-        """allow_all permits all characters, including whitespace and quotes. See squote() and dquote()."""
+        """allow_all permits all characters, including whitespace and quotes; See squote() and dquote()."""
         if allow_all or opt is None:
             return opt
         if any(char.isspace() and (char != " " or not allow_spaces) for char in opt):
@@ -1858,6 +1863,7 @@ class Params:
         return opt
 
     def validate_arg_str(self, opt: str, allow_spaces: bool = False, allow_all: bool = False) -> str:
+        """Returns validated option string, raising if missing or illegal."""
         if opt is None:
             die("Option must not be missing")
         self.validate_arg(opt, allow_spaces=allow_spaces, allow_all=allow_all)
@@ -1865,12 +1871,14 @@ class Params:
 
     @staticmethod
     def validate_quoting(opts: list[str]) -> None:
+        """Raises an error if any option contains a quote or shell metacharacter."""
         for opt in opts:
             if "'" in opt or '"' in opt or "$" in opt or "`" in opt:
                 die(f"Option must not contain a single quote or double quote or dollar or backtick character: {opt}")
 
     @staticmethod
     def fix_recv_opts(opts: list[str], preserve_properties: frozenset[str]) -> tuple[list[str], list[str]]:
+        """Returns sanitized ``zfs recv`` options and captured ``-o/-x`` args."""
         return fix_send_recv_opts(
             opts,
             exclude_long_opts={"--dryrun"},
@@ -1881,6 +1889,7 @@ class Params:
 
     @staticmethod
     def fix_send_opts(opts: list[str]) -> list[str]:
+        """Returns sanitized ``zfs send`` options."""
         return fix_send_recv_opts(
             opts,
             exclude_long_opts={"--dryrun"},
@@ -1904,6 +1913,7 @@ class Params:
         return program
 
     def unset_matching_env_vars(self, args: argparse.Namespace) -> None:
+        """Unset environment variables matching regex filters."""
         exclude_envvar_regexes = compile_regexes(args.exclude_envvar_regex)
         include_envvar_regexes = compile_regexes(args.include_envvar_regex)
         for envvar_name in list(os.environ.keys()):
@@ -1912,8 +1922,11 @@ class Params:
                 self.log.debug("Unsetting b/c envvar regex: %s", envvar_name)
 
     def lock_file_name(self) -> str:
-        """Makes it such that a job that runs periodically declines to start if the same previous periodic
-        job is still running without completion yet."""
+        """Returns unique path used to detect concurrently running jobs.
+
+        Makes it such that a job that runs periodically declines to start if the same previous periodic job is still running
+        without completion yet. Hashed key avoids overly long filenames while remaining deterministic.
+        """
         # fmt: off
         key = (tuple(self.root_dataset_pairs), self.args.recursive, self.args.exclude_dataset_property,
                tuple(self.args.include_dataset), tuple(self.args.exclude_dataset),
@@ -1932,16 +1945,20 @@ class Params:
         return os.path.join(tempfile.gettempdir(), f"{prog_name}-lockfile-{hash_code}.lock")
 
     def dry(self, msg: str) -> str:
+        """Prefix ``msg`` with 'Dry' when running in dry-run mode."""
         return bzfs_main.utils.dry(msg, self.dry_run)
 
     def is_program_available(self, program: str, location: str) -> bool:
+        """Return True if ``program`` was detected on ``location`` host."""
         return program in self.available_programs.get(location, {})
 
 
 #############################################################################
 class Remote:
+    """Connection settings for either source or destination host."""
+
     def __init__(self, loc: str, args: argparse.Namespace, p: Params) -> None:
-        """Option values for either location=='src' or location=='dst'; reads from ArgumentParser via args."""
+        """Reads from ArgumentParser via args."""
         # immutable variables:
         assert loc == "src" or loc == "dst"
         self.location: str = loc
@@ -1980,7 +1997,7 @@ class Remote:
         self.is_nonlocal: bool = False
 
     def local_ssh_command(self) -> list[str]:
-        """Returns the ssh CLI command to run locally in order to talk to the remote host. This excludes the (trailing)
+        """Returns the ssh CLI command to run locally in order to talk to the remote host; This excludes the (trailing)
         command to run on the remote host, which will be appended later."""
         if self.ssh_user_host == "":
             return []  # dataset is on local host - don't use ssh
@@ -2011,6 +2028,7 @@ class Remote:
         return ssh_cmd
 
     def cache_key(self) -> tuple:
+        """Returns tuple uniquely identifying this Remote for caching."""
         return self.location, self.pool, self.ssh_user_host, self.ssh_port, self.ssh_config_file
 
     def __repr__(self) -> str:
@@ -2019,8 +2037,10 @@ class Remote:
 
 #############################################################################
 class CopyPropertiesConfig:
+    """--zfs-recv-o* and --zfs-recv-x* option groups for copying or excluding ZFS properties on receive."""
+
     def __init__(self, group: str, flag: str, args: argparse.Namespace, p: Params) -> None:
-        """Option values for --zfs-recv-o* and --zfs-recv-x* option groups; reads from ArgumentParser via args."""
+        """Reads from ArgumentParser via args."""
         # immutable variables:
         grup = group
         self.group: str = group
@@ -2048,6 +2068,7 @@ class SnapshotLabel(NamedTuple):
         return f"{self.prefix}{self.infix}{self.timestamp}{self.suffix}"
 
     def validate_label(self, input_text: str) -> None:
+        """Validates that the composed snapshot label forms a legal name."""
         name = str(self)
         validate_dataset_name(name, input_text)
         if "/" in name:
@@ -2073,7 +2094,10 @@ class SnapshotLabel(NamedTuple):
 
 #############################################################################
 class SnapshotPeriods:  # thread-safe
+    """Parses snapshot suffix strings and converts between durations."""
+
     def __init__(self) -> None:
+        """Initialize lookup tables of suffixes and corresponding millis."""
         # immutable variables:
         self.suffix_milliseconds: Final = {
             "yearly": 365 * 86400 * 1000,
@@ -2099,9 +2123,11 @@ class SnapshotPeriods:  # thread-safe
         self._suffix_regex1: Final = re.compile("_" + self._suffix_regex0.pattern)
 
     def suffix_to_duration0(self, suffix: str) -> tuple[int, str]:
+        """Parse suffix like '10minutely' to (10, 'minutely')."""
         return self._suffix_to_duration(suffix, self._suffix_regex0)
 
     def suffix_to_duration1(self, suffix: str) -> tuple[int, str]:
+        """Like :meth:`suffix_to_duration0` but expects an underscore prefix."""
         return self._suffix_to_duration(suffix, self._suffix_regex1)
 
     @staticmethod
@@ -2116,6 +2142,7 @@ class SnapshotPeriods:  # thread-safe
             return 0, ""
 
     def label_milliseconds(self, snapshot: str) -> int:
+        """Returns duration encoded in ``snapshot`` suffix, in milliseconds."""
         i = snapshot.rfind("_")
         snapshot = "" if i < 0 else snapshot[i + 1 :]
         duration_amount, duration_unit = self._suffix_to_duration(snapshot, self._suffix_regex0)
@@ -2124,6 +2151,8 @@ class SnapshotPeriods:  # thread-safe
 
 #############################################################################
 class CreateSrcSnapshotConfig:
+    """Option values for --create-src-snapshots, that is, for automatically creating source snapshots."""
+
     def __init__(self, args: argparse.Namespace, p: Params) -> None:
         """Option values for --create-src-snapshots*; reads from ArgumentParser via args."""
         # immutable variables:
@@ -2202,6 +2231,8 @@ class CreateSrcSnapshotConfig:
 #############################################################################
 @dataclass(frozen=True)
 class AlertConfig:
+    """Thresholds controlling when alerts fire for snapshot age."""
+
     kind: Literal["Latest", "Oldest"]
     warning_millis: int
     critical_millis: int
@@ -2210,6 +2241,8 @@ class AlertConfig:
 #############################################################################
 @dataclass(frozen=True)
 class MonitorSnapshotAlert:
+    """Alert configuration for a single monitored snapshot label."""
+
     label: SnapshotLabel
     latest: AlertConfig | None
     oldest: AlertConfig | None
@@ -2217,8 +2250,10 @@ class MonitorSnapshotAlert:
 
 #############################################################################
 class MonitorSnapshotsConfig:
+    """Option values for --monitor-snapshots*, that is, policy describing which snapshots to monitor for staleness."""
+
     def __init__(self, args: argparse.Namespace, p: Params) -> None:
-        """Option values for --monitor-snapshots*; reads from ArgumentParser via args."""
+        """Reads from ArgumentParser via args."""
         # immutable variables:
         self.monitor_snapshots: dict = ast.literal_eval(args.monitor_snapshots)
         self.dont_warn: bool = args.monitor_snapshots_dont_warn
@@ -2298,7 +2333,10 @@ def run_main(args: argparse.Namespace, sys_argv: list[str] | None = None, log: L
 
 #############################################################################
 class Job:
+    """Executes one bzfs run, coordinating snapshot replication tasks."""
+
     def __init__(self) -> None:
+        """Initialize caches and result tracking structures."""
         self.params: Params
         self.all_dst_dataset_exists: dict[str, dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
@@ -2337,12 +2375,14 @@ class Job:
         self.max_command_line_bytes: int | None = None  # for testing only
 
     def shutdown(self) -> None:
-        """Exit any multiplexed ssh sessions that may be leftover."""
+        """Exits any multiplexed ssh sessions that may be leftover."""
         cache_items = self.remote_conf_cache.values()
         for i, cache_item in enumerate(cache_items):
             cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
     def terminate(self, old_term_handler: Any, except_current_process: bool = False) -> None:
+        """Shuts down gracefully on SIGTERM, optionally killing descendants."""
+
         def post_shutdown() -> None:
             signal.signal(signal.SIGTERM, old_term_handler)  # restore original signal handler
             terminate_process_subtree(except_current_process=except_current_process)
@@ -2351,6 +2391,7 @@ class Job:
             self.shutdown()
 
     def run_main(self, args: argparse.Namespace, sys_argv: list[str] | None = None, log: Logger | None = None) -> None:
+        """Parses CLI arguments, sets up logging, and executes main job loop."""
         assert isinstance(self.error_injection_triggers, dict)
         assert isinstance(self.delete_injection_triggers, dict)
         assert isinstance(self.inject_params, dict)
@@ -2431,6 +2472,7 @@ class Job:
             sys.stderr.flush()
 
     def run_tasks(self) -> None:
+        """Executes replication cycles, repeating until daemon lifetime expires."""
         p, log = self.params, self.params.log
         self.all_exceptions = []
         self.all_exceptions_count = 0
@@ -2485,6 +2527,7 @@ class Job:
             raise self.first_exception
 
     def append_exception(self, e: BaseException, task_name: str, task_description: str) -> None:
+        """Records and logs an exception that was encountered while running a subtask."""
         self.first_exception = self.first_exception or e
         if len(self.all_exceptions) < self.max_exceptions_to_summarize:  # cap max memory consumption
             self.all_exceptions.append(str(e))
@@ -2492,6 +2535,7 @@ class Job:
         self.params.log.error(f"#{self.all_exceptions_count}: Done with %s: %s", task_name, task_description)
 
     def sleep_until_next_daemon_iteration(self, daemon_stoptime_nanos: int) -> bool:
+        """Pauses until the next scheduled snapshot time or daemon stop."""
         sleep_nanos = daemon_stoptime_nanos - time.monotonic_ns()
         if sleep_nanos <= 0:
             return False
@@ -2515,6 +2559,7 @@ class Job:
         return daemon_stoptime_nanos - time.monotonic_ns() > 0
 
     def print_replication_stats(self, start_time_nanos: int) -> None:
+        """Logs overall replication statistics after a job cycle completes."""
         p, log = self.params, self.params.log
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
@@ -2525,6 +2570,7 @@ class Job:
         log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
     def validate_once(self) -> None:
+        """Validates CLI parameters and compiles regex lists one time only, which will later be reused many times."""
         p = self.params
         p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
         for snapshot_filter in p.snapshot_filters:
@@ -2572,6 +2618,7 @@ class Job:
             validate_port(r.ssh_port, f"--ssh-{loc}-port ")
 
     def validate_task(self) -> None:
+        """Validates a single replication task before execution."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         for remote in [src, dst]:
@@ -2640,6 +2687,7 @@ class Job:
             log.log(log_trace, "Validated Param values: %s", pretty_print_formatter(self.params))
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> tuple[str, bool]:
+        """Returns sudo command prefix and whether root privileges are required."""
         p = self.params
         assert isinstance(ssh_user_host, str)
         assert isinstance(ssh_user, str)
@@ -2670,6 +2718,8 @@ class Job:
             return "", True
 
     def run_task(self) -> None:
+        """Replicates all snapshots for the current root dataset pair."""
+
         def filter_src_datasets() -> list[str]:  # apply --{include|exclude}-dataset policy
             return filter_datasets(self, src, basis_src_datasets) if src_datasets is None else src_datasets
 
@@ -2992,6 +3042,7 @@ class Job:
             )
 
     def monitor_snapshots(self, remote: Remote, sorted_datasets: list[str]) -> None:
+        """Check snapshots freshness and warns or errors out when limits are exceeded."""
         p, log = self.params, self.params.log
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
         labels: list[SnapshotLabel] = [alert.label for alert in alerts]
@@ -3064,8 +3115,10 @@ class Job:
 
         def find_stale_datasets_and_check_alerts() -> list[str]:
             """If the cache is enabled, check which datasets have changed to determine which datasets can be skipped cheaply,
-            i.e. without incurring 'zfs list -t snapshots'. This is done by comparing the "snapshots_changed" ZFS dataset
-            property with the local cache - https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
+
+            that is, without incurring 'zfs list -t snapshots'. This is done by comparing the "snapshots_changed" ZFS dataset
+            property with the local cache - https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
+            """
             stale_datasets = []
             time_threshold = time.time() - time_threshold_secs
             for dataset in sorted_datasets:
@@ -3114,6 +3167,7 @@ class Job:
                 alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
 
     def replicate_datasets(self, src_datasets: list[str], task_description: str, max_workers: int) -> bool:
+        """Replicates a list of datasets in parallel according to configuration."""
         assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
@@ -3136,9 +3190,11 @@ class Job:
 
         def find_stale_datasets() -> tuple[list[str], dict[str, str]]:
             """If the cache is enabled on replication, check which src datasets or dst datasets have changed to determine
-            which datasets can be skipped cheaply, i.e. without incurring 'zfs list -t snapshots'. This is done by comparing
-            the "snapshots_changed" ZFS dataset property with the local cache.
-            See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
+            which datasets can be skipped cheaply, i.e. without incurring 'zfs list -t snapshots'.
+
+            This is done by comparing the "snapshots_changed" ZFS dataset property with the local cache. See
+            https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
+            """
             # First, check which src datasets have changed since the last replication to that destination
             cache_files = {}
             stale_src_datasets1 = []
@@ -3234,7 +3290,6 @@ class Job:
 
     def replicate_dataset(self, src_dataset: str, tid: str, retry: Retry) -> bool:
         """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
-
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         retry_count = retry.count
@@ -3327,8 +3382,8 @@ class Job:
             # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
             # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
             def latest_common_snapshot(snapshots_with_guids: list[str], intersect_guids: set[str]) -> tuple[str | None, str]:
-                """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously
-                used for 'zfs list -s ...'"""
+                """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously used for
+                'zfs list -s ...'."""
                 for _line in reversed(snapshots_with_guids):
                     guid_, snapshot_ = _line.split("\t", 1)
                     if guid_ in intersect_guids:
@@ -3552,6 +3607,7 @@ class Job:
     def prepare_zfs_send_receive(
         self, src_dataset: str, send_cmd: list[str], recv_cmd: list[str], size_estimate_bytes: int, size_estimate_human: str
     ) -> tuple[str, str, str]:
+        """Constructs zfs send/recv pipelines with optional compression and pv."""
         p = self.params
         send_cmd_str = shlex.join(send_cmd)
         recv_cmd_str = shlex.join(recv_cmd)
@@ -3666,6 +3722,7 @@ class Job:
         dry_run_no_send: bool,
         error_trigger: str | None = None,
     ) -> None:
+        """Executes a zfs send/receive pipeline between source and destination."""
         p, log = self.params, self.params.log
         src_pipe, local_pipe, dst_pipe = self.prepare_zfs_send_receive(
             src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human
@@ -3706,6 +3763,8 @@ class Job:
             src_conn_pool.return_connection(src_conn)
 
     def clear_resumable_recv_state_if_necessary(self, dst_dataset: str, stderr: str) -> bool:
+        """Deletes leftover state when resume tokens fail to apply."""
+
         def clear_resumable_recv_state() -> bool:
             log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
             cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
@@ -3794,8 +3853,8 @@ class Job:
         return recv_resume_token, send_resume_opts, recv_resume_opts
 
     def mbuffer_cmd(self, loc: str, size_estimate_bytes: int, recordsize: int) -> str:
-        """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
-        smooth out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
+        """If mbuffer command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to smooth
+        out the rate of data flow and prevent bottlenecks caused by network latency or speed fluctuation."""
         p = self.params
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
@@ -3812,8 +3871,8 @@ class Job:
             return "cat"
 
     def compress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
-        """If zstd command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to
-        reduce network bottlenecks by sending compressed data."""
+        """If zstd command is on the PATH, uses it in the ssh network pipe between 'zfs send' and 'zfs receive' to reduce
+        network bottlenecks by sending compressed data."""
         p = self.params
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
@@ -3825,6 +3884,7 @@ class Job:
             return "cat"
 
     def decompress_cmd(self, loc: str, size_estimate_bytes: int) -> str:
+        """Returns decompression command for network pipe if remote supports it."""
         p = self.params
         if (
             size_estimate_bytes >= p.min_pipe_transfer_size
@@ -3840,8 +3900,8 @@ class Job:
     def pv_cmd(
         self, loc: str, size_estimate_bytes: int, size_estimate_human: str, disable_progress_bar: bool = False
     ) -> str:
-        """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'.
-        Progress can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
+        """If pv command is on the PATH, monitors the progress of data transfer from 'zfs send' to 'zfs receive'; Progress
+        can be viewed via "tail -f $pv_log_file" aka tail -f ~/bzfs-logs/current.pv or similar."""
         p = self.params
         if p.is_program_available("pv", loc):
             size = f"--size={size_estimate_bytes}"
@@ -3888,14 +3948,16 @@ class Job:
 
     @staticmethod
     def squote(remote: Remote, arg: str) -> str:
+        """Quotes an argument only when running remotely over ssh."""
         return arg if remote.ssh_user_host == "" else shlex.quote(arg)
 
     @staticmethod
     def dquote(arg: str) -> str:
-        """shell-escapes double quotes and dollar and backticks, then surrounds with double quotes."""
+        """Shell-escapes double quotes and dollar and backticks, then surrounds with double quotes."""
         return '"' + arg.replace('"', '\\"').replace("$", "\\$").replace("`", "\\`") + '"'
 
     def delete_snapshots(self, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:
+        """Deletes snapshots in manageable batches on the specified remote."""
         if len(snapshot_tags) == 0:
             return
         p, log = self.params, self.params.log
@@ -3911,6 +3973,7 @@ class Job:
         )
 
     def delete_snapshot(self, r: Remote, dataset: str, snapshots_to_delete: str) -> None:
+        """Runs zfs destroy for a comma-separated snapshot list."""
         p = self.params
         cmd = self.delete_snapshot_cmd(r, snapshots_to_delete)
         is_dry = p.dry_run and is_solaris_zfs(p, r)  # solaris-11.4 knows no 'zfs destroy -n' flag
@@ -3924,12 +3987,14 @@ class Job:
             raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
     def delete_snapshot_cmd(self, r: Remote, snapshots_to_delete: str) -> list[str]:
+        """Builds zfs destroy command for given snapshots."""
         p = self.params
         return p.split_args(
             f"{r.sudo} {p.zfs_program} destroy", p.force_hard, p.verbose_destroy, p.dry_run_destroy, snapshots_to_delete
         )
 
     def delete_bookmarks(self, remote: Remote, dataset: str, snapshot_tags: list[str]) -> None:
+        """Removes bookmarks individually since zfs lacks batch deletion."""
         if len(snapshot_tags) == 0:
             return
         # Unfortunately ZFS has no syntax yet to delete multiple bookmarks in a single CLI invocation
@@ -3967,6 +4032,7 @@ class Job:
             last_deleted_dataset = dataset
 
     def create_zfs_filesystem(self, filesystem: str) -> None:
+        """Creates destination filesystem hierarchies without mounting them."""
         # zfs create -p -u $filesystem
         # To ensure the filesystems that we create do not get mounted, we apply a separate 'zfs create -p -u'
         # invocation for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
@@ -4094,6 +4160,7 @@ class Job:
     def incremental_send_steps_wrapper(
         self, src_snapshots: list[str], src_guids: list[str], included_guids: set[str], is_resume: bool
     ) -> list[tuple[str, str, str, list[str]]]:
+        """Returns incremental send steps, optionally converting -I to -i."""
         force_convert_I_to_i = self.params.src.use_zfs_delegation and not getenv_bool(  # noqa: N806
             "no_force_convert_I_to_i", True
         )
@@ -4105,7 +4172,7 @@ class Job:
     def add_recv_property_options(
         self, full_send: bool, recv_opts: list[str], dataset: str, cache: dict[tuple[str, str, str], dict[str, str | None]]
     ) -> tuple[list[str], list[str]]:
-        """Reads the ZFS properties of the given src dataset. Appends zfs recv -o and -x values to recv_opts according to CLI
+        """Reads the ZFS properties of the given src dataset; Appends zfs recv -o and -x values to recv_opts according to CLI
         params, and returns properties to explicitly set on the dst dataset after 'zfs receive' completes successfully."""
         p = self.params
         set_opts = []
@@ -4155,8 +4222,8 @@ class Job:
 
     @staticmethod
     def recv_option_property_names(recv_opts: list[str]) -> set[str]:
-        """Extracts -o and -x property names that are already specified on the command line. This can be used to check
-        for dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
+        """Extracts -o and -x property names that are already specified on the command line; This can be used to check for
+        dupes because 'zfs receive' does not accept multiple -o or -x options with the same property name."""
         propnames = set()
         i = 0
         n = len(recv_opts)
@@ -4179,15 +4246,17 @@ class Job:
     ) -> list[str] | None:
         """Returns the root datasets within the (filtered) `datasets` list if no incompatible pruning is detected. A dataset
         within `datasets` is considered a root dataset if it has no parent, i.e. it is not a descendant of any dataset in
-        `datasets`. Returns `None` if any (unfiltered) dataset in `basis_dataset` that is a descendant of at least one of
-        the root datasets is missing in `datasets`, indicating that --include/exclude-dataset* or the snapshot schedule
-        have pruned a dataset in a way that is incompatible with 'zfs snapshot -r' CLI semantics, thus requiring a switch
-        to the non-recursive 'zfs snapshot snapshot1 .. snapshot N' CLI flavor.
+        `datasets`. Returns `None` if any (unfiltered) dataset in `basis_dataset` that is a descendant of at least one of the
+        root datasets is missing in `datasets`, indicating that --include/exclude-dataset* or the snapshot schedule have
+        pruned a dataset in a way that is incompatible with 'zfs snapshot -r' CLI semantics, thus requiring a switch to the
+        non-recursive 'zfs snapshot snapshot1 .. snapshot N' CLI flavor.
+
         Assumes that set(datasets).issubset(set(basis_datasets)). Also assumes that datasets and basis_datasets are both
         sorted (and thus the output root_datasets is sorted too), which is why this algorithm is efficient - O(N) time
         complexity. The impl is akin to the merge algorithm of a merge sort, adapted to our specific use case.
         See root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct() in the unit test suite for an alternative
-        impl that's easier to grok."""
+        impl that's easier to grok.
+        """
         datasets_set: set[str] = set(datasets)
         root_datasets: list[str] = self.find_root_datasets(datasets)
         len_root_datasets = len(root_datasets)
@@ -4206,8 +4275,8 @@ class Job:
 
     @staticmethod
     def find_root_datasets(sorted_datasets: list[str]) -> list[str]:
-        """Returns the roots of the subtrees in the (sorted) input datasets. The output root dataset list is sorted, too.
-        A dataset is a root dataset if it has no parent, i.e. it is not a descendant of any dataset in the input datasets."""
+        """Returns the roots of the subtrees in the (sorted) input datasets; The output root dataset list is sorted, too; A
+        dataset is a root dataset if it has no parent, i.e. it is not a descendant of any dataset in the input datasets."""
         root_datasets = []
         skip_dataset = DONT_SKIP_DATASET
         for dataset in sorted_datasets:
@@ -4219,14 +4288,16 @@ class Job:
 
     def find_datasets_to_snapshot(self, sorted_datasets: list[str]) -> dict[SnapshotLabel, list[str]]:
         """Given a (sorted) list of source datasets, returns a dict where the key is a snapshot name (aka SnapshotLabel, e.g.
-        bzfs_2024-11-06_08:30:05_hourly) and the value is the (sorted) (sub)list of datasets for which a snapshot needs to
-        be created with that name, because these datasets are due per the schedule, either because the 'creation' time of
-        their most recent snapshot with that name pattern is now too old, or such a snapshot does not even exist.
+        bzfs_2024-11-06_08:30:05_hourly) and the value is the (sorted) (sub)list of datasets for which a snapshot needs to be
+        created with that name, because these datasets are due per the schedule, either because the 'creation' time of their
+        most recent snapshot with that name pattern is now too old, or such a snapshot does not even exist.
+
         The baseline implementation uses the 'zfs list -t snapshot' CLI to find the most recent snapshots, which is simple
-        but doesn't scale well with the number of snapshots, at least if the goal is to take snapshots every second.
-        An alternative, much more scalable, implementation queries the standard ZFS "snapshots_changed" dataset property
-        (requires zfs >= 2.2.0), in combination with a local cache that stores this property, as well as the creation time
-        of the most recent snapshot, for each SnapshotLabel and each dataset."""
+        but doesn't scale well with the number of snapshots, at least if the goal is to take snapshots every second. An
+        alternative, much more scalable, implementation queries the standard ZFS "snapshots_changed" dataset property
+        (requires zfs >= 2.2.0), in combination with a local cache that stores this property, as well as the creation time of
+        the most recent snapshot, for each SnapshotLabel and each dataset.
+        """
         p, log = self.params, self.params.log
         src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
@@ -4332,7 +4403,7 @@ class Job:
         fn_on_finish_dataset: Callable[[str], None] = lambda dataset: None,
     ) -> list[str]:  # thread-safe
         """For each dataset in `sorted_datasets`, for each label in `labels`, finds the latest and oldest snapshot, and runs
-        the callback functions on them. Ignores the timestamp of the input labels and the timestamp of the snapshot names."""
+        the callback functions on them; Ignores the timestamp of the input labels and the timestamp of the snapshot names."""
         p = self.params
         cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -Hp -o createtxg,creation,name")  # sort dataset,createtxg
         datasets_with_snapshots: set[str] = set()
@@ -4377,6 +4448,7 @@ class Job:
         return datasets_without_snapshots
 
     def cache_get_snapshots_changed(self, path: str) -> int:
+        """Returns numeric timestamp from cached snapshots-changed file."""
         return self.cache_get_snapshots_changed2(path)[1]
 
     @staticmethod
@@ -4389,6 +4461,7 @@ class Job:
             return 0, 0  # harmless
 
     def last_modified_cache_file(self, remote: Remote, dataset: str, label: SnapshotLabel | None = None) -> str:
+        """Returns the path of the cache file that is tracking last snapshot modification."""
         cache_file = "=" if label is None else f"{label.prefix}{label.infix}{label.suffix}"
         userhost_dir = remote.ssh_user_host if remote.ssh_user_host else "-"
         return os_path_join(self.params.log_params.last_modified_cache_dir, userhost_dir, dataset, cache_file)
@@ -4440,7 +4513,7 @@ class Job:
                         pass  # harmless
 
     def zfs_get_snapshots_changed(self, remote: Remote, datasets: list[str]) -> dict[str, int]:
-        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds.
+        """Returns the ZFS dataset property "snapshots_changed", which is a UTC Unix time in integer seconds;
         See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed"""
 
         def try_zfs_list_command(_cmd: list[str], batch: list[str]) -> list[str]:
@@ -4470,16 +4543,20 @@ class Job:
 
     @dataclass(order=True, frozen=True)
     class ComparableSnapshot:
+        """Snapshot entry comparable by dataset and GUID for stable sorting."""
+
         key: tuple[str, str]  # rel_dataset, guid
         cols: list[str] = field(compare=False)
 
     def run_compare_snapshot_lists(self, src_datasets: list[str], dst_datasets: list[str]) -> None:
-        """Compares source and destination dataset trees recursively wrt. snapshots, for example to check if all recently
-        taken snapshots have been successfully replicated by a periodic job. Lists snapshots only contained in source
-        (tagged with 'src'), only contained in destination (tagged with 'dst'), and contained in both source and destination
-        (tagged with 'all'), in the form of a TSV file, along with other snapshot metadata. Implemented with a time and
-        space efficient streaming algorithm; easily scales to millions of datasets and any number of snapshots.
-        Assumes that both src_datasets and dst_datasets are sorted."""
+        """Compares source and destination dataset trees recursively with respect to snapshots, for example to check if all
+        recently taken snapshots have been successfully replicated by a periodic job.
+
+        Lists snapshots only contained in source (tagged with 'src'), only contained in destination (tagged with 'dst'), and
+        contained in both source and destination (tagged with 'all'), in the form of a TSV file, along with other snapshot
+        metadata. Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and
+        any number of snapshots. Assumes that both src_datasets and dst_datasets are sorted.
+        """
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         task = src.root_dataset + " vs. " + dst.root_dataset
@@ -4494,7 +4571,7 @@ class Job:
         now = None
 
         def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Generator[str, None, None]:
-            """Lists snapshots sorted by dataset name. All snapshots of a given dataset will be adjacent."""
+            """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
             assert not self.is_test_mode or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
             written_zfs_prop = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
             if is_solaris_zfs(p, r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
@@ -4511,8 +4588,8 @@ class Job:
             root_dataset: str, sorted_itr: Generator[str, None, None]
         ) -> Generator[Job.ComparableSnapshot, None, None]:
             """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two
-            snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges
-            src snapshots and dst snapshots."""
+            snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges src snapshots
+            and dst snapshots."""
             # streaming group by dataset name (consumes constant memory only)
             for dataset, group in itertools.groupby(
                 sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.replace("#", "@").index("@")]
@@ -4678,6 +4755,7 @@ class Job:
 
     @staticmethod
     def print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
+        """Iterate over grouped datasets and apply fn, adding gaps for missing ones."""
         rel_datasets = sorted(rel_datasets)
         n = len(rel_datasets)
         i = 0
@@ -4699,7 +4777,7 @@ class Job:
         src_itr: Iterator,
         dst_itr: Iterator,
     ) -> Generator[tuple[Any, ...], None, None]:
-        """This is the typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
+        """The typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
         assert len(choices) == 3
         assert choice
         flags = 0
@@ -4733,12 +4811,12 @@ class Job:
                 src_next = next(src_itr, None)
 
     def check_zfs_dataset_busy(self, remote: Remote, dataset: str, busy_if_send: bool = True) -> bool:
-        """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with other
-        currently running processes. Instead, retry the operation later, after some delay. For example, decline to
-        start a 'zfs receive' into a destination dataset if another process is already running another 'zfs receive'
-        into the same destination dataset, as ZFS would reject any such attempt. However, it's actually fine to run an
-        incremental 'zfs receive' into a dataset in parallel with a 'zfs send' out of the very same dataset. This also
-        helps daisy chain use cases where A replicates to B, and B replicates to C.
+        """Decline to start a state changing ZFS operation that is, although harmless, likely to collide with other currently
+        running processes. Instead, retry the operation later, after some delay. For example, decline to start a 'zfs
+        receive' into a destination dataset if another process is already running another 'zfs receive' into the same
+        destination dataset, as ZFS would reject any such attempt. However, it's actually fine to run an incremental 'zfs
+        receive' into a dataset in parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use
+        cases where A replicates to B, and B replicates to C.
 
         check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words,
         even if the process check below passes there is no guarantee that the destination dataset won't be busy by the
@@ -4747,7 +4825,8 @@ class Job:
 
         TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic
         concurrency control where the parties simply retry on collision detection (rather than coordinate concurrency
-        via a remote lock server)."""
+        via a remote lock server).
+        """
         p, log = self.params, self.params.log
         if not p.is_program_available("ps", remote.location):
             return True
@@ -4770,6 +4849,7 @@ class Job:
 
     @staticmethod
     def is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:
+        """Checks if any process list entry indicates zfs activity on dataset."""
         regex = Job.zfs_dataset_busy_if_send if busy_if_send else Job.zfs_dataset_busy_if_mods
         suffix = " " + dataset
         infix = " " + dataset + "@"
@@ -4784,6 +4864,7 @@ class Job:
         max_batch_items: int = 2**29,
         sep: str = " ",
     ) -> None:
+        """Runs ssh command for each batch of args, without creating a command line that's too big for the OS to handle."""
         drain(self.itr_ssh_cmd_batched(r, cmd, cmd_args, fn, max_batch_items=max_batch_items, sep=sep))
 
     def itr_ssh_cmd_batched(
@@ -4837,6 +4918,7 @@ class Job:
         fn: Callable[[list[str], list[str]], Any],
         max_batch_items: int = 2**29,
     ) -> None:
+        """Runs multiple ssh commands in parallel, batching each set of args."""
         drain(self.itr_ssh_cmd_parallel(r, cmd_args_list, fn=fn, max_batch_items=max_batch_items, ordered=False))
 
     def itr_ssh_cmd_parallel(
@@ -4944,6 +5026,7 @@ def fix_send_recv_opts(
 
 
 def fix_solaris_raw_mode(lst: list[str]) -> list[str]:
+    """Adjusts zfs send options for Solaris compatibility."""
     lst = ["-w" if opt == "--raw" else opt for opt in lst]
     lst = ["compress" if opt == "--compressed" else opt for opt in lst]
     i = lst.index("-w") if "-w" in lst else -1
@@ -4965,7 +5048,7 @@ def delete_stale_files(
     exclude: str | None = None,
     ssh: bool = False,
 ) -> None:
-    """Cleans up obsolete files. For example caused by abnormal termination, OS crash."""
+    """Cleans up obsolete files; For example caused by abnormal termination, OS crash."""
     seconds = millis / 1000
     now = time.time()
     validate_is_not_a_symlink("", root_dir)
@@ -5008,8 +5091,8 @@ TAPPEND = TypeVar("TAPPEND")
 
 
 def xappend(lst: list[TAPPEND], *items: TAPPEND | Iterable[TAPPEND]) -> list[TAPPEND]:
-    """Appends each of the items to the given list if the item is "truthy", e.g. not None and not an empty string.
-    If an item is an iterable does so recursively, flattening the output."""
+    """Appends each of the items to the given list if the item is "truthy", for example not None and not an empty string; If
+    an item is an iterable does so recursively, flattening the output."""
     for item in items:
         if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
             if item:
@@ -5020,11 +5103,13 @@ def xappend(lst: list[TAPPEND], *items: TAPPEND | Iterable[TAPPEND]) -> list[TAP
 
 
 def create_symlink(src: str, dst_dir: str, dst: str) -> None:
+    """Creates dst symlink pointing to src using a relative path."""
     rel_path = os.path.relpath(src, start=dst_dir)
     os.symlink(src=rel_path, dst=os.path.join(dst_dir, dst))
 
 
 def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:
+    """Appends items to list if they are not already present."""
     for item in items:
         if item not in lst:
             lst.append(item)
@@ -5036,6 +5121,7 @@ def set_last_modification_time_safe(
     unixtime_in_secs: int | tuple[int, int],
     if_more_recent: bool = False,
 ) -> None:
+    """Like set_last_modification_time() but creates directories if necessary."""
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         set_last_modification_time(path, unixtime_in_secs=unixtime_in_secs, if_more_recent=if_more_recent)
@@ -5061,22 +5147,27 @@ def set_last_modification_time(
 
 
 def nprefix(s: str) -> str:
+    """Returns a canonical snapshot prefix with trailing underscore."""
     return sys.intern(s + "_")
 
 
 def ninfix(s: str) -> str:
+    """Returns a canonical infix with trailing underscore when not empty."""
     return sys.intern(s + "_") if s else ""
 
 
 def nsuffix(s: str) -> str:
+    """Returns a canonical suffix with leading underscore when not empty."""
     return sys.intern("_" + s) if s else ""
 
 
 def format_dict(dictionary: dict[Any, Any]) -> str:
+    """Returns a formatted dictionary using repr for consistent output."""
     return f'"{dictionary}"'
 
 
 def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
+    """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
     unit_milliseconds = {
         "milliseconds": 1,
         "millis": 1,
@@ -5105,13 +5196,13 @@ def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", contex
 
 
 def unixtime_fromisoformat(datetime_str: str) -> int:
-    """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds. If the datetime string does not
-    contain time zone info then it is assumed to be in the local time zone."""
+    """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds; If the datetime string does not contain
+    time zone info then it is assumed to be in the local time zone."""
     return int(datetime.fromisoformat(datetime_str).timestamp())
 
 
 def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
-    """Converts a UTC Unix time in integer seconds into an ISO 8601 datetime string in the local time zone.
+    """Converts a UTC Unix time in integer seconds into an ISO 8601 datetime string in the local time zone;
     Example: 2024-09-03_12:26:15"""
     tz: tzinfo = timezone.utc  # outputs time in UTC
     # tz = None  # outputs time in local time zone
@@ -5130,8 +5221,8 @@ def current_datetime(
 
 
 def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
-    """Returns the given timezone, or the local timezone if the timezone spec is absent. The optional timezone spec is of
-    the form "UTC" or "+HH:MM" or "-HH:MM" for fixed UTC offsets."""
+    """Returns the given timezone, or the local timezone if the timezone spec is absent; The optional timezone spec is of the
+    form "UTC" or "+HH:MM" or "-HH:MM" for fixed UTC offsets."""
     tz: tzinfo | None
     if tz_spec is None:
         tz = None  # i.e. local timezone
@@ -5155,6 +5246,8 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
 def parse_dataset_locator(
     input_text: str, validate: bool = True, user: str | None = None, host: str | None = None, port: int | None = None
 ) -> tuple[str, str, str, str, str]:
+    """Splits user@host:pool/dataset into its components with optional checks."""
+
     def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator ...
         return hostname.replace("|", ":")  # ... and any colons that may be part of a (valid) ZFS dataset name
 
@@ -5213,6 +5306,7 @@ def validate_dataset_name(dataset: str, input_text: str) -> None:
 
 
 def validate_property_name(propname: str, input_text: str) -> str:
+    """Checks that the ZFS property name contains no spaces or shell chars."""
     invalid_chars = SHELL_CHARS
     if not propname or any(c.isspace() or c in invalid_chars for c in propname):
         die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
@@ -5220,18 +5314,21 @@ def validate_property_name(propname: str, input_text: str) -> str:
 
 
 def validate_user_name(user: str, input_text: str) -> None:
+    """Checks that the username is safe for ssh or local usage."""
     invalid_chars = SHELL_CHARS + "/"
     if user and (".." in user or any(c.isspace() or c in invalid_chars for c in user)):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
 def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = "") -> None:
+    """Checks hostname for forbidden characters or patterns."""
     invalid_chars = SHELL_CHARS + "/" + extra_invalid_chars
     if host and (host.startswith("-") or ".." in host or any(c.isspace() or c in invalid_chars for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 
 
 def validate_port(port: str | int, message: str) -> None:
+    """Checks that port specification is a valid integer."""
     if isinstance(port, int):
         port = str(port)
     if port and not port.isdigit():
@@ -5239,11 +5336,13 @@ def validate_port(port: str | int, message: str) -> None:
 
 
 def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentParser | None = None) -> None:
+    """Checks that the given path is not a symbolic link."""
     if os.path.islink(path):
         die(f"{msg}must not be a symlink: {path}", parser=parser)
 
 
 def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
+    """Disallow csh-style quoting."""
     if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
@@ -5257,15 +5356,19 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
 def validate_no_argument_file(
     path: str, namespace: argparse.Namespace, err_prefix: str, parser: argparse.ArgumentParser | None = None
 ) -> None:
+    """Checks that command line options do not include @file when disabled."""
     if getattr(namespace, "no_argument_file", False):
         die(f"{err_prefix}Argument file inclusion is disabled: {path}", parser=parser)
 
 
 #############################################################################
 class NonEmptyStringAction(argparse.Action):
+    """Argparse action rejecting empty string values."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Strip whitespace and reject empty values."""
         values = values.strip()
         if values == "":
             parser.error(f"{option_string}: Empty string is not valid")
@@ -5274,9 +5377,12 @@ class NonEmptyStringAction(argparse.Action):
 
 #############################################################################
 class DatasetPairsAction(argparse.Action):
+    """Parses alternating source/destination dataset arguments."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Validates dataset pair arguments and expand '+file' notation."""
         datasets = []
         err_prefix = f"{option_string or self.dest}: "
         for value in values:
@@ -5313,9 +5419,12 @@ class DatasetPairsAction(argparse.Action):
 
 #############################################################################
 class SSHConfigFileNameAction(argparse.Action):
+    """Validates SSH config file argument contains no whitespace or shell chars."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Reject invalid file names with spaces or shell metacharacters."""
         values = values.strip()
         if values == "":
             parser.error(f"{option_string}: Empty string is not valid")
@@ -5326,9 +5435,12 @@ class SSHConfigFileNameAction(argparse.Action):
 
 #############################################################################
 class SafeFileNameAction(argparse.Action):
+    """Ensures filenames lack path separators and weird whitespace."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Rejects filenames containing path traversal or unusual whitespace."""
         if ".." in values or "/" in values or "\\" in values:
             parser.error(f"{option_string}: Invalid file name '{values}': must not contain '..' or '/' or '\\'.")
         if any(char.isspace() and char != " " for char in values):
@@ -5338,9 +5450,12 @@ class SafeFileNameAction(argparse.Action):
 
 #############################################################################
 class SafeDirectoryNameAction(argparse.Action):
+    """Validates directory name argument, allowing only simple spaces."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Rejects directory names with weird whitespace or emptiness."""
         values = values.strip()
         if values == "":
             parser.error(f"{option_string}: Empty string is not valid")
@@ -5351,9 +5466,12 @@ class SafeDirectoryNameAction(argparse.Action):
 
 #############################################################################
 class NewSnapshotFilterGroupAction(argparse.Action):
+    """Starts a new filter group when seen in command line arguments."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, args: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Insert an empty group before adding new snapshot filters."""
         if not hasattr(args, snapshot_filters_var):
             args.snapshot_filters_var = [[]]
         elif len(args.snapshot_filters_var[-1]) > 0:
@@ -5362,9 +5480,12 @@ class NewSnapshotFilterGroupAction(argparse.Action):
 
 #############################################################################
 class FileOrLiteralAction(argparse.Action):
+    """Allows '@file' style argument expansion with '+' prefix."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Expands file arguments and append them to the namespace."""
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
@@ -5394,9 +5515,12 @@ class FileOrLiteralAction(argparse.Action):
 
 #############################################################################
 class IncludeSnapshotPlanAction(argparse.Action):
+    """Parses include plan dictionaries from the command line."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Builds a list of snapshot filters from a serialized plan."""
         opts = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
         # The bzfs_include_snapshot_plan_excludes_outdated_snapshots env var flag is a work-around for (rare) replication
@@ -5450,9 +5574,12 @@ class IncludeSnapshotPlanAction(argparse.Action):
 
 #############################################################################
 class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
+    """Specialized include plan used to decide which dst snapshots to keep."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Parses plan while preventing disasters."""
         opts = getattr(namespace, self.dest, None)
         opts = [] if opts is None else opts
         opts += ["--delete-dst-snapshots-except"]
@@ -5469,9 +5596,13 @@ class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
 
 #############################################################################
 class TimeRangeAndRankRangeAction(argparse.Action):
+    """Parses --include-snapshot-times-and-ranks option values."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Converts user-supplied time and rank ranges into snapshot filters."""
+
         def parse_time(time_spec: str) -> int | timedelta | None:
             time_spec = time_spec.strip()
             if time_spec == "*" or time_spec == "anytime":
@@ -5501,6 +5632,8 @@ class TimeRangeAndRankRangeAction(argparse.Action):
 
     @staticmethod
     def get_include_snapshot_times(times: list[timedelta | int | None]) -> UnixTimeRange:
+        """Converts start and end times to UnixTimeRange for filtering."""
+
         def utc_unix_time_in_seconds(time_spec: timedelta | int | None, default: int) -> timedelta | int:
             if isinstance(time_spec, timedelta):
                 return time_spec
@@ -5519,6 +5652,8 @@ class TimeRangeAndRankRangeAction(argparse.Action):
 
     @staticmethod
     def parse_rankranges(parser: argparse.ArgumentParser, values: Any, option_string: str | None = None) -> list[RankRange]:
+        """Parses rank range strings like 'latest 3..latest 5' into tuples."""
+
         def parse_rank(spec: str) -> tuple[bool, str, int, bool]:
             spec = spec.strip()
             if not (match := re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)):
@@ -5571,12 +5706,15 @@ class TimeRangeAndRankRangeAction(argparse.Action):
 #############################################################################
 @dataclass(order=True)
 class SnapshotFilter:
+    """Represents a snapshot filter with matching options and time range."""
+
     name: str
     timerange: UnixTimeRange
     options: Any = field(compare=False, default=None)
 
 
 def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
+    """Appends snapshot filter to namespace list, creating the list if absent."""
     if not hasattr(args, snapshot_filters_var):
         args.snapshot_filters_var = [[]]
     args.snapshot_filters_var[-1].append(_filter)
@@ -5585,6 +5723,7 @@ def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> No
 def add_time_and_rank_snapshot_filter(
     args: argparse.Namespace, dst: str, timerange: UnixTimeRange, rankranges: list[RankRange]
 ) -> None:
+    """Creates and adds a SnapshotFilter using timerange and rank ranges."""
     if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
         add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
     else:
@@ -5626,6 +5765,7 @@ def merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> N
 
 
 def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> None:
+    """Combine consecutive regex filters of the same type for efficiency."""
     # Merge regex filter operators of the same kind as long as they are within the same group, aka as long as they
     # are not separated by a non-regex filter. This improves execution perf and makes handling easier in later stages.
     # Example: --include-snapshot-regex .*daily --exclude-snapshot-regex .*weekly --include-snapshot-regex .*hourly
@@ -5675,14 +5815,17 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> N
 
 def reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> None:
     """In an execution plan that contains filter operators based on sort order (the --include-snapshot-times-and-ranks
-    operator with non-empty ranks), filters cannot freely be reordered without violating correctness, but they can
-    still be partially reordered for better execution performance. The filter list is partitioned into sections such
-    that sections are separated by --include-snapshot-times-and-ranks operators with non-empty ranks. Within each
-    section, we move include_snapshot_times operators aka --include-snapshot-times-and-ranks operators with empty ranks
-    before --include/exclude-snapshot-regex operators because the former involves fast integer comparisons and the
-    latter involves more expensive regex matching.
+    operator with non-empty ranks), filters cannot freely be reordered without violating correctness, but they can still be
+    partially reordered for better execution performance. The filter list is partitioned into sections such that sections are
+    separated by --include-snapshot-times-and-ranks operators with non-empty ranks. Within each section, we move.
+
+    include_snapshot_times operators aka --include-snapshot-times-and-ranks operators with empty ranks before
+    --include/exclude-snapshot-regex operators because the former involves fast integer comparisons and the latter involves
+    more expensive regex matching.
+
     Example: reorders --include-snapshot-regex .*daily --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 into
-    --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 --include-snapshot-regex .*daily"""
+    --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 --include-snapshot-regex .*daily
+    """
 
     def reorder_time_filters_within_section(i: int, j: int) -> None:
         while j > i:
@@ -5705,9 +5848,12 @@ def reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> Non
 
 #############################################################################
 class LogConfigVariablesAction(argparse.Action):
+    """Collects --log-config-var NAME:VALUE pairs for later substitution."""
+
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Validates NAME:VALUE entries and accumulate them."""
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []
@@ -5721,10 +5867,12 @@ class LogConfigVariablesAction(argparse.Action):
 
 #############################################################################
 class CheckPercentRange(CheckRange):
+    """Argparse action verifying percentages fall within 0-100."""
 
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
+        """Normalizes integer or percent values and store them."""
         assert isinstance(values, str)
         original = values
         values = values.strip()

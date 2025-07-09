@@ -680,8 +680,10 @@ class SmokeTestCase(IntegrationTestCase):
 
 #############################################################################
 class AdhocTestCase(IntegrationTestCase):
-    """For testing isolated changes you are currently working on. You can temporarily change the list of tests here.
-    The current list is arbitrary and subject to change at any time."""
+    """For testing isolated changes you are currently working on.
+
+    You can temporarily change the list of tests here. The current list is arbitrary and subject to change at any time.
+    """
 
     def test_include_snapshots_plan(self) -> None:
         LocalTestCase(param=self.param).test_include_snapshots_plan()
@@ -3030,7 +3032,7 @@ class LocalTestCase(IntegrationTestCase):
                     self.assert_bookmark_names(src_root_dataset, ["d1", "d1h", "d2"])
 
     def test_basic_replication_flat_with_bookmarks_already_exists(self) -> None:
-        """check that run_bzfs works as usual even if the bookmark already exists"""
+        """Check that run_bzfs works as usual even if the bookmark already exists."""
         if not are_bookmarks_enabled("src"):
             self.skipTest("ZFS has no bookmark feature")
         take_snapshot(src_root_dataset, fix("d1"))
@@ -3514,7 +3516,10 @@ class LocalTestCase(IntegrationTestCase):
 
     @staticmethod
     def create_resumable_snapshots(lo: int, hi: int, size_in_bytes: int = 1024 * 1024) -> None:
-        """large enough to be interruptable and resumable. interacts with bzfs.py/inject_dst_pipe_fail"""
+        """Large enough to be interruptable and resumable.
+
+        interacts with bzfs.py/inject_dst_pipe_fail
+        """
         run_cmd(f"sudo -n zfs mount {src_root_dataset}".split())
         for j in range(lo, hi):
             tmp_file = "/" + src_root_dataset + "/tmpfile"
@@ -5716,8 +5721,8 @@ def natsorted(
     key: Callable[[str], str] | None = None,
     reverse: bool = False,
 ) -> list[str]:
-    """
-    Returns a new list containing all items from the iterable in ascending order.
+    """Returns a new list containing all items from the iterable in ascending order.
+
     If `key` is specified, it will be used to extract a comparison key from each list element.
     """
     if key is None:
@@ -5727,8 +5732,11 @@ def natsorted(
 
 
 def natsort_key(s: str) -> tuple[str, int, str]:
-    """Sorts strings that may contain non-negative integers according to numerical value if any two strings
-    have the same non-numeric prefix. Example: s1 < s3 < s10 < s10a < s10b"""
+    """Sorts strings that may contain non-negative integers according to numerical value if any two strings have the same
+    non-numeric prefix.
+
+    Example: s1 < s3 < s10 < s10a < s10b
+    """
     match = re.fullmatch(r"(\D*)(\d*)(.*)", s)
     if match:
         prefix, num, suffix = match.groups()
@@ -5774,7 +5782,7 @@ def is_pv_at_least_1_9_0() -> bool:
 
 
 def pv_version() -> str:
-    """Example pv 1.8.5 -> 1.8.5"""
+    """Example pv 1.8.5 -> 1.8.5."""
     lines = subprocess.run(["pv", "--version"], capture_output=True, text=True, check=True).stdout
     assert lines
     assert lines.startswith("pv")

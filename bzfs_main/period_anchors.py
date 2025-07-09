@@ -11,6 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Utility for computing snap points aligned to calendar periods.
+
+Anchors specify offsets within yearly, monthly and smaller cycles. These values are used by
+``round_datetime_up_to_duration_multiple`` to snap datetimes to the next boundary. Keeping anchors in a dataclass simplifies
+argument handling and makes the rounding logic reusable.
+"""
 
 from __future__ import annotations
 import argparse
@@ -32,6 +39,8 @@ metadata_microsecond = {"min": 0, "max": 999, "help": "The microsecond within a 
 
 @dataclass(frozen=True)
 class PeriodAnchors:
+    """Anchor offsets used to round datetimes up to periodic boundaries."""
+
     # The anchors for a given duration unit are computed as follows:
     # yearly: Anchor(dt) = latest T where T <= dt and T == Start of January 1 of dt + anchor.yearly_* vars
     yearly_year: int = field(default=2025, metadata={"min": 1, "max": 9999, "help": "The anchor year of multi-year periods"})
@@ -74,6 +83,7 @@ class PeriodAnchors:
 
     @staticmethod
     def parse(args: argparse.Namespace) -> "PeriodAnchors":
+        """Creates a ``PeriodAnchors`` instance from parsed CLI arguments."""
         kwargs = {f.name: getattr(args, f.name) for f in dataclasses.fields(PeriodAnchors)}
         return PeriodAnchors(**kwargs)
 
@@ -82,8 +92,9 @@ def round_datetime_up_to_duration_multiple(
     dt: datetime, duration_amount: int, duration_unit: str, anchors: PeriodAnchors
 ) -> datetime:
     """Given a timezone-aware datetime and a duration, returns a datetime (in the same timezone) that is greater than or
-    equal to dt, and rounded up (ceiled) and snapped to an anchor plus a multiple of the duration. The snapping is done
-    relative to the anchors object and the rules defined therein.
+    equal to dt, and rounded up (ceiled) and snapped to an anchor plus a multiple of the duration.
+
+    The snapping is done relative to the anchors object and the rules defined therein.
     Supported units: "millisecondly", "secondly", "minutely", "hourly", "daily", "weekly", "monthly", "yearly".
     If dt is already exactly on a boundary (i.e. exactly on a multiple), it is returned unchanged.
     Examples:
@@ -102,6 +113,7 @@ def round_datetime_up_to_duration_multiple(
     """
 
     def add_months(dt: datetime, months: int) -> datetime:
+        """Returns ``dt`` plus ``months`` with day clamped to month's end."""
         total_month = dt.month - 1 + months
         new_year = dt.year + total_month // 12
         new_month = total_month % 12 + 1
@@ -109,6 +121,7 @@ def round_datetime_up_to_duration_multiple(
         return dt.replace(year=new_year, month=new_month, day=min(dt.day, last_day))
 
     def add_years(dt: datetime, years: int) -> datetime:
+        """Returns ``dt`` plus ``years`` with day clamped to month's end."""
         new_year = dt.year + years
         last_day = calendar.monthrange(new_year, dt.month)[1]  # last valid day of the current month
         return dt.replace(year=new_year, day=min(dt.day, last_day))

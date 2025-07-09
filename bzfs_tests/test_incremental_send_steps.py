@@ -102,8 +102,10 @@ class TestIncrementalSendSteps(AbstractTestCase):
         return testcases
 
     def validate_incremental_send_steps(self, input_snapshots: list[str], expected_results: list[str]) -> None:
-        """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input
-        snapshots. Applies the steps and compares the resulting destination snapshots with the expected results."""
+        """Computes steps to incrementally replicate the daily snapshots of the given daily and/or hourly input snapshots.
+
+        Applies the steps and compares the resulting destination snapshots with the expected results.
+        """
         for is_resume in [False, True]:  # via --no-resume-recv
             for src_dataset in ["", "s@"]:
                 for force_convert_I_to_i in [False, True]:  # noqa: N806
@@ -132,7 +134,9 @@ class TestIncrementalSendSteps(AbstractTestCase):
 
     def apply_incremental_send_steps(self, steps: list[tuple], input_snapshots: list[str]) -> list[str]:
         """Simulates replicating (a subset of) the given input_snapshots to a destination, according to the given steps.
-        Returns the subset of snapshots that have actually been replicated to the destination."""
+
+        Returns the subset of snapshots that have actually been replicated to the destination.
+        """
         output_snapshots = []
         for incr_flag, start_snapshot, end_snapshot, to_snapshots in steps:  # noqa: B007
             start_snapshot = start_snapshot[start_snapshot.find("@") + 1 :]

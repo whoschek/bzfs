@@ -65,7 +65,7 @@ def suite() -> unittest.TestSuite:
 class TestHelperFunctions(AbstractTestCase):
 
     def test_logdir_basename_prefix(self) -> None:
-        """Basename of --log-dir must start with prefix 'bzfs-logs'"""
+        """Basename of --log-dir must start with prefix 'bzfs-logs'."""
         logdir = os.path.join(get_home_directory(), bzfs.log_dir_default + "-tmp")
         try:
             LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))

@@ -62,6 +62,7 @@ dev = [  # for development only
   "ruff==0.12.2",  # see https://github.com/astral-sh/ruff
   "pylint==3.3.7",  # see https://github.com/pycqa/pylint
   "coverage>=7.6",  # see https://github.com/nedbat/coveragepy
+  "docformatter==1.7.7",  # see https://github.com/PyCQA/docformatter
   "mypy==1.16.1",  # see https://github.com/python/mypy
   "argparse-manpage==4.6",  # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
@@ -103,6 +104,11 @@ branch = true
 include = ["bzfs_main/*.py"]
 omit = ["bzfs_tests/*.py", "*/__init__.py"]
 
+[tool.docformatter]         # auto-format Python docstrings to follow PEP 257 and Hard-wrap them to a specific line length
+wrap-summaries = 125        # summary / one-liner length; see https://docformatter.readthedocs.io/en/latest/usage.html
+wrap-descriptions = 125     # long-description line length
+in-place = true             # let pre-commit make changes to files instead of printing diffs
+
 [tool.black]
 line_length = 125
 target_version = ["py38", "py39", "py310", "py311", "py312", "py313"]
@@ -123,6 +129,7 @@ exclude = [   # toggles to exclude overly strict `ruff` checks of these Python s
 select = [  # see https://docs.astral.sh/ruff/rules/
     "A",    # builtins
     "B",    # bugbear
+    "D100", "D101", "D102", "D103", "D106", "D200", "D206", "D403", "D404", "D414", "D418", "D419",  # pydocstyle docs
     "E",    # pycodestyle error
     "EXE",  # shebang
     "F",    # pyflakes
@@ -173,6 +180,7 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 
 [tool.ruff.lint.per-file-ignores]
 "bzfs_tests/**/*" = [
+    "D",        # pydocstyle docs
     "PGH003",   # pygrep-hooks blanket-type-ignore
     "PLW0603",  # global-statement
     "S",        # bandit

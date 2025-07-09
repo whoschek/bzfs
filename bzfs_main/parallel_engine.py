@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Thread pool engine ensuring ancestor datasets finish before descendants start."""
 
 from __future__ import annotations
 import argparse
@@ -51,8 +53,8 @@ Tree = Dict[str, Dict[str, Any]]  # Type alias
 
 
 def build_dataset_tree(sorted_datasets: list[str]) -> Tree:
-    """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names,
-    in the form of nested dicts."""
+    """Takes as input a sorted list of datasets and returns a sorted directory tree containing the same dataset names, in the
+    form of nested dicts."""
     tree: Tree = {}
     for dataset in sorted_datasets:
         current = tree
@@ -81,12 +83,15 @@ def process_datasets_in_parallel_and_fault_tolerant(
     is_test_mode: bool = False,
 ) -> bool:
     """Runs process_dataset(dataset) for each dataset in datasets, while taking care of error handling and retries and
-    parallel execution. Assumes that the input dataset list is sorted and does not contain duplicates. All children of a
-    dataset may be processed in parallel. For consistency (even during parallel dataset replication/deletion), processing
-    of a dataset only starts after processing of all its ancestor datasets has completed. Further, when a thread is ready
-    to start processing another dataset, it chooses the "smallest" dataset wrt. lexicographical sort order from the
-    datasets that are currently available for start of processing. Initially, only the roots of the selected dataset
-    subtrees are available for start of processing."""
+    parallel execution.
+
+    Assumes that the input dataset list is sorted and does not contain duplicates. All children of a dataset may be processed
+    in parallel. For consistency (even during parallel dataset replication/deletion), processing of a dataset only starts
+    after processing of all its ancestor datasets has completed. Further, when a thread is ready to start processing another
+    dataset, it chooses the "smallest" dataset wrt. lexicographical sort order from the datasets that are currently available
+    for start of processing. Initially, only the roots of the selected dataset subtrees are available for start of
+    processing.
+    """
     assert not is_test_mode or datasets == sorted(datasets), "List is not sorted"
     assert not is_test_mode or not has_duplicates(datasets), "List contains duplicates"
     assert callable(process_dataset)
@@ -107,6 +112,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     )
 
     def _process_dataset(dataset: str, tid: str) -> bool:
+        """Runs ``process_dataset`` with retries and logs duration."""
         start_time_nanos = time.monotonic_ns()
         try:
             return run_with_retries(log, retry_policy, process_dataset, dataset, tid)
@@ -115,14 +121,19 @@ def process_datasets_in_parallel_and_fault_tolerant(
             log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, human_readable_duration(elapsed_nanos))
 
     class TreeNodeMutableAttributes:
+        """Container for mutable attributes, stored space efficiently."""
+
         __slots__ = ("barrier", "pending")  # uses more compact memory layout than __dict__
 
         def __init__(self) -> None:
+            """Initialize empty barrier pointer and pending counter."""
             self.barrier: Any | None = None  # aka TreeNode; zero or one barrier TreeNode waiting for this node to complete
             self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
 
     class TreeNode(NamedTuple):
-        # TreeNodes are ordered by dataset name within a priority queue via __lt__ comparisons.
+        """Node in dataset dependency tree used by the scheduler; TreeNodes are ordered by dataset name within a priority
+        queue via __lt__ comparisons."""
+
         dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
         children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
         parent: Any  # aka TreeNode
@@ -133,6 +144,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
             return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
 
     def make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None) -> TreeNode:
+        """Creates a TreeNode with mutable state container."""
         return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
 
     def build_dataset_tree_and_find_roots() -> list[TreeNode]:
@@ -163,6 +175,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         fw_timeout: float | None = None
 
         def submit_datasets() -> bool:
+            """Enqueues available datasets and return True if any were queued."""
             nonlocal fw_timeout
             fw_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
             while len(priority_queue) > 0 and len(todo_futures) < max_workers:
@@ -206,6 +219,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 if not barriers_enabled:
                     # This simple algorithm is sufficient for almost all use cases:
                     def simple_enqueue_children(node: TreeNode) -> None:
+                        """Recursively enqueues child nodes for start of processing."""
                         for child, grandchildren in node.children.items():  # as processing of parent has now completed
                             child_node = make_tree_node(f"{node.dataset}/{child}", grandchildren)
                             if child_node.dataset in datasets_set:
@@ -257,6 +271,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                         return n
 
                     def on_job_completion_with_barriers(node: TreeNode, no_skip: bool) -> None:
+                        """After successful completion, enqueues children, opens barriers + propagates completion upwards."""
                         if no_skip:
                             enqueue_children(node)  # make child datasets available for start of processing
                         else:  # job completed without success

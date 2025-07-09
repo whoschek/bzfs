@@ -11,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""
-* The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots().
-"""
+#
+"""The filter algorithms that apply include/exclude policies are in filter_datasets() and filter_snapshots()."""
 
 from __future__ import annotations
 import math
@@ -56,8 +54,11 @@ RankRange = Tuple[Tuple[str, int, bool], Tuple[str, int, bool]]  # Type alias
 
 
 def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> list[str]:
-    """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the
-    exclude regexes. Assumes the list of input datasets is sorted. The list of output datasets will be sorted too."""
+    """Returns all datasets (and their descendants) that match at least one of the include regexes but none of the exclude
+    regexes.
+
+    Assumes the list of input datasets is sorted. The list of output datasets will be sorted too.
+    """
     p, log = job.params, job.params.log
     results = []
     for i, dataset in enumerate(sorted_datasets):
@@ -130,12 +131,16 @@ def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_dataset
 
 def filter_snapshots(job: Job, basis_snapshots: list[str], all_except: bool = False) -> list[str]:
     """Returns all snapshots that pass all include/exclude policies.
-    `all_except=False` returns snapshots *matching* the filters,
-    for example those that should be deleted if we are in "delete selected" mode.
-    `all_except=True` returns snapshots *not* matching the filters,
-    for example those that should be deleted if we are in "retain selected" mode."""
+
+    `all_except=False` returns snapshots *matching* the filters, for example those that should be deleted if we are in
+    "delete selected" mode.
+
+    `all_except=True` returns snapshots *not* matching the filters, for example those that should be deleted if we are in
+    "retain selected" mode.
+    """
 
     def resolve_timerange(timerange: UnixTimeRange) -> UnixTimeRange:
+        """Converts relative timerange values to UTC Unix time in integer seconds."""
         assert timerange is not None
         lo, hi = timerange
         if isinstance(lo, timedelta):
@@ -194,6 +199,7 @@ def filter_snapshots_by_regex(job: Job, snapshots: list[str], regexes: tuple[Reg
 
 
 def filter_snapshots_by_creation_time(job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange) -> list[str]:
+    """Filters snapshots to those created within the specified time window."""
     log = job.params.log
     is_debug = log.isEnabledFor(log_debug)
     lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
@@ -216,8 +222,10 @@ def filter_snapshots_by_creation_time(job: Job, snapshots: list[str], include_sn
 def filter_snapshots_by_creation_time_and_rank(
     job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange, include_snapshot_ranks: list[RankRange]
 ) -> list[str]:
+    """Filters by creation time and rank within the snapshot list."""
 
     def get_idx(rank: tuple[str, int, bool], n: int) -> int:
+        """Returns index for rank tuple (kind, value, percent)."""
         kind, num, is_percent = rank
         m = round(n * num / 100) if is_percent else min(n, num)
         assert kind == "latest" or kind == "oldest"
@@ -292,6 +300,7 @@ def filter_lines_except(input_list: list[str], input_set: set[str]) -> list[str]
 
 
 def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:
+    """Converts dataset paths to regex strings relative to src or dst roots."""
     results = []
     for dataset in datasets:
         if dataset.startswith("/"):

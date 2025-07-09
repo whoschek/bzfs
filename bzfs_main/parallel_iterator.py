@@ -11,6 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Utility for merging multiple iterators running in parallel threads.
+
+It yields results either in the original order or as soon as completed. This design hides the thread pool, buffering and
+blocking logic, simplifying callers that need parallel I/O without complex concurrency code.
+"""
 
 from __future__ import annotations
 import concurrent

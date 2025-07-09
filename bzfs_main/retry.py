@@ -11,6 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Generic retry support using jitter and exponential backoff with cap.
+
+This module retries failing operations according to a configurable policy. It assumes transient errors may eventually succeed
+and centralizes retry logic for consistency across callers.
+"""
 
 from __future__ import annotations
 import argparse
@@ -29,6 +35,8 @@ from bzfs_main.utils import human_readable_duration
 
 #############################################################################
 class RetryPolicy:
+    """Configuration controlling retry counts and backoff delays."""
+
     def __init__(self, args: argparse.Namespace) -> None:
         """Option values for retries; reads from ArgumentParser via args."""
         # immutable variables:
@@ -43,6 +51,7 @@ class RetryPolicy:
         self.max_sleep_nanos = max(self.min_sleep_nanos, self.max_sleep_nanos)
 
     def __repr__(self) -> str:
+        """Return debug representation of retry parameters."""
         return (
             f"retries: {self.retries}, min_sleep_secs: {self.min_sleep_secs}, "
             f"max_sleep_secs: {self.max_sleep_secs}, max_elapsed_secs: {self.max_elapsed_secs}"
@@ -90,6 +99,7 @@ class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
 
     def __init__(self, message: str, no_sleep: bool = False) -> None:
+        """Initialize with message and optional no_sleep flag."""
         super().__init__(message)
         self.no_sleep: bool = no_sleep
 
@@ -97,4 +107,6 @@ class RetryableError(Exception):
 #############################################################################
 @dataclass(frozen=True)
 class Retry:
+    """The current retry attempt number provided to the callable."""
+
     count: int

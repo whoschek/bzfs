@@ -11,6 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Shared utility functions and small concurrency primitives for bzfs.
+
+Helpers range from environment variable parsing to process management. They are dependency free so that core modules can rely
+on them without additional packages. Functions strive for simplicity and predictable behavior across platforms.
+"""
 
 from __future__ import annotations
 import argparse
@@ -70,10 +76,12 @@ def getenv_any(key: str, default: str | None = None) -> str | None:
 
 
 def getenv_int(key: str, default: int) -> int:
+    """Returns environment variable ``key`` as int with ``default`` fallback."""
     return int(cast(str, getenv_any(key, str(default))))
 
 
 def getenv_bool(key: str, default: bool = False) -> bool:
+    """Returns environment variable ``key`` as bool with ``default`` fallback."""
     return cast(str, getenv_any(key, str(default))).lower().strip().lower() == "true"
 
 
@@ -100,16 +108,19 @@ V_ = TypeVar("V_")
 
 
 def shuffle_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
+    """Returns a new dict with items shuffled randomly."""
     items = list(dictionary.items())
     random.shuffle(items)
     return dict(items)
 
 
 def sorted_dict(dictionary: dict[K_, V_]) -> dict[K_, V_]:
+    """Returns a new dict with items sorted by key."""
     return dict(sorted(dictionary.items()))
 
 
 def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
+    """Return the last ``n`` lines of ``file`` without following symlinks."""
     if not os.path.isfile(file):
         return []
     with open_nofollow(file, "r", encoding="utf-8", errors=errors, check_owner=False) as fd:
@@ -118,10 +129,12 @@ def tail(file: str, n: int, errors: str | None = None) -> Sequence[str]:
 
 def replace_capturing_groups_with_non_capturing_groups(regex: str) -> str:
     """Replaces regex capturing groups with non-capturing groups for better matching performance.
+
     Example: '(.*/)?tmp(foo|bar)(?!public)\\(' --> '(?:.*/)?tmp(?:foo|bar)(?!public)\\()'
     Aka replaces brace '(' followed by a char other than question mark '?', but not preceded by a backslash
     with the replacement string '(?:'
-    Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups"""
+    Also see https://docs.python.org/3/howto/regex.html#non-capturing-and-named-groups
+    """
     # pattern = re.compile(r'(?<!\\)\((?!\?)')
     # return pattern.sub('(?:', regex)
     i = len(regex) - 2
@@ -140,6 +153,7 @@ def get_home_directory() -> str:
 
 
 def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int | None = None, long: bool = False) -> str:
+    """Formats ``num_bytes`` as human readable size, e.g. ``12 MiB``."""
     sign = "-" if num_bytes < 0 else ""
     s = abs(num_bytes)
     units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB")
@@ -156,6 +170,7 @@ def human_readable_bytes(num_bytes: float, separator: str = " ", precision: int 
 def human_readable_duration(
     duration: float, unit: str = "ns", separator: str = "", precision: int | None = None, long: bool = False
 ) -> str:
+    """Formats a duration in human units, automatically scaling as needed."""
     sign = "-" if duration < 0 else ""
     t = abs(duration)
     units = ("ns", "μs", "ms", "s", "m", "h", "d")
@@ -181,7 +196,11 @@ def human_readable_duration(
 
 
 def human_readable_float(number: float) -> str:
-    """If the number has one digit before the decimal point (0 <= abs(number) < 10):
+    """Formats ``number`` with a variable precision depending on magnitude.
+
+    This design mirrors the way humans round values when scanning logs.
+
+    If the number has one digit before the decimal point (0 <= abs(number) < 10):
       Round and use two decimals after the decimal point (e.g., 3.14559 --> "3.15").
 
     If the number has two digits before the decimal point (10 <= abs(number) < 100):
@@ -190,7 +209,7 @@ def human_readable_float(number: float) -> str:
     If the number has three or more digits before the decimal point (abs(number) >= 100):
       Round and use zero decimals after the decimal point (e.g., 123.556 --> "124").
 
-    Ensure no unnecessary trailing zeroes are retained: Example: 1.500 --> "1.5", 1.00 --> "1"
+    Ensures no unnecessary trailing zeroes are retained: Example: 1.500 --> "1.5", 1.00 --> "1"
     """
     abs_number = abs(number)
     precision = 2 if abs_number < 10 else 1 if abs_number < 100 else 0
@@ -203,6 +222,7 @@ def human_readable_float(number: float) -> str:
 
 
 def percent(number: int, total: int) -> str:
+    """Returns percentage string of ``number`` relative to ``total``."""
     return f"{number}={'NaN' if total == 0 else human_readable_float(100 * number / total)}%"
 
 
@@ -219,7 +239,10 @@ def open_nofollow(
     **kwargs: Any,
 ) -> IO:
     """Behaves exactly like built-in open(), except that it refuses to follow symlinks, i.e. raises OSError with
-    errno.ELOOP/EMLINK if basename of path is a symlink. Also, can specify permissions on O_CREAT, and verify ownership."""
+    errno.ELOOP/EMLINK if basename of path is a symlink.
+
+    Also, can specify permissions on O_CREAT, and verify ownership.
+    """
     if not mode:
         raise ValueError("Must have exactly one of create/read/write/append mode and at most one plus")
     flags = {
@@ -260,11 +283,10 @@ def find_match(
     raises: bool | str | Callable[[], str] = False,  # raises: bool | str | Callable = False,  # python >= 3.10
 ) -> int:
     """Returns the integer index within seq of the first item (or last item if reverse==True) that matches the given
-    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter,
-    which is a bool indicating whether to raise an error, or a string containing the error message, but can also be a
-    Callable/lambda in order to support efficient deferred generation of error messages.
-    Analog to str.find(), including slicing semantics with parameters start and end.
-    For example, seq can be a list, tuple or str.
+    predicate condition. If no matching item is found returns -1 or ValueError, depending on the raises parameter, which is a
+    bool indicating whether to raise an error, or a string containing the error message, but can also be a Callable/lambda in
+    order to support efficient deferred generation of error messages. Analog to str.find(), including slicing semantics with
+    parameters start and end. For example, seq can be a list, tuple or str.
 
     Example usage:
         lst = ["a", "b", "-c", "d"]
@@ -293,6 +315,7 @@ def find_match(
 
 
 def is_descendant(dataset: str, of_root_dataset: str) -> bool:
+    """Returns True if ``dataset`` lies under ``of_root_dataset``."""
     return (dataset + "/").startswith(of_root_dataset + "/")
 
 
@@ -302,29 +325,38 @@ def has_duplicates(sorted_list: list[Any]) -> bool:
 
 
 def dry(msg: str, is_dry_run: bool) -> str:
+    """Prefix ``msg`` with 'Dry' when in dry-run mode."""
     return "Dry " + msg if is_dry_run else msg
 
 
 def relativize_dataset(dataset: str, root_dataset: str) -> str:
-    """Converts an absolute dataset path to a relative dataset path wrt root_dataset
-    Example: root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz"""
+    """Converts an absolute dataset path to one relative to ``root_dataset``.
+
+    Example: root_dataset=tank/foo, dataset=tank/foo/bar/baz --> relative_path=/bar/baz.
+    """
     return dataset[len(root_dataset) :]
 
 
 def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
-    """In a string s, replaces a leading old_prefix string with new_prefix. Assumes the leading string is present."""
+    """In a string s, replaces a leading old_prefix string with new_prefix.
+
+    Assumes the leading string is present.
+    """
     assert s.startswith(old_prefix)
     return new_prefix + s[len(old_prefix) :]
 
 
 def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> None:
+    """Replaces ``old`` with ``new`` in-place for every string in ``lines``."""
     for i in range(len(lines)):
         lines[i] = lines[i].replace(old, new, count)
 
 
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
     """Returns True if the name matches at least one of the include regexes but none of the exclude regexes; else False.
-    A regex that starts with a `!` is a negation - the regex matches if the regex without the `!` prefix does not match."""
+
+    A regex that starts with a `!` is a negation - the regex matches if the regex without the `!` prefix does not match.
+    """
     for regex, is_negation in exclude_regexes:
         is_match = regex.fullmatch(name) if regex.pattern != ".*" else True
         if is_negation:
@@ -343,6 +375,7 @@ def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexLis
 
 
 def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
+    """Compiles regex strings and keeps track of negations."""
     assert isinstance(regexes, list)
     compiled_regexes = []
     for regex in regexes:
@@ -363,8 +396,11 @@ def compile_regexes(regexes: list[str], suffix: str = "") -> RegexList:
 
 
 def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool = False) -> Any:
-    # For lazy/noop evaluation in disabled log levels
+    """Lazy formatter joining items with ``separator`` used to avoid overhead in disabled log levels."""
+
     class CustomListFormatter:
+        """Formatter object that joins items when converted to ``str``."""
+
         def __str__(self) -> str:
             s = separator.join(map(str, iterable))
             return s.lstrip() if lstrip else s
@@ -372,8 +408,12 @@ def list_formatter(iterable: Iterable[Any], separator: str = " ", lstrip: bool =
     return CustomListFormatter()
 
 
-def pretty_print_formatter(obj_to_format: Any) -> Any:  # For lazy/noop evaluation in disabled log levels
+def pretty_print_formatter(obj_to_format: Any) -> Any:
+    """Lazy pprint formatter used to avoid overhead in disabled log levels."""
+
     class PrettyPrintFormatter:
+        """Formatter that pretty-prints the object on conversion to ``str``."""
+
         def __str__(self) -> str:
             import pprint
 
@@ -383,11 +423,12 @@ def pretty_print_formatter(obj_to_format: Any) -> Any:  # For lazy/noop evaluati
 
 
 def stderr_to_str(stderr: Any) -> str:
-    """Workaround for https://github.com/python/cpython/issues/87597"""
+    """Workaround for https://github.com/python/cpython/issues/87597."""
     return str(stderr) if not isinstance(stderr, bytes) else stderr.decode("utf-8")
 
 
 def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", file: TextIO | None = None) -> None:
+    """Optionally logs ``value`` at stdout/stderr level."""
     if run and value:
         value = value if end else str(value).rstrip()
         level = log_stdout if file is sys.stdout else log_stderr
@@ -395,6 +436,7 @@ def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", f
 
 
 def die(msg: str, exit_code: int = die_status, parser: argparse.ArgumentParser | None = None) -> NoReturn:
+    """Exits the program with ``exit_code`` after logging ``msg``."""
     if parser is None:
         ex = SystemExit(msg)
         ex.code = exit_code
@@ -434,7 +476,7 @@ def subprocess_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
 def terminate_process_subtree(
     except_current_process: bool = False, root_pid: int | None = None, sig: signal.Signals = signal.SIGTERM
 ) -> None:
-    """Sends signal also to descendant processes to also terminate processes started via subprocess.run()"""
+    """Sends ``sig`` to ``root_pid`` and all of its descendant processes."""
     current_pid = os.getpid()
     root_pid = current_pid if root_pid is None else root_pid
     pids = get_descendant_processes(root_pid)
@@ -461,6 +503,7 @@ def get_descendant_processes(root_pid: int) -> list[int]:
     descendants: list[int] = []
 
     def recursive_append(ppid: int) -> None:
+        """Recursively collect descendant PIDs starting from ``ppid``."""
         for child_pid in procs[ppid]:
             descendants.append(child_pid)
             recursive_append(child_pid)
@@ -470,6 +513,7 @@ def get_descendant_processes(root_pid: int) -> list[int]:
 
 
 def pid_exists(pid: int) -> bool | None:
+    """Returns True if a process with PID exists, False if not, or None on error."""
     if pid <= 0:
         return False
     try:  # with signal=0, no signal is actually sent, but error checking is still performed
@@ -485,6 +529,8 @@ def pid_exists(pid: int) -> bool | None:
 
 #############################################################################
 class Comparable(Protocol):
+    """Partial ordering protocol used by :class:`SmallPriorityQueue`."""
+
     def __lt__(self, other: Any) -> bool:  # pragma: no cover - behavior defined by implementor
         ...
 
@@ -495,24 +541,32 @@ T = TypeVar("T", bound=Comparable)  # Generic type variable for elements stored 
 class SmallPriorityQueue(Generic[T]):
     """A priority queue that can handle updates to the priority of any element that is already contained in the queue, and
     does so very efficiently if there are a small number of elements in the queue (no more than thousands), as is the case
-    for us. Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers or using an
-    indexed priority queue via https://github.com/nvictus/pqdict but, to avoid an external dependency, is actually
-    implemented using a simple yet effective binary search-based sorted list that can handle updates to the priority of
-    elements that are already contained in the queue, via removal of the element, followed by update of the element, followed
-    by (re)insertion. Duplicate elements (if any) are maintained in their order of insertion relative to other duplicates."""
+    for us.
+
+    Could be implemented using a SortedList via https://github.com/grantjenks/python-sortedcontainers or using an indexed
+    priority queue via
+    https://github.com/nvictus/pqdict.
+    But, to avoid an external dependency, is actually implemented
+    using a simple yet effective binary search-based sorted list that can handle updates to the priority of elements that
+    are already contained in the queue, via removal of the element, followed by update of the element, followed by
+    (re)insertion. Duplicate elements (if any) are maintained in their order of insertion relative to other duplicates.
+    """
 
     def __init__(self, reverse: bool = False) -> None:
+        """Creates an empty queue; sort order flips when ``reverse`` is True."""
         self._lst: list[T] = []
         self._reverse: bool = reverse
 
     def clear(self) -> None:
+        """Removes all elements from the queue."""
         self._lst.clear()
 
     def push(self, element: T) -> None:
+        """Inserts ``element`` while maintaining sorted order."""
         bisect.insort(self._lst, element)
 
     def pop(self) -> T:
-        """Removes and return the smallest (or largest if reverse == True) element from the queue."""
+        """Removes and returns the smallest (or largest if reverse == True) element from the queue."""
         return self._lst.pop() if self._reverse else self._lst.pop(0)
 
     def peek(self) -> T:
@@ -520,7 +574,7 @@ class SmallPriorityQueue(Generic[T]):
         return self._lst[-1] if self._reverse else self._lst[0]
 
     def remove(self, element: T) -> bool:
-        """Removes the first occurrence of the specified element from the queue; returns True if the element was contained"""
+        """Removes the first occurrence of ``element`` and returns True if it was present."""
         lst = self._lst
         i = bisect.bisect_left(lst, element)
         is_contained = i < len(lst) and lst[i] == element
@@ -529,23 +583,27 @@ class SmallPriorityQueue(Generic[T]):
         return is_contained
 
     def __len__(self) -> int:
+        """Returns the number of queued elements."""
         return len(self._lst)
 
     def __contains__(self, element: T) -> bool:
+        """Returns ``True`` if ``element`` is present."""
         lst = self._lst
         i = bisect.bisect_left(lst, element)
         return i < len(lst) and lst[i] == element
 
     def __iter__(self) -> Iterator[T]:
+        """Iterates over queued elements in priority order."""
         return reversed(self._lst) if self._reverse else iter(self._lst)
 
     def __repr__(self) -> str:
+        """Representation showing queue contents in current order."""
         return repr(list(reversed(self._lst))) if self._reverse else repr(self._lst)
 
 
 #############################################################################
 class SynchronizedBool:
-    """Thread-safe bool."""
+    """Thread-safe wrapper around a regular bool."""
 
     def __init__(self, val: bool) -> None:
         assert isinstance(val, bool)
@@ -554,21 +612,25 @@ class SynchronizedBool:
 
     @property
     def value(self) -> bool:
+        """Returns the current boolean value."""
         with self._lock:
             return self._value
 
     @value.setter
     def value(self, new_value: bool) -> None:
+        """Atomically assign ``new_value``."""
         with self._lock:
             self._value = new_value
 
     def get_and_set(self, new_value: bool) -> bool:
+        """Swaps in ``new_value`` and return the previous value."""
         with self._lock:
             old_value = self._value
             self._value = new_value
             return old_value
 
     def compare_and_set(self, expected_value: bool, new_value: bool) -> bool:
+        """Sets to ``new_value`` only if current value equals ``expected_value``."""
         with self._lock:
             eq = self._value == expected_value
             if eq:
@@ -591,7 +653,7 @@ V = TypeVar("V")
 
 
 class SynchronizedDict(Generic[K, V]):
-    """Thread-safe dict."""
+    """Thread-safe wrapper around a regular dict."""
 
     def __init__(self, val: dict[K, V]) -> None:
         assert isinstance(val, dict)
@@ -627,18 +689,22 @@ class SynchronizedDict(Generic[K, V]):
             return str(self._dict)
 
     def get(self, key: K, default: V | None = None) -> V | None:
+        """Returns ``self[key]`` or ``default`` if missing."""
         with self._lock:
             return self._dict.get(key, default)
 
     def pop(self, key: K, default: V | None = None) -> V | None:
+        """Removes ``key`` and returns its value."""
         with self._lock:
             return self._dict.pop(key, default)
 
     def clear(self) -> None:
+        """Removes all items atomically."""
         with self._lock:
             self._dict.clear()
 
     def items(self) -> ItemsView[K, V]:
+        """Returns a snapshot of dictionary items."""
         with self._lock:
             return self._dict.copy().items()
 
@@ -672,12 +738,16 @@ class InterruptibleSleep:
 
 #############################################################################
 class _XFinally(contextlib.AbstractContextManager):
+    """Context manager ensuring cleanup code executes after ``with`` blocks."""
+
     def __init__(self, cleanup: Callable[[], None]) -> None:
+        """Records the callable to run upon exit."""
         self._cleanup = cleanup  # Zero-argument callable executed after the `with` block exits.
 
     def __exit__(  # type: ignore[exit-return]  # need to ignore on python <= 3.8
         self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: types.TracebackType | None
     ) -> bool:
+        """Runs cleanup and propagate any exceptions appropriately."""
         try:
             self._cleanup()
         except BaseException as cleanup_exc:

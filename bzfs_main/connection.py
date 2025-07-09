@@ -11,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""
-* Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool.
-"""
+#
+"""Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool."""
 
 from __future__ import annotations
 import copy
@@ -64,9 +62,11 @@ def run_ssh_command(
     print_stderr: bool = True,
     cmd: list[str] | None = None,
 ) -> str:
-    """Runs the given cmd via ssh on the given remote, and returns stdout. The full command is the concatenation
-    of both the command to run on the localhost in order to talk to the remote host ($remote.local_ssh_command())
-    and the command to run on the given remote host ($cmd)."""
+    """Runs the given cmd via ssh on the given remote, and returns stdout.
+
+    The full command is the concatenation of both the command to run on the localhost in order to talk to the remote host
+    ($remote.local_ssh_command()) and the command to run on the given remote host ($cmd).
+    """
     level = level if level >= 0 else logging.INFO
     assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
     p, log = job.params, job.params.log
@@ -130,6 +130,7 @@ def try_ssh_command(
 
 
 def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connection") -> None:
+    """Maintain or create an ssh master connection for low latency reuse."""
     p, log = job.params, job.params.log
     if remote.ssh_user_host == "":
         return  # we're in local mode; no ssh required
@@ -229,17 +230,21 @@ class Connection:
         return str({"free": self.free, "cid": self.cid})
 
     def increment_free(self, value: int) -> None:
+        """Adjusts the count of available SSH slots."""
         self.free += value
         assert self.free >= 0
         assert self.free <= self.capacity
 
     def is_full(self) -> bool:
+        """Returns True if no more SSH sessions may be opened over this TCP connection."""
         return self.free <= 0
 
     def update_last_modified(self, last_modified: int) -> None:
+        """Records when the connection was last used."""
         self.last_modified = last_modified
 
     def shutdown(self, msg_prefix: str, p: Params) -> None:
+        """Closes the underlying SSH master connection."""
         ssh_cmd = self.ssh_cmd
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
@@ -265,10 +270,12 @@ class ConnectionPool:
         self._lock: threading.Lock = threading.Lock()
 
     def get_connection(self) -> Connection:
-        """Any Connection object returned on get_connection() also remains intentionally contained in the priority queue,
-        and that identical Connection object is later, on return_connection(), temporarily removed from the priority queue,
-        updated with an incremented "free" slot count and then immediately reinserted into the priority queue. In effect,
-        any Connection object remains intentionally contained in the priority queue at all times."""
+        """Any Connection object returned on get_connection() also remains intentionally contained in the priority queue, and
+        that identical Connection object is later, on return_connection(), temporarily removed from the priority queue,
+        updated with an incremented "free" slot count and then immediately reinserted into the priority queue.
+
+        In effect, any Connection object remains intentionally contained in the priority queue at all times.
+        """
         with self._lock:
             conn = self.priority_queue.pop() if len(self.priority_queue) > 0 else None
             if conn is None or conn.is_full():
@@ -283,6 +290,7 @@ class ConnectionPool:
             return conn
 
     def return_connection(self, conn: Connection) -> None:
+        """Returns the given connection to the pool and updates its priority."""
         assert conn is not None
         with self._lock:
             # update priority = remove conn from queue, increment priority, finally reinsert updated conn into queue
@@ -293,6 +301,7 @@ class ConnectionPool:
                 self.priority_queue.push(conn)
 
     def shutdown(self, msg_prefix: str) -> None:
+        """Closes all SSH connections managed by this pool."""
         with self._lock:
             if self.remote.reuse_ssh_connection:
                 for conn in self.priority_queue:
@@ -310,14 +319,17 @@ class ConnectionPools:
     """A bunch of named connection pools with various multiplexing capacities."""
 
     def __init__(self, remote: Remote, capacities: dict[str, int]) -> None:
+        """Creates one connection pool per name with the given capacities."""
         self.pools = {name: ConnectionPool(remote, capacity) for name, capacity in capacities.items()}
 
     def __repr__(self) -> str:
         return str(self.pools)
 
     def pool(self, name: str) -> ConnectionPool:
+        """Returns the pool associated with the given name."""
         return self.pools[name]
 
     def shutdown(self, msg_prefix: str) -> None:
+        """Shuts down every contained pool."""
         for name, pool in self.pools.items():
             pool.shutdown(msg_prefix + "/" + name)

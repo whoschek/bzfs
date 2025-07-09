@@ -665,7 +665,9 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTestCase):
 
     def test_monthly_cycle_with_future_anchor_month(self) -> None:
         """Tests that the monthly cycle works correctly when the anchor month is after the current month.
-        This is already covered by other tests, but this one makes it explicit."""
+
+        This is already covered by other tests, but this one makes it explicit.
+        """
         # Schedule: Every 3 months (quarterly). Anchor phase is set to start in November (month 11).
         # Schedule is Feb, May, Aug, Nov.
         anchors = PeriodAnchors(monthly_month=11)
@@ -732,7 +734,9 @@ class TestRoundDatetimeUpToDurationMultiple(AbstractTestCase):
 
     def test_yearly_cycle_with_future_anchor_year(self) -> None:
         """Tests that the cycle phase works correctly even if the anchor year is in the future.
-        The anchor year should only define the phase (e.g., odd/even years), not a starting point."""
+
+        The anchor year should only define the phase (e.g., odd/even years), not a starting point.
+        """
         # Schedule: Every 2 years. The anchor phase is defined by year 2051 (an odd year).
         # This means snapshots should occur in ..., 2023, 2025, 2027, ...
         anchors = PeriodAnchors(yearly_year=2051)

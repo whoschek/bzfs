@@ -11,6 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Thread-based progress monitor for `pv` output during data transfers.
+
+It tails the log files produced by (parallel) ``pv`` processes and periodically prints a single status line showing
+aggregated throughput, ETA, etc. The reporter runs in a separate daemon thread to avoid blocking replication. All methods
+are designed for minimal synchronization overhead.
+"""
 
 from __future__ import annotations
 import argparse
@@ -42,13 +49,16 @@ pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s
 #############################################################################
 class ProgressReporter:
     """Periodically prints progress updates to the same console status line, which is helpful if the program runs in an
-    interactive Unix terminal session. Tails the 'pv' output log files that are being written to by (parallel) replication,
+    interactive Unix terminal session.
+
+    Tails the 'pv' output log files that are being written to by (parallel) replication,
     and extracts aggregate progress and throughput metrics from them, such as MB, MB/s, ETA, etc. Periodically prints these
     metrics to the console status line (but not to the log file), and in doing so "visually overwrites" the previous status
     line, via appending a \r carriage return control char rather than a \n newline char. Does not print a status line if the
     Unix environment var 'bzfs_isatty' is set to 'false', in order not to confuse programs that scrape redirected stdout.
     Example console status line:
-    2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08"""
+    2025-01-17 01:23:04 [I] zfs sent 41.7 GiB 0:00:46 [963 MiB/s] [907 MiB/s] [==========>  ] 80% ETA 0:00:04 ETA 01:23:08
+    """
 
     def __init__(
         self,
@@ -58,6 +68,7 @@ class ProgressReporter:
         progress_update_intervals: tuple[float, float] | None,
         fail: bool = False,
     ) -> None:
+        """Creates a reporter configured for ``pv`` log parsing."""
         # immutable variables:
         self.log: Logger = log
         self.pv_program_opts: list[str] = pv_program_opts
@@ -76,6 +87,7 @@ class ProgressReporter:
         self.is_pausing: bool = False
 
     def start(self) -> None:
+        """Starts the monitoring thread and begins asynchronous parsing of ``pv`` log files."""
         with self.lock:
             assert self.thread is None
             self.thread = threading.Thread(target=lambda: self._run(), name="progress_reporter", daemon=True)
@@ -92,10 +104,13 @@ class ProgressReporter:
             raise e  # reraise exception in current thread
 
     def pause(self) -> None:
+        """Temporarily suspends status logging."""
         with self.lock:
             self.is_pausing = True
 
     def reset(self) -> None:
+        """Clears metrics before processing a new batch of logs; the purpose is to discard previous totals to avoid mixing
+        unrelated transfers."""
         with self.lock:
             self.is_resetting = True
 
@@ -106,6 +121,7 @@ class ProgressReporter:
                 self.file_name_queue.add(pv_log_file)
 
     def _run(self) -> None:
+        """Thread entry point consuming pv logs and updating metrics."""
         log = self.log
         try:
             fds: list[IO] = []
@@ -124,8 +140,12 @@ class ProgressReporter:
 
     @dataclass
     class TransferStat:
+        """Tracks per-file transfer state and ETA."""
+
         @dataclass(order=True)
-        class ETA:  # Estimated time of arrival
+        class ETA:
+            """Estimated time of arrival."""
+
             timestamp_nanos: int  # sorted by future time at which current zfs send/recv transfer is estimated to complete
             seq_nr: int  # tiebreaker wrt. sort order
             line_tail: str = field(compare=False)  # trailing pv log line part w/ progress bar, duration ETA, timestamp ETA
@@ -134,8 +154,11 @@ class ProgressReporter:
         eta: ETA
 
     def _run_internal(self, fds: list[IO], selector: selectors.BaseSelector) -> None:
+        """Tails pv log files and periodically logs aggregated progress."""
 
         class Sample(NamedTuple):
+            """Sliding window entry for throughput calculation."""
+
             sent_bytes: int
             timestamp_nanos: int
 
@@ -224,6 +247,7 @@ class ProgressReporter:
                 raise ValueError("Injected ProgressReporter error")  # for testing only
 
     def update_transfer_stat(self, line: str, s: TransferStat, curr_time_nanos: int) -> int:
+        """Update ``s`` from one pv status line and return bytes delta."""
         num_bytes, s.eta.timestamp_nanos, s.eta.line_tail = self.parse_pv_line(line, curr_time_nanos)
         bytes_in_flight = s.bytes_in_flight
         s.bytes_in_flight = num_bytes if line.endswith("\r") else 0  # intermediate vs. final status update of each transfer
@@ -235,6 +259,7 @@ class ProgressReporter:
 
     @staticmethod
     def parse_pv_line(line: str, curr_time_nanos: int) -> tuple[int, int, str]:
+        """Parses a pv status line into transferred bytes and ETA timestamp."""
         assert isinstance(line, str)
         if ":" in line:
             line = line.split(":", 1)[1].strip()
@@ -249,17 +274,20 @@ class ProgressReporter:
 
     @staticmethod
     def format_sent_bytes(num_bytes: int, duration_nanos: int) -> tuple[str, str]:
+        """Returns a human-readable byte count and rate."""
         bytes_per_sec = round(1_000_000_000 * num_bytes / max(1, duration_nanos))
         return f"{human_readable_bytes(num_bytes, precision=2)}", f"[{human_readable_bytes(bytes_per_sec, precision=2)}/s]"
 
     @staticmethod
     def format_duration(duration_nanos: int) -> str:
+        """Formats ``duration_nanos`` as HH:MM:SS string."""
         total_seconds = round(duration_nanos / 1_000_000_000)
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours}:{minutes:02d}:{seconds:02d}"
 
     def get_update_intervals(self) -> tuple[float, float]:
+        """Extracts polling intervals from ``pv_program_opts``."""
         parser = argparse.ArgumentParser(allow_abbrev=False)
         parser.add_argument("--interval", "-i", type=float, default=1)
         parser.add_argument("--average-rate-window", "-m", type=float, default=30)
@@ -269,6 +297,7 @@ class ProgressReporter:
 
 
 def pv_size_to_bytes(size: str) -> tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
+    """Converts pv size string to bytes and returns remaining text."""
     if match := pv_size_to_bytes_regex.fullmatch(size):
         number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
         i = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
@@ -287,6 +316,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     """Scrapes the .pv log file(s) and sums up the 'pv --bytes' column."""
 
     def parse_pv_line(line: str) -> int:
+        """Extracts byte count from a single pv log line."""
         if ":" in line:
             col = line.split(":", 1)[1].strip()
             num_bytes, _ = pv_size_to_bytes(col)

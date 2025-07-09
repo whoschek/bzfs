@@ -115,13 +115,12 @@ def create_filesystem(
     no_mount: bool = True,
     props: list[str] | None = None,
 ) -> str:
-    """implies mk_parents=True
-    if no_mount=True:
-    To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation
-    for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u' part only to
-    the immediate dataset, rather than to the not-yet existing ancestors.
-    If the zfs version doesn't support the 'zfs create -u' flag then we manually unmount immediately after each
-    dataset creation.
+    """Implies mk_parents=True if no_mount=True:
+
+    To ensure the datasets that we create do not get mounted, we apply a separate 'zfs create -p -u' invocation for each non-
+    existing ancestor. This is because a single 'zfs create -p -u' applies the '-u' part only to the immediate dataset,
+    rather than to the not-yet existing ancestors. If the zfs version doesn't support the 'zfs create -u' flag then we
+    manually unmount immediately after each dataset creation.
     """
     if props is None:
         props = []
@@ -380,7 +379,7 @@ def build(name: str, check: bool = True) -> str:
 
 
 def zfs_version() -> str | None:
-    """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5"""
+    """Example zfs-2.1.5~rc5-ubuntu3 -> 2.1.5."""
     try:
         # on Linux, 'zfs --version' returns with zero status and prints the correct info
         # on FreeBSD, 'zfs --version' always prints the same (correct) info as Linux, but nonetheless sometimes
