@@ -62,7 +62,7 @@ checks still pass.
 6. **Commit:**
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages for all commits, e.g. 'feat(bzfs_jobrunner): add --foo CLI option'
-  - **Types:** `feat`, `fix`, `docs`, `CI`, `build`, `perf`, `refactor`, `chore`, `dx` (developer experience)
+  - **Types:** `feat`, `fix`, `docs`, `ci`, `build`, `perf`, `refactor`, `chore`, `dx` (developer experience)
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `all`
 
 7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
@@ -93,7 +93,7 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 ## How to Write Code
 
 - **docstrings:** For every module, class, function, or method you **add or modify**, attach a docstring ≤ 80 words that
-    concisely explains **Purpose**, **Assumptions** and **Design rationale** (why this implementation was chosen).
+    concisely explains **Purpose**, **Assumptions** and **Design Rationale** (why this implementation was chosen).
 - **Linter Suppressions: Last Resort Only:**
   - Do not add `# noqa:`, `# type:` annotations, etc, unless the linter cannot be satisfied in a reasonable way, in
     which case keep the annotation on the specific line and append a brief comment explaining the reason (≤ 10 words).
@@ -168,10 +168,9 @@ Your context is your most valuable asset. Use it effectively.
 
 ## How to Manage Time if your Environment has Time Limits
 
-- Create intermediate checkpoints or commits to save progress, especially as environment time limits approach. Make sure
-  you don't run into the current environment time limit to avoid your task getting unexpectedly aborted or cancelled.
-  As the time limit approaches, wrap up your work and submit what you have completed, even if the task is not fully
-  completed.
+- Create intermediate checkpoints or commits to save progress, especially as environment time limits approach. Stay
+  within the current environment time limit to avoid your task getting unexpectedly aborted or cancelled. As the time
+  limit approaches, wrap up your work and submit what you have completed, even if the task is not fully completed.
 
 ## Environment Setup
 
