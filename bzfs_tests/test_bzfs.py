@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Unit tests for the ``bzfs`` CLI."""
 
 from __future__ import annotations
 import argparse
@@ -93,7 +95,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def merge_sorted_iterators(self, src: list[Any], dst: list[Any], choice: str) -> list[tuple[Any, ...]]:
         s, d, a = self.s, self.d, self.a
-        return [item for item in bzfs.Job().merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst))]
+        return list(bzfs.Job().merge_sorted_iterators([s, d, a], choice, iter(src), iter(dst)))
 
     def assert_merge_sorted_iterators(
         self,
@@ -538,8 +540,8 @@ class TestHelperFunctions(AbstractTestCase):
     def test_root_datasets_if_recursive_zfs_snapshot_is_possible(self) -> None:
         def run_filter(src_datasets: list[str], basis_src_datasets: list[str]) -> list[str]:
             assert set(src_datasets).issubset(set(basis_src_datasets))
-            src_datasets = list(sorted(src_datasets))
-            basis_src_datasets = list(sorted(basis_src_datasets))
+            src_datasets = sorted(src_datasets)
+            basis_src_datasets = sorted(basis_src_datasets)
             expected = self.root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(
                 src_datasets, basis_src_datasets
             )

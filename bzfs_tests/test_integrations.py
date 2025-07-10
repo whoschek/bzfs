@@ -11,6 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Integration tests for full replication workflows.
+
+The tests are skipped when running in unit mode. Exercises ``bzfs`` and ``bzfs_jobrunner`` together using temporary datasets
+and configuration files. Requires local 'zfs' and 'zpool' CLI. Ensures that individual components interoperate correctly when
+run as a whole.
+"""
 
 from __future__ import annotations
 import contextlib
@@ -238,7 +245,7 @@ class IntegrationTestCase(ParametrizedTestCase):
             if dataset_exists(pool):
                 destroy_pool(pool)
             if not dataset_exists(pool):
-                tmp = tempfile.NamedTemporaryFile()
+                tmp = tempfile.NamedTemporaryFile()  # noqa: SIM115
                 tmp.seek(pool_size_bytes - 1)
                 tmp.write(b"0")
                 tmp.seek(0)
@@ -3743,7 +3750,7 @@ class LocalTestCase(IntegrationTestCase):
                     self.setup_basic()
                     cmp_choices: list[str] = []
                     for w in range(len(bzfs.cmp_choices_items)):
-                        cmp_choices += map(lambda c: "+".join(c), itertools.combinations(bzfs.cmp_choices_items, w + 1))
+                        cmp_choices += ["+".join(c) for c in itertools.combinations(bzfs.cmp_choices_items, w + 1)]
                     for cmp in cmp_choices:
                         job = self.run_bzfs(
                             src_root_dataset, dst_root_dataset, "--skip-replication", f"--compare-snapshot-lists={cmp}"

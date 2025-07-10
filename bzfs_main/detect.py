@@ -68,10 +68,9 @@ def detect_available_programs(job: Job) -> None:
     available_programs = params.available_programs
     if "local" not in available_programs:
         cmd = [p.shell_program_local, "-c", find_available_programs(p)]
-        available_programs["local"] = {
-            prog: ""
-            for prog in subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines()
-        }
+        available_programs["local"] = dict.fromkeys(
+            subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).stdout.splitlines(), ""
+        )
         cmd = [p.shell_program_local, "-c", "exit"]
         if subprocess.run(cmd, stdin=DEVNULL, stdout=PIPE, stderr=sys.stderr, text=True).returncode != 0:
             disable_program(p, "sh", ["local"])

@@ -1123,7 +1123,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     cmp_choices_dflt = "+".join(cmp_choices_items)
     cmp_choices: list[str] = []
     for i in range(len(cmp_choices_items)):
-        cmp_choices += map(lambda item: "+".join(item), itertools.combinations(cmp_choices_items, i + 1))
+        cmp_choices += ["+".join(c) for c in itertools.combinations(cmp_choices_items, i + 1)]
     parser.add_argument(
         "--compare-snapshot-lists", choices=cmp_choices, default="", const=cmp_choices_dflt, nargs="?",
         help="Do nothing if the --compare-snapshot-lists option is missing. Otherwise, after successful replication "
@@ -5342,7 +5342,7 @@ def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentPars
 
 
 def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
-    """Disallow csh-style quoting."""
+    """Disallows csh-style quoting."""
     if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
@@ -5356,7 +5356,7 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
 def validate_no_argument_file(
     path: str, namespace: argparse.Namespace, err_prefix: str, parser: argparse.ArgumentParser | None = None
 ) -> None:
-    """Checks that command line options do not include @file when disabled."""
+    """Checks that command line options do not include +file when disabled."""
     if getattr(namespace, "no_argument_file", False):
         die(f"{err_prefix}Argument file inclusion is disabled: {path}", parser=parser)
 
@@ -5485,7 +5485,7 @@ class FileOrLiteralAction(argparse.Action):
     def __call__(
         self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
-        """Expands file arguments and append them to the namespace."""
+        """Expands file arguments and appends them to the namespace."""
         current_values = getattr(namespace, self.dest, None)
         if current_values is None:
             current_values = []

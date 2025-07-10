@@ -13,18 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the hostname of your
+local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs
+are on the PATH. Run the final script like so:
 
-#############################################################################
-# Quickstart for local replication: Edit this script. Replace all occurrences of the word "nas" with the hostname of
-# your local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets.
-# Make sure `bzfs` and `bzfs_jobrunner` CLIs are on the PATH. Run the final script like so:
-#
-# /etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks \
-# --prune-dst-snapshots --monitor-src-snapshots --monitor-dst-snapshots
-#
-# Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or
-# every hour, or every day, or similar.
-#############################################################################
+/etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks \ --prune-dst-
+snapshots --monitor-src-snapshots --monitor-dst-snapshots
+
+Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or every
+hour, or every day, or similar.
+"""
 
 import argparse
 import os
@@ -43,7 +42,8 @@ Typically, this script should be periodically executed on each source host and e
 (or similar). However, you can also run it on a single third-party host and have that talk to all source hosts and
 destination hosts, which is convenient for basic use cases and for testing.
 This script submits parameters plus all unknown CLI arguments to `bzfs_jobrunner`, which in turn delegates most of the
-actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach.
+actual work to the `bzfs` CLI. Uses an "Infrastructure as Code" approach. A plain Python script offers readable
+customization without needing a separate configuration format.
 """
 )
 known_args, unknown_args = parser.parse_known_args()  # forward all unknown args to `bzfs_jobrunner`

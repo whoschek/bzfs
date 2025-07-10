@@ -29,16 +29,18 @@ Each endpoint can be either a number or positive or negative infinity:
 from __future__ import annotations
 import argparse
 import operator
-from typing import Any
+from typing import Any, Final
 
 
 # fmt: off
 class CheckRange(argparse.Action):
     """Argparse action validating numeric ranges like ``(a,b]`` or ``[a,+∞)``."""
-    ops = {'inf': operator.gt,  # noqa: RUF012
-           'min': operator.ge,
-           'sup': operator.lt,
-           'max': operator.le}
+    ops: Final = {
+        'inf': operator.gt,
+        'min': operator.ge,
+        'sup': operator.lt,
+        'max': operator.le,
+    }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         if 'min' in kwargs and 'inf' in kwargs:

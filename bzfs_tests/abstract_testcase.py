@@ -11,6 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Test case base class used by most unit tests.
+
+Provides shared setup for consistent CLI argument parsing and environment control. Tests may run in unit, smoke, functional
+or adhoc modes, toggled by environment variables.
+"""
 
 from __future__ import annotations
 import argparse

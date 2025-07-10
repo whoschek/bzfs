@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+"""Unit tests for the progress reporting utilities during replication; Verifies parsing and display of streaming subprocess
+output."""
 
 from __future__ import annotations
 import io

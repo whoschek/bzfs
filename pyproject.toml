@@ -107,6 +107,7 @@ omit = ["bzfs_tests/*.py", "*/__init__.py"]
 [tool.docformatter]         # auto-format Python docstrings to follow PEP 257 and Hard-wrap them to a specific line length
 wrap-summaries = 125        # summary / one-liner length; see https://docformatter.readthedocs.io/en/latest/usage.html
 wrap-descriptions = 125     # long-description line length
+force-wrap = false          # force descriptions to be wrapped even if it may result in a mess?
 in-place = true             # let pre-commit make changes to files instead of printing diffs
 
 [tool.black]
@@ -127,40 +128,58 @@ exclude = [   # toggles to exclude overly strict `ruff` checks of these Python s
 
 [tool.ruff.lint]
 select = [  # see https://docs.astral.sh/ruff/rules/
-    "A",    # builtins
-    "B",    # bugbear
-    "D100", "D101", "D102", "D103", "D106", "D200", "D206", "D403", "D404", "D414", "D418", "D419",  # pydocstyle docs
-    "E",    # pycodestyle error
-    "EXE",  # shebang
-    "F",    # pyflakes
-    "FA",   # forward annotations
-    "G",    # flake8-logging-format
-    "I",    # sort imports
-    "ICN",  # flake8-import-conventions
-    "INP",  # flake8-no-pep420
-    "LOG",  # flake8-logging
-    "N8",   # naming, snake case
-    "PGH",  # pygrep-hooks
-    "PIE",  # flake8-pie
-    "PLC",  # convention
-    "PLE0704", # bare raise statement is not inside an exception handler
-    "PLE",  # error
-    "PLW",  # warning
-    "RUF",  # ruff-specifc rules
-    "S",    # bandit
-    "SLF",  # private member accessed
-    "T100", # check for debugger imports and breakpoint() calls
-    "TID",  # flake8-tidy-imports
-    "TRY",  # tryceratops raises
-    "TRY201",  # Use `raise` without specifying exception name
-#    "UP006",  # pyupgrade
-#    "UP007",  # pyupgrade
-#    "UP045",  # pyupgrade
-    "YTT",  # flake8-2020
+    "A",        # builtins
+    "B",        # bugbear
+    "C4",       # flake8-comprehensions
+    "D100", "D101", "D102", "D103", "D106", "D200", "D206", "D403", "D404", "D414", "D418", "D419",  # pydocstyle
+    "E",        # pycodestyle error
+    "EXE",      # shebang
+    "F",        # pyflakes
+    "FA",       # forward annotations
+    "G",        # flake8-logging-format
+    "I",        # sort imports
+    "ICN",      # flake8-import-conventions
+    "INP",      # flake8-no-pep420
+    "LOG",      # flake8-logging
+    "N",        # pep8-naming, snake_case
+    "PERF402",  # use list or list.copy to create a copy of a list
+    "PGH",      # pygrep-hooks
+    "PIE",      # flake8-pie
+    "PLC",      # convention
+    "PLE0704",  # bare raise statement is not inside an exception handler
+    "PLE",      # error
+    "PLR0402",  # use from {module} import {name} in lieu of alias
+    "PLR1711",  # useless return statement at end of function
+    "PLR1722",  # use sys.exit() instead of exit()
+    "PLR1730",  # replace if statement with min() or max() if possible
+    "PLR1733",  # unnecessary lookup of dictionary value by key
+    "PLR1736",  # list index lookup in enumerate() loop
+    "PLR2044",  # line with empty comment
+    "PLW",      # warning
+    "RUF",      # ruff-specifc rules
+    "S",        # bandit
+    "SIM115",   # flake8-simplify: Use a context manager for opening files
+    "SIM300",   # yoda condition detected
+    "SIM401",   # use dict.get(x, default) instead of if statement
+    "SIM910",   # dict.get(x, None)
+    "SIM911",   # use dict.items() instead of zip()
+    "SLF",      # private member accessed
+    "T100",     # check for debugger imports and breakpoint() calls
+    "TID",      # flake8-tidy-imports
+    "TRY",      # tryceratops raises
+    "TRY201",   # use `raise` without specifying exception name
+#    "UP006",   # pyupgrade
+#    "UP007",   # pyupgrade
+#    "UP045",   # pyupgrade
+    "YTT",      # flake8-2020
 ]
 preview = true                 # enable preview rules
 explicit-preview-rules = true  # only opt into specific preview rules via extend-select whitelist (no blank opt-in)
-extend-select = ["CPY001"]     # copyright
+extend-select = [
+    "CPY001",   # copyright
+    "PLR0202",  # no-classmethod-decorator
+    "PLR0203",  # no-staticmethod-decorator
+]
 ignore = [  # toggles to exclude overly strict `ruff` checks:
     "G004",     # logging statement uses f-string
     "PLC0415",  # `import` should be at the top-level of a file
@@ -168,26 +187,29 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
     "PLW1510",  # subprocess-run
     "PLW2901",  # redefined-loop-name
     "RUF005",   # collection-literal-concatenation
-    "RUF059",   # unpacked variable is never used
     "S101",     # use of assert detected (harmless)
     "S404",     # use of subprocess module (this use is intended)
     "S603",     # use of subprocess without shell=True (this use is intended)
     "TRY003",   # avoid specifying long messages outside the exception class
-    "TRY300",   # Consider moving this statement to an else block
+    "TRY300",   # consider moving this statement to an else block
     "TRY301",   # abstract raise to an inner function
     "TRY400",   # use logging.exception instead of logging.error
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "bzfs_tests/**/*" = [
-    "D",        # pydocstyle docs
+    "D101", "D102", "D103", "D104", "D105", "D106", "D107",  # pydocstyle: ignore all D rules except the ones we want
+    "PERF402",  # use list or list.copy to create a copy of a list
     "PGH003",   # pygrep-hooks blanket-type-ignore
     "PLW0603",  # global-statement
     "S",        # bandit
-    "SLF",      # Private member accessed
+    "SLF",      # private member accessed
 ]
 "bash_completion_d/**/*" = [
-    "SLF",      # Private member accessed
+    "SLF",      # private member accessed
+]
+".github-workflow-scripts/**/*" = [
+    "N999",     # invalid-module-name
 ]
 "**/__init__.py" = [
     "CPY",      # copyright
@@ -197,7 +219,8 @@ ignore = [  # toggles to exclude overly strict `ruff` checks:
 ]
 
 [tool.ruff.lint.flake8-copyright]
-author = "Wolfgang Hoschek"
+notice-rgx = """Copyright (\\(c\\) )?\\d{4}([-,]\\d{4})* Wolfgang Hoschek AT mac DOT com\
+\\s+#\\s+# Licensed under the Apache License, Version 2\\.0"""
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
