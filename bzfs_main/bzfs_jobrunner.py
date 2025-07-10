@@ -620,23 +620,21 @@ class Job:
                             j += 1
                 subjob_name = update_subjob_name(marker)
 
-            def prune_src(opts: list[str], retention_plan: dict, tag: str) -> None:
+            def prune_src(opts: list[str], retention_plan: dict, tag: str, src_host: str = src_host) -> None:
                 """Creates prune subjob options for ``tag`` using ``retention_plan``."""
                 opts += [
                     "--skip-replication",
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
                     f"--log-file-prefix={prog_name}{sep}{tag}{sep}",
                     f"--log-file-infix={sep}{job_id}",
-                    f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",  # noqa: B023
+                    f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
                     opts, ssh_dst_user=ssh_src_user, ssh_dst_port=ssh_src_port, ssh_dst_config_file=ssh_src_config_file
                 )
                 opts += ["--"]
-                opts += flatten(
-                    dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs])  # noqa: B023
-                )
+                opts += flatten(dedupe([(dummy, resolve_dataset(src_host, src)) for src, dst in args.root_dataset_pairs]))
                 nonlocal subjob_name
                 subjob_name += f"/{tag}"
                 subjobs[subjob_name] = bzfs_prog_header + opts

@@ -1556,8 +1556,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
         flag = "'" + flag + "'"  # one of -o or -x
 
-        def h(text: str) -> str:
-            return argparse.SUPPRESS if option_name == "zfs_set" else text  # noqa: B023
+        def h(text: str, option_name: str=option_name) -> str:
+            return argparse.SUPPRESS if option_name == "zfs_set" else text
 
         argument_group = parser.add_argument_group(
             grup + " (Experimental)",

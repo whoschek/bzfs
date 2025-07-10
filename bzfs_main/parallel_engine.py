@@ -170,6 +170,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
     datasets_set: set[str] = set(datasets)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         todo_futures: set[Future[Any]] = set()
+        future_to_node: dict[Future[Any], TreeNode] = {}
         submitted: int = 0
         next_update_nanos: int = time.monotonic_ns()
         fw_timeout: float | None = None
@@ -194,7 +195,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                 nonlocal submitted
                 submitted += 1
                 future = executor.submit(_process_dataset, node.dataset, tid=f"{submitted}/{len_datasets}")
-                future.node = node  # type: ignore[attr-defined]
+                future_to_node[future] = node
                 todo_futures.add(future)
             return len(todo_futures) > 0
 
@@ -203,7 +204,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
         while submit_datasets():
             done_futures, todo_futures = concurrent.futures.wait(todo_futures, fw_timeout, return_when=FIRST_COMPLETED)
             for done_future in done_futures:
-                dataset = done_future.node.dataset  # type: ignore[attr-defined]
+                done_future_node: TreeNode = future_to_node.pop(done_future)
+                dataset = done_future_node.dataset
                 try:
                     no_skip: bool = done_future.result()  # does not block as processing has already completed
                 except (subprocess.CalledProcessError, subprocess.TimeoutExpired, SystemExit, UnicodeDecodeError) as e:
@@ -228,7 +230,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
                                 simple_enqueue_children(child_node)  # ... recursively down the tree
 
                     if no_skip:
-                        simple_enqueue_children(done_future.node)  # type: ignore[attr-defined]
+                        simple_enqueue_children(done_future_node)
                 else:
                     # The (more complex) algorithm below is for more general job scheduling, as in bzfs_jobrunner.
                     # Here, a "dataset" string is treated as an identifier for any kind of job rather than a reference
@@ -294,8 +296,9 @@ def process_datasets_in_parallel_and_fault_tolerant(
                             assert node.mut.pending >= 0
 
                     assert barriers_enabled
-                    on_job_completion_with_barriers(done_future.node, no_skip)  # type: ignore[attr-defined]
+                    on_job_completion_with_barriers(done_future_node, no_skip)
         # endwhile submit_datasets()
         assert len(priority_queue) == 0
         assert len(todo_futures) == 0
+        assert len(future_to_node) == 0
         return failed
