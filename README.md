@@ -426,6 +426,14 @@ sudo ln -sf $(pwd)/bzfs_jobrunner /usr/local/bin/bzfs_jobrunner  # Optional syst
 pip install bzfs
 bzfs --help  # Run the CLI
 bzfs_jobrunner --help
+
+# Alternatively, setup the environment for software development:
+git clone https://github.com/whoschek/bzfs.git
+cd bzfs
+python3 -m venv venv                # Create a Python virtual environment
+source venv/bin/activate            # Activate it
+pip install -e '.[dev]'             # Install all development dependencies
+pre-commit install --install-hooks  # Ensure Linters and Formatters run on every commit
 ```
 
 
