@@ -14,8 +14,8 @@
 #
 """Emits a bash completion script such that typing bzfs <TAB> or bzfs_jobrunner <TAB> will auto-complete all flags.
 
-Usage: python3 -m bash_completion_d.shell-completion-generator > /etc/bash_completion.d/bzfs-shell-completion
-or     python3 -m bash_completion_d.shell-completion-generator > ~/.bash_completion.d/bzfs-shell-completion
+Usage: python3 -m bash_completion_d.shell_completion_generator > /etc/bash_completion.d/bzfs-shell-completion
+or     python3 -m bash_completion_d.shell_completion_generator > ~/.bash_completion.d/bzfs-shell-completion
 """
 
 from __future__ import annotations
