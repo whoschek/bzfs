@@ -19,7 +19,6 @@ import subprocess
 import time
 import unittest
 from unittest.mock import (
-    MagicMock,
     patch,
 )
 
@@ -54,8 +53,7 @@ class TestRemoteConfCache(AbstractTestCase):
 
     def test_remote_conf_cache_hit_skips_detection(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
+        p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
         p.src = bzfs.Remote("src", args, p)
@@ -78,8 +76,7 @@ class TestRemoteConfCache(AbstractTestCase):
 
     def test_remote_conf_cache_miss_runs_detection(self) -> None:
         args = self.argparser_parse_args(["src", "dst", "--daemon-remote-conf-cache-ttl", "10 milliseconds"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
+        p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
         p.src = bzfs.Remote("src", args, p)
@@ -108,7 +105,7 @@ class TestRemoteConfCache(AbstractTestCase):
 class TestDisableAndHelpers(AbstractTestCase):
     def test_disable_program(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
+        p = self.make_params(args=args)
         p.available_programs = {"local": {"zpool": ""}, "src": {"zpool": ""}}
         bzfs_main.detect.disable_program(p, "zpool", ["local", "src"])
         self.assertNotIn("zpool", p.available_programs["local"])
@@ -116,14 +113,14 @@ class TestDisableAndHelpers(AbstractTestCase):
 
     def test_find_available_programs_contains_commands(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
+        p = self.make_params(args=args)
         cmds = bzfs_main.detect.find_available_programs(p)
         self.assertIn("default_shell-", cmds)
         self.assertIn(f"command -v {p.zpool_program}", cmds)
 
     def test_is_solaris_zfs_and_location(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
+        p = self.make_params(args=args)
         p.available_programs = {"src": {"zfs": "notOpenZFS"}}
         with patch.object(bzfs_main.detect.platform, "system", return_value="SunOS"):
             self.assertTrue(bzfs_main.detect.is_solaris_zfs_location(p, "local"))
@@ -131,7 +128,7 @@ class TestDisableAndHelpers(AbstractTestCase):
 
     def test_is_dummy(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
+        p = self.make_params(args=args)
         r = bzfs.Remote("src", args, p)
         r.root_dataset = bzfs_main.detect.dummy_dataset
         self.assertTrue(bzfs_main.detect.is_dummy(r))
@@ -143,8 +140,7 @@ class TestDisableAndHelpers(AbstractTestCase):
 class TestDetectAvailablePrograms(AbstractTestCase):
     def _setup_job(self) -> bzfs.Job:
         args = self.argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
+        p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
         p.src = bzfs.Remote("src", args, p)
@@ -236,8 +232,7 @@ class TestDetectAvailablePrograms(AbstractTestCase):
 class TestDetectAvailableProgramsRemote(AbstractTestCase):
     def _setup(self) -> tuple[bzfs.Job, bzfs.Remote]:
         args = self.argparser_parse_args(["src", "dst"])
-        p = bzfs.Params(args)
-        p.log = MagicMock()
+        p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
         p.src = bzfs.Remote("src", args, p)

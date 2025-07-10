@@ -867,7 +867,8 @@ class Job:
         has_barrier = any(BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
             log.log(log_trace, "%s", "spawn_process_per_job: True")
-            params = bzfs.Params(self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"]), log=log)
+            args = self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"])
+            params = bzfs.Params(args=args, sys_argv=[], log_params=bzfs.LogParams(args), log=log)
             process_datasets_in_parallel_and_fault_tolerant(
                 log=params.log,
                 datasets=sorted_subjobs,

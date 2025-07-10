@@ -87,6 +87,7 @@ from typing import (
     cast,
 )
 
+import bzfs_main.loggers
 import bzfs_main.utils
 from bzfs_main.check_range import CheckRange
 from bzfs_main.connection import (
@@ -132,7 +133,6 @@ from bzfs_main.incremental_send_steps import (
 )
 from bzfs_main.loggers import (
     Tee,
-    get_logger,
     get_simple_logger,
     reset_logger,
     validate_log_config_variable,
@@ -1693,19 +1693,21 @@ class Params:
     def __init__(
         self,
         args: argparse.Namespace,
-        sys_argv: list[str] | None = None,
-        log_params: LogParams | None = None,
-        log: Logger | None = None,
+        sys_argv: list[str],
+        log_params: LogParams,
+        log: Logger,
         inject_params: dict[str, bool] | None = None,
     ) -> None:
         """Reads from ArgumentParser via args."""
         # immutable variables:
         assert args is not None
+        assert isinstance(sys_argv, list)
+        assert log_params is not None
+        assert log is not None
         self.args: argparse.Namespace = args
-        self.sys_argv: list[str] = sys_argv if sys_argv is not None else []
-        assert isinstance(self.sys_argv, list)
-        self.log_params: LogParams = cast(LogParams, log_params)
-        self.log: Logger = cast(Logger, log)
+        self.sys_argv: list[str] = sys_argv
+        self.log_params: LogParams = log_params
+        self.log: Logger = log
         self.inject_params: dict[str, bool] = inject_params if inject_params is not None else {}  # for testing only
         self.one_or_more_whitespace_regex: re.Pattern = re.compile(r"\s+")
         self.two_or_more_spaces_regex: re.Pattern = re.compile(r"  +")
@@ -2398,7 +2400,7 @@ class Job:
         with xfinally(reset_logger):  # runs reset_logger() on exit, without masking exception raised in body of `with` block
             try:
                 log_params = LogParams(args)
-                log = get_logger(log_params, args, log)
+                log = bzfs_main.loggers.get_logger(log_params=log_params, args=args, log=log)
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
                 get_simple_logger(prog_name).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
@@ -2420,7 +2422,7 @@ class Job:
                 log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
                 if self.is_test_mode:
                     log.log(log_trace, "Parsed CLI arguments: %s", args)
-                self.params = p = Params(args, sys_argv, log_params, log, self.inject_params)
+                self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
                 log_params.params = p
                 with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
                     with contextlib.redirect_stderr(cast(IO, Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr

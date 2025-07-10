@@ -20,10 +20,14 @@ or adhoc modes, toggled by environment variables.
 
 from __future__ import annotations
 import argparse
+import logging
 import os
 import unittest
+from unittest.mock import MagicMock
 
 from bzfs_main.bzfs import (
+    LogParams,
+    Params,
     argument_parser,
     log_dir_default,
 )
@@ -50,3 +54,14 @@ class AbstractTestCase(unittest.TestCase):
         return argument_parser().parse_args(
             args + ["--log-dir", os.path.join(get_home_directory(), log_dir_default + "-test")]
         )
+
+    @staticmethod
+    def make_params(
+        args: argparse.Namespace,
+        log_params: LogParams | None = None,
+        log: logging.Logger | None = None,
+        inject_params: dict[str, bool] | None = None,
+    ) -> Params:
+        log_params = log_params if log_params is not None else MagicMock(spec=LogParams)
+        log = log if log is not None else MagicMock(spec=logging.Logger)
+        return Params(args=args, sys_argv=[], log_params=log_params, log=log, inject_params=inject_params)

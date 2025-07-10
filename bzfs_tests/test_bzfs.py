@@ -142,7 +142,7 @@ class TestHelperFunctions(AbstractTestCase):
             bzfs.validate_port("xxx47", "msg")
 
     def test_validate_quoting(self) -> None:
-        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         params.validate_quoting([""])
         params.validate_quoting(["foo"])
         with self.assertRaises(SystemExit):
@@ -153,7 +153,7 @@ class TestHelperFunctions(AbstractTestCase):
             params.validate_quoting(["foo`"])
 
     def test_validate_arg(self) -> None:
-        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         params.validate_arg("")
         params.validate_arg("foo")
         with self.assertRaises(SystemExit):
@@ -190,31 +190,31 @@ class TestHelperFunctions(AbstractTestCase):
         args = self.argparser_parse_args(args=["src", "dst"])
         args.zpool_program = ""
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
         args.zpool_program = None
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
 
     def test_validate_program_name_must_not_contain_special_chars(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         args.zpool_program = "true;false"
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
         args.zpool_program = "echo foo|cat"
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
         args.zpool_program = "foo>bar"
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
         args.zpool_program = "foo\nbar"
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
         args.zpool_program = "foo\\bar"
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
 
     def test_split_args(self) -> None:
-        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.split_args(""))
         self.assertEqual([], params.split_args("  "))
         self.assertEqual(["foo", "bar", "baz"], params.split_args("foo  bar baz"))
@@ -243,7 +243,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_pretty_print_formatter(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
+        params = self.make_params(args=args)
         self.assertIsNotNone(str(bzfs_main.utils.pretty_print_formatter(params)))
 
     def test_parse_duration_to_milliseconds(self) -> None:
@@ -258,7 +258,7 @@ class TestHelperFunctions(AbstractTestCase):
             bzfs.parse_duration_to_milliseconds("foo", context="ctx")
 
     def test_fix_send_recv_opts(self) -> None:
-        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         self.assertEqual([], params.fix_recv_opts(["-n"], frozenset())[0])
         self.assertEqual([], params.fix_recv_opts(["--dryrun", "-n"], frozenset())[0])
         self.assertEqual([""], params.fix_recv_opts([""], frozenset())[0])
@@ -287,7 +287,7 @@ class TestHelperFunctions(AbstractTestCase):
     def test_fix_recv_opts_with_preserve_properties(self) -> None:
         mp = "mountpoint"
         cr = "createtxg"
-        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         with self.assertRaises(SystemExit):
             params.fix_recv_opts(["-n", "-o", f"{mp}=foo"], frozenset([mp]))
         self.assertEqual(([], [mp]), params.fix_recv_opts(["-n"], frozenset([mp])))
@@ -297,7 +297,7 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(([], [cr, mp]), params.fix_recv_opts([], frozenset([mp, cr])))
 
     def test_xprint(self) -> None:
-        log = logging.getLogger()
+        log = MagicMock(logging.Logger)
         bzfs_main.utils.xprint(log, "foo")
         bzfs_main.utils.xprint(log, "foo", run=True)
         bzfs_main.utils.xprint(log, "foo", run=False)
@@ -398,17 +398,13 @@ class TestHelperFunctions(AbstractTestCase):
                 bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
 
     def test_run_main_with_unexpected_exception(self) -> None:
-        try:
-            args = self.argparser_parse_args(args=["src", "dst"])
-            log_params = bzfs.LogParams(args)
-            job = bzfs.Job()
-            job.params = bzfs.Params(args, log_params=log_params)
+        args = self.argparser_parse_args(args=["src", "dst"])
+        job = bzfs.Job()
+        job.params = self.make_params(args=args)
 
-            with patch("time.monotonic_ns", side_effect=ValueError("my value error")):
-                with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
-                    job.run_main(args)
-        finally:
-            bzfs_main.loggers.reset_logger()
+        with patch("time.monotonic_ns", side_effect=ValueError("my value error")):
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+                job.run_main(args)
 
     def test_recv_option_property_names(self) -> None:
         def names(lst: list[str]) -> set[str]:
@@ -474,7 +470,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_validate_default_shell(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
-        p = bzfs.Params(args)
+        p = self.make_params(args=args)
         remote = bzfs.Remote("src", args, p)
         bzfs.validate_default_shell("/bin/sh", remote)
         bzfs.validate_default_shell("/bin/bash", remote)
@@ -484,9 +480,12 @@ class TestHelperFunctions(AbstractTestCase):
             bzfs.validate_default_shell("/bin/tcsh", remote)
 
     def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
+        args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bzfs_ssh_config.cfg"])
+        self.make_params(args=args)
+
         args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bad_file_name.cfg"])
         with self.assertRaises(SystemExit):
-            bzfs.Params(args)
+            self.make_params(args=args)
 
     def test_is_zfs_dataset_busy_match(self) -> None:
         def is_busy(proc: str, dataset: str, busy_if_send: bool = True) -> bool:
@@ -514,14 +513,10 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_pv_cmd(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
-        log_params = bzfs.LogParams(args)
-        try:
-            job = bzfs.Job()
-            job.params = bzfs.Params(args, log_params=log_params, log=bzfs_main.loggers.get_logger(log_params, args))
-            job.params.available_programs = {"src": {"pv": "pv"}}
-            self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
-        finally:
-            bzfs_main.loggers.reset_logger()
+        job = bzfs.Job()
+        job.params = self.make_params(args=args, log_params=bzfs.LogParams(args))
+        job.params.available_programs = {"src": {"pv": "pv"}}
+        self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
 
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
@@ -662,7 +657,8 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(xperiods.suffix_milliseconds["millisecondly"], xperiods.label_milliseconds("foo_millisecondly"))
 
     def test_CreateSrcSnapshotConfig(self) -> None:  # noqa: N802
-        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        params = self.make_params(args=bzfs.argument_parser().parse_args(["src", "dst"]))
+
         good_args = bzfs.argument_parser().parse_args(
             [
                 "src",
@@ -853,27 +849,32 @@ class TestHelperFunctions(AbstractTestCase):
         )
         bzfs.CreateSrcSnapshotConfig(good_args, params)
 
-        args = bzfs.argument_parser().parse_args(["src", "dst", "--daemon-frequency=2secondly"])
-        config = bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
+        args = bzfs.argument_parser().parse_args(["src", "dst"])
+        params.daemon_frequency = "2secondly"
+        config = bzfs.CreateSrcSnapshotConfig(args, params)
         self.assertDictEqual({"_2secondly": (2, "secondly")}, config.suffix_durations)
 
-        args = bzfs.argument_parser().parse_args(["src", "dst", "--daemon-frequency=2seconds"])
+        args = bzfs.argument_parser().parse_args(["src", "dst"])
+        params.daemon_frequency = "2seconds"
         with self.assertRaises(SystemExit):
-            bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
+            bzfs.CreateSrcSnapshotConfig(args, params)
 
-        args = bzfs.argument_parser().parse_args(["src", "dst", "--daemon-frequency=-2secondly"])
+        args = bzfs.argument_parser().parse_args(["src", "dst"])
+        params.daemon_frequency = "-2secondly"
         with self.assertRaises(SystemExit):
-            bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
+            bzfs.CreateSrcSnapshotConfig(args, params)
 
-        args = bzfs.argument_parser().parse_args(["src", "dst", "--daemon-frequency=2adhoc"])
+        args = bzfs.argument_parser().parse_args(["src", "dst"])
+        params.daemon_frequency = "2adhoc"
         with self.assertRaises(SystemExit):
-            bzfs.CreateSrcSnapshotConfig(args, bzfs.Params(args))
+            bzfs.CreateSrcSnapshotConfig(args, params)
 
     def test_MonitorSnapshotsConfig(self) -> None:  # noqa: N802
         def plan(alerts: dict[str, Any]) -> str:
             return str({"z": {"onsite": {"100millisecondly": alerts}}})
 
-        params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        params = self.make_params(args=bzfs.argument_parser().parse_args(["src", "dst"]))
+
         args = bzfs.argument_parser().parse_args(
             ["src", "dst", "--monitor-snapshots=" + plan({"latest": {"warning": "1 millis", "critical": "2 millis"}})]
         )
@@ -991,7 +992,7 @@ class TestHelperFunctions(AbstractTestCase):
     @patch("bzfs_main.bzfs.Job.itr_ssh_cmd_parallel")
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
         job = bzfs.Job()
-        job.params = bzfs.Params(self.argparser_parse_args(args=["src", "dst"]))
+        job.params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
         self.mock_remote = MagicMock(spec=bzfs.Remote)  # spec helps catch calls to non-existent attrs
 
         mock_itr_parallel.return_value = [  # normal input
@@ -1052,22 +1053,22 @@ class TestAdditionalHelpers(AbstractTestCase):
 
     def test_params_verbose_zfs_and_bwlimit(self) -> None:
         args = self.argparser_parse_args(["src", "dst", "-v", "-v", "--bwlimit", "20m"])
-        params = bzfs.Params(args)
+        params = self.make_params(args=args)
         self.assertIn("-v", params.zfs_send_program_opts)
         self.assertIn("-v", params.zfs_recv_program_opts)
         self.assertIn("--rate-limit=20m", params.pv_program_opts)
 
     def test_program_name_injections(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        p1 = bzfs.Params(args, inject_params={"inject_unavailable_ssh": True})
+        p1 = self.make_params(args=args, inject_params={"inject_unavailable_ssh": True})
         self.assertEqual("ssh-xxx", p1.program_name("ssh"))
-        p2 = bzfs.Params(args, inject_params={"inject_failing_ssh": True})
+        p2 = self.make_params(args=args, inject_params={"inject_failing_ssh": True})
         self.assertEqual("false", p2.program_name("ssh"))
 
     def test_unset_matching_env_vars(self) -> None:
         with patch.dict(os.environ, {"FOO_BAR": "x"}):
             args = self.argparser_parse_args(["src", "dst", "--exclude-envvar-regex", "FOO.*"])
-            params = bzfs.Params(args, log_params=bzfs.LogParams(args), log=logging.getLogger())
+            params = self.make_params(args=args)
             params.unset_matching_env_vars(args)
             self.assertNotIn("FOO_BAR", os.environ)
 
@@ -1077,7 +1078,7 @@ class TestAdditionalHelpers(AbstractTestCase):
             Path(cfg).touch()
             args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", cfg])
             args.ssh_src_port = 2222
-            p = bzfs.Params(args)
+            p = self.make_params(args=args)
             r = bzfs.Remote("src", args, p)
             r.ssh_user_host = "user@host"
             r.ssh_user = "user"
@@ -1096,7 +1097,7 @@ class TestAdditionalHelpers(AbstractTestCase):
             self.assertNotIn("-S", cmd)
 
             args = self.argparser_parse_args(["src", "dst", "--ssh-program", "-"])
-            p = bzfs.Params(args)
+            p = self.make_params(args=args)
             r = bzfs.Remote("src", args, p)
             r.ssh_user_host = "u@h"
             with self.assertRaises(SystemExit):
@@ -1108,13 +1109,13 @@ class TestAdditionalHelpers(AbstractTestCase):
         args = self.argparser_parse_args(
             ["src", "dst", "--zfs-recv-program-opt=-o", "--zfs-recv-program-opt=org.test=value"]
         )
-        params = bzfs.Params(args)
+        params = self.make_params(args=args)
         self.assertIn("-o", params.zfs_recv_program_opts)
         self.assertIn("org.test=value", params.zfs_recv_program_opts)
 
     def test_copy_properties_config_repr(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        params = bzfs.Params(args)
+        params = self.make_params(args=args)
         conf = bzfs.CopyPropertiesConfig("zfs_recv_o", "-o", args, params)
         rep = repr(conf)
         self.assertIn("sources", rep)
@@ -1148,47 +1149,47 @@ class TestAdditionalHelpers(AbstractTestCase):
         malicious_opts_short = "--bytes -f /etc/hosts"
         args_short = self.argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_short}"])
         with self.assertRaises(SystemExit):
-            bzfs.Params(args_short)
+            self.make_params(args=args_short)
 
         # Test Case 2: The long-form option '--log-file' should be rejected.
         malicious_opts_long = "--progress --log-file /etc/shadow"
         args_long = self.argparser_parse_args(["src", "dst", f"--pv-program-opts={malicious_opts_long}"])
         with self.assertRaises(SystemExit):
-            bzfs.Params(args_long)
+            self.make_params(args=args_long)
 
         # Test Case 3: A valid set of options should instantiate successfully.
         valid_opts = "--bytes --progress --rate"
         args_valid = self.argparser_parse_args(["src", "dst", f"--pv-program-opts={valid_opts}"])
 
         # This should not raise an exception.
-        params_valid = bzfs.Params(args_valid)
+        params_valid = self.make_params(args=args_valid)
         self.assertIn("--rate", params_valid.pv_program_opts)
 
     def test_compression_program_opts_disallows_dangerous_options(self) -> None:
         malicious_opts_short = "-o /etc/hosts"
         args_short = self.argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_short}"])
         with self.assertRaises(SystemExit):
-            bzfs.Params(args_short)
+            self.make_params(args=args_short)
 
         malicious_opts_long = "--output-file /etc/hosts"
         args_long = self.argparser_parse_args(["src", "dst", f"--compression-program-opts={malicious_opts_long}"])
         with self.assertRaises(SystemExit):
-            bzfs.Params(args_long)
+            self.make_params(args=args_long)
 
         valid_opts = "-9"
         args_valid = self.argparser_parse_args(["src", "dst", f"--compression-program-opts={valid_opts}"])
-        params_valid = bzfs.Params(args_valid)
+        params_valid = self.make_params(args=args_valid)
         self.assertIn("-9", params_valid.compression_program_opts)
 
     def test_mbuffer_program_opts_disallows_dangerous_options(self) -> None:
         malicious_opts = "-o /etc/hosts"
         args_short = self.argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={malicious_opts}"])
         with self.assertRaises(SystemExit):
-            bzfs.Params(args_short)
+            self.make_params(args=args_short)
 
         valid_opts = "-q"
         args_valid = self.argparser_parse_args(["src", "dst", f"--mbuffer-program-opts={valid_opts}"])
-        params_valid = bzfs.Params(args_valid)
+        params_valid = self.make_params(args=args_valid)
         self.assertIn("-q", params_valid.mbuffer_program_opts)
 
 
@@ -1511,7 +1512,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
     def setUp(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
-        self.p = bzfs.Params(args)
+        self.p = self.make_params(args=args)
         self.p.src = bzfs.Remote("src", args, self.p)
         self.p.dst = bzfs.Remote("dst", args, self.p)
         self.p.zfs_recv_x_names = ["xprop1", "xprop2"]
@@ -1617,8 +1618,7 @@ class TestPreservePropertiesValidation(AbstractTestCase):
                 "--zfs-send-program-opts=--props --raw --compressed",
             ]
         )
-        log_params = bzfs.LogParams(self.args)
-        self.p = bzfs.Params(self.args, log_params=log_params, log=bzfs_main.loggers.get_logger(log_params, self.args))
+        self.p = self.make_params(args=self.args)
         self.job = bzfs.Job()
         self.job.params = self.p
 
@@ -1634,9 +1634,6 @@ class TestPreservePropertiesValidation(AbstractTestCase):
         }
         self.p.zpool_features = {"src": {}, "dst": {}}
         self.p.available_programs = {"local": {"ssh": ""}, "src": {}, "dst": {}}
-
-    def tearDown(self) -> None:
-        bzfs_main.loggers.reset_logger()
 
     @patch.object(bzfs_main.detect, "detect_zpool_features")
     @patch.object(bzfs_main.detect, "detect_available_programs_remote")

@@ -29,12 +29,10 @@ from typing import (
     cast,
 )
 from unittest import mock
+from unittest.mock import MagicMock
 
-import bzfs_main.loggers
 from bzfs_main import bzfs, connection
 from bzfs_main.bzfs import (
-    LogParams,
-    Params,
     Remote,
 )
 from bzfs_main.connection import (
@@ -100,7 +98,7 @@ class SlowButCorrectConnectionPool(ConnectionPool):  # validate a better impleme
 class TestConnectionPool(AbstractTestCase):
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst", "-v"])
-        p = Params(args, log=bzfs_main.loggers.get_logger(LogParams(args), args))
+        p = self.make_params(args=args)
         self.src = p.src
         self.dst = p.dst
         self.dst.ssh_user_host = "127.0.0.1"
@@ -336,16 +334,13 @@ class TestConnectionPool(AbstractTestCase):
         log.info("random_walk took %s secs", elapsed_secs)
 
 
-#############################################################################
-class _FakeParams:
-    def __init__(self) -> None:
-        self.log = logging.getLogger(__name__)
-        self.ssh_program = "ssh"
-        self.connection_pools: dict[str, connection.ConnectionPools] = {}
-        self.timeout_nanos = None
-
-    def is_program_available(self, prog: str, loc: str) -> bool:
-        return True
+def make_fake_params() -> bzfs.Params:
+    mock = MagicMock(bzfs.Params)
+    mock.log = logging.getLogger(__name__)
+    mock.ssh_program = "ssh"
+    mock.connection_pools = {}
+    mock.timeout_nanos = None
+    return mock
 
 
 #############################################################################
@@ -358,7 +353,7 @@ class _FakeRemote(SimpleNamespace):
 class TestRunSshCommand(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
-        self.job.params = cast(bzfs.Params, _FakeParams())
+        self.job.params = make_fake_params()
         self.job.control_persist_secs = 90
         self.job.control_persist_margin_secs = 2
         self.job.timeout_nanos = None
@@ -432,7 +427,7 @@ class TestRunSshCommand(AbstractTestCase):
 class TestTrySshCommand(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
-        self.job.params = cast(bzfs.Params, _FakeParams())
+        self.job.params = make_fake_params()
         self.remote = cast(
             bzfs.Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
@@ -483,7 +478,7 @@ class TestTrySshCommand(AbstractTestCase):
 class TestRefreshSshConnection(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
-        self.job.params = cast(bzfs.Params, _FakeParams())
+        self.job.params = make_fake_params()
         self.job.control_persist_secs = 4
         self.job.control_persist_margin_secs = 1
         self.job.timeout_nanos = None
@@ -547,7 +542,7 @@ class TestRefreshSshConnection(AbstractTestCase):
 class TestTimeout(AbstractTestCase):
     def setUp(self) -> None:
         self.job = bzfs.Job()
-        self.job.params = cast(bzfs.Params, _FakeParams())
+        self.job.params = make_fake_params()
 
     def test_no_timeout_returns_none(self) -> None:
         self.job.timeout_nanos = None

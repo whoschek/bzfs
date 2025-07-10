@@ -56,6 +56,7 @@ from bzfs_main.detect import (
     dummy_dataset,
     is_version_at_least,
 )
+from bzfs_main.loggers import get_simple_logger
 from bzfs_main.utils import (
     die_status,
     env_var_prefix,
@@ -893,7 +894,11 @@ class TestSSHLatency(IntegrationTestCase):
     def test_ssh_loopback_latency(self) -> None:
         self.setup_basic()
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
-        p = bzfs.Params(args, log_params=bzfs.LogParams(args))
+        log_params = bzfs.LogParams(args)
+        log = bzfs_main.loggers.get_logger(
+            log_params=log_params, args=args, log=get_simple_logger("test_ssh_loopback_latency")
+        )
+        p = self.make_params(args=args, log_params=log_params, log=log)
 
         ssh_opts_list = p.src.ssh_extra_opts + ["-oStrictHostKeyChecking=no"]
         ssh_opts_list += ["-S", os.path.join(p.src.ssh_socket_dir, "bzfs_test_ssh_socket")]
@@ -916,7 +921,6 @@ class TestSSHLatency(IntegrationTestCase):
                 check_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O check 127.0.0.1")
                 echo_cmd = "echo hello"
                 list_cmd = f"{p.zfs_program} list -t snapshot -s createtxg -d 1 -Hp -o guid,name {src_root_dataset}"
-                log = bzfs_main.loggers.get_logger(p.log_params, args, None)
                 master_is_running = False
                 try:
                     log.info(f"mode: {mode}")
@@ -966,7 +970,6 @@ class TestSSHLatency(IntegrationTestCase):
                         master_exit_cmd = p.split_args(f"{ssh_program} {ssh_opts} -O exit 127.0.0.1")
                         result = self.run_latency_cmd(master_exit_cmd)
                         log.info(f"exit result: {result}")
-                    bzfs_main.loggers.reset_logger()
 
 
 #############################################################################
@@ -2648,7 +2651,7 @@ class LocalTestCase(IntegrationTestCase):
                 "correctly in any mode though)"
             )
         self.setup_basic()
-        params = bzfs.Params(bzfs.argument_parser().parse_args(args=[src_root_dataset, dst_root_dataset]))
+        params = self.make_params(args=bzfs.argument_parser().parse_args(args=[src_root_dataset, dst_root_dataset]))
         lock_file = params.lock_file_name()
         with open(lock_file, "w", encoding="utf-8") as lock_file_fd:
             # Acquire an exclusive lock; will raise an error if the lock is already held by another process.

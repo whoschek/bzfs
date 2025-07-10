@@ -20,15 +20,11 @@ import time
 import unittest
 
 from bzfs_main import bzfs
-from bzfs_main.bzfs import (
-    Params,
-)
 from bzfs_main.connection import (
     DEDICATED,
     SHARED,
     ConnectionPools,
 )
-from bzfs_main.loggers import reset_logger
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
@@ -71,7 +67,7 @@ def dummy_fn_race(cmd: list[str], batch: list[str]) -> tuple[list[str], list[str
 class TestParallelIterator(AbstractTestCase):
     def setUp(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
-        p = Params(args)
+        p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
         p.src = bzfs.Remote("src", args, p)
@@ -100,9 +96,6 @@ class TestParallelIterator(AbstractTestCase):
             (["zfslist2"], ["b1", "b2", "b3"]),
             (["zfslist2"], ["b4", "b5"]),
         ]
-
-    def tearDown(self) -> None:
-        reset_logger()
 
     def test_ordered_with_max_batch_items_2(self) -> None:
         results = list(

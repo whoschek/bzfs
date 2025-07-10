@@ -76,8 +76,9 @@ class TestHelperFunctions(AbstractTestCase):
             shutil.rmtree(logdir, ignore_errors=True)
 
         logdir = os.path.join(get_home_directory(), "bzfs-tmp")
+        args = bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir])
         with self.assertRaises(SystemExit):
-            LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
+            LogParams(args)
         self.assertFalse(os.path.exists(logdir))
 
     def test_logdir_must_not_be_symlink(self) -> None:
@@ -86,8 +87,9 @@ class TestHelperFunctions(AbstractTestCase):
             os.mkdir(target)
             link_path = os.path.join(tmpdir, bzfs.log_dir_default + "-link")
             os.symlink(target, link_path)
+            args = bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path])
             with self.assertRaises(SystemExit) as cm:
-                LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path]))
+                LogParams(args)
             self.assertEqual(die_status, cm.exception.code)
             self.assertIn("--log-dir must not be a symlink", str(cm.exception))
 
