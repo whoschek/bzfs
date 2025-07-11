@@ -18,7 +18,7 @@
 local machine. Edit root_dataset_pairs and dst_root_datasets to specify datasets. Make sure `bzfs` and `bzfs_jobrunner` CLIs
 are on the PATH. Run the final script like so:
 
-/etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks \ --prune-dst-
+/etc/bzfs/bzfs_job_example.py --create-src-snapshots --replicate --prune-src-snapshots --prune-src-bookmarks --prune-dst-
 snapshots --monitor-src-snapshots --monitor-dst-snapshots
 
 Add this command to your crontab file (or systemd or monit or similar), such that the command runs every minute, or every
