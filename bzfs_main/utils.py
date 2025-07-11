@@ -237,7 +237,7 @@ def open_nofollow(
     perm: int = stat.S_IRUSR | stat.S_IWUSR,  # rw------- (owner read + write)
     check_owner: bool = True,
     **kwargs: Any,
-) -> IO:
+) -> IO[Any]:
     """Behaves exactly like built-in open(), except that it refuses to follow symlinks, i.e. raises OSError with
     errno.ELOOP/EMLINK if basename of path is a symlink.
 

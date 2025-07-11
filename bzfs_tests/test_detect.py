@@ -15,6 +15,7 @@
 """Unit tests for the program detection helpers used by ``bzfs``."""
 
 from __future__ import annotations
+import platform
 import subprocess
 import time
 import unittest
@@ -122,7 +123,7 @@ class TestDisableAndHelpers(AbstractTestCase):
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
         p.available_programs = {"src": {"zfs": "notOpenZFS"}}
-        with patch.object(bzfs_main.detect.platform, "system", return_value="SunOS"):
+        with patch.object(platform, "system", return_value="SunOS"):
             self.assertTrue(bzfs_main.detect.is_solaris_zfs_location(p, "local"))
         self.assertTrue(bzfs_main.detect.is_solaris_zfs(p, p.src))
 

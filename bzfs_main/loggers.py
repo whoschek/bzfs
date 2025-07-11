@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import (
     IO,
     TYPE_CHECKING,
+    Any,
 )
 
 from bzfs_main.utils import (
@@ -231,8 +232,8 @@ def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tu
     if ":" in address:
         host, port_str = address.rsplit(":", 1)
         addr = (host.strip(), int(port_str.strip()))
-        socktype = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM  # for TCP
-        return addr, socktype
+        scktype: socket.SocketKind = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM  # for TCP
+        return addr, scktype
     return address, socktype
 
 
@@ -362,7 +363,7 @@ def validate_log_config_dict(config: dict) -> None:
 class Tee:
     """File-like object that duplicates writes to multiple streams."""
 
-    def __init__(self, *files: IO) -> None:
+    def __init__(self, *files: IO[Any]) -> None:
         self.files = files
 
     def write(self, obj: str) -> None:

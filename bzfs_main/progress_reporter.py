@@ -35,6 +35,7 @@ from logging import Logger
 from pathlib import Path
 from typing import (
     IO,
+    Any,
     NamedTuple,
 )
 
@@ -124,7 +125,7 @@ class ProgressReporter:
         """Thread entry point consuming pv logs and updating metrics."""
         log = self.log
         try:
-            fds: list[IO] = []
+            fds: list[IO[Any]] = []
             try:
                 selector = selectors.SelectSelector() if self.use_select else selectors.PollSelector()
                 try:
@@ -153,7 +154,7 @@ class ProgressReporter:
         bytes_in_flight: int
         eta: ETA
 
-    def _run_internal(self, fds: list[IO], selector: selectors.BaseSelector) -> None:
+    def _run_internal(self, fds: list[IO[Any]], selector: selectors.BaseSelector) -> None:
         """Tails pv log files and periodically logs aggregated progress."""
 
         class Sample(NamedTuple):

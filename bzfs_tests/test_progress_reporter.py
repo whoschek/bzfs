@@ -383,13 +383,13 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_run_internal_returns_when_stopping(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
-        fds: list[IO] = []
+        fds: list[IO[Any]] = []
 
         class DummySelector:
             def __init__(self) -> None:
                 self.select_called = False
 
-            def register(self, fd: IO, events: int, data: Any) -> None:
+            def register(self, fd: IO[Any], events: int, data: Any) -> None:
                 pass
 
             def select(self, timeout: int = 0) -> list[tuple[Any, Any]]:
@@ -407,7 +407,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_run_internal_pause_sleep_amount(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
-        fds: list[IO] = []
+        fds: list[IO[Any]] = []
         sleep_args: list[int] = []
 
         def fake_sleep(n: int) -> None:
@@ -426,7 +426,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_run_internal_reset_triggers_progress_output(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
-        fds: list[IO] = []
+        fds: list[IO[Any]] = []
         with reporter.lock:
             reporter.is_resetting = True
         selector = MagicMock()
@@ -458,7 +458,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_run_internal_reads_lines(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(0.01, 0.02))
-        fds: list[IO] = []
+        fds: list[IO[Any]] = []
         fake_file = io.StringIO("a\nb\n")
         stat = reporter.TransferStat(bytes_in_flight=0, eta=reporter.TransferStat.ETA(0, 0, ""))
         key = types.SimpleNamespace(data=(iter(fake_file), stat))
@@ -472,7 +472,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_run_internal_progress_line_includes_latest_eta_line_tail(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
-        fds: list[IO] = []
+        fds: list[IO[Any]] = []
         fd1 = io.StringIO("x\n")
         fd2 = io.StringIO("y\n")
         eta1 = reporter.TransferStat.ETA(timestamp_nanos=1, seq_nr=0, line_tail="tail1")
@@ -501,7 +501,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_run_internal_calls_sleep_when_no_lines(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(2, 2))
-        fds: list[IO] = []
+        fds: list[IO[Any]] = []
         with reporter.lock:
             reporter.is_resetting = True
         sleep_args: list[int] = []
@@ -532,7 +532,7 @@ class TestHelperFunctions(AbstractTestCase):
         selector_calls: list[Any] = []
 
         class DummySelector:
-            def register(self, fd: IO, events: int, data: Any) -> None:
+            def register(self, fd: IO[Any], events: int, data: Any) -> None:
                 selector_calls.append(fd)
 
             def select(self, timeout: int = 0) -> list[tuple[Any, Any]]:
@@ -550,7 +550,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_run_internal_status_line_without_etas(self) -> None:
         reporter = ProgressReporter(MagicMock(spec=Logger), [], use_select=False, progress_update_intervals=(1e-6, 2e-6))
-        fds: list[IO] = []
+        fds: list[IO[Any]] = []
         with reporter.lock:
             reporter.is_resetting = True
         selector = MagicMock()
@@ -576,7 +576,7 @@ class TestHelperFunctions(AbstractTestCase):
         reporter = ProgressReporter(mock_log, [], use_select=False, progress_update_intervals=None)
         fake_fd = MagicMock()
 
-        def fake_run_internal(fds: list[IO], selector: Any) -> None:
+        def fake_run_internal(fds: list[IO[Any]], selector: Any) -> None:
             fds.append(fake_fd)
             raise ValueError()
 

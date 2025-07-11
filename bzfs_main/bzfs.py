@@ -2425,7 +2425,7 @@ class Job:
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
                 log_params.params = p
                 with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
-                    with contextlib.redirect_stderr(cast(IO, Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
+                    with contextlib.redirect_stderr(cast(IO[Any], Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
                         lock_file = p.lock_file_name()
                         lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, FILE_PERMISSIONS)
                         with xfinally(lambda: os.close(lock_fd)):
