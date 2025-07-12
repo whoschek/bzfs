@@ -152,4 +152,6 @@ pip-selfcheck.json
 *.sublime-*
 /.python-version
 ./patch*
+.pyre/
+.pytype/
 trained_model.*
