@@ -58,23 +58,30 @@ Distribution = "https://pypi.org/project/bzfs"
 
 [project.optional-dependencies]
 dev = [  # for development only
-  "black==25.1",  # see https://github.com/psf/black
-  "ruff==0.12.2",  # see https://github.com/astral-sh/ruff
-  "pylint==3.3.7",  # see https://github.com/pycqa/pylint
-  "coverage>=7.6",  # see https://github.com/nedbat/coveragepy
-  "docformatter==1.7.7",  # see https://github.com/PyCQA/docformatter
-  "mypy==1.16.1",  # see https://github.com/python/mypy
-  "argparse-manpage==4.6",  # see https://github.com/praiskup/argparse-manpage
+  "argparse-manpage==4.6",          # see https://github.com/praiskup/argparse-manpage
   # "pandoc", # instead use this for v3.5: sudo apt-get -y install pandoc (Ubuntu) or brew install pandoc (OSX)
-  "genbadge[coverage]==1.1.2",  # see https://smarie.github.io/python-genbadge/
-  "pre-commit==4.2",  # see https://github.com/pre-commit/pre-commit
+  "genbadge[coverage]==1.1.2",      # see https://smarie.github.io/python-genbadge/
+  "pre-commit==4.2",                # see https://github.com/pre-commit/pre-commit
+  "black==25.1",                    # see https://github.com/psf/black
+  "ruff==0.12.2",                   # see https://github.com/astral-sh/ruff
+  "coverage>=7.6",                  # see https://github.com/nedbat/coveragepy
+  "mypy==1.16.1",                   # see https://github.com/python/mypy
+  "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
+  "pylint==3.3.7",                  # see https://github.com/pylint-dev/pylint
+  "pyre-check>=0.9.22",             # see https://github.com/facebook/pyre-check
+  "pyrefly==0.23.0",                # see https://github.com/facebook/pyrefly
+  "pytype==2024.10.11",             # see https://github.com/google/pytype
+  "autotyping==24.9.0",             # see https://github.com/JelleZijlstra/autotyping
+  "libcst==1.8.2",                  # see https://github.com/Instagram/LibCST
+  "rope==1.13.0",                   # see https://github.com/python-rope/rope
 ]
 # Example that installs the optional python development dependencies (see above) into a venv:
 # cd ~/devel/bzfs
 # rm -rf venv
-# python3 -m venv venv
-# source venv/bin/activate
-# pip install -e '.[dev]'
+# python3 -m venv venv                # Create a Python virtual environment
+# source venv/bin/activate            # Activate it
+# pip install -e '.[dev]'             # Install all development dependencies
+# pre-commit install --install-hooks  # Ensure Linters and Formatters run on every commit
 # pip list --not-required
 
 [project.scripts]
@@ -170,7 +177,7 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "TRY201",   # use `raise` without specifying exception name
 #    "UP006",   # pyupgrade
 #    "UP007",   # pyupgrade
-#    "UP045",   # pyupgrade
+#    "UP045",   # pyupgrade: use X | None for type annotations with python >= 3.10
     "YTT",      # flake8-2020
 ]
 preview = true                 # enable preview rules
@@ -181,6 +188,7 @@ extend-select = [
     "PLR0203",  # no-staticmethod-decorator
 ]
 ignore = [  # toggles to exclude overly strict `ruff` checks:
+    "E501",     # line too long (defer autofix to `black`)
     "G004",     # logging statement uses f-string
     "PLC0415",  # `import` should be at the top-level of a file
     "PLW0108",  # lambda may be unnecessary; consider inlining inner function
@@ -271,3 +279,29 @@ disable_error_code = [  # toggles to exclude overly strict `mypy` checks in deve
 #    "index",
 #    "call-arg",
 ]
+
+[tool.pyre]
+python_version = "3.8"
+strict = false           # see https://pyre-check.org/docs/types-in-python/#strict-mode
+source_directories = [
+    "bzfs_*",
+]
+exclude = [
+  ".*/bzfs_tests/bzfs_job_example\\.py$",
+]
+
+[tool.pytype]
+python_version = "3.11"
+inputs = [
+    "bzfs_main",
+]
+disable = [  # see https://google.github.io/pytype/errors.html
+]
+keep_going = true
+jobs = "auto"
+
+[tool.pyrefly]
+python-version = "3.8"
+#untyped-def-behavior = "check-and-infer-return-type"
+#project-includes = ["**/bzfs_*/**"]
+#project-excludes = ["**/tests/**", "**/.venv/**"]

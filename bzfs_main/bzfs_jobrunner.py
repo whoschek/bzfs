@@ -162,7 +162,7 @@ finally exit after, say, 86400 seconds (whatever you specify via `--daemon-lifet
 auto-restarted by 'cron', or earlier if they fail. While the daemons are running, 'cron' will attempt to start new
 (unnecessary) daemons but this is benign as these new processes immediately exit with a message like this:
 "Exiting as same previous periodic job is still running without completion yet"
-""")  # noqa: E501
+""")
 
     # commands:
     parser.add_argument(

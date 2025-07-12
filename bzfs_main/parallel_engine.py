@@ -67,6 +67,36 @@ def build_dataset_tree(sorted_datasets: list[str]) -> Tree:
     return tree
 
 
+class TreeNodeMutableAttributes:
+    """Container for mutable attributes, stored space efficiently."""
+
+    __slots__ = ("barrier", "pending")  # uses more compact memory layout than __dict__
+
+    def __init__(self) -> None:
+        """Initialize empty barrier pointer and pending counter."""
+        self.barrier: "TreeNode" | None = None  # zero or one barrier TreeNode waiting for this node to complete
+        self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
+
+
+class TreeNode(NamedTuple):
+    """Node in dataset dependency tree used by the scheduler; TreeNodes are ordered by dataset name within a priority queue
+    via __lt__ comparisons."""
+
+    dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
+    children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
+    parent: Any  # aka TreeNode
+    mut: TreeNodeMutableAttributes
+
+    def __repr__(self) -> str:
+        dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
+        return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
+
+
+def make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None) -> TreeNode:
+    """Creates a TreeNode with mutable state container."""
+    return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
+
+
 def process_datasets_in_parallel_and_fault_tolerant(
     log: Logger,
     datasets: list[str],
@@ -119,33 +149,6 @@ def process_datasets_in_parallel_and_fault_tolerant(
         finally:
             elapsed_nanos = time.monotonic_ns() - start_time_nanos
             log.debug(dry(f"{tid} {task_name} done: %s took %s", dry_run), dataset, human_readable_duration(elapsed_nanos))
-
-    class TreeNodeMutableAttributes:
-        """Container for mutable attributes, stored space efficiently."""
-
-        __slots__ = ("barrier", "pending")  # uses more compact memory layout than __dict__
-
-        def __init__(self) -> None:
-            """Initialize empty barrier pointer and pending counter."""
-            self.barrier: Any | None = None  # aka TreeNode; zero or one barrier TreeNode waiting for this node to complete
-            self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
-
-    class TreeNode(NamedTuple):
-        """Node in dataset dependency tree used by the scheduler; TreeNodes are ordered by dataset name within a priority
-        queue via __lt__ comparisons."""
-
-        dataset: str  # Each dataset name is unique, thus attributes other than `dataset` are never used for comparisons
-        children: Tree  # dataset "directory" tree consists of nested dicts; aka Dict[str, Dict]
-        parent: Any  # aka TreeNode
-        mut: TreeNodeMutableAttributes
-
-        def __repr__(self) -> str:
-            dataset, pending, barrier, nchildren = self.dataset, self.mut.pending, self.mut.barrier, len(self.children)
-            return str({"dataset": dataset, "pending": pending, "barrier": barrier is not None, "nchildren": nchildren})
-
-    def make_tree_node(dataset: str, children: Tree, parent: TreeNode | None = None) -> TreeNode:
-        """Creates a TreeNode with mutable state container."""
-        return TreeNode(dataset, children, parent, TreeNodeMutableAttributes())
 
     def build_dataset_tree_and_find_roots() -> list[TreeNode]:
         """For consistency, processing of a dataset only starts after processing of its ancestors has completed."""

@@ -232,7 +232,11 @@ def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tu
     if ":" in address:
         host, port_str = address.rsplit(":", 1)
         addr = (host.strip(), int(port_str.strip()))
-        scktype: socket.SocketKind = socket.SOCK_DGRAM if log_syslog_socktype == "UDP" else socket.SOCK_STREAM  # for TCP
+        scktype: socket.SocketKind = (
+            socket.SOCK_DGRAM
+            if log_syslog_socktype == "UDP"
+            else socket.SOCK_STREAM  # for TCP # pytype: disable=annotation-type-mismatch
+        )
         return addr, scktype
     return address, socktype
 

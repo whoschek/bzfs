@@ -54,6 +54,58 @@ repos:
       - id: pylint
         name: pylint R0401 (cyclic imports)
         exclude: '.*'  # Skip detection of circular imports. Comment out this line to enable detection of circular imports.
+  - repo: local
+    hooks:
+      - id: pyrefly-autotype
+        name: "pyrefly autotype (auto-fix types)"
+        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
+        entry: pyrefly autotype
+        language: python
+        additional_dependencies: ['pyrefly==0.23.0']
+        pass_filenames: false
+  - repo: local
+    hooks:
+      - id: pyre-infer
+        name: "pyre infer (auto-fix types)"
+        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
+        entry: pyre infer --in-place --use-future-annotations
+        pass_filenames: false
+        language: python
+  - repo: https://github.com/JelleZijlstra/autotyping
+    rev: 24.9.0
+    hooks:
+      - id: autotyping
+        name: "autotyping (auto-fix types)"
+        exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
+        types: [python]
+        args: [--safe]
+        # args: ["--aggressive"]
+  - repo: local
+    hooks:
+      - id: pytype-and-merge
+        name: "pytype (auto-fix types)"
+        entry: |
+          bash -c '
+            exit 0  # Skip this hook. Comment out this line to enable this hook.
+            pytype --config pyproject.toml
+            PYTYPE_EXIT_CODE=$?
+            set -e
+            NPROC=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 8)
+            find .pytype/pyi -type f -name "*.pyi" -print0 |
+              xargs -0 -n1 -P"$NPROC" sh -c '\''
+                pyi="$1"
+                py=${pyi#.pytype/pyi/}
+                py=${py%.pyi}.py
+                merge-pyi --in-place "$py" "$pyi"
+              '\'' _
+            rm -rf .pytype
+            exit $PYTYPE_EXIT_CODE
+          '
+        language: python
+        additional_dependencies: ['pytype==2024.10.11']
+        always_run: true
+        pass_filenames: false
+        types: [python]
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.16.1
     hooks:
