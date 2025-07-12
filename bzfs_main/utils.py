@@ -66,11 +66,11 @@ log_stderr = (logging.INFO + logging.WARNING) // 2  # custom log level is halfwa
 log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
 log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
+snapshot_filters_var = "snapshot_filters_var"
+year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
-snapshot_filters_var = "snapshot_filters_var"
 SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
-year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
 
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 
@@ -532,62 +532,6 @@ def pid_exists(pid: int) -> bool | None:
     return True
 
 
-###############################################################################
-class SnapshotPeriods:  # thread-safe
-    """Parses snapshot suffix strings and converts between durations."""
-
-    def __init__(self) -> None:
-        """Initialize lookup tables of suffixes and corresponding millis."""
-        self.suffix_milliseconds: Final = {
-            "yearly": 365 * 86400 * 1000,
-            "monthly": round(30.5 * 86400 * 1000),
-            "weekly": 7 * 86400 * 1000,
-            "daily": 86400 * 1000,
-            "hourly": 60 * 60 * 1000,
-            "minutely": 60 * 1000,
-            "secondly": 1000,
-            "millisecondly": 1,
-        }
-        self.period_labels: Final = {
-            "yearly": "years",
-            "monthly": "months",
-            "weekly": "weeks",
-            "daily": "days",
-            "hourly": "hours",
-            "minutely": "minutes",
-            "secondly": "seconds",
-            "millisecondly": "milliseconds",
-        }
-        self._suffix_regex0: Final = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
-        self._suffix_regex1: Final = re.compile("_" + self._suffix_regex0.pattern)
-
-    def suffix_to_duration0(self, suffix: str) -> tuple[int, str]:
-        """Parse suffix like '10minutely' to (10, 'minutely')."""
-        return self._suffix_to_duration(suffix, self._suffix_regex0)
-
-    def suffix_to_duration1(self, suffix: str) -> tuple[int, str]:
-        """Like :meth:`suffix_to_duration0` but expects an underscore prefix."""
-        return self._suffix_to_duration(suffix, self._suffix_regex1)
-
-    @staticmethod
-    def _suffix_to_duration(suffix: str, regex: re.Pattern) -> tuple[int, str]:
-        """Ex: Converts '2 hourly' to (2, 'hourly') and 'hourly' to (1, 'hourly')."""
-        if match := regex.fullmatch(suffix):
-            duration_amount = int(match.group(1)) if match.group(1) else 1
-            assert duration_amount > 0
-            duration_unit = match.group(2)
-            return duration_amount, duration_unit
-        else:
-            return 0, ""
-
-    def label_milliseconds(self, snapshot: str) -> int:
-        """Returns duration encoded in ``snapshot`` suffix, in milliseconds."""
-        i = snapshot.rfind("_")
-        snapshot = "" if i < 0 else snapshot[i + 1 :]
-        duration_amount, duration_unit = self._suffix_to_duration(snapshot, self._suffix_regex0)
-        return duration_amount * self.suffix_milliseconds.get(duration_unit, 0)
-
-
 def nprefix(s: str) -> str:
     """Returns a canonical snapshot prefix with trailing underscore."""
     return sys.intern(s + "_")
@@ -680,6 +624,62 @@ def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
         else:
             raise ValueError(f"Invalid timezone specification: {tz_spec}")
     return tz
+
+
+###############################################################################
+class SnapshotPeriods:  # thread-safe
+    """Parses snapshot suffix strings and converts between durations."""
+
+    def __init__(self) -> None:
+        """Initialize lookup tables of suffixes and corresponding millis."""
+        self.suffix_milliseconds: Final = {
+            "yearly": 365 * 86400 * 1000,
+            "monthly": round(30.5 * 86400 * 1000),
+            "weekly": 7 * 86400 * 1000,
+            "daily": 86400 * 1000,
+            "hourly": 60 * 60 * 1000,
+            "minutely": 60 * 1000,
+            "secondly": 1000,
+            "millisecondly": 1,
+        }
+        self.period_labels: Final = {
+            "yearly": "years",
+            "monthly": "months",
+            "weekly": "weeks",
+            "daily": "days",
+            "hourly": "hours",
+            "minutely": "minutes",
+            "secondly": "seconds",
+            "millisecondly": "milliseconds",
+        }
+        self._suffix_regex0: Final = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
+        self._suffix_regex1: Final = re.compile("_" + self._suffix_regex0.pattern)
+
+    def suffix_to_duration0(self, suffix: str) -> tuple[int, str]:
+        """Parse suffix like '10minutely' to (10, 'minutely')."""
+        return self._suffix_to_duration(suffix, self._suffix_regex0)
+
+    def suffix_to_duration1(self, suffix: str) -> tuple[int, str]:
+        """Like :meth:`suffix_to_duration0` but expects an underscore prefix."""
+        return self._suffix_to_duration(suffix, self._suffix_regex1)
+
+    @staticmethod
+    def _suffix_to_duration(suffix: str, regex: re.Pattern) -> tuple[int, str]:
+        """Ex: Converts '2 hourly' to (2, 'hourly') and 'hourly' to (1, 'hourly')."""
+        if match := regex.fullmatch(suffix):
+            duration_amount = int(match.group(1)) if match.group(1) else 1
+            assert duration_amount > 0
+            duration_unit = match.group(2)
+            return duration_amount, duration_unit
+        else:
+            return 0, ""
+
+    def label_milliseconds(self, snapshot: str) -> int:
+        """Returns duration encoded in ``snapshot`` suffix, in milliseconds."""
+        i = snapshot.rfind("_")
+        snapshot = "" if i < 0 else snapshot[i + 1 :]
+        duration_amount, duration_unit = self._suffix_to_duration(snapshot, self._suffix_regex0)
+        return duration_amount * self.suffix_milliseconds.get(duration_unit, 0)
 
 
 #############################################################################
