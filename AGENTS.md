@@ -124,34 +124,6 @@ Your goal is to improve quality with zero functional regressions.
     shared logic into a new utility module - or an existing one that keeps the dependency graph acyclic - rather than
     adding deep import chains.
 
-### How to Choose a Refactoring Tool
-
-- **Use Ruff CLI** for automated fixing of simple common style and correctness issues.
-
-- **Use LibCST CLI** when the change is *structural* or *syntactic* and **does not** require resolving symbols or
-    understanding types across different files. LibCST is powerful for pattern-based code modification within a single
-    file.
-    - **Examples:**
-        - Modifying function signatures in a uniform way.
-        - Adding or transforming decorators.
-        - Rewriting specific API calls or patterns.
-        - Enforcing stylistic rules that go beyond linters.
-    - **Example Usage:** `python3 -m libcst.tool codemod mymods.RenameArg path/to/pkg --python-version 3.8`
-
-- **Use Rope CLI** when the change requires *semantic* knowledge of the code, especially when it involves tracking
-    symbols (variables, functions, classes) across multiple files.
-    - **Examples:**
-        - Renaming or moving functions/classes from one module to another, and fixing all affected call sites and import
-          statements project-wide.
-        - Reorganising multiple modules.
-
-- **Use AI Reasoning:** Choose your own reasoning ability when the refactoring task is complex, context-dependent, or
-    requires architectural changes that go beyond the capabilities of automated tools. This is for changes that require
-    a deep understanding of the project's goals, trade-offs, and design patterns.
-
-- **Multiple Kinds of Changes:** If a task mixes multiple kinds of changes, break it into sub‑tasks and apply the
-    appropriate tool to each.
-
 ## How to Improve Code Coverage
 
 If asked to improve coverage:
