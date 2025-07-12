@@ -44,7 +44,7 @@ repos:
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.2
+    rev: v0.12.3
     hooks:
       - id: ruff-check  # Run linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
