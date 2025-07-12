@@ -63,7 +63,7 @@ checks still pass.
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages for all commits, e.g. 'feat(bzfs_jobrunner): add --foo CLI option'
   - **Types:** `feat`, `fix`, `docs`, `ci`, `build`, `perf`, `refactor`, `chore`, `dx` (developer experience)
-  - **Scopes:** `bzfs`, `bzfs_jobrunner`, `all`
+  - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`, `all`
 
 7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
 to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
@@ -102,7 +102,8 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 
 Your goal is to improve quality with zero functional regressions.
 
-- **Plan First:** Think hard and write a plan (≤ 200 words) summarizing the intended changes.
+- **Plan First:** Think harder and write a plan (≤ 200 words) summarizing the intended changes, chosen tool, and
+    validation steps.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
@@ -122,6 +123,34 @@ Your goal is to improve quality with zero functional regressions.
 - **Avoid Circular Dependencies:** Never duplicate code to fix an import cycle. Instead, think harder and extract the
     shared logic into a new utility module - or an existing one that keeps the dependency graph acyclic - rather than
     adding deep import chains.
+
+### How to Choose a Refactoring Tool
+
+- **Use Ruff CLI** for automated fixing of simple common style and correctness issues.
+
+- **Use LibCST CLI** when the change is *structural* or *syntactic* and **does not** require resolving symbols or
+    understanding types across different files. LibCST is powerful for pattern-based code modification within a single
+    file.
+    - **Examples:**
+        - Modifying function signatures in a uniform way.
+        - Adding or transforming decorators.
+        - Rewriting specific API calls or patterns.
+        - Enforcing stylistic rules that go beyond linters.
+    - **Example Usage:** `python3 -m libcst.tool codemod mymods.RenameArg path/to/pkg --python-version 3.8`
+
+- **Use Rope CLI** when the change requires *semantic* knowledge of the code, especially when it involves tracking
+    symbols (variables, functions, classes) across multiple files.
+    - **Examples:**
+        - Renaming or moving functions/classes from one module to another, and fixing all affected call sites and import
+          statements project-wide.
+        - Reorganising multiple modules.
+
+- **Use AI Reasoning:** Choose your own reasoning ability when the refactoring task is complex, context-dependent, or
+    requires architectural changes that go beyond the capabilities of automated tools. This is for changes that require
+    a deep understanding of the project's goals, trade-offs, and design patterns.
+
+- **Multiple Kinds of Changes:** If a task mixes multiple kinds of changes, break it into sub‑tasks and apply the
+    appropriate tool to each.
 
 ## How to Improve Code Coverage
 
@@ -182,3 +211,14 @@ Your context is your most valuable asset. Use it effectively.
     pip install -e '.[dev]'             # Install all development dependencies
     pre-commit install --install-hooks  # Ensure Linters and Formatters run on every commit
     ```
+
+## How to Improve This Document
+
+- **Self-Improvement Trigger:** If you discover that a guideline, clarification, or change to `AGENTS.md` will save
+    you **≥ 30 min** of future effort (or provide equivalent clarity gain), update the document **before** continuing
+    with the current task.
+- **Action:**
+    - Think harder; distill the **engineering goal**, just enough **context**, applicable **constraints**,
+      required **output**, and **measurable success criteria**.
+    - Apply the change in a **single docs-only commit** touching only `AGENTS.md`, adding **≤ 100 words**.
+    - Proceed with the original task once the commit is in place.
