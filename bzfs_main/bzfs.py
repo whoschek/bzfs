@@ -4826,7 +4826,7 @@ class Job:
         self,
         r: Remote,
         cmd: list[str],
-        cmd_args: list[str],
+        cmd_args: Iterable[str],
         fn: Callable[[list[str]], Any],
         max_batch_items: int = 2**29,
         sep: str = " ",
@@ -4838,7 +4838,7 @@ class Job:
         self,
         r: Remote,
         cmd: list[str],
-        cmd_args: list[str],
+        cmd_args: Iterable[str],
         fn: Callable[[list[str]], Any],
         max_batch_items: int = 2**29,
         sep: str = " ",
@@ -4881,7 +4881,7 @@ class Job:
     def run_ssh_cmd_parallel(
         self,
         r: Remote,
-        cmd_args_list: list[tuple[list[str], list[str]]],
+        cmd_args_list: list[tuple[list[str], Iterable[str]]],
         fn: Callable[[list[str], list[str]], Any],
         max_batch_items: int = 2**29,
     ) -> None:
@@ -4891,7 +4891,7 @@ class Job:
     def itr_ssh_cmd_parallel(
         self,
         r: Remote,
-        cmd_args_list: list[tuple[list[str], list[str]]],
+        cmd_args_list: list[tuple[list[str], Iterable[str]]],
         fn: Callable[[list[str], list[str]], Any],
         max_batch_items: int = 2**29,
         ordered: bool = True,
@@ -5223,5 +5223,6 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
         )
 
 
+#############################################################################
 if __name__ == "__main__":
     main()
