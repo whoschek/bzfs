@@ -26,7 +26,6 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import (
     Any,
@@ -35,15 +34,12 @@ from typing import (
 )
 from unittest.mock import (
     MagicMock,
-    mock_open,
     patch,
 )
 
 import bzfs_main.detect
+import bzfs_main.utils
 from bzfs_main import bzfs
-from bzfs_main.check_range import (
-    CheckRange,
-)
 from bzfs_main.connection import (
     ConnectionPools,
 )
@@ -67,20 +63,9 @@ def suite() -> unittest.TestSuite:
         TestHelperFunctions,
         TestAdditionalHelpers,
         TestParseDatasetLocator,
-        TestCurrentDateTime,
         TestArgumentParser,
         TestAddRecvPropertyOptions,
         TestPreservePropertiesValidation,
-        TestDatasetPairsAction,
-        TestFileOrLiteralAction,
-        TestNewSnapshotFilterGroupAction,
-        TestNonEmptyStringAction,
-        TestLogConfigVariablesAction,
-        SSHConfigFileNameAction,
-        TestSafeFileNameAction,
-        TestSafeDirectoryNameAction,
-        TestCheckRange,
-        TestCheckPercentRange,
         TestPythonVersionCheck,
         # TestPerformance,
     ]
@@ -239,23 +224,12 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(["foo", "bar\rbaz"], params.split_args("foo", "bar\rbaz"))
 
     def test_format_dict(self) -> None:
-        self.assertEqual("\"{'a': 1}\"", bzfs.format_dict({"a": 1}))
+        self.assertEqual("\"{'a': 1}\"", bzfs_main.utils.format_dict({"a": 1}))
 
     def test_pretty_print_formatter(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         params = self.make_params(args=args)
         self.assertIsNotNone(str(bzfs_main.utils.pretty_print_formatter(params)))
-
-    def test_parse_duration_to_milliseconds(self) -> None:
-        self.assertEqual(5000, bzfs.parse_duration_to_milliseconds("5 seconds"))
-        self.assertEqual(
-            300000,
-            bzfs.parse_duration_to_milliseconds("5 minutes ago", regex_suffix=r"\s*ago"),
-        )
-        with self.assertRaises(ValueError):
-            bzfs.parse_duration_to_milliseconds("foo")
-        with self.assertRaises(SystemExit):
-            bzfs.parse_duration_to_milliseconds("foo", context="ctx")
 
     def test_fix_send_recv_opts(self) -> None:
         params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
@@ -638,24 +612,6 @@ class TestHelperFunctions(AbstractTestCase):
             bzfs.SnapshotLabel("foo/bar_", "", "", "").validate_label("")
         self.assertTrue(str(bzfs.SnapshotLabel("foo_", "", "", "")))
 
-    def test_label_milliseconds(self) -> None:
-        xperiods = bzfs.SnapshotPeriods()
-        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 1, xperiods.label_milliseconds("foo_yearly"))
-        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 2, xperiods.label_milliseconds("foo_2yearly"))
-        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 2, xperiods.label_milliseconds("_2yearly"))
-        self.assertEqual(0, xperiods.label_milliseconds("_0yearly"))
-        self.assertEqual(0, xperiods.label_milliseconds("2yearly"))
-        self.assertEqual(0, xperiods.label_milliseconds("x"))
-        self.assertEqual(0, xperiods.label_milliseconds(""))
-        self.assertEqual(xperiods.suffix_milliseconds["monthly"], xperiods.label_milliseconds("foo_monthly"))
-        self.assertEqual(xperiods.suffix_milliseconds["weekly"], xperiods.label_milliseconds("foo_weekly"))
-        self.assertEqual(xperiods.suffix_milliseconds["daily"], xperiods.label_milliseconds("foo_daily"))
-        self.assertEqual(xperiods.suffix_milliseconds["hourly"], xperiods.label_milliseconds("foo_hourly"))
-        self.assertEqual(xperiods.suffix_milliseconds["minutely"] * 60, xperiods.label_milliseconds("foo_60minutely"))
-        self.assertEqual(xperiods.suffix_milliseconds["minutely"] * 59, xperiods.label_milliseconds("foo_59minutely"))
-        self.assertEqual(xperiods.suffix_milliseconds["secondly"], xperiods.label_milliseconds("foo_secondly"))
-        self.assertEqual(xperiods.suffix_milliseconds["millisecondly"], xperiods.label_milliseconds("foo_millisecondly"))
-
     def test_CreateSrcSnapshotConfig(self) -> None:  # noqa: N802
         params = self.make_params(args=bzfs.argument_parser().parse_args(["src", "dst"]))
 
@@ -1036,12 +992,6 @@ class TestHelperFunctions(AbstractTestCase):
         results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
         self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
 
-    def test_validate_no_argument_file_raises(self) -> None:
-        parser = argparse.ArgumentParser()
-        ns = argparse.Namespace(no_argument_file=True)
-        with self.assertRaises(SystemExit):
-            bzfs.validate_no_argument_file("afile", ns, err_prefix="e", parser=parser)
-
     def test_die_with_parser(self) -> None:
         parser = argparse.ArgumentParser()
         with self.assertRaises(SystemExit):
@@ -1353,125 +1303,6 @@ class TestParseDatasetLocator(AbstractTestCase):
 
 
 #############################################################################
-class TestCurrentDateTime(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)  # in no timezone
-
-    def test_now(self) -> None:
-        self.assertIsNotNone(bzfs.current_datetime(tz_spec=None, now_fn=None))
-        self.assertIsNotNone(bzfs.current_datetime(tz_spec="UTC", now_fn=None))
-        self.assertIsNotNone(bzfs.current_datetime(tz_spec="+0530", now_fn=None))
-        self.assertIsNotNone(bzfs.current_datetime(tz_spec="+05:30", now_fn=None))
-        self.assertIsNotNone(bzfs.current_datetime(tz_spec="-0430", now_fn=None))
-        self.assertIsNotNone(bzfs.current_datetime(tz_spec="-04:30", now_fn=None))
-
-    def test_local_timezone(self) -> None:
-        expected = self.fixed_datetime.astimezone(tz=None)
-        actual = bzfs.current_datetime(tz_spec=None, now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))  # type: ignore
-        self.assertEqual(expected, actual)
-
-        # For the strftime format, see https://docs.python.org/3.12/library/datetime.html#strftime-strptime-behavior.
-        fmt = "%Y-%m-%dT%H:%M:%S"
-        self.assertEqual("2024-01-01T12:00:00", actual.strftime(fmt))
-        fmt = "%Y-%m-%d_%H:%M:%S"
-        self.assertEqual("2024-01-01_12:00:00", actual.strftime(fmt))
-        fmt = "%Y-%m-%d_%H:%M:%S_%Z"
-        expected_prefix = "2024-01-01_12:00:00_"
-        self.assertTrue(actual.strftime(fmt).startswith(expected_prefix))
-        suffix = actual.strftime(fmt)[len(expected_prefix) :]
-        self.assertGreater(len(suffix), 0)  # CET
-
-        fmt = "%Y-%m-%d_%H:%M:%S%z"
-        expected_prefix = "2024-01-01_12:00:00"
-        self.assertTrue(actual.strftime(fmt).startswith(expected_prefix))
-        suffix = actual.strftime(fmt)[len(expected_prefix) :]  # "+0100"
-        self.assertIn(suffix[0], ["+", "-"])
-        self.assertTrue(suffix[1:].isdigit())
-
-    def test_utc_timezone(self) -> None:
-        expected = self.fixed_datetime.astimezone(tz=timezone.utc)
-
-        def now_fn(tz: tzinfo | None = None) -> datetime:
-            return self.fixed_datetime.astimezone(tz=tz)
-
-        actual = bzfs.current_datetime(tz_spec="UTC", now_fn=now_fn)
-        self.assertEqual(expected, actual)
-
-    def test_tzoffset_positive(self) -> None:
-        tz_spec = "+0530"
-        tz = timezone(timedelta(hours=5, minutes=30))
-        expected = self.fixed_datetime.astimezone(tz=tz)
-
-        def now_fn(_: tzinfo | None = None) -> datetime:
-            return self.fixed_datetime.astimezone(tz=tz)
-
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
-        self.assertEqual(expected, actual)
-
-    def test_tzoffset_negative(self) -> None:
-        tz_spec = "-0430"
-        tz = timezone(timedelta(hours=-4, minutes=-30))
-        expected = self.fixed_datetime.astimezone(tz=tz)
-
-        def now_fn(_: tzinfo | None = None) -> datetime:
-            return self.fixed_datetime.astimezone(tz=tz)
-
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
-        self.assertEqual(expected, actual)
-
-    def test_iana_timezone(self) -> None:
-        if sys.version_info < (3, 9):
-            self.skipTest("ZoneInfo requires python >= 3.9")
-        from zoneinfo import ZoneInfo  # requires python >= 3.9
-
-        tz_spec = "Asia/Tokyo"
-        self.assertIsNotNone(bzfs.current_datetime(tz_spec=tz_spec, now_fn=None))
-        tz = ZoneInfo(tz_spec)  # Standard IANA timezone. Example: "Europe/Vienna"
-        expected = self.fixed_datetime.astimezone(tz=tz)
-
-        def now_fn(_: tzinfo | None = None) -> datetime:
-            return self.fixed_datetime.astimezone(tz=tz)
-
-        actual = bzfs.current_datetime(tz_spec=tz_spec, now_fn=now_fn)
-        self.assertEqual(expected, actual)
-
-        fmt = "%Y-%m-%dT%H:%M:%S%z"
-        expected_prefix = "2024-01-01T20:00:00"
-        suffix = actual.strftime(fmt)[len(expected_prefix) :]  # "+0100"
-        self.assertIn(suffix[0], ["+", "-"])
-        self.assertTrue(suffix[1:].isdigit())
-
-    def test_invalid_timezone(self) -> None:
-        with self.assertRaises(ValueError) as context:
-            bzfs.current_datetime(tz_spec="INVALID")
-        self.assertIn("Invalid timezone specification", str(context.exception))
-
-    def test_invalid_timezone_format_missing_sign(self) -> None:
-        with self.assertRaises(ValueError):
-            bzfs.current_datetime(tz_spec="0400")
-
-    def test_unixtime_conversion(self) -> None:
-        iso = "2024-01-02T03:04:05+00:00"
-        unix = bzfs.unixtime_fromisoformat(iso)
-        expected = "2024-01-02_03:04:05+00:00"
-        self.assertEqual(expected, bzfs.isotime_from_unixtime(unix))
-
-    def test_get_timezone_variants(self) -> None:
-        if sys.version_info < (3, 9):
-            self.skipTest("ZoneInfo requires python >= 3.9")
-        self.assertIsNone(bzfs.get_timezone())
-        self.assertEqual(timezone.utc, bzfs.get_timezone("UTC"))
-        tz = bzfs.get_timezone("+0130")
-        assert tz is not None
-        self.assertEqual(90 * 60, cast(timedelta, tz.utcoffset(None)).total_seconds())
-        zone = bzfs.get_timezone("Europe/Vienna")
-        self.assertEqual("Europe/Vienna", getattr(zone, "key", None))
-        with self.assertRaises(ValueError):
-            bzfs.get_timezone("bad-tz")
-
-
-#############################################################################
 class TestArgumentParser(AbstractTestCase):
 
     def test_help(self) -> None:
@@ -1539,73 +1370,6 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
 
 
 #############################################################################
-class TestDatasetPairsAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--input", nargs="+", action=bzfs.DatasetPairsAction)
-
-    def test_direct_value(self) -> None:
-        args = self.parser.parse_args(["--input", "src1", "dst1"])
-        self.assertEqual([("src1", "dst1")], args.input)
-
-    def test_direct_value_without_corresponding_dst(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["--input", "src1"])
-
-    def test_file_input(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
-            args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual([("src1", "dst1"), ("src2", "dst2")], args.input)
-
-    def test_file_input_without_trailing_newline(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2")):
-            args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual([("src1", "dst1"), ("src2", "dst2")], args.input)
-
-    def test_mixed_input(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\tdst1\nsrc2\tdst2\n")):
-            args = self.parser.parse_args(["--input", "src0", "dst0", "+test_bzfs_argument_file"])
-            self.assertEqual([("src0", "dst0"), ("src1", "dst1"), ("src2", "dst2")], args.input)
-
-    def test_file_skip_comments_and_empty_lines(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="\n\n#comment\nsrc1\tdst1\nsrc2\tdst2\n")):
-            args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual([("src1", "dst1"), ("src2", "dst2")], args.input)
-
-    def test_file_skip_stripped_empty_lines(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data=" \t \nsrc1\tdst1")):
-            args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual([("src1", "dst1")], args.input)
-
-    def test_file_missing_tab(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\nsrc2")):
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-
-    def test_file_whitespace_only(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data=" \tdst1")):
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src1\t ")):
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-
-        with patch("bzfs_main.bzfs.open_nofollow", side_effect=FileNotFoundError):
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "+nonexistent_test_bzfs_argument_file"])
-
-    def test_option_not_specified(self) -> None:
-        args = self.parser.parse_args([])
-        self.assertIsNone(args.input)
-
-    def test_dataset_pairs_action_invalid_basename(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="src\tdst\n")):
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "+bad_file_name"])
-
-
 #############################################################################
 class TestPreservePropertiesValidation(AbstractTestCase):
     def setUp(self) -> None:
@@ -1685,337 +1449,6 @@ class TestPreservePropertiesValidation(AbstractTestCase):
 
 
 #############################################################################
-class TestFileOrLiteralAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--input", nargs="+", action=bzfs.FileOrLiteralAction)
-
-    def test_direct_value(self) -> None:
-        args = self.parser.parse_args(["--input", "literalvalue"])
-        self.assertEqual(["literalvalue"], args.input)
-
-    def test_file_input(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line 1\nline 2  \n")):
-            args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(["line 1", "line 2  "], args.input)
-
-    def test_mixed_input(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line 1\nline 2")):
-            args = self.parser.parse_args(["--input", "literalvalue", "+test_bzfs_argument_file"])
-            self.assertEqual(["literalvalue", "line 1", "line 2"], args.input)
-
-    def test_skip_comments_and_empty_lines(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="\n\n#comment\nline 1\n\n\nline 2\n")):
-            args = self.parser.parse_args(["--input", "+test_bzfs_argument_file"])
-            self.assertEqual(["line 1", "line 2"], args.input)
-
-    def test_file_not_found(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", side_effect=FileNotFoundError):
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "+nonexistent_test_bzfs_argument_file"])
-
-    def test_option_not_specified(self) -> None:
-        args = self.parser.parse_args([])
-        self.assertIsNone(args.input)
-
-    def test_file_or_literal_action_invalid_basename(self) -> None:
-        with patch("bzfs_main.bzfs.open_nofollow", mock_open(read_data="line")):
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--input", "+bad_file_name"])
-
-
-#############################################################################
-class TestNewSnapshotFilterGroupAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--new-snapshot-filter-group", action=bzfs.NewSnapshotFilterGroupAction, nargs=0)
-
-    def test_basic0(self) -> None:
-        args = self.parser.parse_args(["--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs.snapshot_filters_var))
-
-    def test_basic1(self) -> None:
-        args = self.parser.parse_args(["--new-snapshot-filter-group", "--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs.snapshot_filters_var))
-
-
-#############################################################################
-class TestNonEmptyStringAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--name", action=bzfs.NonEmptyStringAction)
-
-    def test_non_empty_string_action_empty(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["--name", " "])
-
-
-#############################################################################
-class TestLogConfigVariablesAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--log-config-var", nargs="+", action=bzfs.LogConfigVariablesAction)
-
-    def test_basic(self) -> None:
-        args = self.parser.parse_args(["--log-config-var", "name1:val1", "name2:val2"])
-        self.assertEqual(["name1:val1", "name2:val2"], args.log_config_var)
-
-        for var in ["", "  ", "varWithoutColon", ":valueWithoutName", " nameWithWhitespace:value"]:
-            with self.assertRaises(SystemExit):
-                self.parser.parse_args(["--log-config-var", var])
-
-
-#############################################################################
-class SSHConfigFileNameAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("filename", action=bzfs.SSHConfigFileNameAction)
-
-    def test_safe_filename(self) -> None:
-        args = self.parser.parse_args(["file1.txt"])
-        self.assertEqual("file1.txt", args.filename)
-
-    def test_empty_filename(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args([""])
-
-    def test_filename_in_subdirectory(self) -> None:
-        self.parser.parse_args(["subdir/safe_file.txt"])
-
-    def test_filename_with_single_dot_slash(self) -> None:
-        self.parser.parse_args(["./file.txt"])
-
-    def test_ssh_config_filename_action_invalid_chars(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["foo bar"])
-
-
-#############################################################################
-class TestSafeFileNameAction(AbstractTestCase):
-
-    def setUp(self) -> None:
-        self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("filename", action=bzfs.SafeFileNameAction)
-
-    def test_safe_filename(self) -> None:
-        args = self.parser.parse_args(["file1.txt"])
-        self.assertEqual("file1.txt", args.filename)
-
-    def test_empty_filename(self) -> None:
-        args = self.parser.parse_args([""])
-        self.assertEqual("", args.filename)
-
-    def test_filename_in_subdirectory(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["subdir/safe_file.txt"])
-
-    def test_unsafe_filename_with_parent_directory_reference(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["../escape.txt"])
-
-    def test_unsafe_filename_with_absolute_path(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["/unsafe_file.txt"])
-
-    def test_unsafe_nested_parent_directory(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["../../another_escape.txt"])
-
-    def test_filename_with_single_dot_slash(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["./file.txt"])
-
-    def test_filename_with_tab(self) -> None:
-        with self.assertRaises(SystemExit):
-            self.parser.parse_args(["foo\nbar.txt"])
-
-
-#############################################################################
-class TestSafeDirectoryNameAction(AbstractTestCase):
-    def test_valid_directory_name_is_accepted(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
-        args = parser.parse_args(["--dir", "valid_directory"])
-        assert args.dir == "valid_directory"
-
-    def test_empty_directory_name_raises_error(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--dir", ""])
-
-    def test_directory_name_with_invalid_whitespace_raises_error(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--dir", "invalid\nname"])
-
-    def test_directory_name_with_leading_or_trailing_spaces_is_trimmed(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--dir", action=bzfs.SafeDirectoryNameAction)
-        args = parser.parse_args(["--dir", "  valid_directory  "])
-        assert args.dir == "valid_directory"
-
-
-#############################################################################
-class TestCheckRange(AbstractTestCase):
-
-    def test_valid_range_min_max(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange, min=0, max=100)
-        args = parser.parse_args(["--age", "50"])
-        self.assertEqual(50, args.age)
-
-    def test_valid_range_inf_sup(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange, inf=0, sup=100)
-        args = parser.parse_args(["--age", "50"])
-        self.assertEqual(50, args.age)
-
-    def test_invalid_range_min_max(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange, min=0, max=100)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--age", "-1"])
-
-    def test_invalid_range_inf_sup(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange, inf=0, sup=100)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--age", "101"])
-
-    def test_invalid_combination_min_inf(self) -> None:
-        with self.assertRaises(ValueError):
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--age", type=int, action=CheckRange, min=0, inf=100)
-
-    def test_invalid_combination_max_sup(self) -> None:
-        with self.assertRaises(ValueError):
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--age", type=int, action=CheckRange, max=0, sup=100)
-
-    def test_valid_float_range_min_max(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
-        args = parser.parse_args(["--age", "50.5"])
-        self.assertEqual(50.5, args.age)
-
-    def test_invalid_float_range_min_max(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--age", "-0.1"])
-
-    def test_valid_edge_case_min(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
-        args = parser.parse_args(["--age", "0.0"])
-        self.assertEqual(0.0, args.age)
-
-    def test_valid_edge_case_max(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=CheckRange, min=0.0, max=100.0)
-        args = parser.parse_args(["--age", "100.0"])
-        self.assertEqual(100.0, args.age)
-
-    def test_invalid_edge_case_sup(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=CheckRange, inf=0.0, sup=100.0)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--age", "100.0"])
-
-    def test_invalid_edge_case_inf(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=CheckRange, inf=0.0, sup=100.0)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--age", "0.0"])
-
-    def test_no_range_constraints(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange)
-        args = parser.parse_args(["--age", "150"])
-        self.assertEqual(150, args.age)
-
-    def test_no_range_constraints_float(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=float, action=CheckRange)
-        args = parser.parse_args(["--age", "150.5"])
-        self.assertEqual(150.5, args.age)
-
-    def test_very_large_value(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange, max=10**18)
-        args = parser.parse_args(["--age", "999999999999999999"])
-        self.assertEqual(999999999999999999, args.age)
-
-    def test_very_small_value(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange, min=-(10**18))
-        args = parser.parse_args(["--age", "-999999999999999999"])
-        self.assertEqual(-999999999999999999, args.age)
-
-    def test_default_interval(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange)
-        action = CheckRange(option_strings=["--age"], dest="age")
-        self.assertEqual("valid range: (-infinity, +infinity)", action.interval())
-
-    def test_interval_with_inf_sup(self) -> None:
-        action = CheckRange(option_strings=["--age"], dest="age", inf=0, sup=100)
-        self.assertEqual("valid range: (0, 100)", action.interval())
-
-    def test_interval_with_min_max(self) -> None:
-        action = CheckRange(option_strings=["--age"], dest="age", min=0, max=100)
-        self.assertEqual("valid range: [0, 100]", action.interval())
-
-    def test_interval_with_min(self) -> None:
-        action = CheckRange(option_strings=["--age"], dest="age", min=0)
-        self.assertEqual("valid range: [0, +infinity)", action.interval())
-
-    def test_interval_with_max(self) -> None:
-        action = CheckRange(option_strings=["--age"], dest="age", max=100)
-        self.assertEqual("valid range: (-infinity, 100]", action.interval())
-
-    def test_call_without_range_constraints(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--age", type=int, action=CheckRange)
-        args = parser.parse_args(["--age", "50"])
-        self.assertEqual(50, args.age)
-
-
-#############################################################################
-class TestCheckPercentRange(AbstractTestCase):
-
-    def test_valid_range_min(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
-        args = parser.parse_args(["--threads", "1"])
-        threads, is_percent = args.threads
-        self.assertEqual(1.0, threads)
-        self.assertFalse(is_percent)
-
-    def test_valid_range_percent(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
-        args = parser.parse_args(["--threads", "5.2%"])
-        threads, is_percent = args.threads
-        self.assertEqual(5.2, threads)
-        self.assertTrue(is_percent)
-
-    def test_invalid(self) -> None:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--threads", action=bzfs.CheckPercentRange, min=1)
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--threads", "0"])
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--threads", "0%"])
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["--threads", "abc"])
 
 
 #############################################################################

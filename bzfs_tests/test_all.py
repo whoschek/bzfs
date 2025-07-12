@@ -20,6 +20,7 @@ import sys
 import unittest
 
 import bzfs_main.utils
+import bzfs_tests.test_argparse_actions
 import bzfs_tests.test_bzfs
 import bzfs_tests.test_connection
 import bzfs_tests.test_detect
@@ -49,6 +50,7 @@ def main() -> None:
     suite.addTests(bzfs_tests.test_connection.suite())
     suite.addTests(bzfs_tests.test_detect.suite())
     suite.addTests(bzfs_tests.test_incremental_send_steps.suite())
+    suite.addTests(bzfs_tests.test_argparse_actions.suite())
     suite.addTests(bzfs_tests.test_bzfs.suite())
     suite.addTests(bzfs_tests.test_jobrunner.suite())
     test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing

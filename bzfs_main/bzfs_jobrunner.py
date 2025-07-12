@@ -47,7 +47,7 @@ from subprocess import DEVNULL, PIPE
 from typing import Any, Iterable, TypeVar, Union
 
 import bzfs_main.utils
-from bzfs_main import bzfs
+from bzfs_main import argparse_actions, bzfs
 from bzfs_main.check_range import CheckRange
 from bzfs_main.detect import dummy_dataset
 from bzfs_main.loggers import get_simple_logger
@@ -57,6 +57,7 @@ from bzfs_main.parallel_engine import (
 )
 from bzfs_main.utils import (
     die_status,
+    format_dict,
     human_readable_duration,
     log_trace,
     percent,
@@ -197,7 +198,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
 
     # options:
     parser.add_argument(
-        "--localhost", default=None, action=bzfs.NonEmptyStringAction, metavar="STRING",
+        "--localhost", default=None, action=argparse_actions.NonEmptyStringAction, metavar="STRING",
         help="Hostname of localhost. Default is the hostname without the domain name, querying the Operating System.\n\n")
     parser.add_argument(
         "--src-hosts", default=None, metavar="LIST_STRING",
@@ -329,7 +330,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
             help=f"Remote SSH port on {loc} host to connect to (optional).\n\n")
     for loc in locations:
         parser.add_argument(
-            f"--ssh-{loc}-config-file", type=str, action=bzfs.SSHConfigFileNameAction, metavar="FILE",
+            f"--ssh-{loc}-config-file", type=str, action=argparse_actions.SSHConfigFileNameAction, metavar="FILE",
             help=f"Path to SSH ssh_config(5) file to connect to {loc} (optional); will be passed into ssh -F CLI. "
                  "The basename must contain the substring 'bzfs_ssh_config'.\n\n")
     parser.add_argument(
@@ -339,19 +340,19 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--dst-user", default="", metavar="STRING",
         help=argparse.SUPPRESS)  # deprecated; was renamed to --ssh-dst-user
     parser.add_argument(
-        "--job-id", required=True, action=bzfs.NonEmptyStringAction, metavar="STRING",
+        "--job-id", required=True, action=argparse_actions.NonEmptyStringAction, metavar="STRING",
         help="The identifier that remains constant across all runs of this particular job; will be included in the log file "
              "name infix. Example: mytestjob\n\n")
     parser.add_argument(
-        "--jobid", default=None, action=bzfs.NonEmptyStringAction, metavar="STRING",
+        "--jobid", default=None, action=argparse_actions.NonEmptyStringAction, metavar="STRING",
         help=argparse.SUPPRESS)   # deprecated; was renamed to --job-run
     parser.add_argument(
-        "--job-run", default=None, action=bzfs.NonEmptyStringAction, metavar="STRING",
+        "--job-run", default=None, action=argparse_actions.NonEmptyStringAction, metavar="STRING",
         help="The identifier of this particular run of the overall job; will be included in the log file name suffix. "
              "Default is a hex UUID. Example: 0badc0f003a011f0a94aef02ac16083c\n\n")
     workers_default = 100  # percent
     parser.add_argument(
-        "--workers", min=1, default=(workers_default, True), action=bzfs.CheckPercentRange, metavar="INT[%]",
+        "--workers", min=1, default=(workers_default, True), action=argparse_actions.CheckPercentRange, metavar="INT[%]",
         help="The maximum number of jobs to run in parallel at any time; can be given as a positive integer, "
              f"optionally followed by the %% percent character (min: %(min)s, default: {workers_default}%%). Percentages "
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many parallel jobs as "
@@ -407,7 +408,8 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
     for bad_opt in bad_opts:
         parser.add_argument(bad_opt, action=RejectArgumentAction, nargs=0, help=argparse.SUPPRESS)
     parser.add_argument(
-        "--root-dataset-pairs", required=True, nargs="+", action=bzfs.DatasetPairsAction, metavar="SRC_DATASET DST_DATASET",
+        "--root-dataset-pairs", required=True, nargs="+", action=argparse_actions.DatasetPairsAction,
+        metavar="SRC_DATASET DST_DATASET",
         help="Source and destination dataset pairs (excluding usernames and excluding hostnames, which will all be "
              "auto-appended later).\n\n")
     return parser
@@ -1198,11 +1200,6 @@ def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     """Returns a log file suffix in a format that contains the given hostnames."""
     sanitized_dst_hostname = sanitize(dst_hostname) if dst_hostname else ""
     return f"{sep}{sanitize(localhostname)}{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
-
-
-def format_dict(dictionary: dict[str, Any]) -> str:
-    """Pretty prints the given dictionary for logging and docs."""
-    return bzfs.format_dict(dictionary)
 
 
 def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:

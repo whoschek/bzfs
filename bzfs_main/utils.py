@@ -36,11 +36,13 @@ import threading
 import time
 import types
 from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone, tzinfo
 from subprocess import DEVNULL, PIPE
 from typing import (
     IO,
     Any,
     Callable,
+    Final,
     Generic,
     ItemsView,
     Iterable,
@@ -66,6 +68,9 @@ log_debug = logging.DEBUG
 log_trace = logging.DEBUG // 2  # custom log level is halfway in between
 unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
+snapshot_filters_var = "snapshot_filters_var"
+SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
+year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
 
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 
@@ -525,6 +530,156 @@ def pid_exists(pid: int) -> bool | None:
             return True
         return None
     return True
+
+
+###############################################################################
+class SnapshotPeriods:  # thread-safe
+    """Parses snapshot suffix strings and converts between durations."""
+
+    def __init__(self) -> None:
+        """Initialize lookup tables of suffixes and corresponding millis."""
+        self.suffix_milliseconds: Final = {
+            "yearly": 365 * 86400 * 1000,
+            "monthly": round(30.5 * 86400 * 1000),
+            "weekly": 7 * 86400 * 1000,
+            "daily": 86400 * 1000,
+            "hourly": 60 * 60 * 1000,
+            "minutely": 60 * 1000,
+            "secondly": 1000,
+            "millisecondly": 1,
+        }
+        self.period_labels: Final = {
+            "yearly": "years",
+            "monthly": "months",
+            "weekly": "weeks",
+            "daily": "days",
+            "hourly": "hours",
+            "minutely": "minutes",
+            "secondly": "seconds",
+            "millisecondly": "milliseconds",
+        }
+        self._suffix_regex0: Final = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
+        self._suffix_regex1: Final = re.compile("_" + self._suffix_regex0.pattern)
+
+    def suffix_to_duration0(self, suffix: str) -> tuple[int, str]:
+        """Parse suffix like '10minutely' to (10, 'minutely')."""
+        return self._suffix_to_duration(suffix, self._suffix_regex0)
+
+    def suffix_to_duration1(self, suffix: str) -> tuple[int, str]:
+        """Like :meth:`suffix_to_duration0` but expects an underscore prefix."""
+        return self._suffix_to_duration(suffix, self._suffix_regex1)
+
+    @staticmethod
+    def _suffix_to_duration(suffix: str, regex: re.Pattern) -> tuple[int, str]:
+        """Ex: Converts '2 hourly' to (2, 'hourly') and 'hourly' to (1, 'hourly')."""
+        if match := regex.fullmatch(suffix):
+            duration_amount = int(match.group(1)) if match.group(1) else 1
+            assert duration_amount > 0
+            duration_unit = match.group(2)
+            return duration_amount, duration_unit
+        else:
+            return 0, ""
+
+    def label_milliseconds(self, snapshot: str) -> int:
+        """Returns duration encoded in ``snapshot`` suffix, in milliseconds."""
+        i = snapshot.rfind("_")
+        snapshot = "" if i < 0 else snapshot[i + 1 :]
+        duration_amount, duration_unit = self._suffix_to_duration(snapshot, self._suffix_regex0)
+        return duration_amount * self.suffix_milliseconds.get(duration_unit, 0)
+
+
+def nprefix(s: str) -> str:
+    """Returns a canonical snapshot prefix with trailing underscore."""
+    return sys.intern(s + "_")
+
+
+def ninfix(s: str) -> str:
+    """Returns a canonical infix with trailing underscore when not empty."""
+    return sys.intern(s + "_") if s else ""
+
+
+def nsuffix(s: str) -> str:
+    """Returns a canonical suffix with leading underscore when not empty."""
+    return sys.intern("_" + s) if s else ""
+
+
+def format_dict(dictionary: dict[Any, Any]) -> str:
+    """Returns a formatted dictionary using repr for consistent output."""
+    return f'"{dictionary}"'
+
+
+def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
+    """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
+    unit_milliseconds = {
+        "milliseconds": 1,
+        "millis": 1,
+        "seconds": 1000,
+        "secs": 1000,
+        "minutes": 60 * 1000,
+        "mins": 60 * 1000,
+        "hours": 60 * 60 * 1000,
+        "days": 86400 * 1000,
+        "weeks": 7 * 86400 * 1000,
+        "months": round(30.5 * 86400 * 1000),
+        "years": 365 * 86400 * 1000,
+    }
+    match = re.fullmatch(
+        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix,
+        duration,
+    )
+    if not match:
+        if context:
+            die(f"Invalid duration format: {duration} within {context}")
+        else:
+            raise ValueError(f"Invalid duration format: {duration}")
+    assert match
+    quantity = int(match.group(1))
+    unit = match.group(2)
+    return quantity * unit_milliseconds[unit]
+
+
+def unixtime_fromisoformat(datetime_str: str) -> int:
+    """Converts ISO 8601 datetime string into UTC Unix time seconds."""
+    return int(datetime.fromisoformat(datetime_str).timestamp())
+
+
+def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
+    """Converts UTC Unix time seconds into ISO 8601 datetime string."""
+    tz: tzinfo = timezone.utc
+    dt = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
+    return dt.isoformat(sep="_", timespec="seconds")
+
+
+def current_datetime(
+    tz_spec: str | None = None,
+    now_fn: Callable[[tzinfo | None], datetime] | None = None,
+) -> datetime:
+    """Returns current time in ``tz_spec`` timezone or local timezone."""
+    if now_fn is None:
+        now_fn = datetime.now
+    return now_fn(get_timezone(tz_spec))
+
+
+def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
+    """Returns timezone from spec or local timezone if unspecified."""
+    tz: tzinfo | None
+    if tz_spec is None:
+        tz = None
+    elif tz_spec == "UTC":
+        tz = timezone.utc
+    else:
+        if match := re.fullmatch(r"([+-])(\d\d):?(\d\d)", tz_spec):
+            sign, hours, minutes = match.groups()
+            offset = int(hours) * 60 + int(minutes)
+            offset = -offset if sign == "-" else offset
+            tz = timezone(timedelta(minutes=offset))
+        elif "/" in tz_spec and sys.version_info >= (3, 9):
+            from zoneinfo import ZoneInfo  # requires python >= 3.9
+
+            tz = ZoneInfo(tz_spec)
+        else:
+            raise ValueError(f"Invalid timezone specification: {tz_spec}")
+    return tz
 
 
 #############################################################################

@@ -33,7 +33,9 @@ from unittest.mock import (
     patch,
 )
 
+import bzfs_main.argparse_actions
 from bzfs_main import bzfs
+from bzfs_main.argparse_actions import SnapshotFilter
 from bzfs_main.bzfs import (
     Job,
     Params,
@@ -207,7 +209,7 @@ class TestHelperFunctions(CommonTest):
         job = bzfs.Job()
         job.params = self.make_params(args=args, log=log)
         regexes = (compile_regexes([]), compile_regexes(["keep"]))
-        job.params.snapshot_filters = [[bzfs.SnapshotFilter(snapshot_regex_filter_name, None, regexes)]]
+        job.params.snapshot_filters = [[SnapshotFilter(snapshot_regex_filter_name, None, regexes)]]
         snapshots = ["0\tds@keep", "0\tds@other"]
         with patch("bzfs_main.filter.filter_snapshots_by_regex", return_value=[snapshots[0]]) as mock_f:
             result = filter_snapshots(job, snapshots)
@@ -219,7 +221,7 @@ class TestHelperFunctions(CommonTest):
 class TestTimeRangeAction(CommonTest):
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--time-n-ranks", action=bzfs.TimeRangeAndRankRangeAction, nargs="+")
+        self.parser.add_argument("--time-n-ranks", action=bzfs_main.argparse_actions.TimeRangeAndRankRangeAction, nargs="+")
 
     def parse_duration(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--time-n-ranks", arg + " ago..anytime"])
@@ -422,7 +424,7 @@ class TestRankRangeAction(CommonTest):
 
     def setUp(self) -> None:
         self.parser = argparse.ArgumentParser()
-        self.parser.add_argument("--ranks", nargs="+", action=bzfs.TimeRangeAndRankRangeAction)
+        self.parser.add_argument("--ranks", nargs="+", action=bzfs_main.argparse_actions.TimeRangeAndRankRangeAction)
 
     def parse_args(self, arg: str) -> argparse.Namespace:
         return self.parser.parse_args(["--ranks", "0..0", arg])

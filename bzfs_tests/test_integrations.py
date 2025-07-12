@@ -64,6 +64,7 @@ from bzfs_main.utils import (
     getenv_any,
     getenv_bool,
     human_readable_duration,
+    unixtime_fromisoformat,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.test_incremental_send_steps import (
@@ -1974,7 +1975,7 @@ class LocalTestCase(IntegrationTestCase):
         # "creation" zfs property cannot be manually set or modified or easily mocked.
         # Thus, for checks during testing we use the "bzfs_test:creation" property instead of the "creation" property.
         for snap in ["2024-01-01d", "2024-01-02d", "2024-01-03d", "2024-01-04d", "2024-01-05h"]:
-            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            unix_time = unixtime_fromisoformat(snap[0 : len("2024-01-01")])
             take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
 
         regex_filter = ["--include-snapshot-regex=.*d.*"]  # include dailies only
@@ -2008,7 +2009,7 @@ class LocalTestCase(IntegrationTestCase):
 
     def test_snapshot_filter_regexes_dont_merge_across_groups(self) -> None:
         for snap in ["2024-01-01d", "2024-01-02d", "2024-01-03h", "2024-01-04dt"]:
-            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            unix_time = unixtime_fromisoformat(snap[0 : len("2024-01-01")])
             take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
 
         regex_filter_daily = ["--include-snapshot-regex=.*d.*"]  # include dailies only
@@ -2027,7 +2028,7 @@ class LocalTestCase(IntegrationTestCase):
 
     def test_snapshot_filter_ranks_dont_merge_across_groups(self) -> None:
         for snap in ["2024-01-01d", "2024-01-02h", "2024-01-03d", "2024-01-04dt"]:
-            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            unix_time = unixtime_fromisoformat(snap[0 : len("2024-01-01")])
             take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
 
         regex_filter_daily = ["--include-snapshot-regex=.*d.*"]  # include dailies only
@@ -2046,7 +2047,7 @@ class LocalTestCase(IntegrationTestCase):
 
     def test_snapshot_filter_groups(self) -> None:
         for snap in ["2024-01-01d", "2024-01-02h", "2024-01-03d", "2024-01-04dt"]:
-            unix_time = bzfs.unixtime_fromisoformat(snap[0 : len("2024-01-01")])
+            unix_time = unixtime_fromisoformat(snap[0 : len("2024-01-01")])
             take_snapshot(src_root_dataset, fix(snap), props=["-o", creation_prefix + f"creation={unix_time}"])
 
         snapshot_filter = [

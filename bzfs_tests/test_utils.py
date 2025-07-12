@@ -28,6 +28,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone, tzinfo
 from subprocess import PIPE
 from typing import (
     Any,
@@ -45,21 +46,26 @@ from unittest.mock import (
 
 from bzfs_main.utils import (
     SmallPriorityQueue,
+    SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
     compile_regexes,
+    current_datetime,
     cut,
     descendants_re_suffix,
     drain,
     find_match,
     get_descendant_processes,
     get_home_directory,
+    get_timezone,
     has_duplicates,
     human_readable_bytes,
     human_readable_duration,
     human_readable_float,
     is_descendant,
+    isotime_from_unixtime,
     open_nofollow,
+    parse_duration_to_milliseconds,
     percent,
     pid_exists,
     replace_capturing_groups_with_non_capturing_groups,
@@ -68,6 +74,7 @@ from bzfs_main.utils import (
     subprocess_run,
     tail,
     terminate_process_subtree,
+    unixtime_fromisoformat,
     xfinally,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
@@ -92,7 +99,9 @@ def suite() -> unittest.TestSuite:
         TestSmallPriorityQueue,
         TestSynchronizedBool,
         TestSynchronizedDict,
+        TestSnapshotPeriods,
         TestXFinally,
+        TestCurrentDateTime,
     ]
     return unittest.TestSuite(unittest.TestLoader().loadTestsFromTestCase(test_case) for test_case in test_cases)
 
@@ -159,6 +168,39 @@ class TestHelperFunctions(AbstractTestCase):
         assert_full_match("foo", "!foo")
         with self.assertRaises(re.error):
             compile_regexes(["fo$o"], re_suffix)
+
+    def test_parse_duration_to_milliseconds(self) -> None:
+        self.assertEqual(5000, parse_duration_to_milliseconds("5 seconds"))
+        self.assertEqual(
+            300000,
+            parse_duration_to_milliseconds("5 minutes ago", regex_suffix=r"\s*ago"),
+        )
+        with self.assertRaises(ValueError):
+            parse_duration_to_milliseconds("foo")
+        with self.assertRaises(SystemExit):
+            parse_duration_to_milliseconds("foo", context="ctx")
+
+
+###############################################################################
+class TestSnapshotPeriods(AbstractTestCase):
+
+    def test_label_milliseconds(self) -> None:
+        xperiods = SnapshotPeriods()
+        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 1, xperiods.label_milliseconds("foo_yearly"))
+        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 2, xperiods.label_milliseconds("foo_2yearly"))
+        self.assertEqual(xperiods.suffix_milliseconds["yearly"] * 2, xperiods.label_milliseconds("_2yearly"))
+        self.assertEqual(0, xperiods.label_milliseconds("_0yearly"))
+        self.assertEqual(0, xperiods.label_milliseconds("2yearly"))
+        self.assertEqual(0, xperiods.label_milliseconds("x"))
+        self.assertEqual(0, xperiods.label_milliseconds(""))
+        self.assertEqual(xperiods.suffix_milliseconds["monthly"], xperiods.label_milliseconds("foo_monthly"))
+        self.assertEqual(xperiods.suffix_milliseconds["weekly"], xperiods.label_milliseconds("foo_weekly"))
+        self.assertEqual(xperiods.suffix_milliseconds["daily"], xperiods.label_milliseconds("foo_daily"))
+        self.assertEqual(xperiods.suffix_milliseconds["hourly"], xperiods.label_milliseconds("foo_hourly"))
+        self.assertEqual(xperiods.suffix_milliseconds["minutely"] * 60, xperiods.label_milliseconds("foo_60minutely"))
+        self.assertEqual(xperiods.suffix_milliseconds["minutely"] * 59, xperiods.label_milliseconds("foo_59minutely"))
+        self.assertEqual(xperiods.suffix_milliseconds["secondly"], xperiods.label_milliseconds("foo_secondly"))
+        self.assertEqual(xperiods.suffix_milliseconds["millisecondly"], xperiods.label_milliseconds("foo_millisecondly"))
 
 
 #############################################################################
@@ -1105,6 +1147,124 @@ class TestXFinally(AbstractTestCase):
         self.assertIsInstance(cm.exception.exceptions[0], ValueError)
         self.assertIsInstance(cm.exception.exceptions[1], RuntimeError)
         cleanup.assert_called_once()
+
+
+###############################################################################
+class TestCurrentDateTime(AbstractTestCase):
+
+    def setUp(self) -> None:
+        self.fixed_datetime = datetime(2024, 1, 1, 12, 0, 0)
+
+    def test_now(self) -> None:
+        self.assertIsNotNone(current_datetime(tz_spec=None, now_fn=None))
+        self.assertIsNotNone(current_datetime(tz_spec="UTC", now_fn=None))
+        self.assertIsNotNone(current_datetime(tz_spec="+0530", now_fn=None))
+        self.assertIsNotNone(current_datetime(tz_spec="+05:30", now_fn=None))
+        self.assertIsNotNone(current_datetime(tz_spec="-0430", now_fn=None))
+        self.assertIsNotNone(current_datetime(tz_spec="-04:30", now_fn=None))
+
+    def test_local_timezone(self) -> None:
+        expected = self.fixed_datetime.astimezone(tz=None)
+        actual = current_datetime(tz_spec=None, now_fn=lambda tz=None: self.fixed_datetime.astimezone(tz=tz))  # type: ignore
+        self.assertEqual(expected, actual)
+
+        fmt = "%Y-%m-%dT%H:%M:%S"
+        self.assertEqual("2024-01-01T12:00:00", actual.strftime(fmt))
+        fmt = "%Y-%m-%d_%H:%M:%S"
+        self.assertEqual("2024-01-01_12:00:00", actual.strftime(fmt))
+        fmt = "%Y-%m-%d_%H:%M:%S_%Z"
+        expected_prefix = "2024-01-01_12:00:00_"
+        self.assertTrue(actual.strftime(fmt).startswith(expected_prefix))
+        suffix = actual.strftime(fmt)[len(expected_prefix) :]
+        self.assertGreater(len(suffix), 0)
+
+        fmt = "%Y-%m-%d_%H:%M:%S%z"
+        expected_prefix = "2024-01-01_12:00:00"
+        self.assertTrue(actual.strftime(fmt).startswith(expected_prefix))
+        suffix = actual.strftime(fmt)[len(expected_prefix) :]
+        self.assertIn(suffix[0], ["+", "-"])
+        self.assertTrue(suffix[1:].isdigit())
+
+    def test_utc_timezone(self) -> None:
+        expected = self.fixed_datetime.astimezone(tz=timezone.utc)
+
+        def now_fn(tz: tzinfo | None = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = current_datetime(tz_spec="UTC", now_fn=now_fn)
+        self.assertEqual(expected, actual)
+
+    def test_tzoffset_positive(self) -> None:
+        tz_spec = "+0530"
+        tz = timezone(timedelta(hours=5, minutes=30))
+        expected = self.fixed_datetime.astimezone(tz=tz)
+
+        def now_fn(_: tzinfo | None = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = current_datetime(tz_spec=tz_spec, now_fn=now_fn)
+        self.assertEqual(expected, actual)
+
+    def test_tzoffset_negative(self) -> None:
+        tz_spec = "-0430"
+        tz = timezone(timedelta(hours=-4, minutes=-30))
+        expected = self.fixed_datetime.astimezone(tz=tz)
+
+        def now_fn(_: tzinfo | None = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = current_datetime(tz_spec=tz_spec, now_fn=now_fn)
+        self.assertEqual(expected, actual)
+
+    def test_iana_timezone(self) -> None:
+        if sys.version_info < (3, 9):
+            self.skipTest("ZoneInfo requires python >= 3.9")
+        from zoneinfo import ZoneInfo
+
+        tz_spec = "Asia/Tokyo"
+        self.assertIsNotNone(current_datetime(tz_spec=tz_spec, now_fn=None))
+        tz = ZoneInfo(tz_spec)
+        expected = self.fixed_datetime.astimezone(tz=tz)
+
+        def now_fn(_: tzinfo | None = None) -> datetime:
+            return self.fixed_datetime.astimezone(tz=tz)
+
+        actual = current_datetime(tz_spec=tz_spec, now_fn=now_fn)
+        self.assertEqual(expected, actual)
+
+        fmt = "%Y-%m-%dT%H:%M:%S%z"
+        expected_prefix = "2024-01-01T20:00:00"
+        suffix = actual.strftime(fmt)[len(expected_prefix) :]
+        self.assertIn(suffix[0], ["+", "-"])
+        self.assertTrue(suffix[1:].isdigit())
+
+    def test_invalid_timezone(self) -> None:
+        with self.assertRaises(ValueError) as context:
+            current_datetime(tz_spec="INVALID")
+        self.assertIn("Invalid timezone specification", str(context.exception))
+
+    def test_invalid_timezone_format_missing_sign(self) -> None:
+        with self.assertRaises(ValueError):
+            current_datetime(tz_spec="0400")
+
+    def test_unixtime_conversion(self) -> None:
+        iso = "2024-01-02T03:04:05+00:00"
+        unix = unixtime_fromisoformat(iso)
+        expected = "2024-01-02_03:04:05+00:00"
+        self.assertEqual(expected, isotime_from_unixtime(unix))
+
+    def test_get_timezone_variants(self) -> None:
+        if sys.version_info < (3, 9):
+            self.skipTest("ZoneInfo requires python >= 3.9")
+        self.assertIsNone(get_timezone())
+        self.assertEqual(timezone.utc, get_timezone("UTC"))
+        tz = get_timezone("+0130")
+        assert tz is not None
+        self.assertEqual(90 * 60, cast(timedelta, tz.utcoffset(None)).total_seconds())
+        zone = get_timezone("Europe/Vienna")
+        self.assertEqual("Europe/Vienna", getattr(zone, "key", None))
+        with self.assertRaises(ValueError):
+            get_timezone("bad-tz")
 
 
 @contextlib.contextmanager

@@ -63,7 +63,7 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from logging import Logger
 from os import stat as os_stat
 from os import utime as os_utime
@@ -76,7 +76,6 @@ from typing import (
     Any,
     Callable,
     Counter,
-    Final,
     Generator,
     Iterable,
     Iterator,
@@ -89,6 +88,24 @@ from typing import (
 
 import bzfs_main.loggers
 import bzfs_main.utils
+from bzfs_main.argparse_actions import (
+    CheckPercentRange,
+    DatasetPairsAction,
+    DeleteDstSnapshotsExceptPlanAction,
+    FileOrLiteralAction,
+    IncludeSnapshotPlanAction,
+    LogConfigVariablesAction,
+    NewSnapshotFilterGroupAction,
+    NonEmptyStringAction,
+    SafeDirectoryNameAction,
+    SafeFileNameAction,
+    SnapshotFilter,
+    SSHConfigFileNameAction,
+    TimeRangeAndRankRangeAction,
+    has_timerange_filter,
+    optimize_snapshot_filters,
+    validate_no_argument_file,
+)
 from bzfs_main.check_range import CheckRange
 from bzfs_main.connection import (
     DEDICATED,
@@ -118,8 +135,6 @@ from bzfs_main.detect import (
     zfs_version_is_at_least_2_2_0,
 )
 from bzfs_main.filter import (
-    RankRange,
-    UnixTimeRange,
     dataset_regexes,
     filter_datasets,
     filter_lines,
@@ -135,7 +150,6 @@ from bzfs_main.loggers import (
     Tee,
     get_simple_logger,
     reset_logger,
-    validate_log_config_variable,
 )
 from bzfs_main.parallel_engine import (
     process_datasets_in_parallel_and_fault_tolerant,
@@ -160,17 +174,22 @@ from bzfs_main.retry import (
 )
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
+    SHELL_CHARS,
     RegexList,
+    SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
     compile_regexes,
+    current_datetime,
     cut,
     descendants_re_suffix,
     die,
     die_status,
     drain,
     env_var_prefix,
+    format_dict,
     get_home_directory,
+    get_timezone,
     getenv_bool,
     getenv_int,
     has_duplicates,
@@ -178,10 +197,15 @@ from bzfs_main.utils import (
     human_readable_duration,
     is_descendant,
     is_included,
+    isotime_from_unixtime,
     list_formatter,
     log_debug,
     log_trace,
+    ninfix,
+    nprefix,
+    nsuffix,
     open_nofollow,
+    parse_duration_to_milliseconds,
     percent,
     pid_exists,
     pretty_print_formatter,
@@ -189,12 +213,14 @@ from bzfs_main.utils import (
     relativize_dataset,
     replace_in_lines,
     replace_prefix,
+    snapshot_filters_var,
     stderr_to_str,
     subprocess_run,
     terminate_process_subtree,
     unixtime_infinity_secs,
     xfinally,
     xprint,
+    year_with_four_digits_regex,
 )
 
 # constants:
@@ -213,15 +239,11 @@ create_src_snapshots_prefix_dflt = prog_name + "_"
 create_src_snapshots_suffix_dflt = "_adhoc"
 time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
 zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
-snapshot_regex_filter_names = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
-snapshot_filters_var = "snapshot_filters_var"
 cmp_choices_items = ("src", "dst", "all")
 inject_dst_pipe_fail_kbytes = 400
-year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
 FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
 DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
-SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -2092,63 +2114,6 @@ class SnapshotLabel(NamedTuple):
                     die(f"Invalid {input_text}{key}: Must start with an underscore character: '{value}'")
                 if value.count("_") > 1:
                     die(f"Invalid {input_text}{key}: Must not contain multiple underscore characters: '{value}'")
-
-
-#############################################################################
-class SnapshotPeriods:  # thread-safe
-    """Parses snapshot suffix strings and converts between durations."""
-
-    def __init__(self) -> None:
-        """Initialize lookup tables of suffixes and corresponding millis."""
-        # immutable variables:
-        self.suffix_milliseconds: Final = {
-            "yearly": 365 * 86400 * 1000,
-            "monthly": round(30.5 * 86400 * 1000),
-            "weekly": 7 * 86400 * 1000,
-            "daily": 86400 * 1000,
-            "hourly": 60 * 60 * 1000,
-            "minutely": 60 * 1000,
-            "secondly": 1000,
-            "millisecondly": 1,
-        }
-        self.period_labels: Final = {
-            "yearly": "years",
-            "monthly": "months",
-            "weekly": "weeks",
-            "daily": "days",
-            "hourly": "hours",
-            "minutely": "minutes",
-            "secondly": "seconds",
-            "millisecondly": "milliseconds",
-        }
-        self._suffix_regex0: Final = re.compile(rf"([1-9][0-9]*)?({'|'.join(self.suffix_milliseconds.keys())})")
-        self._suffix_regex1: Final = re.compile("_" + self._suffix_regex0.pattern)
-
-    def suffix_to_duration0(self, suffix: str) -> tuple[int, str]:
-        """Parse suffix like '10minutely' to (10, 'minutely')."""
-        return self._suffix_to_duration(suffix, self._suffix_regex0)
-
-    def suffix_to_duration1(self, suffix: str) -> tuple[int, str]:
-        """Like :meth:`suffix_to_duration0` but expects an underscore prefix."""
-        return self._suffix_to_duration(suffix, self._suffix_regex1)
-
-    @staticmethod
-    def _suffix_to_duration(suffix: str, regex: re.Pattern) -> tuple[int, str]:
-        """Ex: Converts "2 hourly" to (2, "hourly") and "hourly" to (1, "hourly"), i.e. perform some action every N hours."""
-        if match := regex.fullmatch(suffix):
-            duration_amount = int(match.group(1)) if match.group(1) else 1
-            assert duration_amount > 0
-            duration_unit = match.group(2)
-            return duration_amount, duration_unit
-        else:
-            return 0, ""
-
-    def label_milliseconds(self, snapshot: str) -> int:
-        """Returns duration encoded in ``snapshot`` suffix, in milliseconds."""
-        i = snapshot.rfind("_")
-        snapshot = "" if i < 0 else snapshot[i + 1 :]
-        duration_amount, duration_unit = self._suffix_to_duration(snapshot, self._suffix_regex0)
-        return duration_amount * self.suffix_milliseconds.get(duration_unit, 0)
 
 
 #############################################################################
@@ -5148,103 +5113,6 @@ def set_last_modification_time(
     os_utime(path, times=unixtime_in_secs)
 
 
-def nprefix(s: str) -> str:
-    """Returns a canonical snapshot prefix with trailing underscore."""
-    return sys.intern(s + "_")
-
-
-def ninfix(s: str) -> str:
-    """Returns a canonical infix with trailing underscore when not empty."""
-    return sys.intern(s + "_") if s else ""
-
-
-def nsuffix(s: str) -> str:
-    """Returns a canonical suffix with leading underscore when not empty."""
-    return sys.intern("_" + s) if s else ""
-
-
-def format_dict(dictionary: dict[Any, Any]) -> str:
-    """Returns a formatted dictionary using repr for consistent output."""
-    return f'"{dictionary}"'
-
-
-def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:
-    """Parses human duration strings like '5m' or '2 hours' to milliseconds."""
-    unit_milliseconds = {
-        "milliseconds": 1,
-        "millis": 1,
-        "seconds": 1000,
-        "secs": 1000,
-        "minutes": 60 * 1000,
-        "mins": 60 * 1000,
-        "hours": 60 * 60 * 1000,
-        "days": 86400 * 1000,
-        "weeks": 7 * 86400 * 1000,
-        "months": round(30.5 * 86400 * 1000),
-        "years": 365 * 86400 * 1000,
-    }
-    match = re.fullmatch(
-        r"(\d+)\s*(milliseconds|millis|seconds|secs|minutes|mins|hours|days|weeks|months|years)" + regex_suffix, duration
-    )
-    if not match:
-        if context:
-            die(f"Invalid duration format: {duration} within {context}")
-        else:
-            raise ValueError(f"Invalid duration format: {duration}")
-    assert match
-    quantity = int(match.group(1))
-    unit = match.group(2)
-    return quantity * unit_milliseconds[unit]
-
-
-def unixtime_fromisoformat(datetime_str: str) -> int:
-    """Converts an ISO 8601 datetime string into a UTC Unix time in integer seconds; If the datetime string does not contain
-    time zone info then it is assumed to be in the local time zone."""
-    return int(datetime.fromisoformat(datetime_str).timestamp())
-
-
-def isotime_from_unixtime(unixtime_in_seconds: int) -> str:
-    """Converts a UTC Unix time in integer seconds into an ISO 8601 datetime string in the local time zone;
-    Example: 2024-09-03_12:26:15"""
-    tz: tzinfo = timezone.utc  # outputs time in UTC
-    # tz = None  # outputs time in local time zone
-    dt = datetime.fromtimestamp(unixtime_in_seconds, tz=tz)
-    return dt.isoformat(sep="_", timespec="seconds")
-
-
-def current_datetime(
-    tz_spec: str | None = None,
-    now_fn: Callable[[tzinfo | None], datetime] | None = None,
-) -> datetime:
-    """Returns a datetime that is the current time in the given timezone, or in the local timezone if tz_spec is absent."""
-    if now_fn is None:
-        now_fn = datetime.now
-    return now_fn(get_timezone(tz_spec))
-
-
-def get_timezone(tz_spec: str | None = None) -> tzinfo | None:
-    """Returns the given timezone, or the local timezone if the timezone spec is absent; The optional timezone spec is of the
-    form "UTC" or "+HH:MM" or "-HH:MM" for fixed UTC offsets."""
-    tz: tzinfo | None
-    if tz_spec is None:
-        tz = None  # i.e. local timezone
-    elif tz_spec == "UTC":
-        tz = timezone.utc
-    else:
-        if match := re.fullmatch(r"([+-])(\d\d):?(\d\d)", tz_spec):
-            sign, hours, minutes = match.groups()
-            offset = int(hours) * 60 + int(minutes)
-            offset = -offset if sign == "-" else offset
-            tz = timezone(timedelta(minutes=offset))
-        elif "/" in tz_spec and sys.version_info >= (3, 9):
-            from zoneinfo import ZoneInfo  # requires python >= 3.9
-
-            tz = ZoneInfo(tz_spec)  # Standard IANA timezone. Example: "Europe/Vienna"
-        else:
-            raise ValueError(f"Invalid timezone specification: {tz_spec}")
-    return tz
-
-
 def parse_dataset_locator(
     input_text: str, validate: bool = True, user: str | None = None, host: str | None = None, port: int | None = None
 ) -> tuple[str, str, str, str, str]:
@@ -5355,540 +5223,5 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
         )
 
 
-def validate_no_argument_file(
-    path: str, namespace: argparse.Namespace, err_prefix: str, parser: argparse.ArgumentParser | None = None
-) -> None:
-    """Checks that command line options do not include +file when disabled."""
-    if getattr(namespace, "no_argument_file", False):
-        die(f"{err_prefix}Argument file inclusion is disabled: {path}", parser=parser)
-
-
-#############################################################################
-class NonEmptyStringAction(argparse.Action):
-    """Argparse action rejecting empty string values."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Strip whitespace and reject empty values."""
-        values = values.strip()
-        if values == "":
-            parser.error(f"{option_string}: Empty string is not valid")
-        setattr(namespace, self.dest, values)
-
-
-#############################################################################
-class DatasetPairsAction(argparse.Action):
-    """Parses alternating source/destination dataset arguments."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Validates dataset pair arguments and expand '+file' notation."""
-        datasets = []
-        err_prefix = f"{option_string or self.dest}: "
-        for value in values:
-            if not value.startswith("+"):
-                datasets.append(value)
-            else:
-                path = value[1:]
-                validate_no_argument_file(path, namespace, err_prefix=err_prefix, parser=parser)
-                if "bzfs_argument_file" not in os.path.basename(path):
-                    parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
-                try:
-                    with open_nofollow(path, "r", encoding="utf-8") as fd:
-                        for i, line in enumerate(fd.read().splitlines()):
-                            if line.startswith("#") or not line.strip():
-                                continue  # skip comment lines and empty lines
-                            splits = line.split("\t", 1)
-                            if len(splits) <= 1:
-                                parser.error(f"{err_prefix}Line must contain tab-separated SRC_DATASET and DST_DATASET: {i}")
-                            src_root_dataset, dst_root_dataset = splits
-                            if not src_root_dataset.strip() or not dst_root_dataset.strip():
-                                parser.error(
-                                    f"{err_prefix}SRC_DATASET and DST_DATASET must not be empty or whitespace-only: {i}"
-                                )
-                            datasets.append(src_root_dataset)
-                            datasets.append(dst_root_dataset)
-                except OSError as e:
-                    parser.error(f"{err_prefix}{e}")
-
-        if len(datasets) % 2 != 0:
-            parser.error(f"{err_prefix}Each SRC_DATASET must have a corresponding DST_DATASET: {datasets}")
-        root_dataset_pairs = [(datasets[i], datasets[i + 1]) for i in range(0, len(datasets), 2)]
-        setattr(namespace, self.dest, root_dataset_pairs)
-
-
-#############################################################################
-class SSHConfigFileNameAction(argparse.Action):
-    """Validates SSH config file argument contains no whitespace or shell chars."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Reject invalid file names with spaces or shell metacharacters."""
-        values = values.strip()
-        if values == "":
-            parser.error(f"{option_string}: Empty string is not valid")
-        if any(char in SHELL_CHARS or char.isspace() for char in values):
-            parser.error(f"{option_string}: Invalid file name '{values}': must not contain whitespace or special chars.")
-        setattr(namespace, self.dest, values)
-
-
-#############################################################################
-class SafeFileNameAction(argparse.Action):
-    """Ensures filenames lack path separators and weird whitespace."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Rejects filenames containing path traversal or unusual whitespace."""
-        if ".." in values or "/" in values or "\\" in values:
-            parser.error(f"{option_string}: Invalid file name '{values}': must not contain '..' or '/' or '\\'.")
-        if any(char.isspace() and char != " " for char in values):
-            parser.error(f"{option_string}: Invalid file name '{values}': must not contain whitespace other than space.")
-        setattr(namespace, self.dest, values)
-
-
-#############################################################################
-class SafeDirectoryNameAction(argparse.Action):
-    """Validates directory name argument, allowing only simple spaces."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Rejects directory names with weird whitespace or emptiness."""
-        values = values.strip()
-        if values == "":
-            parser.error(f"{option_string}: Empty string is not valid")
-        if any(char.isspace() and char != " " for char in values):
-            parser.error(f"{option_string}: Invalid dir name '{values}': must not contain whitespace other than space.")
-        setattr(namespace, self.dest, values)
-
-
-#############################################################################
-class NewSnapshotFilterGroupAction(argparse.Action):
-    """Starts a new filter group when seen in command line arguments."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, args: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Insert an empty group before adding new snapshot filters."""
-        if not hasattr(args, snapshot_filters_var):
-            args.snapshot_filters_var = [[]]
-        elif len(args.snapshot_filters_var[-1]) > 0:
-            args.snapshot_filters_var.append([])
-
-
-#############################################################################
-class FileOrLiteralAction(argparse.Action):
-    """Allows '@file' style argument expansion with '+' prefix."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Expands file arguments and appends them to the namespace."""
-        current_values = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        extra_values = []
-        err_prefix = f"{option_string or self.dest}: "
-        for value in values:
-            if not value.startswith("+"):
-                extra_values.append(value)
-            else:
-                path = value[1:]
-                validate_no_argument_file(path, namespace, err_prefix=err_prefix, parser=parser)
-                if "bzfs_argument_file" not in os.path.basename(path):
-                    parser.error(f"{err_prefix}basename must contain substring 'bzfs_argument_file': {path}")
-                try:
-                    with open_nofollow(path, "r", encoding="utf-8") as fd:
-                        for line in fd.read().splitlines():
-                            if line.startswith("#") or not line.strip():
-                                continue  # skip comment lines and empty lines
-                            extra_values.append(line)
-                except OSError as e:
-                    parser.error(f"{err_prefix}{e}")
-        current_values += extra_values
-        setattr(namespace, self.dest, current_values)
-        if self.dest in snapshot_regex_filter_names:
-            add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
-
-
-#############################################################################
-class IncludeSnapshotPlanAction(argparse.Action):
-    """Parses include plan dictionaries from the command line."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Builds a list of snapshot filters from a serialized plan."""
-        opts = getattr(namespace, self.dest, None)
-        opts = [] if opts is None else opts
-        # The bzfs_include_snapshot_plan_excludes_outdated_snapshots env var flag is a work-around for (rare) replication
-        # situations where a common snapshot cannot otherwise be found because bookmarks are disabled and a common
-        # snapshot is actually available but not included by the --include-snapshot-plan policy chosen by the user, and the
-        # user cannot change the content of the --include-snapshot-plan for some reason. The flag makes replication work even
-        # in this scenario, at the expense of including (and thus replicating) old snapshots that will immediately be deleted
-        # on the destination by the next pruning action. In a proper production setup, it should never be necessary to set
-        # the flag to 'False'.
-        include_snapshot_times_and_ranks = getenv_bool("include_snapshot_plan_excludes_outdated_snapshots", True)
-        if not self._add_opts(opts, include_snapshot_times_and_ranks, parser, values, option_string=option_string):
-            opts += ["--new-snapshot-filter-group", "--include-snapshot-regex=!.*"]
-        setattr(namespace, self.dest, opts)
-
-    def _add_opts(
-        self,
-        opts: list[str],
-        include_snapshot_times_and_ranks: bool,
-        parser: argparse.ArgumentParser,
-        values: str,
-        option_string: str | None = None,
-    ) -> bool:
-        """Generates extra options to be parsed later during second parse_args() pass, within run_main()"""
-        xperiods = SnapshotPeriods()
-        has_at_least_one_filter_clause = False
-        for org, target_periods in ast.literal_eval(values).items():
-            prefix = re.escape(nprefix(org))
-            for target, periods in target_periods.items():
-                infix = re.escape(ninfix(target)) if target else year_with_four_digits_regex.pattern  # disambiguate
-                for period_unit, period_amount in periods.items():  # e.g. period_unit can be "10minutely" or "minutely"
-                    if not isinstance(period_amount, int) or period_amount < 0:
-                        parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
-                    suffix = re.escape(nsuffix(period_unit))
-                    regex = f"{prefix}{infix}.*{suffix}"
-                    opts += ["--new-snapshot-filter-group", f"--include-snapshot-regex={regex}"]
-                    if include_snapshot_times_and_ranks:
-                        duration_amount, duration_unit = xperiods.suffix_to_duration0(period_unit)  # --> 10, "minutely"
-                        duration_unit_label = xperiods.period_labels.get(duration_unit)  # duration_unit_label = "minutes"
-                        opts += [
-                            "--include-snapshot-times-and-ranks",
-                            (
-                                "notime"
-                                if duration_unit_label is None or duration_amount * period_amount == 0
-                                else f"{duration_amount * period_amount}{duration_unit_label}ago..anytime"
-                            ),
-                            f"latest{period_amount}",
-                        ]
-                    has_at_least_one_filter_clause = True
-        return has_at_least_one_filter_clause
-
-
-#############################################################################
-class DeleteDstSnapshotsExceptPlanAction(IncludeSnapshotPlanAction):
-    """Specialized include plan used to decide which dst snapshots to keep."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Parses plan while preventing disasters."""
-        opts = getattr(namespace, self.dest, None)
-        opts = [] if opts is None else opts
-        opts += ["--delete-dst-snapshots-except"]
-        if not self._add_opts(opts, True, parser, values, option_string=option_string):
-            parser.error(
-                f"{option_string}: Cowardly refusing to delete all snapshots on "
-                f"--delete-dst-snapshots-except-plan='{values}' (which means 'retain no snapshots' aka "
-                "'delete all snapshots'). Assuming this is an unintended pilot error rather than intended carnage. "
-                "Aborting. If this is really what is intended, use `--delete-dst-snapshots --include-snapshot-regex=.*` "
-                "instead to force the deletion."
-            )
-        setattr(namespace, self.dest, opts)
-
-
-#############################################################################
-class TimeRangeAndRankRangeAction(argparse.Action):
-    """Parses --include-snapshot-times-and-ranks option values."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Converts user-supplied time and rank ranges into snapshot filters."""
-
-        def parse_time(time_spec: str) -> int | timedelta | None:
-            time_spec = time_spec.strip()
-            if time_spec == "*" or time_spec == "anytime":
-                return None
-            if time_spec.isdigit():
-                return int(time_spec)  # Input is a Unix time in integer seconds
-            try:
-                return timedelta(milliseconds=parse_duration_to_milliseconds(time_spec, regex_suffix=r"\s*ago"))
-            except ValueError:
-                try:  # If it's not a duration, try parsing as an ISO 8601 datetime
-                    return unixtime_fromisoformat(time_spec)
-                except ValueError:
-                    parser.error(f"{option_string}: Invalid duration, Unix time, or ISO 8601 datetime: {time_spec}")
-
-        assert isinstance(values, list)
-        assert len(values) > 0
-        value = values[0].strip()
-        if value == "notime":
-            value = "0..0"
-        if ".." not in value:
-            parser.error(f"{option_string}: Invalid time range: Missing '..' separator: {value}")
-        timerange_specs = [parse_time(time_spec) for time_spec in value.split("..", 1)]
-        rankranges = self.parse_rankranges(parser, values[1:], option_string=option_string)
-        setattr(namespace, self.dest, [timerange_specs] + rankranges)  # for testing only
-        timerange = self.get_include_snapshot_times(timerange_specs)
-        add_time_and_rank_snapshot_filter(namespace, self.dest, timerange, rankranges)
-
-    @staticmethod
-    def get_include_snapshot_times(times: list[timedelta | int | None]) -> UnixTimeRange:
-        """Converts start and end times to UnixTimeRange for filtering."""
-
-        def utc_unix_time_in_seconds(time_spec: timedelta | int | None, default: int) -> timedelta | int:
-            if isinstance(time_spec, timedelta):
-                return time_spec
-            if isinstance(time_spec, int):
-                return int(time_spec)
-            return default
-
-        lo, hi = times
-        if lo is None and hi is None:
-            return None
-        lo = utc_unix_time_in_seconds(lo, default=0)
-        hi = utc_unix_time_in_seconds(hi, default=unixtime_infinity_secs)
-        if isinstance(lo, int) and isinstance(hi, int):
-            return (lo, hi) if lo <= hi else (hi, lo)
-        return lo, hi
-
-    @staticmethod
-    def parse_rankranges(parser: argparse.ArgumentParser, values: Any, option_string: str | None = None) -> list[RankRange]:
-        """Parses rank range strings like 'latest 3..latest 5' into tuples."""
-
-        def parse_rank(spec: str) -> tuple[bool, str, int, bool]:
-            spec = spec.strip()
-            if not (match := re.fullmatch(r"(all\s*except\s*)?(oldest|latest)\s*(\d+)%?", spec)):
-                parser.error(f"{option_string}: Invalid rank format: {spec}")
-            assert match
-            is_except = bool(match.group(1))
-            kind = match.group(2)
-            num = int(match.group(3))
-            is_percent = spec.endswith("%")
-            if is_percent and num > 100:
-                parser.error(f"{option_string}: Invalid rank: Percent must not be greater than 100: {spec}")
-            return is_except, kind, num, is_percent
-
-        rankranges = []
-        for value in values:
-            value = value.strip()
-            if ".." in value:
-                lo_split, hi_split = value.split("..", 1)
-                lo = parse_rank(lo_split)
-                hi = parse_rank(hi_split)
-                if lo[0] or hi[0]:
-                    # Example: 'all except latest 90..except latest 95' or 'all except latest 90..latest 95'
-                    parser.error(f"{option_string}: Invalid rank range: {value}")
-                if lo[1] != hi[1]:
-                    # Example: 'latest10..oldest10' and 'oldest10..latest10' may be somewhat unambigous if there are 40
-                    # input snapshots, but they are tricky/not well-defined if there are less than 20 input snapshots.
-                    parser.error(f"{option_string}: Ambiguous rank range: Must not compare oldest with latest: {value}")
-            else:
-                hi = parse_rank(value)
-                is_except, kind, num, is_percent = hi
-                if is_except:
-                    if is_percent:
-                        # 'all except latest 10%' aka 'oldest 90%' aka 'oldest 0..oldest 90%'
-                        # 'all except oldest 10%' aka 'latest 90%' aka 'latest 0..oldest 90%'
-                        negated_kind = "oldest" if kind == "latest" else "latest"
-                        lo = parse_rank(f"{negated_kind}0")
-                        hi = parse_rank(f"{negated_kind}{100-num}%")
-                    else:
-                        # 'all except latest 90' aka 'latest 90..latest 100%'
-                        # 'all except oldest 90' aka 'oldest 90..oldest 100%'
-                        lo = parse_rank(f"{kind}{num}")
-                        hi = parse_rank(f"{kind}100%")
-                else:
-                    # 'latest 90' aka 'latest 0..latest 90'
-                    lo = parse_rank(f"{kind}0")
-            rankranges.append((lo[1:], hi[1:]))
-        return rankranges
-
-
-#############################################################################
-@dataclass(order=True)
-class SnapshotFilter:
-    """Represents a snapshot filter with matching options and time range."""
-
-    name: str
-    timerange: UnixTimeRange
-    options: Any = field(compare=False, default=None)
-
-
-def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
-    """Appends snapshot filter to namespace list, creating the list if absent."""
-    if not hasattr(args, snapshot_filters_var):
-        args.snapshot_filters_var = [[]]
-    args.snapshot_filters_var[-1].append(_filter)
-
-
-def add_time_and_rank_snapshot_filter(
-    args: argparse.Namespace, dst: str, timerange: UnixTimeRange, rankranges: list[RankRange]
-) -> None:
-    """Creates and adds a SnapshotFilter using timerange and rank ranges."""
-    if timerange is None or len(rankranges) == 0 or any(rankrange[0] == rankrange[1] for rankrange in rankranges):
-        add_snapshot_filter(args, SnapshotFilter("include_snapshot_times", timerange, None))
-    else:
-        assert timerange is not None
-        add_snapshot_filter(args, SnapshotFilter(dst, timerange, rankranges))
-
-
-def has_timerange_filter(snapshot_filters: list[list[SnapshotFilter]]) -> bool:
-    """Interacts with add_time_and_rank_snapshot_filter() and optimize_snapshot_filters()"""
-    return any(f.timerange is not None for snapshot_filter in snapshot_filters for f in snapshot_filter)
-
-
-def optimize_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> list[SnapshotFilter]:
-    """Not intended to be a full query execution plan optimizer, but we still apply some basic plan optimizations."""
-    merge_adjacent_snapshot_filters(snapshot_filters)
-    merge_adjacent_snapshot_regexes(snapshot_filters)
-    snapshot_filters = [f for f in snapshot_filters if f.timerange or f.options]  # drop noop --include-snapshot-times
-    reorder_snapshot_time_filters(snapshot_filters)
-    return snapshot_filters
-
-
-def merge_adjacent_snapshot_filters(snapshot_filters: list[SnapshotFilter]) -> None:
-    """Merges filter operators of the same kind if they are next to each other and carry an option list, for example
-    --include-snapshot-ranks and --include-snapshot-regex and --exclude-snapshot-regex.  This improves execution perf
-    and makes handling easier in later stages.
-    Example: merges --include-snapshot-times-and-ranks 0..9 oldest10% --include-snapshot-times-and-ranks 0..9 latest20%
-    into --include-snapshot-times-and-ranks 0..9 oldest10% latest20%"""
-    i = len(snapshot_filters) - 1
-    while i >= 0:
-        filter_i = snapshot_filters[i]
-        if isinstance(filter_i.options, list):
-            j = i - 1
-            if j >= 0 and snapshot_filters[j] == filter_i:
-                lst = snapshot_filters[j].options
-                assert isinstance(lst, list)
-                lst += filter_i.options
-                snapshot_filters.pop(i)
-        i -= 1
-
-
-def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> None:
-    """Combine consecutive regex filters of the same type for efficiency."""
-    # Merge regex filter operators of the same kind as long as they are within the same group, aka as long as they
-    # are not separated by a non-regex filter. This improves execution perf and makes handling easier in later stages.
-    # Example: --include-snapshot-regex .*daily --exclude-snapshot-regex .*weekly --include-snapshot-regex .*hourly
-    # --exclude-snapshot-regex .*monthly
-    # gets merged into the following:
-    # --include-snapshot-regex .*daily .*hourly --exclude-snapshot-regex .*weekly .*monthly
-    i = len(snapshot_filters) - 1
-    while i >= 0:
-        filter_i = snapshot_filters[i]
-        if filter_i.name in snapshot_regex_filter_names:
-            assert isinstance(filter_i.options, list)
-            j = i - 1
-            while j >= 0 and snapshot_filters[j].name in snapshot_regex_filter_names:
-                if snapshot_filters[j].name == filter_i.name:
-                    lst = snapshot_filters[j].options
-                    assert isinstance(lst, list)
-                    lst += filter_i.options
-                    snapshot_filters.pop(i)
-                    break
-                j -= 1
-        i -= 1
-
-    # Merge --include-snapshot-regex and --exclude-snapshot-regex filters that are part of the same group (i.e. next
-    # to each other) into a single combined filter operator that contains the info of both, and hence all info for the
-    # group, which makes handling easier in later stages.
-    # Example: --include-snapshot-regex .*daily .*hourly --exclude-snapshot-regex .*weekly .*monthly
-    # gets merged into the following: --snapshot-regex(excludes=[.*weekly, .*monthly], includes=[.*daily, .*hourly])
-    i = len(snapshot_filters) - 1
-    while i >= 0:
-        filter_i = snapshot_filters[i]
-        name = filter_i.name
-        if name in snapshot_regex_filter_names:
-            j = i - 1
-            if j >= 0 and snapshot_filters[j].name in snapshot_regex_filter_names:
-                filter_j = snapshot_filters[j]
-                assert filter_j.name != name
-                snapshot_filters.pop(i)
-                i -= 1
-            else:
-                name_j = next(iter(snapshot_regex_filter_names.difference({name})))
-                filter_j = SnapshotFilter(name_j, None, [])
-            sorted_filters = sorted([filter_i, filter_j])
-            exclude_regexes, include_regexes = sorted_filters[0].options, sorted_filters[1].options
-            snapshot_filters[i] = SnapshotFilter(snapshot_regex_filter_name, None, (exclude_regexes, include_regexes))
-        i -= 1
-
-
-def reorder_snapshot_time_filters(snapshot_filters: list[SnapshotFilter]) -> None:
-    """In an execution plan that contains filter operators based on sort order (the --include-snapshot-times-and-ranks
-    operator with non-empty ranks), filters cannot freely be reordered without violating correctness, but they can still be
-    partially reordered for better execution performance. The filter list is partitioned into sections such that sections are
-    separated by --include-snapshot-times-and-ranks operators with non-empty ranks. Within each section, we move.
-
-    include_snapshot_times operators aka --include-snapshot-times-and-ranks operators with empty ranks before
-    --include/exclude-snapshot-regex operators because the former involves fast integer comparisons and the latter involves
-    more expensive regex matching.
-
-    Example: reorders --include-snapshot-regex .*daily --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 into
-    --include-snapshot-times-and-ranks 2024-01-01..2024-04-01 --include-snapshot-regex .*daily
-    """
-
-    def reorder_time_filters_within_section(i: int, j: int) -> None:
-        while j > i:
-            filter_j = snapshot_filters[j]
-            if filter_j.name == "include_snapshot_times":
-                snapshot_filters.pop(j)
-                snapshot_filters.insert(i + 1, filter_j)
-            j -= 1
-
-    i = len(snapshot_filters) - 1
-    j = i
-    while i >= 0:
-        name = snapshot_filters[i].name
-        if name == "include_snapshot_times_and_ranks":
-            reorder_time_filters_within_section(i, j)
-            j = i - 1
-        i -= 1
-    reorder_time_filters_within_section(i, j)
-
-
-#############################################################################
-class LogConfigVariablesAction(argparse.Action):
-    """Collects --log-config-var NAME:VALUE pairs for later substitution."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Validates NAME:VALUE entries and accumulate them."""
-        current_values = getattr(namespace, self.dest, None)
-        if current_values is None:
-            current_values = []
-        for variable in values:
-            error_msg = validate_log_config_variable(variable)
-            if error_msg:
-                parser.error(error_msg)
-            current_values.append(variable)
-        setattr(namespace, self.dest, current_values)
-
-
-#############################################################################
-class CheckPercentRange(CheckRange):
-    """Argparse action verifying percentages fall within 0-100."""
-
-    def __call__(
-        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: Any, option_string: str | None = None
-    ) -> None:
-        """Normalizes integer or percent values and store them."""
-        assert isinstance(values, str)
-        original = values
-        values = values.strip()
-        is_percent = values.endswith("%")
-        if is_percent:
-            values = values[0:-1]
-        try:
-            values = float(values)
-        except ValueError:
-            parser.error(f"{option_string}: Invalid percentage or number: {original}")
-        super().__call__(parser, namespace, values, option_string=option_string)
-        setattr(namespace, self.dest, (getattr(namespace, self.dest), is_percent))
-
-
-#############################################################################
 if __name__ == "__main__":
     main()

@@ -47,6 +47,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 # constants:
 snapshot_regex_filter_name = "snapshot_regex"
+snapshot_regex_filter_names = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 
 
 UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
