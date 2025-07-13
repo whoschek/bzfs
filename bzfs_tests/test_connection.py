@@ -335,7 +335,7 @@ class TestConnectionPool(AbstractTestCase):
 
 
 def make_fake_params() -> bzfs.Params:
-    mock = MagicMock(bzfs.Params)
+    mock = MagicMock(spec=bzfs.Params)
     mock.log = logging.getLogger(__name__)
     mock.ssh_program = "ssh"
     mock.connection_pools = {}

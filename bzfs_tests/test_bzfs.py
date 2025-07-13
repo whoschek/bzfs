@@ -271,7 +271,7 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(([], [cr, mp]), params.fix_recv_opts([], frozenset([mp, cr])))
 
     def test_xprint(self) -> None:
-        log = MagicMock(logging.Logger)
+        log = MagicMock(spec=logging.Logger)
         bzfs_main.utils.xprint(log, "foo")
         bzfs_main.utils.xprint(log, "foo", run=True)
         bzfs_main.utils.xprint(log, "foo", run=False)

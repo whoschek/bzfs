@@ -69,7 +69,7 @@ from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
 PROG_NAME = "bzfs_jobrunner"
 SRC_MAGIC_SUBSTITUTION_TOKEN = "^SRC_HOST"  # noqa: S105
 DST_MAGIC_SUBSTITUTION_TOKEN = "^DST_HOST"  # noqa: S105
-DST = ","
+SEP = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -542,7 +542,7 @@ class Job:
 
         def npad() -> str:
             """Returns standardized subjob count suffix."""
-            return DST + zero_pad(len(subjobs))
+            return SEP + zero_pad(len(subjobs))
 
         def update_subjob_name(tag: str) -> str:
             """Derives next subjob name based on ``tag`` and index ``j``."""
@@ -582,9 +582,9 @@ class Job:
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={PROG_NAME}{DST}create-src-snapshots{DST}"]
-                opts += [f"--log-file-infix={DST}{job_id}"]
-                opts += [f"--log-file-suffix={DST}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{DST}"]
+                opts += [f"--log-file-prefix={PROG_NAME}{SEP}create-src-snapshots{SEP}"]
+                opts += [f"--log-file-infix={SEP}{job_id}"]
+                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{SEP}"]
                 self.add_ssh_opts(
                     opts, ssh_src_user=ssh_src_user, ssh_src_port=ssh_src_port, ssh_src_config_file=ssh_src_config_file
                 )
@@ -627,9 +627,9 @@ class Job:
                 opts += [
                     "--skip-replication",
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
-                    f"--log-file-prefix={PROG_NAME}{DST}{tag}{DST}",
-                    f"--log-file-infix={DST}{job_id}",
-                    f"--log-file-suffix={DST}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{DST}",
+                    f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}",
+                    f"--log-file-infix={SEP}{job_id}",
+                    f"--log-file-suffix={SEP}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{SEP}",
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
@@ -661,9 +661,9 @@ class Job:
                     }
                     opts = ["--delete-dst-snapshots", "--skip-replication"]
                     opts += [f"--delete-dst-snapshots-except-plan={curr_dst_snapshot_plan}"]
-                    opts += [f"--log-file-prefix={PROG_NAME}{DST}{marker}{DST}"]
-                    opts += [f"--log-file-infix={DST}{job_id}"]
-                    opts += [f"--log-file-suffix={DST}{job_run}{npad()}{log_suffix(lhn, src_host, dst_hostname)}{DST}"]
+                    opts += [f"--log-file-prefix={PROG_NAME}{SEP}{marker}{SEP}"]
+                    opts += [f"--log-file-infix={SEP}{job_id}"]
+                    opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{log_suffix(lhn, src_host, dst_hostname)}{SEP}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
@@ -679,9 +679,9 @@ class Job:
             def monitor_snapshots_opts(tag: str, monitor_plan: dict, logsuffix: str) -> list[str]:
                 """Returns monitor subjob options for ``tag`` and ``monitor_plan``."""
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={PROG_NAME}{DST}{tag}{DST}"]
-                opts += [f"--log-file-infix={DST}{job_id}"]
-                opts += [f"--log-file-suffix={DST}{job_run}{npad()}{logsuffix}{DST}"]
+                opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
+                opts += [f"--log-file-infix={SEP}{job_id}"]
+                opts += [f"--log-file-suffix={SEP}{job_run}{npad()}{logsuffix}{SEP}"]
                 opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
                 return opts
 
@@ -789,9 +789,9 @@ class Job:
         opts = []
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
-            opts += [f"--log-file-prefix={PROG_NAME}{DST}{tag}{DST}"]
-            opts += [f"--log-file-infix={DST}{job_id}"]
-            opts += [f"--log-file-suffix={DST}{job_run}{log_suffix(localhostname, src_hostname, dst_hostname)}{DST}"]
+            opts += [f"--log-file-prefix={PROG_NAME}{SEP}{tag}{SEP}"]
+            opts += [f"--log-file-infix={SEP}{job_id}"]
+            opts += [f"--log-file-suffix={SEP}{job_run}{log_suffix(localhostname, src_hostname, dst_hostname)}{SEP}"]
         return opts
 
     def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -1191,7 +1191,7 @@ def flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
 
 def sanitize(filename: str) -> str:
     """Replaces potentially problematic characters in ``filename`` with '!'."""
-    for s in (" ", "..", "/", "\\", DST):
+    for s in (" ", "..", "/", "\\", SEP):
         filename = filename.replace(s, "!")
     return filename
 
@@ -1199,7 +1199,7 @@ def sanitize(filename: str) -> str:
 def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     """Returns a log file suffix in a format that contains the given hostnames."""
     sanitized_dst_hostname = sanitize(dst_hostname) if dst_hostname else ""
-    return f"{DST}{sanitize(localhostname)}{DST}{sanitize(src_hostname)}{DST}{sanitized_dst_hostname}"
+    return f"{SEP}{sanitize(localhostname)}{SEP}{sanitize(src_hostname)}{SEP}{sanitized_dst_hostname}"
 
 
 def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:
