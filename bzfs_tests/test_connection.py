@@ -43,7 +43,7 @@ from bzfs_main.connection import (
     ConnectionPools,
 )
 from bzfs_main.retry import RetryableError
-from bzfs_main.utils import log_trace
+from bzfs_main.utils import LOG_TRACE
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
@@ -281,7 +281,7 @@ class TestConnectionPool(AbstractTestCase):
     def test_long_random_walk(self) -> None:
         log = logging.getLogger(bzfs.__name__)
         # loglevel = logging.DEBUG
-        loglevel = log_trace
+        loglevel = LOG_TRACE
         is_logging = log.isEnabledFor(loglevel)
         num_steps = 75 if self.is_unit_test or self.is_smoke_test or self.is_functional_test or self.is_adhoc_test else 1000
         log.info(f"num_random_steps: {num_steps}")

@@ -34,12 +34,12 @@ from typing import (
 )
 
 from bzfs_main.utils import (
+    LOG_STDERR,
+    LOG_STDOUT,
+    LOG_TRACE,
+    PROG_NAME,
     die,
-    log_stderr,
-    log_stdout,
-    log_trace,
     open_nofollow,
-    prog_name,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -74,8 +74,8 @@ def reset_logger() -> None:
 def get_logger(log_params: LogParams, args: argparse.Namespace, log: Logger | None = None) -> Logger:
     """Returns a logger configured from CLI arguments or an optional base logger."""
     add_trace_loglevel()
-    logging.addLevelName(log_stderr, "STDERR")
-    logging.addLevelName(log_stdout, "STDOUT")
+    logging.addLevelName(LOG_STDERR, "STDERR")
+    logging.addLevelName(LOG_STDOUT, "STDOUT")
 
     if log is not None:
         assert isinstance(log, Logger)
@@ -136,15 +136,15 @@ log_level_prefixes = {
     logging.WARNING: "[W]",
     logging.INFO: "[I]",
     logging.DEBUG: "[D]",
-    log_trace: "[T]",
+    LOG_TRACE: "[T]",
 }
 
 
 def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = None) -> logging.Formatter:
     """Returns a formatter for bzfs logs with optional prefix and column padding."""
     level_prefixes_ = log_level_prefixes
-    log_stderr_ = log_stderr
-    log_stdout_ = log_stdout
+    log_stderr_ = LOG_STDERR
+    log_stdout_ = LOG_STDOUT
     terminal_cols = [0 if log_params is None else None]  # 'None' indicates "configure value later"
 
     class DefaultLogFormatter(logging.Formatter):
@@ -222,7 +222,7 @@ def get_simple_logger(program: str) -> Logger:
 
 def add_trace_loglevel() -> None:
     """Registers a custom TRACE logging level with the standard python logging framework."""
-    logging.addLevelName(log_trace, "TRACE")
+    logging.addLevelName(LOG_TRACE, "TRACE")
 
 
 def get_syslog_address(address: str, log_syslog_socktype: str) -> tuple[str | tuple[str, int], socket.SocketKind | None]:
@@ -260,7 +260,7 @@ def get_dict_config_logger(log_params: LogParams, args: argparse.Namespace) -> L
     """Creates a logger from a JSON config file with variable substitution."""
     import json
 
-    prefix = prog_name + "."
+    prefix = PROG_NAME + "."
     log_config_vars = {
         prefix + "sub.logger": get_logger_subname(),
         prefix + "get_default_log_formatter": __name__ + ".get_default_log_formatter",

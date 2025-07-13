@@ -45,11 +45,11 @@ from bzfs_main.loggers import (
     validate_log_config_variable,
 )
 from bzfs_main.utils import (
-    die_status,
+    DIE_STATUS,
+    LOG_STDERR,
+    LOG_STDOUT,
+    LOG_TRACE,
     get_home_directory,
-    log_stderr,
-    log_stdout,
-    log_trace,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
@@ -68,7 +68,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_logdir_basename_prefix(self) -> None:
         """Basename of --log-dir must start with prefix 'bzfs-logs'."""
-        logdir = os.path.join(get_home_directory(), bzfs.log_dir_default + "-tmp")
+        logdir = os.path.join(get_home_directory(), bzfs.LOG_DIR_DEFAULT + "-tmp")
         try:
             LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
             self.assertTrue(os.path.exists(logdir))
@@ -85,12 +85,12 @@ class TestHelperFunctions(AbstractTestCase):
         with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmpdir:
             target = os.path.join(tmpdir, "target")
             os.mkdir(target)
-            link_path = os.path.join(tmpdir, bzfs.log_dir_default + "-link")
+            link_path = os.path.join(tmpdir, bzfs.LOG_DIR_DEFAULT + "-link")
             os.symlink(target, link_path)
             args = bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path])
             with self.assertRaises(SystemExit) as cm:
                 LogParams(args)
-            self.assertEqual(die_status, cm.exception.code)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn("--log-dir must not be a symlink", str(cm.exception))
 
     def test_get_logger_with_cleanup(self) -> None:
@@ -114,16 +114,16 @@ class TestHelperFunctions(AbstractTestCase):
         args = self.argparser_parse_args(args=["src", "dst"])
         log_params = LogParams(args)
         log = get_logger(log_params, args)
-        log.log(log_stderr, "%s", prefix + "bbbe1")
-        log.log(log_stdout, "%s", prefix + "bbbo1")
+        log.log(LOG_STDERR, "%s", prefix + "bbbe1")
+        log.log(LOG_STDOUT, "%s", prefix + "bbbo1")
         log.info("%s", prefix + "bbb3")
         log.setLevel(logging.WARNING)
-        log.log(log_stderr, "%s", prefix + "bbbe2")
-        log.log(log_stdout, "%s", prefix + "bbbo2")
+        log.log(LOG_STDERR, "%s", prefix + "bbbe2")
+        log.log(LOG_STDOUT, "%s", prefix + "bbbo2")
         log.info("%s", prefix + "bbb4")
-        log.log(log_trace, "%s", prefix + "bbb5")
-        log.setLevel(log_trace)
-        log.log(log_trace, "%s", prefix + "bbb6")
+        log.log(LOG_TRACE, "%s", prefix + "bbb5")
+        log.setLevel(LOG_TRACE)
+        log.log(LOG_TRACE, "%s", prefix + "bbb6")
         files = {os.path.abspath(log_params.log_file)}
         check(log, files)
 
@@ -320,7 +320,7 @@ class TestLogging(AbstractTestCase):
             # The fixed code should detect the disallowed callable and exit.
             with self.assertRaises(SystemExit) as cm:  # get_dict_config_logger() calls die(), which raises SystemExit.
                 get_dict_config_logger(lp, args)
-            self.assertEqual(cm.exception.code, die_status)
+            self.assertEqual(cm.exception.code, DIE_STATUS)
             self.assertIn("Disallowed callable 'os.system'", str(cm.exception))
             mock_system.assert_not_called()
 

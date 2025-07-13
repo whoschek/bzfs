@@ -45,6 +45,7 @@ from unittest.mock import (
 )
 
 from bzfs_main.utils import (
+    DESCENDANTS_RE_SUFFIX,
     SmallPriorityQueue,
     SnapshotPeriods,
     SynchronizedBool,
@@ -52,7 +53,6 @@ from bzfs_main.utils import (
     compile_regexes,
     current_datetime,
     cut,
-    descendants_re_suffix,
     drain,
     find_match,
     get_descendant_processes,
@@ -149,7 +149,7 @@ class TestHelperFunctions(AbstractTestCase):
         def assert_not_full_match(text: str, regex: str, re_suffix: str = "") -> None:
             _assert_full_match(text=text, regex=regex, re_suffix=re_suffix, expected=False)
 
-        re_suffix = descendants_re_suffix
+        re_suffix = DESCENDANTS_RE_SUFFIX
         assert_full_match("foo", "foo")
         assert_not_full_match("xfoo", "foo")
         assert_not_full_match("fooy", "foo")

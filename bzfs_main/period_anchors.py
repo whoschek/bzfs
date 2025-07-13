@@ -27,14 +27,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 # constants:
-metadata_month = {"min": 1, "max": 12, "help": "The month within a year"}
-metadata_weekday = {"min": 0, "max": 6, "help": "The weekday within a week: 0=Sunday, 1=Monday, ..., 6=Saturday"}
-metadata_day = {"min": 1, "max": 31, "help": "The day within a month"}
-metadata_hour = {"min": 0, "max": 23, "help": "The hour within a day"}
-metadata_minute = {"min": 0, "max": 59, "help": "The minute within an hour"}
-metadata_second = {"min": 0, "max": 59, "help": "The second within a minute"}
-metadata_millisecond = {"min": 0, "max": 999, "help": "The millisecond within a second"}
-metadata_microsecond = {"min": 0, "max": 999, "help": "The microsecond within a millisecond"}
+METADATA_MONTH = {"min": 1, "max": 12, "help": "The month within a year"}
+METADATA_WEEKDAY = {"min": 0, "max": 6, "help": "The weekday within a week: 0=Sunday, 1=Monday, ..., 6=Saturday"}
+METADATA_DAY = {"min": 1, "max": 31, "help": "The day within a month"}
+METADATA_HOUR = {"min": 0, "max": 23, "help": "The hour within a day"}
+METADATA_MINUTE = {"min": 0, "max": 59, "help": "The minute within an hour"}
+METADATA_SECOND = {"min": 0, "max": 59, "help": "The second within a minute"}
+METADATA_MILLISECOND = {"min": 0, "max": 999, "help": "The millisecond within a second"}
+METADATA_MICROSECOND = {"min": 0, "max": 999, "help": "The microsecond within a millisecond"}
 
 
 @dataclass(frozen=True)
@@ -44,42 +44,42 @@ class PeriodAnchors:
     # The anchors for a given duration unit are computed as follows:
     # yearly: Anchor(dt) = latest T where T <= dt and T == Start of January 1 of dt + anchor.yearly_* vars
     yearly_year: int = field(default=2025, metadata={"min": 1, "max": 9999, "help": "The anchor year of multi-year periods"})
-    yearly_month: int = field(default=1, metadata=metadata_month)  # 1 <= x <= 12
-    yearly_monthday: int = field(default=1, metadata=metadata_day)  # 1 <= x <= 31
-    yearly_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
-    yearly_minute: int = field(default=0, metadata=metadata_minute)  # 0 <= x <= 59
-    yearly_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
+    yearly_month: int = field(default=1, metadata=METADATA_MONTH)  # 1 <= x <= 12
+    yearly_monthday: int = field(default=1, metadata=METADATA_DAY)  # 1 <= x <= 31
+    yearly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
+    yearly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
+    yearly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
     # monthly: Anchor(dt) = latest T where T <= dt && T == Start of first day of month of dt + anchor.monthly_* vars
     monthly_month: int = field(default=1, metadata={"min": 1, "max": 12, "help": "The anchor month of multi-month periods"})
-    monthly_monthday: int = field(default=1, metadata=metadata_day)  # 1 <= x <= 31
-    monthly_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
-    monthly_minute: int = field(default=0, metadata=metadata_minute)  # 0 <= x <= 59
-    monthly_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
+    monthly_monthday: int = field(default=1, metadata=METADATA_DAY)  # 1 <= x <= 31
+    monthly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
+    monthly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
+    monthly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
     # weekly: Anchor(dt) = latest T where T <= dt && T == Latest midnight from Sunday to Monday of dt + anchor.weekly_* vars
-    weekly_weekday: int = field(default=0, metadata=metadata_weekday)  # 0 <= x <= 7
-    weekly_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
-    weekly_minute: int = field(default=0, metadata=metadata_minute)  # 0 <= x <= 59
-    weekly_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
+    weekly_weekday: int = field(default=0, metadata=METADATA_WEEKDAY)  # 0 <= x <= 7
+    weekly_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
+    weekly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
+    weekly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
     # daily: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.daily_* vars
-    daily_hour: int = field(default=0, metadata=metadata_hour)  # 0 <= x <= 23
-    daily_minute: int = field(default=0, metadata=metadata_minute)  # 0 <= x <= 59
-    daily_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
+    daily_hour: int = field(default=0, metadata=METADATA_HOUR)  # 0 <= x <= 23
+    daily_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
+    daily_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
     # hourly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.hourly_* vars
-    hourly_minute: int = field(default=0, metadata=metadata_minute)  # 0 <= x <= 59
-    hourly_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
+    hourly_minute: int = field(default=0, metadata=METADATA_MINUTE)  # 0 <= x <= 59
+    hourly_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
     # minutely: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.minutely_* vars
-    minutely_second: int = field(default=0, metadata=metadata_second)  # 0 <= x <= 59
+    minutely_second: int = field(default=0, metadata=METADATA_SECOND)  # 0 <= x <= 59
 
     # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.secondly_* vars
-    secondly_millisecond: int = field(default=0, metadata=metadata_millisecond)  # 0 <= x <= 999
+    secondly_millisecond: int = field(default=0, metadata=METADATA_MILLISECOND)  # 0 <= x <= 999
 
     # secondly: Anchor(dt) = latest T where T <= dt && T == Latest midnight of dt + anchor.millisecondly_* vars
-    millisecondly_microsecond: int = field(default=0, metadata=metadata_microsecond)  # 0 <= x <= 999
+    millisecondly_microsecond: int = field(default=0, metadata=METADATA_MICROSECOND)  # 0 <= x <= 999
 
     @staticmethod
     def parse(args: argparse.Namespace) -> "PeriodAnchors":

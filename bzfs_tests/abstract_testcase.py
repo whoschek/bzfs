@@ -26,10 +26,10 @@ import unittest
 from unittest.mock import MagicMock
 
 from bzfs_main.bzfs import (
+    LOG_DIR_DEFAULT,
     LogParams,
     Params,
     argument_parser,
-    log_dir_default,
 )
 from bzfs_main.utils import (
     get_home_directory,
@@ -52,7 +52,7 @@ class AbstractTestCase(unittest.TestCase):
     @staticmethod
     def argparser_parse_args(args: list[str]) -> argparse.Namespace:
         return argument_parser().parse_args(
-            args + ["--log-dir", os.path.join(get_home_directory(), log_dir_default + "-test")]
+            args + ["--log-dir", os.path.join(get_home_directory(), LOG_DIR_DEFAULT + "-test")]
         )
 
     @staticmethod

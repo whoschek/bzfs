@@ -34,20 +34,20 @@ from bzfs_main.connection import (
     try_ssh_command,
 )
 from bzfs_main.utils import (
+    LOG_TRACE,
+    PROG_NAME,
     die,
     list_formatter,
-    log_trace,
-    prog_name,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
     from bzfs_main.bzfs import Job, Params, Remote
 
 # constants:
-disable_prg = "-"
-dummy_dataset = "dummy"
-zfs_version_is_at_least_2_1_0 = "zfs>=2.1.0"
-zfs_version_is_at_least_2_2_0 = "zfs>=2.2.0"
+DISABLE_PRG = "-"
+DUMMY_DATASET = "dummy"
+ZFS_VERSION_IS_AT_LEAST_2_1_0 = "zfs>=2.1.0"
+ZFS_VERSION_IS_AT_LEAST_2_2_0 = "zfs>=2.2.0"
 
 
 #############################################################################
@@ -102,19 +102,19 @@ def detect_available_programs(job: Job) -> None:
             )
 
     locations = ["src", "dst", "local"]
-    if params.compression_program == disable_prg:
+    if params.compression_program == DISABLE_PRG:
         disable_program(p, "zstd", locations)
-    if params.mbuffer_program == disable_prg:
+    if params.mbuffer_program == DISABLE_PRG:
         disable_program(p, "mbuffer", locations)
-    if params.ps_program == disable_prg:
+    if params.ps_program == DISABLE_PRG:
         disable_program(p, "ps", locations)
-    if params.pv_program == disable_prg:
+    if params.pv_program == DISABLE_PRG:
         disable_program(p, "pv", locations)
-    if params.shell_program == disable_prg:
+    if params.shell_program == DISABLE_PRG:
         disable_program(p, "sh", locations)
-    if params.sudo_program == disable_prg:
+    if params.sudo_program == DISABLE_PRG:
         disable_program(p, "sudo", locations)
-    if params.zpool_program == disable_prg:
+    if params.zpool_program == DISABLE_PRG:
         disable_program(p, "zpool", locations)
 
     for key, programs in available_programs.items():
@@ -128,20 +128,20 @@ def detect_available_programs(job: Job) -> None:
                 programs.pop(program)
                 uname = program[len("uname-") :]
                 programs["uname"] = uname
-                log.log(log_trace, f"available_programs[{key}][uname]: %s", uname)
+                log.log(LOG_TRACE, f"available_programs[{key}][uname]: %s", uname)
                 programs["os"] = uname.split(" ")[0]  # Linux|FreeBSD|SunOS|Darwin
-                log.log(log_trace, f"available_programs[{key}][os]: %s", programs["os"])
+                log.log(LOG_TRACE, f"available_programs[{key}][os]: %s", programs["os"])
             elif program.startswith("default_shell-"):
                 programs.pop(program)
                 default_shell = program[len("default_shell-") :]
                 programs["default_shell"] = default_shell
-                log.log(log_trace, f"available_programs[{key}][default_shell]: %s", default_shell)
+                log.log(LOG_TRACE, f"available_programs[{key}][default_shell]: %s", default_shell)
                 validate_default_shell(default_shell, r)
             elif program.startswith("getconf_cpu_count-"):
                 programs.pop(program)
                 getconf_cpu_count = program[len("getconf_cpu_count-") :]
                 programs["getconf_cpu_count"] = getconf_cpu_count
-                log.log(log_trace, f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
+                log.log(LOG_TRACE, f"available_programs[{key}][getconf_cpu_count]: %s", getconf_cpu_count)
 
     for key, programs in available_programs.items():
         log.debug(f"available_programs[{key}]: %s", list_formatter(programs, separator=", "))
@@ -153,7 +153,7 @@ def detect_available_programs(job: Job) -> None:
     if (
         len(p.args.preserve_properties) > 0
         and any(prop in p.zfs_send_program_opts for prop in ["--props", "-p"])
-        and not p.is_program_available(zfs_version_is_at_least_2_2_0, p.dst.location)
+        and not p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, p.dst.location)
     ):
         die(
             "Cowardly refusing to proceed as --preserve-properties is unreliable on destination ZFS < 2.2.0 when using "
@@ -205,7 +205,7 @@ def detect_available_programs_remote(job: Job, remote: Remote, available_program
         # returns with non-zero status (sometimes = if the zfs kernel module is not loaded)
         # on Solaris, 'zfs --version' returns with non-zero status without printing useful info as the --version
         # option is not known there
-        lines = run_ssh_command(job, remote, log_trace, print_stderr=False, cmd=[p.zfs_program, "--version"])
+        lines = run_ssh_command(job, remote, LOG_TRACE, print_stderr=False, cmd=[p.zfs_program, "--version"])
         assert lines
     except (FileNotFoundError, PermissionError):  # location is local and program file was not found
         die(f"{p.zfs_program} CLI is not available on {location} host: {ssh_user_host or 'localhost'}")
@@ -227,15 +227,15 @@ def detect_available_programs_remote(job: Job, remote: Remote, available_program
         version = match.group(1)
         available_programs[location]["zfs"] = version
         if is_version_at_least(version, "2.1.0"):
-            available_programs[location][zfs_version_is_at_least_2_1_0] = True
+            available_programs[location][ZFS_VERSION_IS_AT_LEAST_2_1_0] = True
         if is_version_at_least(version, "2.2.0"):
-            available_programs[location][zfs_version_is_at_least_2_2_0] = True
-    log.log(log_trace, f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
+            available_programs[location][ZFS_VERSION_IS_AT_LEAST_2_2_0] = True
+    log.log(LOG_TRACE, f"available_programs[{location}][zfs]: %s", available_programs[location]["zfs"])
 
-    if p.shell_program != disable_prg:
+    if p.shell_program != DISABLE_PRG:
         try:
             cmd = [p.shell_program, "-c", find_available_programs(p)]
-            available_programs[location].update(dict.fromkeys(run_ssh_command(job, remote, log_trace, cmd=cmd).splitlines()))
+            available_programs[location].update(dict.fromkeys(run_ssh_command(job, remote, LOG_TRACE, cmd=cmd).splitlines()))
             return
         except (FileNotFoundError, PermissionError) as e:  # location is local and shell program file was not found
             if e.filename != p.shell_program:
@@ -260,7 +260,7 @@ def is_solaris_zfs_location(p: Params, location: str) -> bool:
 
 def is_dummy(r: Remote) -> bool:
     """Returns True if ``remote`` refers to the synthetic dummy dataset."""
-    return r.root_dataset == dummy_dataset
+    return r.root_dataset == DUMMY_DATASET
 
 
 def detect_zpool_features(job: Job, remote: Remote) -> None:
@@ -273,10 +273,10 @@ def detect_zpool_features(job: Job, remote: Remote) -> None:
     if is_dummy(r):
         params.zpool_features[loc] = {}
         return
-    if params.zpool_program != disable_prg:
+    if params.zpool_program != DISABLE_PRG:
         cmd = params.split_args(f"{params.zpool_program} get -Hp -o property,value all", r.pool)
         try:
-            lines = run_ssh_command(job, remote, log_trace, check=False, cmd=cmd).splitlines()
+            lines = run_ssh_command(job, remote, LOG_TRACE, check=False, cmd=cmd).splitlines()
         except (FileNotFoundError, PermissionError) as e:
             if e.filename != params.zpool_program:
                 raise
@@ -286,7 +286,7 @@ def detect_zpool_features(job: Job, remote: Remote) -> None:
             features = {k: v for k, v in props.items() if k.startswith("feature@") or k == "delegation"}
     if len(lines) == 0:
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem -Hp -o name -s name", r.pool)
-        if try_ssh_command(job, remote, log_trace, cmd=cmd) is None:
+        if try_ssh_command(job, remote, LOG_TRACE, cmd=cmd) is None:
             die(f"Pool does not exist for {loc} dataset: {r.basis_root_dataset}. Manually create the pool first!")
     params.zpool_features[loc] = features
 
@@ -307,7 +307,7 @@ def is_caching_snapshots(p: Params, remote: Remote) -> bool:
     """Returns True if snapshot caching is supported and enabled on ``remote``."""
     return (
         p.is_caching_snapshots
-        and p.is_program_available(zfs_version_is_at_least_2_2_0, remote.location)
+        and p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, remote.location)
         and is_zpool_feature_enabled_or_active(p, remote, "feature@extensible_dataset")
     )
 
@@ -322,7 +322,7 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
     if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
-            f"Cowardly refusing to proceed because {prog_name} is not compatible with csh-style quoting of special "
+            f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "
             f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
             f"the default shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
             "chsh -s /bin/sh YOURUSERNAME"

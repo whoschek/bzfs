@@ -35,7 +35,7 @@ from typing import (
 from unittest.mock import MagicMock, patch
 
 from bzfs_main import bzfs, progress_reporter
-from bzfs_main.progress_reporter import ProgressReporter, count_num_bytes_transferred_by_zfs_send, pv_file_thread_separator
+from bzfs_main.progress_reporter import PV_FILE_THREAD_SEPARATOR, ProgressReporter, count_num_bytes_transferred_by_zfs_send
 from bzfs_main.utils import tail
 from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.test_utils import stop_on_failure_subtest
@@ -65,7 +65,7 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertEqual(round(4.12 * 1024), pv_size_to_bytes("4.12 KiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46,2GiB"))
         self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46.2GiB"))
-        self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46" + progress_reporter.arabic_decimal_separator + "2GiB"))
+        self.assertEqual(round(46.2 * 1024**3), pv_size_to_bytes("46" + progress_reporter.ARABIC_DECIMAL_SEPARATOR + "2GiB"))
         self.assertEqual(2 * 1024**2, pv_size_to_bytes("2 MiB"))
         self.assertEqual(1000**2, pv_size_to_bytes("1 MB"))
         self.assertEqual(1024**3, pv_size_to_bytes("1 GiB"))
@@ -106,7 +106,7 @@ class TestHelperFunctions(AbstractTestCase):
             with stop_on_failure_subtest(i=i):
                 pv1_fd, pv1 = tempfile.mkstemp(prefix="test_bzfs.test_count_num_byte", suffix=".pv")
                 os.write(pv1_fd, ": 800B foo".encode("utf-8"))
-                pv2 = pv1 + pv_file_thread_separator + "001"
+                pv2 = pv1 + PV_FILE_THREAD_SEPARATOR + "001"
                 with open(pv2, "w", encoding="utf-8") as fd:
                     fd.write("1 KB\r\n")
                     fd.write("2 KiB:20 KB\r")
@@ -114,7 +114,7 @@ class TestHelperFunctions(AbstractTestCase):
                     fd.write("4 KiB:4000 KB\r")
                     fd.write("4 KiB:50000 KB\r")
                     fd.write("4 KiB:600000 KB\r" + ("\n" if i == 0 else ""))
-                pv3 = pv1 + pv_file_thread_separator + "002"
+                pv3 = pv1 + PV_FILE_THREAD_SEPARATOR + "002"
                 os.makedirs(pv3, exist_ok=True)
                 try:
                     num_bytes = count_num_bytes_transferred_by_zfs_send(pv1)

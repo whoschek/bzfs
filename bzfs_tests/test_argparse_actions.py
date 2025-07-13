@@ -24,9 +24,8 @@ from bzfs_main import argparse_actions
 from bzfs_main.check_range import CheckRange
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
+
 ###############################################################################
-
-
 def suite() -> unittest.TestSuite:
     test_cases = [
         TestDatasetPairsAction,
@@ -161,11 +160,11 @@ class TestNewSnapshotFilterGroupAction(AbstractTestCase):
 
     def test_basic0(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs_main.utils.snapshot_filters_var))
+        self.assertListEqual([[]], getattr(args, bzfs_main.utils.SNAPSHOT_FILTERS_VAR))
 
     def test_basic1(self) -> None:
         args = self.parser.parse_args(["--new-snapshot-filter-group", "--new-snapshot-filter-group"])
-        self.assertListEqual([[]], getattr(args, bzfs_main.utils.snapshot_filters_var))
+        self.assertListEqual([[]], getattr(args, bzfs_main.utils.SNAPSHOT_FILTERS_VAR))
 
 
 ###############################################################################

@@ -30,7 +30,7 @@ from typing import Union, cast
 from unittest.mock import MagicMock, patch
 
 from bzfs_main import bzfs_jobrunner
-from bzfs_main.utils import die_status
+from bzfs_main.utils import DIE_STATUS
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
@@ -208,7 +208,7 @@ class TestValidation(AbstractTestCase):
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
         base_argv = [
-            bzfs_jobrunner.prog_name,
+            bzfs_jobrunner.PROG_NAME,
             "--job-id=test",
             "--root-dataset-pairs",
             "tank/data",
@@ -241,7 +241,7 @@ class TestValidation(AbstractTestCase):
         with patch("sys.argv", base_argv):  # No --src-host filter
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(base_argv)
-            self.assertEqual(die_status, cm.exception.code)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
 
     def test_multisource_substitution_token_validation_passes_safe_config(self) -> None:
@@ -251,7 +251,7 @@ class TestValidation(AbstractTestCase):
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITH ^SRC_HOST
         base_argv_safe = [
-            bzfs_jobrunner.prog_name,
+            bzfs_jobrunner.PROG_NAME,
             "--job-id=test",
             "--root-dataset-pairs",
             "tank/data",
@@ -288,7 +288,7 @@ class TestValidation(AbstractTestCase):
 
         # Config: 2 source hosts, 1 dest host, dst_root_datasets WITHOUT ^SRC_HOST
         base_argv = [
-            bzfs_jobrunner.prog_name,
+            bzfs_jobrunner.PROG_NAME,
             "--job-id=test",
             "--root-dataset-pairs",
             "tank/data",
@@ -306,7 +306,7 @@ class TestValidation(AbstractTestCase):
         with patch("sys.argv", argv_src1):
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(argv_src1)
-            self.assertEqual(die_status, cm.exception.code)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
 
         # Scenario 2: Run for srcB only, should fail.
@@ -314,7 +314,7 @@ class TestValidation(AbstractTestCase):
         with patch("sys.argv", argv_src2):
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(argv_src2)
-            self.assertEqual(die_status, cm.exception.code)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
 
         # Scenario 3: Run for both (no --src-host filter), should fail.
@@ -323,7 +323,7 @@ class TestValidation(AbstractTestCase):
         with patch("sys.argv", base_argv):  # No --src-host filter
             with self.assertRaises(SystemExit) as cm:
                 job.run_main(base_argv)
-            self.assertEqual(die_status, cm.exception.code)
+            self.assertEqual(DIE_STATUS, cm.exception.code)
             self.assertIn(expect_msg, str(cm.exception))
 
 
@@ -709,9 +709,9 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
 
     def test_generic_exception_returns_die_status(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs", "foo"]
-        mock_bzfs_run_main.side_effect = SystemExit(die_status)
+        mock_bzfs_run_main.side_effect = SystemExit(DIE_STATUS)
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
-        self.assertEqual(die_status, result)
+        self.assertEqual(DIE_STATUS, result)
 
     def test_single_element_cmd_edge(self, mock_bzfs_run_main: MagicMock) -> None:
         cmd = ["bzfs"]
@@ -723,7 +723,7 @@ class TestRunSubJobInCurrentThread(AbstractTestCase):
         cmd = ["bzfs", "foo"]
         mock_bzfs_run_main.side_effect = ValueError
         result = self.job.run_worker_job_in_current_thread(cmd.copy(), timeout_secs=None)
-        self.assertEqual(die_status, result)
+        self.assertEqual(DIE_STATUS, result)
 
 
 #############################################################################

@@ -33,21 +33,21 @@ from bzfs_main.connection import (
 )
 from bzfs_main.utils import (
     DONT_SKIP_DATASET,
+    LOG_DEBUG,
+    LOG_TRACE,
+    UNIX_TIME_INFINITY_SECS,
     RegexList,
     is_descendant,
     is_included,
-    log_debug,
-    log_trace,
     relativize_dataset,
-    unixtime_infinity_secs,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
     from bzfs_main.bzfs import Job, Remote
 
 # constants:
-snapshot_regex_filter_name = "snapshot_regex"
-snapshot_regex_filter_names = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
+SNAPSHOT_REGEX_FILTER_NAME = "snapshot_regex"
+SNAPSHOT_REGEX_FILTER_NAMES = frozenset({"include_snapshot_regex", "exclude_snapshot_regex"})
 
 
 UnixTimeRange = Optional[Tuple[Union[timedelta, int], Union[timedelta, int]]]  # Type alias
@@ -75,7 +75,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
             log.debug("Excluding b/c dataset regex: %s", dataset)
     if p.exclude_dataset_property:
         results = filter_datasets_by_exclude_property(job, remote, results)
-    is_debug = p.log.isEnabledFor(log_debug)
+    is_debug = p.log.isEnabledFor(LOG_DEBUG)
     for dataset in results:
         if is_debug:
             log.debug("Finally included %s dataset: %s", remote.location, dataset)
@@ -105,7 +105,7 @@ def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_dataset
         # TODO perf: on zfs >= 2.3 use json via zfs list -j to safely merge all zfs list's into one 'zfs list' call
         cmd = p.split_args(f"{p.zfs_program} list -t filesystem,volume -Hp -o {p.exclude_dataset_property}", dataset)
         job.maybe_inject_delete(remote, dataset=dataset, delete_trigger="zfs_list_exclude_property")
-        property_value = try_ssh_command(job, remote, log_trace, cmd=cmd)
+        property_value = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
         if property_value is None:
             log.warning(f"Third party deleted {remote.location}: %s", dataset)
             skip_dataset = dataset
@@ -159,7 +159,7 @@ def filter_snapshots(job: Job, basis_snapshots: list[str], all_except: bool = Fa
         snapshots = basis_snapshots
         for _filter in snapshot_filter:
             name = _filter.name
-            if name == snapshot_regex_filter_name:
+            if name == SNAPSHOT_REGEX_FILTER_NAME:
                 snapshots = filter_snapshots_by_regex(job, snapshots, regexes=_filter.options)
             elif name == "include_snapshot_times":
                 timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
@@ -172,7 +172,7 @@ def filter_snapshots(job: Job, basis_snapshots: list[str], all_except: bool = Fa
                 )
         resultset.update(snapshots)  # union
     snapshots = [line for line in basis_snapshots if "#" in line or ((line in resultset) != all_except)]
-    is_debug = log.isEnabledFor(log_debug)
+    is_debug = log.isEnabledFor(LOG_DEBUG)
     for snapshot in snapshots:
         if is_debug:
             log.debug("Finally included snapshot: %s", snapshot[snapshot.rindex("\t") + 1 :])
@@ -183,7 +183,7 @@ def filter_snapshots_by_regex(job: Job, snapshots: list[str], regexes: tuple[Reg
     """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
     exclude_snapshot_regexes, include_snapshot_regexes = regexes
     log = job.params.log
-    is_debug = log.isEnabledFor(log_debug)
+    is_debug = log.isEnabledFor(LOG_DEBUG)
     results = []
     for snapshot in snapshots:
         i = snapshot.find("@")  # snapshot separator
@@ -202,8 +202,8 @@ def filter_snapshots_by_regex(job: Job, snapshots: list[str], regexes: tuple[Reg
 def filter_snapshots_by_creation_time(job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange) -> list[str]:
     """Filters snapshots to those created within the specified time window."""
     log = job.params.log
-    is_debug = log.isEnabledFor(log_debug)
-    lo_snaptime, hi_snaptime = include_snapshot_times or (0, unixtime_infinity_secs)
+    is_debug = log.isEnabledFor(LOG_DEBUG)
+    lo_snaptime, hi_snaptime = include_snapshot_times or (0, UNIX_TIME_INFINITY_SECS)
     assert isinstance(lo_snaptime, int)
     assert isinstance(hi_snaptime, int)
     results = []
@@ -235,8 +235,8 @@ def filter_snapshots_by_creation_time_and_rank(
     assert isinstance(include_snapshot_ranks, list)
     assert len(include_snapshot_ranks) > 0
     log = job.params.log
-    is_debug = log.isEnabledFor(log_debug)
-    lo_time, hi_time = include_snapshot_times or (0, unixtime_infinity_secs)
+    is_debug = log.isEnabledFor(LOG_DEBUG)
+    lo_time, hi_time = include_snapshot_times or (0, UNIX_TIME_INFINITY_SECS)
     assert isinstance(lo_time, int)
     assert isinstance(hi_time, int)
     n = sum(1 for snapshot in snapshots if "@" in snapshot)
@@ -273,7 +273,7 @@ def filter_properties(
 ) -> dict[str, str | None]:
     """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
     log = job.params.log
-    is_debug = log.isEnabledFor(log_debug)
+    is_debug = log.isEnabledFor(LOG_DEBUG)
     results: dict[str, str | None] = {}
     for propname, propvalue in props.items():
         if is_included(propname, include_regexes, exclude_regexes):

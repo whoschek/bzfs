@@ -34,11 +34,11 @@ from bzfs_main.retry import (
     RetryableError,
 )
 from bzfs_main.utils import (
+    LOG_TRACE,
+    PROG_NAME,
     SmallPriorityQueue,
     die,
     list_formatter,
-    log_trace,
-    prog_name,
     stderr_to_str,
     subprocess_run,
     xprint,
@@ -151,9 +151,9 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connect
         # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
         t = timeout(job)
         if subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=t).returncode == 0:
-            log.log(log_trace, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
+            log.log(LOG_TRACE, "ssh connection is alive: %s", list_formatter(ssh_socket_cmd))
         else:  # ssh master is not alive; start a new master:
-            log.log(log_trace, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
+            log.log(LOG_TRACE, "ssh connection is not yet alive: %s", list_formatter(ssh_socket_cmd))
             control_persist_secs = job.control_persist_secs
             if "-v" in remote.ssh_extra_opts:
                 # Unfortunately, with `ssh -v` (debug mode), the ssh master won't background; instead it stays in the
@@ -161,13 +161,13 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connect
                 control_persist_secs = min(control_persist_secs, 1)  # tell ssh to block as briefly as possible (1 sec)
             ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
             ssh_socket_cmd += ["-M", f"-oControlPersist={control_persist_secs}s", remote.ssh_user_host, "exit"]
-            log.log(log_trace, "Executing: %s", list_formatter(ssh_socket_cmd))
+            log.log(LOG_TRACE, "Executing: %s", list_formatter(ssh_socket_cmd))
             process = subprocess_run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True, timeout=timeout(job))
             if process.returncode != 0:
                 log.error("%s", process.stderr.rstrip())
                 die(
                     f"Cannot ssh into remote host via '{' '.join(ssh_socket_cmd)}'. Fix ssh configuration "
-                    f"first, considering diagnostic log file output from running {prog_name} with: -v -v -v"
+                    f"first, considering diagnostic log file output from running {PROG_NAME} with: -v -v -v"
                 )
         conn.last_refresh_time = time.monotonic_ns()
 
@@ -180,7 +180,7 @@ def timeout(job: Job) -> float | None:
     delta_nanos = timeout_nanos - time.monotonic_ns()
     if delta_nanos <= 0:
         assert job.params.timeout_nanos is not None
-        raise subprocess.TimeoutExpired(prog_name + "_timeout", timeout=job.params.timeout_nanos / 1_000_000_000)
+        raise subprocess.TimeoutExpired(PROG_NAME + "_timeout", timeout=job.params.timeout_nanos / 1_000_000_000)
     return delta_nanos / 1_000_000_000  # seconds
 
 
@@ -248,10 +248,10 @@ class Connection:
         ssh_cmd = self.ssh_cmd
         if ssh_cmd:
             ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
-            p.log.log(log_trace, f"Executing {msg_prefix}: %s", shlex.join(ssh_socket_cmd))
+            p.log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_socket_cmd))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
-                p.log.log(log_trace, "%s", process.stderr.rstrip())
+                p.log.log(LOG_TRACE, "%s", process.stderr.rstrip())
 
 
 #############################################################################

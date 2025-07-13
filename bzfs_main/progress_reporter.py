@@ -42,9 +42,9 @@ from typing import (
 from bzfs_main.utils import InterruptibleSleep, human_readable_bytes, open_nofollow
 
 # constants
-pv_file_thread_separator = "_"
-arabic_decimal_separator = "\u066b"  # "٫"  # noqa: RUF003
-pv_size_to_bytes_regex = re.compile(rf"(\d+[.,{arabic_decimal_separator}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
+PV_FILE_THREAD_SEPARATOR = "_"
+ARABIC_DECIMAL_SEPARATOR = "\u066b"  # "٫"  # noqa: RUF003
+PV_SIZE_TO_BYTES_REGEX = re.compile(rf"(\d+[.,{ARABIC_DECIMAL_SEPARATOR}]?\d*)\s*([KMGTPEZYRQ]?)(i?)([Bb])(.*)")
 
 
 #############################################################################
@@ -299,8 +299,8 @@ class ProgressReporter:
 
 def pv_size_to_bytes(size: str) -> tuple[int, str]:  # example inputs: "800B", "4.12 KiB", "510 MiB", "510 MB", "4Gb", "2TiB"
     """Converts pv size string to bytes and returns remaining text."""
-    if match := pv_size_to_bytes_regex.fullmatch(size):
-        number = float(match.group(1).replace(",", ".").replace(arabic_decimal_separator, "."))
+    if match := PV_SIZE_TO_BYTES_REGEX.fullmatch(size):
+        number = float(match.group(1).replace(",", ".").replace(ARABIC_DECIMAL_SEPARATOR, "."))
         i = "KMGTPEZYRQ".index(match.group(2)) if match.group(2) else -1
         m = 1024 if match.group(3) == "i" else 1000
         b = 1 if match.group(4) == "B" else 8
@@ -325,7 +325,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
         return 0
 
     total_bytes = 0
-    files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + pv_file_thread_separator + "[0-9]*")
+    files = [basis_pv_log_file] + glob.glob(basis_pv_log_file + PV_FILE_THREAD_SEPARATOR + "[0-9]*")
     for file in files:
         if os.path.isfile(file):
             try:

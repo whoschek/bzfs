@@ -24,10 +24,13 @@ from datetime import timedelta
 from typing import Any
 
 from bzfs_main.check_range import CheckRange
-from bzfs_main.filter import RankRange, UnixTimeRange, snapshot_regex_filter_name, snapshot_regex_filter_names
+from bzfs_main.filter import SNAPSHOT_REGEX_FILTER_NAME, SNAPSHOT_REGEX_FILTER_NAMES, RankRange, UnixTimeRange
 from bzfs_main.loggers import validate_log_config_variable
 from bzfs_main.utils import (
     SHELL_CHARS,
+    SNAPSHOT_FILTERS_VAR,
+    UNIX_TIME_INFINITY_SECS,
+    YEAR_WITH_FOUR_DIGITS_REGEX,
     SnapshotPeriods,
     die,
     getenv_bool,
@@ -36,10 +39,7 @@ from bzfs_main.utils import (
     nsuffix,
     open_nofollow,
     parse_duration_to_milliseconds,
-    snapshot_filters_var,
     unixtime_fromisoformat,
-    unixtime_infinity_secs,
-    year_with_four_digits_regex,
 )
 
 
@@ -56,7 +56,7 @@ class SnapshotFilter:
 def add_snapshot_filter(args: argparse.Namespace, _filter: SnapshotFilter) -> None:
     """Appends snapshot filter to namespace list, creating the list if absent."""
 
-    if not hasattr(args, snapshot_filters_var):
+    if not hasattr(args, SNAPSHOT_FILTERS_VAR):
         args.snapshot_filters_var = [[]]
     args.snapshot_filters_var[-1].append(_filter)
 
@@ -111,10 +111,10 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> N
     i = len(snapshot_filters) - 1
     while i >= 0:
         filter_i = snapshot_filters[i]
-        if filter_i.name in snapshot_regex_filter_names:
+        if filter_i.name in SNAPSHOT_REGEX_FILTER_NAMES:
             assert isinstance(filter_i.options, list)
             j = i - 1
-            while j >= 0 and snapshot_filters[j].name in snapshot_regex_filter_names:
+            while j >= 0 and snapshot_filters[j].name in SNAPSHOT_REGEX_FILTER_NAMES:
                 if snapshot_filters[j].name == filter_i.name:
                     lst = snapshot_filters[j].options
                     assert isinstance(lst, list)
@@ -128,19 +128,19 @@ def merge_adjacent_snapshot_regexes(snapshot_filters: list[SnapshotFilter]) -> N
     while i >= 0:
         filter_i = snapshot_filters[i]
         name = filter_i.name
-        if name in snapshot_regex_filter_names:
+        if name in SNAPSHOT_REGEX_FILTER_NAMES:
             j = i - 1
-            if j >= 0 and snapshot_filters[j].name in snapshot_regex_filter_names:
+            if j >= 0 and snapshot_filters[j].name in SNAPSHOT_REGEX_FILTER_NAMES:
                 filter_j = snapshot_filters[j]
                 assert filter_j.name != name
                 snapshot_filters.pop(i)
                 i -= 1
             else:
-                name_j = next(iter(snapshot_regex_filter_names.difference({name})))
+                name_j = next(iter(SNAPSHOT_REGEX_FILTER_NAMES.difference({name})))
                 filter_j = SnapshotFilter(name_j, None, [])
             sorted_filters = sorted([filter_i, filter_j])
             exclude_regexes, include_regexes = sorted_filters[0].options, sorted_filters[1].options
-            snapshot_filters[i] = SnapshotFilter(snapshot_regex_filter_name, None, (exclude_regexes, include_regexes))
+            snapshot_filters[i] = SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, (exclude_regexes, include_regexes))
         i -= 1
 
 
@@ -287,7 +287,7 @@ class NewSnapshotFilterGroupAction(argparse.Action):
         self, parser: argparse.ArgumentParser, args: argparse.Namespace, values: Any, option_string: str | None = None
     ) -> None:
         """Insert an empty group before adding new snapshot filters."""
-        if not hasattr(args, snapshot_filters_var):
+        if not hasattr(args, SNAPSHOT_FILTERS_VAR):
             args.snapshot_filters_var = [[]]
         elif len(args.snapshot_filters_var[-1]) > 0:
             args.snapshot_filters_var.append([])
@@ -325,7 +325,7 @@ class FileOrLiteralAction(argparse.Action):
                     parser.error(f"{err_prefix}{e}")
         current_values += extra_values
         setattr(namespace, self.dest, current_values)
-        if self.dest in snapshot_regex_filter_names:
+        if self.dest in SNAPSHOT_REGEX_FILTER_NAMES:
             add_snapshot_filter(namespace, SnapshotFilter(self.dest, None, extra_values))
 
 
@@ -357,7 +357,7 @@ class IncludeSnapshotPlanAction(argparse.Action):
         for org, target_periods in ast.literal_eval(values).items():
             prefix = re.escape(nprefix(org))
             for target, periods in target_periods.items():
-                infix = re.escape(ninfix(target)) if target else year_with_four_digits_regex.pattern
+                infix = re.escape(ninfix(target)) if target else YEAR_WITH_FOUR_DIGITS_REGEX.pattern
                 for period_unit, period_amount in periods.items():
                     if not isinstance(period_amount, int) or period_amount < 0:
                         parser.error(f"{option_string}: Period amount must be a non-negative integer: {period_amount}")
@@ -453,7 +453,7 @@ class TimeRangeAndRankRangeAction(argparse.Action):
         if lo is None and hi is None:
             return None
         lo = utc_unix_time_in_seconds(lo, default=0)
-        hi = utc_unix_time_in_seconds(hi, default=unixtime_infinity_secs)
+        hi = utc_unix_time_in_seconds(hi, default=UNIX_TIME_INFINITY_SECS)
         if isinstance(lo, int) and isinstance(hi, int):
             return (lo, hi) if lo <= hi else (hi, lo)
         return lo, hi

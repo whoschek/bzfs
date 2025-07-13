@@ -42,6 +42,7 @@ from bzfs_main.bzfs import (
     Remote,
 )
 from bzfs_main.filter import (
+    SNAPSHOT_REGEX_FILTER_NAME,
     dataset_regexes,
     filter_datasets,
     filter_datasets_by_exclude_property,
@@ -50,11 +51,10 @@ from bzfs_main.filter import (
     filter_properties,
     filter_snapshots,
     filter_snapshots_by_regex,
-    snapshot_regex_filter_name,
 )
 from bzfs_main.utils import (
+    LOG_DEBUG,
     compile_regexes,
-    log_debug,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
@@ -163,7 +163,7 @@ class TestHelperFunctions(CommonTest):
     def test_filter_snapshots_by_regex_debug(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger("debug_snapshots")
-        log.setLevel(log_debug)
+        log.setLevel(LOG_DEBUG)
         stream = io.StringIO()
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
@@ -189,7 +189,7 @@ class TestHelperFunctions(CommonTest):
     def test_filter_properties_debug(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger("debug_props")
-        log.setLevel(log_debug)
+        log.setLevel(LOG_DEBUG)
         stream = io.StringIO()
         log.addHandler(logging.StreamHandler(stream))
         job = bzfs.Job()
@@ -209,7 +209,7 @@ class TestHelperFunctions(CommonTest):
         job = bzfs.Job()
         job.params = self.make_params(args=args, log=log)
         regexes = (compile_regexes([]), compile_regexes(["keep"]))
-        job.params.snapshot_filters = [[SnapshotFilter(snapshot_regex_filter_name, None, regexes)]]
+        job.params.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, regexes)]]
         snapshots = ["0\tds@keep", "0\tds@other"]
         with patch("bzfs_main.filter.filter_snapshots_by_regex", return_value=[snapshots[0]]) as mock_f:
             result = filter_snapshots(job, snapshots)
@@ -635,7 +635,7 @@ class TestRankRangeAction(CommonTest):
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
         self.assertEqual((0, 9), times_filter.timerange)
-        self.assertEqual(snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(SNAPSHOT_REGEX_FILTER_NAME, regex_filter.name)
         self.assertEqual((["w", "m"], ["f", "d", "h"]), regex_filter.options)
 
     def test_merge_adjacent_snapshot_regexes_doesnt_merge_across_groups(self) -> None:
@@ -644,12 +644,12 @@ class TestRankRangeAction(CommonTest):
         ranks = "--include-snapshot-times-and-ranks"
         cli = [include, ".*daily", exclude, ".*weekly", include, ".*hourly", ranks, "0..0", "oldest 5%", exclude, ".*m"]
         regex_filter1, ranks_filter, regex_filter2 = self.get_snapshot_filters(cli)
-        self.assertEqual(snapshot_regex_filter_name, regex_filter1.name)
+        self.assertEqual(SNAPSHOT_REGEX_FILTER_NAME, regex_filter1.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter1.options)
         self.assertEqual((0, 0), ranks_filter.timerange)
         self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 5, True)), ranks_filter.options[0])
-        self.assertEqual(snapshot_regex_filter_name, regex_filter2.name)
+        self.assertEqual(SNAPSHOT_REGEX_FILTER_NAME, regex_filter2.name)
         self.assertEqual(([".*m"], []), regex_filter2.options)
 
     def test_reorder_snapshot_times_simple(self) -> None:
@@ -659,7 +659,7 @@ class TestRankRangeAction(CommonTest):
         times_filter, regex_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
         self.assertEqual((0, 9), times_filter.timerange)
-        self.assertEqual(snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(SNAPSHOT_REGEX_FILTER_NAME, regex_filter.name)
         self.assertEqual(([], [".*daily"]), regex_filter.options)
 
     def test_reorder_snapshot_times_complex(self) -> None:
@@ -671,7 +671,7 @@ class TestRankRangeAction(CommonTest):
         times_filter, regex_filter, ranks_filter = self.get_snapshot_filters(cli)
         self.assertEqual("include_snapshot_times", times_filter.name)
         self.assertEqual((0, 9), times_filter.timerange)
-        self.assertEqual(snapshot_regex_filter_name, regex_filter.name)
+        self.assertEqual(SNAPSHOT_REGEX_FILTER_NAME, regex_filter.name)
         self.assertEqual(([".*weekly"], [".*daily", ".*hourly"]), regex_filter.options)
         self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 1, False)), ranks_filter.options[0])
@@ -691,7 +691,7 @@ class TestFilterDatasets(CommonTest):
     ) -> tuple[Job, Remote]:
         args = self.argparser_parse_args(["src", "dst"])
         log = logging.getLogger(f"datasets_{id(self)}_{debug}")
-        log.setLevel(log_debug if debug else logging.INFO)
+        log.setLevel(LOG_DEBUG if debug else logging.INFO)
         job = bzfs.Job()
         job.params = self.make_params(args=args, log=log)
         job.is_test_mode = test_mode
@@ -766,7 +766,7 @@ class TestFilterDatasetsByExcludeProperty(CommonTest):
     def make_job(self, debug: bool = False) -> tuple[Job, Remote]:
         args = self.argparser_parse_args(["src", "dst", "--exclude-dataset-property", "skip"])
         log = logging.getLogger(f"prop_{id(self)}_{debug}")
-        log.setLevel(log_debug if debug else logging.INFO)
+        log.setLevel(LOG_DEBUG if debug else logging.INFO)
         job = bzfs.Job()
         job.params = self.make_params(args=args, log=log)
         remote = MagicMock(spec=Remote, location="src")

@@ -131,7 +131,7 @@ class TestDisableAndHelpers(AbstractTestCase):
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
         r = bzfs.Remote("src", args, p)
-        r.root_dataset = bzfs_main.detect.dummy_dataset
+        r.root_dataset = bzfs_main.detect.DUMMY_DATASET
         self.assertTrue(bzfs_main.detect.is_dummy(r))
         r.root_dataset = "nondummy"
         self.assertFalse(bzfs_main.detect.is_dummy(r))
@@ -163,7 +163,7 @@ class TestDetectAvailablePrograms(AbstractTestCase):
             ("zpool_program", "zpool"),
         ):
             with stop_on_failure_subtest(prog=prog):
-                setattr(p, attr, bzfs_main.detect.disable_prg)
+                setattr(p, attr, bzfs_main.detect.DISABLE_PRG)
                 p.available_programs = {"local": {prog: ""}, "src": {prog: ""}, "dst": {prog: ""}}
                 with patch.object(bzfs_main.detect, "detect_available_programs_remote"), patch.object(
                     bzfs_main.detect, "detect_zpool_features"
@@ -253,12 +253,12 @@ class TestDetectAvailableProgramsRemote(AbstractTestCase):
             bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
         self.assertEqual("2.2.3", p.available_programs[remote.location]["zfs"])
         self.assertIn("sh", p.available_programs[remote.location])
-        self.assertTrue(p.available_programs[remote.location][bzfs_main.detect.zfs_version_is_at_least_2_2_0])
+        self.assertTrue(p.available_programs[remote.location][bzfs_main.detect.ZFS_VERSION_IS_AT_LEAST_2_2_0])
 
     def test_shell_program_disabled(self) -> None:
         job, remote = self._setup()
         p = job.params
-        p.shell_program = bzfs_main.detect.disable_prg
+        p.shell_program = bzfs_main.detect.DISABLE_PRG
         with patch.object(bzfs_main.detect, "run_ssh_command", return_value="zfs-2.1.0\n"):
             bzfs_main.detect.detect_available_programs_remote(job, remote, p.available_programs, "host")
         self.assertIn("zpool", p.available_programs[remote.location])

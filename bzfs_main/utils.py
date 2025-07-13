@@ -58,17 +58,17 @@ from typing import (
 )
 
 # constants:
-prog_name = "bzfs"
-env_var_prefix = prog_name + "_"
-die_status = 3
-descendants_re_suffix = r"(?:/.*)?"  # also match descendants of a matching dataset
-log_stderr = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
-log_stdout = (log_stderr + logging.INFO) // 2  # custom log level is halfway in between
-log_debug = logging.DEBUG
-log_trace = logging.DEBUG // 2  # custom log level is halfway in between
-snapshot_filters_var = "snapshot_filters_var"
-year_with_four_digits_regex = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
-unixtime_infinity_secs = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
+PROG_NAME = "bzfs"
+ENV_VAR_PREFIX = PROG_NAME + "_"
+DIE_STATUS = 3
+DESCENDANTS_RE_SUFFIX = r"(?:/.*)?"  # also match descendants of a matching dataset
+LOG_STDERR = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
+LOG_STDOUT = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
+LOG_DEBUG = logging.DEBUG
+LOG_TRACE = logging.DEBUG // 2  # custom log level is halfway in between
+SNAPSHOT_FILTERS_VAR = "snapshot_filters_var"
+YEAR_WITH_FOUR_DIGITS_REGEX = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
+UNIX_TIME_INFINITY_SECS = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
 SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
 
@@ -77,7 +77,7 @@ RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 
 def getenv_any(key: str, default: str | None = None) -> str | None:
     """All shell environment variable names used for configuration start with this prefix."""
-    return os.getenv(env_var_prefix + key, default)
+    return os.getenv(ENV_VAR_PREFIX + key, default)
 
 
 def getenv_int(key: str, default: int) -> int:
@@ -436,11 +436,11 @@ def xprint(log: logging.Logger, value: Any, run: bool = True, end: str = "\n", f
     """Optionally logs ``value`` at stdout/stderr level."""
     if run and value:
         value = value if end else str(value).rstrip()
-        level = log_stdout if file is sys.stdout else log_stderr
+        level = LOG_STDOUT if file is sys.stdout else LOG_STDERR
         log.log(level, "%s", value)
 
 
-def die(msg: str, exit_code: int = die_status, parser: argparse.ArgumentParser | None = None) -> NoReturn:
+def die(msg: str, exit_code: int = DIE_STATUS, parser: argparse.ArgumentParser | None = None) -> NoReturn:
     """Exits the program with ``exit_code`` after logging ``msg``."""
     if parser is None:
         ex = SystemExit(msg)

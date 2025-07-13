@@ -49,34 +49,34 @@ from typing import Any, Iterable, TypeVar, Union
 import bzfs_main.utils
 from bzfs_main import argparse_actions, bzfs
 from bzfs_main.check_range import CheckRange
-from bzfs_main.detect import dummy_dataset
+from bzfs_main.detect import DUMMY_DATASET
 from bzfs_main.loggers import get_simple_logger
 from bzfs_main.parallel_engine import (
     BARRIER_CHAR,
     process_datasets_in_parallel_and_fault_tolerant,
 )
 from bzfs_main.utils import (
-    die_status,
+    DIE_STATUS,
+    LOG_TRACE,
     format_dict,
     human_readable_duration,
-    log_trace,
     percent,
     shuffle_dict,
 )
-from bzfs_main.utils import prog_name as bzfs_prog_name
+from bzfs_main.utils import PROG_NAME as BZFS_PROG_NAME
 
 # constants:
-prog_name = "bzfs_jobrunner"
-src_magic_substitution_token = "^SRC_HOST"  # noqa: S105
-dst_magic_substitution_token = "^DST_HOST"  # noqa: S105
-sep = ","
+PROG_NAME = "bzfs_jobrunner"
+SRC_MAGIC_SUBSTITUTION_TOKEN = "^SRC_HOST"  # noqa: S105
+DST_MAGIC_SUBSTITUTION_TOKEN = "^DST_HOST"  # noqa: S105
+DST = ","
 
 
 def argument_parser() -> argparse.ArgumentParser:
     """Returns the CLI parser used by bzfs_jobrunner."""
     # fmt: off
     parser = argparse.ArgumentParser(
-        prog=prog_name,
+        prog=PROG_NAME,
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
@@ -100,12 +100,12 @@ geo-replication factors)
 
 You can run this program on a single third-party host and have that talk to all source hosts and destination hosts, which is
 convenient for basic use cases and for testing.
-However, typically, a cron job on each source host runs `{prog_name}` periodically to create new snapshots (via
+However, typically, a cron job on each source host runs `{PROG_NAME}` periodically to create new snapshots (via
 --create-src-snapshots) and prune outdated snapshots and bookmarks on the source (via --prune-src-snapshots and
---prune-src-bookmarks), whereas another cron job on each destination host runs `{prog_name}` periodically to prune
+--prune-src-bookmarks), whereas another cron job on each destination host runs `{PROG_NAME}` periodically to prune
 outdated destination snapshots (via --prune-dst-snapshots), and to replicate the recently created snapshots from the source
 to the destination (via --replicate).
-Yet another cron job on each source and each destination runs `{prog_name}` periodically to alert the user if the latest or
+Yet another cron job on each source and each destination runs `{PROG_NAME}` periodically to alert the user if the latest or
 oldest snapshot is somehow too old (via --monitor-src-snapshots and --monitor-dst-snapshots).
 The frequency of these periodic activities can vary by activity, and is typically every second, minute, hour, day, week,
 month and/or year (or multiples thereof).
@@ -236,7 +236,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "nas": "tank2/bak",
         "bak-us-west-1": "backups/bak001",
         "bak-eu-west-1": "backups/bak999",
-        "archive": f"archives/zoo/{src_magic_substitution_token}",
+        "archive": f"archives/zoo/{SRC_MAGIC_SUBSTITUTION_TOKEN}",
         "hotspare": "",
     }
     parser.add_argument(
@@ -246,7 +246,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "destination host. For backup use cases, this is the backup ZFS pool or a ZFS dataset path within that pool, "
              "whereas for cloning, master slave replication, or replication from a primary to a secondary, this can also be "
              "the empty string.\n\n"
-             f"`{src_magic_substitution_token}` and `{dst_magic_substitution_token}` are optional magic substitution tokens "
+             f"`{SRC_MAGIC_SUBSTITUTION_TOKEN}` and `{DST_MAGIC_SUBSTITUTION_TOKEN}` are optional magic substitution tokens "
              "that will be auto-replaced at runtime with the actual hostname. This can be used to force the use of a "
              "separate destination root dataset per source host or per destination host.\n\n"
              f"Example: `{format_dict(dst_root_datasets_example)}`\n\n")
@@ -381,7 +381,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--jobrunner-log-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"], default="INFO",
         help="Only emit jobrunner messages with equal or higher priority than this log level. Default is '%(default)s'.\n\n")
     parser.add_argument(
-        "--version", action="version", version=f"{prog_name}-{bzfs.__version__}, by {bzfs.prog_author}",
+        "--version", action="version", version=f"{PROG_NAME}-{bzfs.__version__}, by {bzfs.PROG_AUTHOR}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
         "--help, -h", action="help",
@@ -431,7 +431,7 @@ class Job:
         # immutable variables:
         self.jobrunner_dryrun: bool = False
         self.spawn_process_per_job: bool = False
-        self.log: Logger = log if log is not None else get_simple_logger(prog_name)
+        self.log: Logger = log if log is not None else get_simple_logger(PROG_NAME)
         self.bzfs_argument_parser: argparse.ArgumentParser = bzfs.argument_parser()
         self.argument_parser: argparse.ArgumentParser = argument_parser()
         self.loopback_address: str = detect_loopback_address()
@@ -490,7 +490,7 @@ class Job:
         bad_root_datasets = {
             dst_host: root_dataset
             for dst_host in sorted(dst_hosts.keys())
-            if src_magic_substitution_token not in (root_dataset := dst_root_datasets[dst_host])
+            if SRC_MAGIC_SUBSTITUTION_TOKEN not in (root_dataset := dst_root_datasets[dst_host])
         }
         if len(src_hosts) > 1 and len(bad_root_datasets) > 0:
             self.die(
@@ -501,12 +501,12 @@ class Job:
         bad_root_datasets = {
             dst_host: root_dataset
             for dst_host, root_dataset in sorted(dst_root_datasets.items())
-            if root_dataset and src_magic_substitution_token not in root_dataset
+            if root_dataset and SRC_MAGIC_SUBSTITUTION_TOKEN not in root_dataset
         }
         if len(basis_src_hosts) > 1 and len(bad_root_datasets) > 0:
             self.die(
                 "Cowardly refusing to proceed as multiple source hosts are defined in the configuration, but "
-                f"not all non-empty root datasets in --dst-root-datasets contain the '{src_magic_substitution_token}' "
+                f"not all non-empty root datasets in --dst-root-datasets contain the '{SRC_MAGIC_SUBSTITUTION_TOKEN}' "
                 "substitution token to prevent collisions on writing destination datasets. "
                 f"Problematic subset of --dst-root-datasets: {bad_root_datasets} for src_hosts: {sorted(basis_src_hosts)}"
             )
@@ -542,7 +542,7 @@ class Job:
 
         def npad() -> str:
             """Returns standardized subjob count suffix."""
-            return sep + zero_pad(len(subjobs))
+            return DST + zero_pad(len(subjobs))
 
         def update_subjob_name(tag: str) -> str:
             """Derives next subjob name based on ``tag`` and index ``j``."""
@@ -567,24 +567,24 @@ class Job:
             """Expands ``dst_dataset`` relative to ``dst_hostname`` roots."""
             root_dataset = dst_root_datasets.get(dst_hostname)
             assert root_dataset is not None, dst_hostname  # f"Hostname '{dst_hostname}' missing in --dst-root-datasets"
-            root_dataset = root_dataset.replace(src_magic_substitution_token, src_host)
-            root_dataset = root_dataset.replace(dst_magic_substitution_token, dst_hostname)
+            root_dataset = root_dataset.replace(SRC_MAGIC_SUBSTITUTION_TOKEN, src_host)
+            root_dataset = root_dataset.replace(DST_MAGIC_SUBSTITUTION_TOKEN, dst_hostname)
             resolved_dst_dataset = root_dataset + "/" + dst_dataset if root_dataset else dst_dataset
             bzfs.validate_dataset_name(resolved_dst_dataset, dst_dataset)
             return resolve_dataset(dst_hostname, resolved_dst_dataset, is_src=False)
 
-        dummy: str = dummy_dataset
+        dummy: str = DUMMY_DATASET
         lhn = localhostname
-        bzfs_prog_header = [bzfs_prog_name, "--no-argument-file"] + unknown_args
+        bzfs_prog_header = [BZFS_PROG_NAME, "--no-argument-file"] + unknown_args
         subjobs: dict[str, list[str]] = {}
         for i, src_host in enumerate(src_hosts):
             subjob_name: str = zero_pad(i) + "src-host"
 
             if args.create_src_snapshots:
                 opts = ["--create-src-snapshots", f"--create-src-snapshots-plan={src_snapshot_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={prog_name}{sep}create-src-snapshots{sep}"]
-                opts += [f"--log-file-infix={sep}{job_id}"]
-                opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}"]
+                opts += [f"--log-file-prefix={PROG_NAME}{DST}create-src-snapshots{DST}"]
+                opts += [f"--log-file-infix={DST}{job_id}"]
+                opts += [f"--log-file-suffix={DST}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{DST}"]
                 self.add_ssh_opts(
                     opts, ssh_src_user=ssh_src_user, ssh_src_port=ssh_src_port, ssh_src_config_file=ssh_src_config_file
                 )
@@ -627,9 +627,9 @@ class Job:
                 opts += [
                     "--skip-replication",
                     f"--delete-dst-snapshots-except-plan={retention_plan}",
-                    f"--log-file-prefix={prog_name}{sep}{tag}{sep}",
-                    f"--log-file-infix={sep}{job_id}",
-                    f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{sep}",
+                    f"--log-file-prefix={PROG_NAME}{DST}{tag}{DST}",
+                    f"--log-file-infix={DST}{job_id}",
+                    f"--log-file-suffix={DST}{job_run}{npad()}{log_suffix(lhn, src_host, '')}{DST}",
                     f"--daemon-frequency={args.daemon_prune_src_frequency}",
                 ]
                 self.add_ssh_opts(  # i.e. dst=src, src=dummy
@@ -661,9 +661,9 @@ class Job:
                     }
                     opts = ["--delete-dst-snapshots", "--skip-replication"]
                     opts += [f"--delete-dst-snapshots-except-plan={curr_dst_snapshot_plan}"]
-                    opts += [f"--log-file-prefix={prog_name}{sep}{marker}{sep}"]
-                    opts += [f"--log-file-infix={sep}{job_id}"]
-                    opts += [f"--log-file-suffix={sep}{job_run}{npad()}{log_suffix(lhn, src_host, dst_hostname)}{sep}"]
+                    opts += [f"--log-file-prefix={PROG_NAME}{DST}{marker}{DST}"]
+                    opts += [f"--log-file-infix={DST}{job_id}"]
+                    opts += [f"--log-file-suffix={DST}{job_run}{npad()}{log_suffix(lhn, src_host, dst_hostname)}{DST}"]
                     opts += [f"--daemon-frequency={args.daemon_prune_dst_frequency}"]
                     self.add_ssh_opts(
                         opts, ssh_dst_user=ssh_dst_user, ssh_dst_port=ssh_dst_port, ssh_dst_config_file=ssh_dst_config_file
@@ -679,9 +679,9 @@ class Job:
             def monitor_snapshots_opts(tag: str, monitor_plan: dict, logsuffix: str) -> list[str]:
                 """Returns monitor subjob options for ``tag`` and ``monitor_plan``."""
                 opts = [f"--monitor-snapshots={monitor_plan}", "--skip-replication"]
-                opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
-                opts += [f"--log-file-infix={sep}{job_id}"]
-                opts += [f"--log-file-suffix={sep}{job_run}{npad()}{logsuffix}{sep}"]
+                opts += [f"--log-file-prefix={PROG_NAME}{DST}{tag}{DST}"]
+                opts += [f"--log-file-infix={DST}{job_id}"]
+                opts += [f"--log-file-suffix={DST}{job_run}{npad()}{logsuffix}{DST}"]
                 opts += [f"--daemon-frequency={args.daemon_monitor_snapshots_frequency}"]
                 return opts
 
@@ -746,7 +746,7 @@ class Job:
         log.info(
             msg, len(subjobs), len(src_hosts), nb_src_hosts, src_hosts, len(dst_hosts), nb_dst_hosts, list(dst_hosts.keys())
         )
-        log.log(log_trace, "subjobs: \n%s", pretty_print_formatter(subjobs))
+        log.log(LOG_TRACE, "subjobs: \n%s", pretty_print_formatter(subjobs))
         self.run_subjobs(subjobs, max_workers, worker_timeout_seconds, args.work_period_seconds, args.jitter)
         ex = self.first_exception
         if isinstance(ex, int):
@@ -789,9 +789,9 @@ class Job:
         opts = []
         if len(include_snapshot_plan) > 0:
             opts += [f"--include-snapshot-plan={include_snapshot_plan}"]
-            opts += [f"--log-file-prefix={prog_name}{sep}{tag}{sep}"]
-            opts += [f"--log-file-infix={sep}{job_id}"]
-            opts += [f"--log-file-suffix={sep}{job_run}{log_suffix(localhostname, src_hostname, dst_hostname)}{sep}"]
+            opts += [f"--log-file-prefix={PROG_NAME}{DST}{tag}{DST}"]
+            opts += [f"--log-file-infix={DST}{job_id}"]
+            opts += [f"--log-file-suffix={DST}{job_run}{log_suffix(localhostname, src_hostname, dst_hostname)}{DST}"]
         return opts
 
     def skip_nonexisting_local_dst_pools(self, root_dataset_pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -868,7 +868,7 @@ class Job:
         sorted_subjobs = sorted(subjobs.keys())
         has_barrier = any(BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
-            log.log(log_trace, "%s", "spawn_process_per_job: True")
+            log.log(LOG_TRACE, "%s", "spawn_process_per_job: True")
             args = self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"])
             params = bzfs.Params(args=args, sys_argv=[], log_params=bzfs.LogParams(args), log=log)
             process_datasets_in_parallel_and_fault_tolerant(
@@ -888,7 +888,7 @@ class Job:
                 is_test_mode=self.is_test_mode,
             )
         else:
-            log.log(log_trace, "%s", "spawn_process_per_job: False")
+            log.log(LOG_TRACE, "%s", "spawn_process_per_job: False")
             next_update_nanos = time.monotonic_ns()
             for subjob in sorted_subjobs:
                 time.sleep(max(0, next_update_nanos - time.monotonic_ns()) / 1_000_000_000)  # seconds
@@ -922,7 +922,7 @@ class Job:
                 stats.jobs_running += 1
                 stats.started_job_names.add(name)
                 msg = str(stats)
-            log.log(log_trace, "Starting worker job: %s", cmd_str)
+            log.log(LOG_TRACE, "Starting worker job: %s", cmd_str)
             log.info("Progress: %s", msg)
             start_time_nanos = time.monotonic_ns()
             if spawn_process_per_job:
@@ -938,7 +938,7 @@ class Job:
             if returncode != 0:
                 with stats.lock:
                     if self.first_exception is None:
-                        self.first_exception = die_status if returncode is None else returncode
+                        self.first_exception = DIE_STATUS if returncode is None else returncode
                 log.error("Worker job failed with exit code %s in %s: %s", returncode, elapsed_human, cmd_str)
             else:
                 log.debug("Worker job succeeded in %s: %s", elapsed_human, cmd_str)
@@ -978,7 +978,7 @@ class Job:
             return e.code
         except BaseException:
             log.exception("Worker job failed with unexpected exception for command: %s", " ".join(cmd))
-            return die_status
+            return DIE_STATUS
 
     def _bzfs_run_main(self, cmd: list[str]) -> None:
         """Delegate execution to :mod:`bzfs` using parsed arguments."""
@@ -989,7 +989,7 @@ class Job:
     def run_worker_job_spawn_process_per_job(self, cmd: list[str], timeout_secs: float | None) -> int | None:
         """Spawns a subprocess for the worker job and waits for completion."""
         log = self.log
-        if len(cmd) > 0 and cmd[0] == bzfs_prog_name:
+        if len(cmd) > 0 and cmd[0] == BZFS_PROG_NAME:
             cmd = [sys.executable, "-m", "bzfs_main." + cmd[0]] + cmd[1:]
         if self.jobrunner_dryrun:
             return 0
@@ -1191,7 +1191,7 @@ def flatten(root_dataset_pairs: Iterable[Iterable[T]]) -> list[T]:
 
 def sanitize(filename: str) -> str:
     """Replaces potentially problematic characters in ``filename`` with '!'."""
-    for s in (" ", "..", "/", "\\", sep):
+    for s in (" ", "..", "/", "\\", DST):
         filename = filename.replace(s, "!")
     return filename
 
@@ -1199,7 +1199,7 @@ def sanitize(filename: str) -> str:
 def log_suffix(localhostname: str, src_hostname: str, dst_hostname: str) -> str:
     """Returns a log file suffix in a format that contains the given hostnames."""
     sanitized_dst_hostname = sanitize(dst_hostname) if dst_hostname else ""
-    return f"{sep}{sanitize(localhostname)}{sep}{sanitize(src_hostname)}{sep}{sanitized_dst_hostname}"
+    return f"{DST}{sanitize(localhostname)}{DST}{sanitize(src_hostname)}{DST}{sanitized_dst_hostname}"
 
 
 def pretty_print_formatter(dictionary: dict[str, Any]) -> Any:

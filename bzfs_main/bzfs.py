@@ -121,27 +121,27 @@ from bzfs_main.connection import (
     try_ssh_command,
 )
 from bzfs_main.detect import (
+    DISABLE_PRG,
+    DUMMY_DATASET,
+    ZFS_VERSION_IS_AT_LEAST_2_1_0,
+    ZFS_VERSION_IS_AT_LEAST_2_2_0,
     RemoteConfCacheItem,
     are_bookmarks_enabled,
     detect_available_programs,
-    disable_prg,
-    dummy_dataset,
     is_caching_snapshots,
     is_dummy,
     is_solaris_zfs,
     is_solaris_zfs_location,
     is_zpool_feature_enabled_or_active,
-    zfs_version_is_at_least_2_1_0,
-    zfs_version_is_at_least_2_2_0,
 )
 from bzfs_main.filter import (
+    SNAPSHOT_REGEX_FILTER_NAME,
     dataset_regexes,
     filter_datasets,
     filter_lines,
     filter_lines_except,
     filter_properties,
     filter_snapshots,
-    snapshot_regex_filter_name,
 )
 from bzfs_main.incremental_send_steps import (
     incremental_send_steps,
@@ -163,9 +163,9 @@ from bzfs_main.period_anchors import (
     round_datetime_up_to_duration_multiple,
 )
 from bzfs_main.progress_reporter import (
+    PV_FILE_THREAD_SEPARATOR,
     ProgressReporter,
     count_num_bytes_transferred_by_zfs_send,
-    pv_file_thread_separator,
 )
 from bzfs_main.retry import (
     Retry,
@@ -173,8 +173,17 @@ from bzfs_main.retry import (
     RetryPolicy,
 )
 from bzfs_main.utils import (
+    DESCENDANTS_RE_SUFFIX,
+    DIE_STATUS,
     DONT_SKIP_DATASET,
+    ENV_VAR_PREFIX,
+    LOG_DEBUG,
+    LOG_TRACE,
+    PROG_NAME,
     SHELL_CHARS,
+    SNAPSHOT_FILTERS_VAR,
+    UNIX_TIME_INFINITY_SECS,
+    YEAR_WITH_FOUR_DIGITS_REGEX,
     RegexList,
     SnapshotPeriods,
     SynchronizedBool,
@@ -182,11 +191,8 @@ from bzfs_main.utils import (
     compile_regexes,
     current_datetime,
     cut,
-    descendants_re_suffix,
     die,
-    die_status,
     drain,
-    env_var_prefix,
     format_dict,
     get_home_directory,
     get_timezone,
@@ -199,8 +205,6 @@ from bzfs_main.utils import (
     is_included,
     isotime_from_unixtime,
     list_formatter,
-    log_debug,
-    log_trace,
     ninfix,
     nprefix,
     nsuffix,
@@ -209,38 +213,34 @@ from bzfs_main.utils import (
     percent,
     pid_exists,
     pretty_print_formatter,
-    prog_name,
     relativize_dataset,
     replace_in_lines,
     replace_prefix,
-    snapshot_filters_var,
     stderr_to_str,
     subprocess_run,
     terminate_process_subtree,
-    unixtime_infinity_secs,
     xfinally,
     xprint,
-    year_with_four_digits_regex,
 )
 
 # constants:
 __version__ = "1.12.0-dev"
-prog_author = "Wolfgang Hoschek"
-critical_status = 2
-warning_status = 1
-still_running_status = 4
-min_python_version = (3, 8)
-if sys.version_info < min_python_version:
-    print(f"ERROR: {prog_name} requires Python version >= {'.'.join(map(str, min_python_version))}!")
-    sys.exit(die_status)
-exclude_dataset_regexes_default = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
-log_dir_default = prog_name + "-logs"
-create_src_snapshots_prefix_dflt = prog_name + "_"
-create_src_snapshots_suffix_dflt = "_adhoc"
-time_threshold_secs = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
-zfs_recv_groups = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
-cmp_choices_items = ("src", "dst", "all")
-inject_dst_pipe_fail_kbytes = 400
+PROG_AUTHOR = "Wolfgang Hoschek"
+CRITICAL_STATUS = 2
+WARNING_STATUS = 1
+STILL_RUNNING_STATUS = 4
+MIN_PYTHON_VERSION = (3, 8)
+if sys.version_info < MIN_PYTHON_VERSION:
+    print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
+    sys.exit(DIE_STATUS)
+EXCLUDE_DATASET_REGEXES_DEFAULT = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
+LOG_DIR_DEFAULT = PROG_NAME + "-logs"
+CREATE_SRC_SNAPSHOTS_PREFIX_DFLT = PROG_NAME + "_"
+CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT = "_adhoc"
+TIME_THRESHOLD_SECS = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
+ZFS_RECV_GROUPS = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
+CMP_CHOICES_ITEMS = ("src", "dst", "all")
+INJECT_DST_PIPE_FAIL_KBYTES = 400
 FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
 DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
@@ -268,73 +268,73 @@ def argument_parser() -> argparse.ArgumentParser:
 
     # fmt: off
     parser = argparse.ArgumentParser(
-        prog=prog_name,
+        prog=PROG_NAME,
         allow_abbrev=False,
         formatter_class=argparse.RawTextHelpFormatter,
         description=f"""
-*{prog_name} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
+*{PROG_NAME} is a backup command line tool that reliably replicates ZFS snapshots from a (local or remote)
 source ZFS dataset (ZFS filesystem or ZFS volume) and its descendant datasets to a (local or remote)
 destination ZFS dataset to make the destination dataset a recursively synchronized copy of the source dataset,
-using zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {prog_name} can be used to
+using zfs send/receive/rollback/destroy and ssh tunnel as directed. For example, {PROG_NAME} can be used to
 incrementally replicate all ZFS snapshots since the most recent common snapshot from source to destination,
 in order to help protect against data loss or ransomware.*
 
-When run for the first time, {prog_name} replicates the dataset and all its snapshots from the source to the
-destination. On subsequent runs, {prog_name} transfers only the data that has changed since the previous run,
+When run for the first time, {PROG_NAME} replicates the dataset and all its snapshots from the source to the
+destination. On subsequent runs, {PROG_NAME} transfers only the data that has changed since the previous run,
 i.e. it incrementally replicates to the destination all intermediate snapshots that have been created on
 the source since the last run. Source ZFS snapshots older than the most recent common snapshot found on the
 destination are auto-skipped.
 
-Unless {prog_name} is explicitly told to create snapshots on the source, it treats the source as read-only,
-thus the source remains unmodified. With the --dryrun flag, {prog_name} also treats the destination as read-only.
-In normal operation, {prog_name} treats the destination as append-only. Optional CLI flags are available to
+Unless {PROG_NAME} is explicitly told to create snapshots on the source, it treats the source as read-only,
+thus the source remains unmodified. With the --dryrun flag, {PROG_NAME} also treats the destination as read-only.
+In normal operation, {PROG_NAME} treats the destination as append-only. Optional CLI flags are available to
 delete destination snapshots and destination datasets as directed, for example to make the destination
 identical to the source if the two have somehow diverged in unforeseen ways. This easily enables
 (re)synchronizing the backup from the production state, as well as restoring the production state from
 backup.
 
-In the spirit of rsync, {prog_name} supports a variety of powerful include/exclude filters that can be combined to
+In the spirit of rsync, {PROG_NAME} supports a variety of powerful include/exclude filters that can be combined to
 select which datasets, snapshots and properties to create, replicate, delete or compare.
 
-Typically, a `cron` job on the source host runs `{prog_name}` periodically to create new snapshots and prune outdated
-snapshots on the source, whereas another `cron` job on the destination host runs `{prog_name}` periodically to prune
-outdated destination snapshots. Yet another `cron` job runs `{prog_name}` periodically to replicate the recently created
+Typically, a `cron` job on the source host runs `{PROG_NAME}` periodically to create new snapshots and prune outdated
+snapshots on the source, whereas another `cron` job on the destination host runs `{PROG_NAME}` periodically to prune
+outdated destination snapshots. Yet another `cron` job runs `{PROG_NAME}` periodically to replicate the recently created
 snapshots from the source to the destination. The frequency of these periodic activities is typically every N milliseconds,
 every second, minute, hour, day, week, month and/or year (or multiples thereof).
 
-All {prog_name} functions including snapshot creation, replication, deletion, monitoring, comparison, etc. happily work
+All {PROG_NAME} functions including snapshot creation, replication, deletion, monitoring, comparison, etc. happily work
 with any snapshots in any format, even created or managed by third party ZFS snapshot management tools, including manual
-zfs snapshot/destroy. All functions can also be used independently. That is, if you wish you can use {prog_name} just
+zfs snapshot/destroy. All functions can also be used independently. That is, if you wish you can use {PROG_NAME} just
 for creating snapshots, or just for replicating, or just for deleting/pruning, or just for monitoring, or just for
 comparing snapshot lists.
 
-The source 'pushes to' the destination whereas the destination 'pulls from' the source. {prog_name} is installed
+The source 'pushes to' the destination whereas the destination 'pulls from' the source. {PROG_NAME} is installed
 and executed on the 'initiator' host which can be either the host that contains the source dataset (push mode),
 or the destination dataset (pull mode), or both datasets (local mode, no network required, no ssh required),
 or any third-party (even non-ZFS OSX) host as long as that host is able to SSH (via standard 'ssh' OpenSSH CLI) into
 both the source and destination host (pull-push mode). In pull-push mode the source 'zfs send's the data stream
 to the initiator which immediately pipes the stream (without storing anything locally) to the destination
-host that 'zfs receive's it. Pull-push mode means that {prog_name} need not be installed or executed on either
+host that 'zfs receive's it. Pull-push mode means that {PROG_NAME} need not be installed or executed on either
 source or destination host. Only the underlying 'zfs' CLI must be installed on both source and destination host.
-{prog_name} can run as root or non-root user, in the latter case via a) sudo or b) when granted corresponding
+{PROG_NAME} can run as root or non-root user, in the latter case via a) sudo or b) when granted corresponding
 ZFS permissions by administrators via 'zfs allow' delegation mechanism.
 
-{prog_name} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
+{PROG_NAME} is written in Python and continously runs a wide set of unit tests and integration tests to ensure
 coverage and compatibility with old and new versions of ZFS on Linux, FreeBSD and Solaris, on all Python
 versions >= 3.8 (including latest stable which is currently python-3.13).
 
-{prog_name} is a stand-alone program with zero required dependencies, akin to a
+{PROG_NAME} is a stand-alone program with zero required dependencies, akin to a
 stand-alone shell script or binary executable. It is designed to be able to run in restricted barebones server
 environments. No external Python packages are required; indeed no Python package management at all is required.
 You can just symlink the program wherever you like, for example into /usr/local/bin or similar, and simply run it like
 any stand-alone shell script or binary executable.
 
-{prog_name} automatically replicates the snapshots of multiple datasets in parallel for best performance.
+{PROG_NAME} automatically replicates the snapshots of multiple datasets in parallel for best performance.
 Similarly, it quickly deletes (or monitors or compares) snapshots of multiple datasets in parallel. Atomic snapshots can be
 created as frequently as every N milliseconds.
 
-Optionally, {prog_name} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
-send/receive' data transfers. When run across the network, {prog_name} also transparently inserts lightweight
+Optionally, {PROG_NAME} applies bandwidth rate-limiting and progress monitoring (via 'pv' CLI) during 'zfs
+send/receive' data transfers. When run across the network, {PROG_NAME} also transparently inserts lightweight
 data compression (via 'zstd -1' CLI) and efficient data buffering (via 'mbuffer' CLI) into the pipeline
 between network endpoints during 'zfs send/receive' network transfers. If one of these utilities is not
 installed this is auto-detected, and the operation continues reliably without the corresponding auxiliary
@@ -343,7 +343,7 @@ feature.
 # Periodic Jobs with bzfs_jobrunner
 
 The software also ships with the [bzfs_jobrunner](README_bzfs_jobrunner.md) companion program, which is a convenience
-wrapper around `{prog_name}` that simplifies efficient periodic ZFS snapshot creation, replication, pruning, and monitoring,
+wrapper around `{PROG_NAME}` that simplifies efficient periodic ZFS snapshot creation, replication, pruning, and monitoring,
 across N source hosts and M destination hosts, using a single shared [jobconfig](bzfs_tests/bzfs_job_example.py) script.
 For example, this simplifies the deployment of an efficient geo-replicated backup service where each of the M destination
 hosts is located in a separate geographic region and pulls replicas from (the same set of) N source hosts. It also
@@ -353,7 +353,7 @@ simplifies low latency replication from a primary to a secondary or to M read re
 
 * Create adhoc atomic snapshots without a schedule:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
+```$ {PROG_NAME} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 --create-src-snapshots-plan "{create_src_snapshots_plan_example1}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
@@ -362,7 +362,7 @@ tank1/foo/bar@test_2024-11-06_08:30:05_adhoc```
 
 * Create periodic atomic snapshots on a schedule, every hour and every day, by launching this from a periodic `cron` job:
 
-```$ {prog_name} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
+```$ {PROG_NAME} tank1/foo/bar dummy --recursive --skip-replication --create-src-snapshots
 --create-src-snapshots-plan "{create_src_snapshots_plan_example2}"```
 
 ```$ zfs list -t snapshot tank1/foo/bar
@@ -373,14 +373,14 @@ tank1/foo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
 
 Note: A periodic snapshot is created if it is due per the schedule indicated by its suffix (e.g. `_daily` or `_hourly`
 or `_minutely` or `_2secondly` or `_100millisecondly`), or if the --create-src-snapshots-even-if-not-due flag is specified,
-or if the most recent scheduled snapshot is somehow missing. In the latter case {prog_name} immediately creates a snapshot
+or if the most recent scheduled snapshot is somehow missing. In the latter case {PROG_NAME} immediately creates a snapshot
 (named with the current time, not backdated to the missed time), and then resumes the original schedule. If the suffix is
 `_adhoc` or not a known period then a snapshot is considered non-periodic and is thus created immediately regardless of the
 creation time of any existing snapshot.
 
 * Replication example in local mode (no network, no ssh), to replicate ZFS dataset tank1/foo/bar to tank2/boo/bar:
 
-```$ {prog_name} tank1/foo/bar tank2/boo/bar```
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar```
 
 ```$ zfs list -t snapshot tank1/foo/bar
 
@@ -396,20 +396,20 @@ tank2/boo/bar@prod_us-west-1_2024-11-06_08:30:05_hourly```
 
 * Same example in pull mode:
 
-```$ {prog_name} root@host1.example.com:tank1/foo/bar tank2/boo/bar```
+```$ {PROG_NAME} root@host1.example.com:tank1/foo/bar tank2/boo/bar```
 
 * Same example in push mode:
 
-```$ {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar```
+```$ {PROG_NAME} tank1/foo/bar root@host2.example.com:tank2/boo/bar```
 
 * Same example in pull-push mode:
 
-```$ {prog_name} root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
+```$ {PROG_NAME} root@host1:tank1/foo/bar root@host2:tank2/boo/bar```
 
 * Example in local mode (no network, no ssh) to recursively replicate ZFS dataset tank1/foo/bar and its descendant
 datasets to tank2/boo/bar:
 
-```$ {prog_name} tank1/foo/bar tank2/boo/bar --recursive```
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive```
 
 ```$ zfs list -t snapshot -r tank1/foo/bar
 
@@ -433,12 +433,12 @@ tank2/boo/bar/baz@prod_us-west-1_2024-11-06_08:40:00_hourly```
 
 * Example that makes destination identical to source even if the two have drastically diverged:
 
-```$ {prog_name} tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets --delete-dst-snapshots```
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --force --delete-dst-datasets --delete-dst-snapshots```
 
 * Replicate all daily snapshots created during the last 7 days, and at the same time ensure that the latest 7 daily
 snapshots (per dataset) are replicated regardless of creation time:
 
-```$ {prog_name} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily'
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --recursive --include-snapshot-regex '.*_daily'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7'```
 
 Note: The example above compares the specified times against the standard ZFS 'creation' time property of the snapshots
@@ -447,7 +447,7 @@ Note: The example above compares the specified times against the standard ZFS 'c
 * Delete all daily snapshots older than 7 days, but ensure that the latest 7 daily snapshots (per dataset) are retained
 regardless of creation time:
 
-```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+```$ {PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
 --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
 --include-snapshot-times-and-ranks 'anytime..7 days ago'```
 
@@ -458,7 +458,7 @@ the --dryrun flag.
 regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot or bookmark exists in
 the source dataset (same as above except replace the 'dummy' source with 'tank1/foo/bar'):
 
-```$ {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
 --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
 --include-snapshot-times-and-ranks '7 days ago..anytime'```
 
@@ -466,27 +466,27 @@ the source dataset (same as above except replace the 'dummy' source with 'tank1/
 regardless of creation time. Additionally, only delete a snapshot if no corresponding snapshot exists in the source
 dataset (same as above except append 'no-crosscheck'):
 
-```$ {prog_name} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
 --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 7'
 --include-snapshot-times-and-ranks 'anytime..7 days ago' --delete-dst-snapshots-no-crosscheck```
 
 * Delete all daily bookmarks older than 90 days, but retain the latest 200 daily bookmarks (per dataset) regardless
 of creation time:
 
-```$ {prog_name} {dummy_dataset} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks
+```$ {PROG_NAME} {DUMMY_DATASET} tank1/foo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots=bookmarks
 --include-snapshot-regex '.*_daily' --include-snapshot-times-and-ranks notime 'all except latest 200'
 --include-snapshot-times-and-ranks 'anytime..90 days ago'```
 
 * Delete all tmp datasets within tank2/boo/bar:
 
-```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
+```$ {PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-datasets
 --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'```
 
 * Retain all secondly snapshots that were created less than 40 seconds ago, and ensure that the latest 40
 secondly snapshots (per dataset) are retained regardless of creation time. Same for 40 minutely snapshots, 36 hourly
 snapshots, 31 daily snapshots, 12 weekly snapshots, 18 monthly snapshots, and 5 yearly snapshots:
 
-```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+```$ {PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
 --delete-dst-snapshots-except
 --include-snapshot-regex '.*_secondly' --include-snapshot-times-and-ranks '40 seconds ago..anytime' 'latest 40'
 --new-snapshot-filter-group
@@ -504,7 +504,7 @@ snapshots, 31 daily snapshots, 12 weekly snapshots, 18 monthly snapshots, and 5 
 
 For convenience, the lengthy command line above can be expressed in a more concise way, like so:
 
-```$ {prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
+```$ {PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots
 --delete-dst-snapshots-except-plan "{delete_dst_snapshots_except_plan_example1}"```
 
 * Compare source and destination dataset trees recursively, for example to check if all recently taken snapshots have
@@ -513,7 +513,7 @@ only contained in dst (tagged with 'dst'), and contained in both src and dst (ta
 and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some slack/stragglers),
 excluding temporary datasets:
 
-```$ {prog_name} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists=src+dst+all --recursive
+```$ {PROG_NAME} tank1/foo/bar tank2/boo/bar --skip-replication --compare-snapshot-lists=src+dst+all --recursive
 --include-snapshot-regex '.*_(hourly|daily)' --include-snapshot-times-and-ranks '7 days ago..4 hours ago'
 --exclude-dataset-regex '(.*/)?tmp.*'```
 
@@ -528,7 +528,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
 
 * Example with further options:
 
-```$ {prog_name} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
+```$ {PROG_NAME} tank1/foo/bar root@host2.example.com:tank2/boo/bar --recursive
 --exclude-snapshot-regex '.*_(secondly|minutely)' --exclude-snapshot-regex 'test_.*'
 --include-snapshot-times-and-ranks '7 days ago..anytime' 'latest 7' --exclude-dataset /tank1/foo/bar/temporary
 --exclude-dataset /tank1/foo/bar/baz/trash --exclude-dataset-regex '(.*/)?private'
@@ -559,7 +559,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Destination ZFS dataset for replication and deletion. Has same naming format as SRC_DATASET. During "
              "replication, destination datasets that do not yet exist are created as necessary, along with their "
              "parent and ancestors.\n\n"
-             f"*Performance Note:* {prog_name} automatically replicates multiple datasets in parallel. It replicates "
+             f"*Performance Note:* {PROG_NAME} automatically replicates multiple datasets in parallel. It replicates "
              "snapshots in parallel across datasets and serially within a dataset. All child datasets of a dataset "
              "may be processed in parallel. For consistency, processing of a dataset only starts after processing of "
              "all its ancestor datasets has completed. Further, when a thread is ready to start processing another "
@@ -610,7 +610,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     parser.add_argument(
         "--exclude-dataset-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-dataset-regex (see above) except that the default is "
-             f"`{exclude_dataset_regexes_default}` (exclude tmp datasets). Example: `!.*` (exclude no dataset)\n\n")
+             f"`{EXCLUDE_DATASET_REGEXES_DEFAULT}` (exclude tmp datasets). Example: `!.*` (exclude no dataset)\n\n")
     parser.add_argument(
         "--exclude-dataset-property", default=None, action=NonEmptyStringAction, metavar="STRING",
         help="The name of a ZFS dataset user property (optional). If this option is specified, the effective value "
@@ -620,7 +620,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "b) Value is 'false': Exclude the dataset and its descendants.\n\n"
              "c) Value is a comma-separated list of host names (no spaces, for example: "
              "'store001,store002'): Include the dataset if the host name of "
-             f"the host executing {prog_name} is contained in the list, otherwise exclude the dataset and its "
+             f"the host executing {PROG_NAME} is contained in the list, otherwise exclude the dataset and its "
              "descendants.\n\n"
              "If a dataset is excluded its descendants are automatically excluded too, and the property values of the "
              "descendants are ignored because exclude takes precedence over include.\n\n"
@@ -774,7 +774,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "hours, but ensure that the latest 36 hourly snapshots (per dataset) are retained regardless of creation time. "
              "Additionally, delete all daily snapshots older than 31 days, but ensure that the latest 31 daily snapshots "
              "(per dataset) are retained regardless of creation time: "
-             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots "
+             f"`{PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication --delete-dst-snapshots "
              "--include-snapshot-regex '.*_minutely' --include-snapshot-times-and-ranks notime 'all except latest 40' "
              "--include-snapshot-times-and-ranks 'anytime..40 minutes ago' "
              "--new-snapshot-filter-group "
@@ -793,7 +793,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "A periodic snapshot is created if it is due per the schedule indicated by --create-src-snapshots-plan "
              "(for example '_daily' or '_hourly' or _'10minutely' or '_2secondly' or '_100millisecondly'), or if the "
              "--create-src-snapshots-even-if-not-due flag is specified, or if the most recent scheduled snapshot "
-             f"is somehow missing. In the latter case {prog_name} immediately creates a snapshot (tagged with the current "
+             f"is somehow missing. In the latter case {PROG_NAME} immediately creates a snapshot (tagged with the current "
              "time, not backdated to the missed time), and then resumes the original schedule.\n\n"
              "If the snapshot suffix is '_adhoc' or not a known period then a snapshot is considered "
              "non-periodic and is thus created immediately regardless of the creation time of any existing snapshot.\n\n"
@@ -806,7 +806,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "property as ZFS actually provides no such guarantee), and thus be consistent. Dataset names that can't fit "
              "into a single command line are spread over multiple command line invocations, respecting the limits that the "
              "operating system places on the maximum length of a single command line, per `getconf ARG_MAX`.\n\n"
-             f"Note: All {prog_name} functions including snapshot creation, replication, deletion, monitoring, comparison, "
+             f"Note: All {PROG_NAME} functions including snapshot creation, replication, deletion, monitoring, comparison, "
              "etc. happily work with any snapshots in any format, even created or managed by third party ZFS snapshot "
              "management tools, including manual zfs snapshot/destroy.\n\n")
     parser.add_argument(
@@ -844,7 +844,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "Example: `tank/foo@prod_us-west-1_2024-09-03_12:26:15_daily`\n\n")
     parser.add_argument(
         "--create-src-snapshots-timezone", default="", type=str, metavar="TZ_SPEC",
-        help=f"Default is the local timezone of the system running {prog_name}. When creating a new snapshot on the source, "
+        help=f"Default is the local timezone of the system running {PROG_NAME}. When creating a new snapshot on the source, "
              "fetch the current time in the specified timezone, and feed that time, and the value of "
              "--create-src-snapshots-timeformat, into the standard strftime() function to generate the timestamp portion "
              "of the snapshot name. The TZ_SPEC input parameter is of the form 'UTC' or '+HHMM' or '-HHMM' for fixed UTC "
@@ -939,8 +939,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="During replication and deletion, skip processing of the SRC_DATASET and DST_DATASET and only process "
              "their descendant datasets, i.e. children, and children of children, etc (with --recursive). No dataset "
              "is processed unless --recursive is also specified. "
-             f"Analogy: `{prog_name} --recursive --skip-parent src dst` is akin to Unix `cp -r src/* dst/` whereas "
-             f" `{prog_name} --recursive --skip-parent --skip-replication --delete-dst-datasets dummy dst` is akin to "
+             f"Analogy: `{PROG_NAME} --recursive --skip-parent src dst` is akin to Unix `cp -r src/* dst/` whereas "
+             f" `{PROG_NAME} --recursive --skip-parent --skip-replication --delete-dst-datasets dummy dst` is akin to "
              "Unix `rm -r dst/*`\n\n")
     parser.add_argument(
         "--skip-missing-snapshots", choices=["fail", "dataset", "continue"], default="dataset", nargs="?",
@@ -958,7 +958,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="The maximum number of times a retryable replication or deletion step shall be retried if it fails, for "
              "example because of network hiccups (default: %(default)s, min: %(min)s). "
              "Also consider this option if a periodic pruning script may simultaneously delete a dataset or "
-             f"snapshot or bookmark while {prog_name} is running and attempting to access it.\n\n")
+             f"snapshot or bookmark while {PROG_NAME} is running and attempting to access it.\n\n")
     parser.add_argument(
         "--retry-min-sleep-secs", type=float, min=0, default=0.125, action=CheckRange, metavar="FLOAT",
         help="The minimum duration to sleep between retries (default: %(default)s).\n\n")
@@ -1004,14 +1004,14 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="Do nothing if the --delete-dst-datasets option is missing. Otherwise, after successful replication "
              "step, if any, delete existing destination datasets that are selected via --{include|exclude}-dataset* "
              "policy yet do not exist within SRC_DATASET (which can be an empty dataset, such as the hardcoded virtual "
-             f"dataset named '{dummy_dataset}'!). Do not recurse without --recursive. With --recursive, never delete "
+             f"dataset named '{DUMMY_DATASET}'!). Do not recurse without --recursive. With --recursive, never delete "
              "non-selected dataset subtrees or their ancestors.\n\n"
              "For example, if the destination contains datasets h1,h2,h3,d1 whereas source only contains h3, "
              "and the include/exclude policy selects h1,h2,h3,d1, then delete datasets h1,h2,d1 on "
              "the destination to make it 'the same'. On the other hand, if the include/exclude policy "
              "only selects h1,h2,h3 then only delete datasets h1,h2 on the destination to make it 'the same'.\n\n"
              "Example to delete all tmp datasets within tank2/boo/bar: "
-             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --recursive "
+             f"`{PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --skip-replication --recursive "
              "--delete-dst-datasets --include-dataset-regex '(.*/)?tmp.*' --exclude-dataset-regex '!.*'`\n\n")
     parser.add_argument(
         "--delete-dst-snapshots", choices=["snapshots", "bookmarks"], default=None, const="snapshots", nargs="?",
@@ -1026,14 +1026,14 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "On the other hand, if the include/exclude policy only selects snapshots h1,h2,h3 then only "
              "delete snapshots h1,h2 on the destination dataset to make it 'the same'.\n\n"
              "*Note:* To delete snapshots regardless, consider using --delete-dst-snapshots in combination with a "
-             f"source that is an empty dataset, such as the hardcoded virtual dataset named '{dummy_dataset}', like so:"
-             f" `{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
+             f"source that is an empty dataset, such as the hardcoded virtual dataset named '{DUMMY_DATASET}', like so:"
+             f" `{PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --skip-replication --delete-dst-snapshots "
              "--include-snapshot-regex '.*_daily' --recursive`\n\n"
              "*Note:* Use --delete-dst-snapshots=bookmarks to delete bookmarks instead of snapshots, in which "
              "case no snapshots are selected and the --{include|exclude}-snapshot-* filter options treat bookmarks as "
              "snapshots wrt. selecting.\n\n"
              "*Performance Note:* --delete-dst-snapshots operates on multiple datasets in parallel (and serially "
-             f"within a dataset), using the same dataset order as {prog_name} replication. "
+             f"within a dataset), using the same dataset order as {PROG_NAME} replication. "
              "The degree of parallelism is configurable with the --threads option (see below).\n\n")
     parser.add_argument(
         "--delete-dst-snapshots-no-crosscheck", action="store_true",
@@ -1142,10 +1142,10 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--monitor-snapshots-no-oldest-check", action="store_true",
         # help="Disable monitoring check of oldest snapshot.\n\n")
         help=argparse.SUPPRESS)
-    cmp_choices_dflt = "+".join(cmp_choices_items)
+    cmp_choices_dflt = "+".join(CMP_CHOICES_ITEMS)
     cmp_choices: list[str] = []
-    for i in range(len(cmp_choices_items)):
-        cmp_choices += ["+".join(c) for c in itertools.combinations(cmp_choices_items, i + 1)]
+    for i in range(len(CMP_CHOICES_ITEMS)):
+        cmp_choices += ["+".join(c) for c in itertools.combinations(CMP_CHOICES_ITEMS, i + 1)]
     parser.add_argument(
         "--compare-snapshot-lists", choices=cmp_choices, default="", const=cmp_choices_dflt, nargs="?",
         help="Do nothing if the --compare-snapshot-lists option is missing. Otherwise, after successful replication "
@@ -1157,7 +1157,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "(tagged with 'dst'), and contained in both source and destination (tagged with 'all'), restricted to "
              "hourly and daily snapshots taken within the last 7 days, excluding the last 4 hours (to allow for some "
              "slack/stragglers), excluding temporary datasets: "
-             f"`{prog_name} tank1/foo/bar tank2/boo/bar --skip-replication "
+             f"`{PROG_NAME} tank1/foo/bar tank2/boo/bar --skip-replication "
              "--compare-snapshot-lists=src+dst+all --recursive --include-snapshot-regex '.*_(hourly|daily)' "
              "--include-snapshot-times-and-ranks '7 days ago..4 hours ago' --exclude-dataset-regex 'tmp.*'`\n\n"
              "This outputs a TSV file containing the following columns:\n\n"
@@ -1179,7 +1179,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "*Note*: Consider omitting the 'all' flag to reduce noise and instead focus on missing snapshots only, "
              "like so: --compare-snapshot-lists=src+dst \n\n"
              "*Note*: The source can also be an empty dataset, such as the hardcoded virtual dataset named "
-             f"'{dummy_dataset}'.\n\n"
+             f"'{DUMMY_DATASET}'.\n\n"
              "*Note*: --compare-snapshot-lists is typically *much* faster than standard 'zfs list -t snapshot' CLI "
              "usage because the former issues requests with a higher degree of parallelism than the latter. The "
              "degree is configurable with the --threads option (see below).\n\n")
@@ -1252,14 +1252,14 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--no-resume-recv", action="store_true",
         help="Replication of snapshots via 'zfs send/receive' can be interrupted by intermittent network hiccups, "
              "reboots, hardware issues, etc. Interrupted 'zfs send/receive' operations are retried if the --retries "
-             f"and --retry-* options enable it (see above). In normal operation {prog_name} automatically retries "
+             f"and --retry-* options enable it (see above). In normal operation {PROG_NAME} automatically retries "
              "such that only the portion of the snapshot is transmitted that has not yet been fully received on the "
              "destination. For example, this helps to progressively transfer a large individual snapshot over a "
              "wireless network in a timely manner despite frequent intermittent network hiccups. This optimization is "
              "called 'resume receive' and uses the 'zfs receive -s' and 'zfs send -t' feature.\n\n"
              "The --no-resume-recv option disables this optimization such that a retry now retransmits the entire "
              "snapshot from scratch, which could slow down or even prohibit progress in case of frequent network "
-             f"hiccups. {prog_name} automatically falls back to using the --no-resume-recv option if it is "
+             f"hiccups. {PROG_NAME} automatically falls back to using the --no-resume-recv option if it is "
              "auto-detected that the ZFS pool does not reliably support the 'resume receive' optimization.\n\n"
              "*Note:* Snapshots that have already been fully transferred as part of the current 'zfs send/receive' "
              "operation need not be retransmitted regardless of the --no-resume-recv flag. For example, assume "
@@ -1269,15 +1269,15 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "been successfully received at the destination either way.\n\n")
     parser.add_argument(
         "--create-bookmarks", choices=["all", "many", "none"], default="many",
-        help=f"For increased safety, {prog_name} replication behaves as follows wrt. ZFS bookmark creation, if it is "
+        help=f"For increased safety, {PROG_NAME} replication behaves as follows wrt. ZFS bookmark creation, if it is "
              "autodetected that the source ZFS pool support bookmarks:\n\n"
              "* `many` (default): Whenever it has successfully completed replication of the most recent source snapshot, "
-             f"{prog_name} creates a ZFS bookmark of that snapshot, and attaches it to the source dataset. In addition, "
-             f"whenever it has successfully completed a 'zfs send' operation, {prog_name} creates a ZFS bookmark of each "
+             f"{PROG_NAME} creates a ZFS bookmark of that snapshot, and attaches it to the source dataset. In addition, "
+             f"whenever it has successfully completed a 'zfs send' operation, {PROG_NAME} creates a ZFS bookmark of each "
              f"hourly, daily, weekly, monthly and yearly source snapshot that was sent during that 'zfs send' operation, "
              "and attaches it to the source dataset.\n\n"
              "* `all`: Whenever it has successfully completed a 'zfs send' operation, "
-             f"{prog_name} creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, "
+             f"{PROG_NAME} creates a ZFS bookmark of each source snapshot that was sent during that 'zfs send' operation, "
              "and attaches it to the source dataset. This increases safety at the expense of some performance.\n\n"
              "* `none`: No bookmark is created.\n\n"
              "Bookmarks exist so an incremental stream can continue to be sent from the source dataset without having "
@@ -1302,7 +1302,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "source of an incremental send. Note that while a bookmark allows for its snapshot "
              "to be deleted on the source after successful replication, it still requires that its snapshot is not "
              "somehow deleted prematurely on the destination dataset, so be mindful of that. "
-             f"By convention, a bookmark created by {prog_name} has the same name as its corresponding "
+             f"By convention, a bookmark created by {PROG_NAME} has the same name as its corresponding "
              "snapshot, the only difference being the leading '#' separator instead of the leading '@' separator. "
              "Also see https://www.youtube.com/watch?v=LaNgoAZeTww&t=316s.\n\n"
              "You can list bookmarks, like so: "
@@ -1312,7 +1312,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "than snapshots, and destination snapshots should be pruned less aggressively than source snapshots. "
              "As an example starting point, here is a command that deletes all bookmarks older than "
              "90 days, but retains the latest 200 bookmarks (per dataset) regardless of creation time: "
-             f"`{prog_name} {dummy_dataset} tank2/boo/bar --dryrun --recursive --skip-replication "
+             f"`{PROG_NAME} {DUMMY_DATASET} tank2/boo/bar --dryrun --recursive --skip-replication "
              "--delete-dst-snapshots=bookmarks --include-snapshot-times-and-ranks notime 'all except latest 200' "
              "--include-snapshot-times-and-ranks 'anytime..90 days ago'`\n\n")
     parser.add_argument(
@@ -1320,17 +1320,17 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help=argparse.SUPPRESS)  # deprecated; was replaced by --create-bookmarks=none
     parser.add_argument(
         "--no-use-bookmark", action="store_true",
-        help=f"For increased safety, in normal replication operation {prog_name} replication also looks for bookmarks "
+        help=f"For increased safety, in normal replication operation {PROG_NAME} replication also looks for bookmarks "
              "(in addition to snapshots) on the source dataset in order to find the most recent common snapshot wrt. the "
              "destination dataset, if it is auto-detected that the source ZFS pool support bookmarks. "
              "The --no-use-bookmark option disables this safety feature but is discouraged, because bookmarks help "
              "to ensure that ZFS replication can continue even if source and destination dataset somehow have no "
              "common snapshot anymore.\n\n"
-             f"Note that it does not matter whether a bookmark was created by {prog_name} or a third party script, "
+             f"Note that it does not matter whether a bookmark was created by {PROG_NAME} or a third party script, "
              "as only the GUID of the bookmark and the GUID of the snapshot is considered for comparison, and ZFS "
              "guarantees that any bookmark of a given snapshot automatically has the same GUID, transaction group "
              "number and creation time as the snapshot. Also note that you can create, delete and prune bookmarks "
-             f"any way you like, as {prog_name} (without --no-use-bookmark) will happily work with whatever "
+             f"any way you like, as {PROG_NAME} (without --no-use-bookmark) will happily work with whatever "
              "bookmarks currently exist, if any.\n\n")
 
     # ^aes256-gcm@openssh.com cipher: for speed with confidentiality and integrity
@@ -1378,7 +1378,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "high degreee of parallelism, and as such may perform poorly on HDDs. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(
         "--max-concurrent-ssh-sessions-per-tcp-connection", type=int, min=1, default=8, action=CheckRange, metavar="INT",
-        help=f"For best throughput, {prog_name} uses multiple SSH TCP connections in parallel, as indicated by "
+        help=f"For best throughput, {PROG_NAME} uses multiple SSH TCP connections in parallel, as indicated by "
              "--threads (see above). For best startup latency, each such parallel TCP connection can carry a "
              "maximum of S concurrent SSH sessions, where "
              "S=--max-concurrent-ssh-sessions-per-tcp-connection (default: %(default)s, min: %(min)s). "
@@ -1386,7 +1386,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "snapshots. This client-side max sessions parameter must not be higher than the server-side "
              "sshd_config(5) MaxSessions parameter (which defaults to 10, see "
              "https://manpages.ubuntu.com/manpages/man5/sshd_config.5.html).\n\n"
-             f"*Note:* For better throughput, {prog_name} uses one dedicated TCP connection per ZFS "
+             f"*Note:* For better throughput, {PROG_NAME} uses one dedicated TCP connection per ZFS "
              "send/receive operation such that the dedicated connection is never used by any other "
              "concurrent SSH session, effectively ignoring the value of the "
              "--max-concurrent-ssh-sessions-per-tcp-connection parameter in the ZFS send/receive case.\n\n")
@@ -1420,9 +1420,9 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
     def hlp(program: str) -> str:
         return f"The name of the '{program}' executable (optional). Default is '{program}'. "
 
-    msg = f"Use '{disable_prg}' to disable the use of this program.\n\n"
+    msg = f"Use '{DISABLE_PRG}' to disable the use of this program.\n\n"
     parser.add_argument(
-        "--compression-program", default="zstd", choices=["zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", disable_prg],
+        "--compression-program", default="zstd", choices=["zstd", "lz4", "pzstd", "pigz", "gzip", "bzip2", DISABLE_PRG],
         help=hlp("zstd") + msg.rstrip() + " The use is auto-disabled if data is transferred locally instead of via the "
                                           "network. This option is about transparent compression-on-the-wire, not about "
                                           "compression-at-rest.\n\n")
@@ -1431,7 +1431,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="The options to be passed to the compression program on the compression step (optional). "
              "Default is '%(default)s' (fastest).\n\n")
     parser.add_argument(
-        "--mbuffer-program", default="mbuffer", choices=["mbuffer", disable_prg],
+        "--mbuffer-program", default="mbuffer", choices=["mbuffer", DISABLE_PRG],
         help=hlp("mbuffer") + msg.rstrip() + " The use is auto-disabled if data is transferred locally "
                                              "instead of via the network. This tool is used to smooth out the rate "
                                              "of data flow and prevent bottlenecks caused by network latency or "
@@ -1440,32 +1440,32 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         "--mbuffer-program-opts", default="-q -m 128M", metavar="STRING",
         help="Options to be passed to 'mbuffer' program (optional). Default: '%(default)s'.\n\n")
     parser.add_argument(
-        "--ps-program", default="ps", choices=["ps", disable_prg],
+        "--ps-program", default="ps", choices=["ps", DISABLE_PRG],
         help=hlp("ps") + msg)
     parser.add_argument(
-        "--pv-program", default="pv", choices=["pv", disable_prg],
+        "--pv-program", default="pv", choices=["pv", DISABLE_PRG],
         help=hlp("pv") + msg.rstrip() + " This is used for bandwidth rate-limiting and progress monitoring.\n\n")
     parser.add_argument(
         "--pv-program-opts", metavar="STRING",
         default="--progress --timer --eta --fineta --rate --average-rate --bytes --interval=1 --width=120 --buffer-size=2M",
         help="The options to be passed to the 'pv' program (optional). Default: '%(default)s'.\n\n")
     parser.add_argument(
-        "--shell-program", default="sh", choices=["sh", disable_prg],
+        "--shell-program", default="sh", choices=["sh", DISABLE_PRG],
         help=hlp("sh") + msg)
     parser.add_argument(
-        "--ssh-program", default="ssh", choices=["ssh", "hpnssh", disable_prg],
+        "--ssh-program", default="ssh", choices=["ssh", "hpnssh", DISABLE_PRG],
         help=hlp("ssh") + msg)
     parser.add_argument(
-        "--sudo-program", default="sudo", choices=["sudo", disable_prg],
+        "--sudo-program", default="sudo", choices=["sudo", DISABLE_PRG],
         help=hlp("sudo") + msg)
     parser.add_argument(
-        "--zpool-program", default="zpool", choices=["zpool", disable_prg],
+        "--zpool-program", default="zpool", choices=["zpool", DISABLE_PRG],
         help=hlp("zpool") + msg)
     parser.add_argument(
         "--log-dir", type=str, action=SafeDirectoryNameAction, metavar="DIR",
-        help=f"Path to the log output directory on local host (optional). Default: $HOME/{log_dir_default}. The logger "
+        help=f"Path to the log output directory on local host (optional). Default: $HOME/{LOG_DIR_DEFAULT}. The logger "
              "that is used by default writes log files there, in addition to the console. The basename of --log-dir must "
-             f"contain the substring '{log_dir_default}' as this helps prevent accidents. The current.dir symlink "
+             f"contain the substring '{LOG_DIR_DEFAULT}' as this helps prevent accidents. The current.dir symlink "
              "always points to the subdirectory containing the most recent log file. The current.log symlink "
              "always points to the most recent log file. The current.pv symlink always points to the most recent "
              "data transfer monitoring log. Run `tail --follow=name --max-unchanged-stats=1` on both symlinks to "
@@ -1504,8 +1504,8 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
         help="The local facility aka category that identifies msg sources in syslog "
              "(default: %(default)s, min=%(min)s, max=%(max)s).\n\n")
     parser.add_argument(
-        "--log-syslog-prefix", default=prog_name, action=NonEmptyStringAction, metavar="STRING",
-        help=f"The name to prepend to each message that is sent to syslog; identifies {prog_name} messages as opposed "
+        "--log-syslog-prefix", default=PROG_NAME, action=NonEmptyStringAction, metavar="STRING",
+        help=f"The name to prepend to each message that is sent to syslog; identifies {PROG_NAME} messages as opposed "
              "to messages from other sources. Default is '%(default)s'.\n\n")
     parser.add_argument(
         "--log-syslog-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"],
@@ -1538,7 +1538,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "value via --log-config-var, for example via "
              "--log-config-var syslog_address:/path/to/socket_file or via "
              "--log-config-var syslog_address:[host,port].\n\n"
-             f"{prog_name} automatically supplies the following convenience variables: "
+             f"{PROG_NAME} automatically supplies the following convenience variables: "
              "`${bzfs.log_level}`, `${bzfs.log_dir}`, `${bzfs.log_file}`, `${bzfs.sub.logger}`, "
              "`${bzfs.get_default_log_formatter}`, `${bzfs.timestamp}`. "
              "For a complete list see the source code of get_dict_config_logger().\n\n")
@@ -1555,12 +1555,12 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "The default is to include no environment variables, i.e. to make no exceptions to --exclude-envvar-regex. "
              "Example that retains at least these two env vars: "
              "`--include-envvar-regex PATH "
-             f"--include-envvar-regex {env_var_prefix}min_pipe_transfer_size`. "
+             f"--include-envvar-regex {ENV_VAR_PREFIX}min_pipe_transfer_size`. "
              "Example that retains all environment variables without tightened security: `'.*'`\n\n")
     parser.add_argument(
         "--exclude-envvar-regex", action=FileOrLiteralAction, nargs="+", default=[], metavar="REGEX",
         help="Same syntax as --include-envvar-regex (see above) except that the default is to exclude no "
-             f"environment variables. Example: `{env_var_prefix}.*`\n\n")
+             f"environment variables. Example: `{ENV_VAR_PREFIX}.*`\n\n")
 
     for period, label in {"yearly": "years", "monthly": "months", "weekly": "weeks", "daily": "days", "hourly": "hours",
                           "minutely": "minutes", "secondly": "seconds", "millisecondly": "milliseconds"}.items():
@@ -1574,7 +1574,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
                 "--" + f.name, type=int, min=min_, max=max_, default=f.default, action=CheckRange, metavar="INT",
                 help=f"{f.metadata.get('help')} ({min_} ≤ x ≤ {max_}, default: %(default)s).\n\n")
 
-    for option_name, flag in zfs_recv_groups.items():
+    for option_name, flag in ZFS_RECV_GROUPS.items():
         grup = option_name.replace("_", "-")  # one of zfs_recv_o, zfs_recv_x
         flag = "'" + flag + "'"  # one of -o or -x
 
@@ -1632,7 +1632,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
             help=h(f"Same syntax as --{grup}-include-regex (see above), and the default is to exclude no properties. "
                    f"Example: --{grup}-exclude-regex encryptionroot keystatus origin volblocksize volsize\n\n"))
     parser.add_argument(
-        "--version", action="version", version=f"{prog_name}-{__version__}, by {prog_author}",
+        "--version", action="version", version=f"{PROG_NAME}-{__version__}, by {PROG_AUTHOR}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
         "--help, -h", action="help",
@@ -1663,9 +1663,9 @@ class LogParams:
         timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.timestamp: str = timestamp
         self.home_dir: str = get_home_directory()
-        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, log_dir_default)
-        if log_dir_default not in os.path.basename(log_parent_dir):
-            die(f"Basename of --log-dir must contain the substring '{log_dir_default}', but got: {log_parent_dir}")
+        log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
+        if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
+            die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
         sep = "_" if args.log_subdir == "daily" else ":"
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
@@ -1761,7 +1761,7 @@ class Params:
             append_if_absent(self.zfs_send_program_opts, "-v")
             append_if_absent(self.zfs_recv_program_opts, "-v")
         self.zfs_full_recv_opts: list[str] = self.zfs_recv_program_opts.copy()
-        cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in zfs_recv_groups.items()]
+        cpconfigs = [CopyPropertiesConfig(group, flag, args, self) for group, flag in ZFS_RECV_GROUPS.items()]
         self.zfs_recv_o_config, self.zfs_recv_x_config, self.zfs_set_config = cpconfigs
 
         self.force_rollback_to_latest_snapshot: bool = args.force_rollback_to_latest_snapshot
@@ -1840,7 +1840,7 @@ class Params:
         self.remote_conf_cache_ttl_nanos: int = 1_000_000 * parse_duration_to_milliseconds(args.daemon_remote_conf_cache_ttl)
         self.terminal_columns: int = (
             getenv_int("terminal_columns", shutil.get_terminal_size(fallback=(120, 24)).columns)
-            if self.isatty and self.pv_program != disable_prg and not self.quiet
+            if self.isatty and self.pv_program != DISABLE_PRG and not self.quiet
             else 0
         )
 
@@ -1852,7 +1852,7 @@ class Params:
         self.platform_platform: str = platform.platform()
 
         # mutable variables:
-        snapshot_filters = args.snapshot_filters_var if hasattr(args, snapshot_filters_var) else [[]]
+        snapshot_filters = args.snapshot_filters_var if hasattr(args, SNAPSHOT_FILTERS_VAR) else [[]]
         self.snapshot_filters: list[list[SnapshotFilter]] = [optimize_snapshot_filters(f) for f in snapshot_filters]
         self.exclude_dataset_property: str | None = args.exclude_dataset_property
         self.exclude_dataset_regexes: RegexList = []  # deferred to validate_task() phase
@@ -1966,7 +1966,7 @@ class Params:
                self.src.basis_ssh_user, self.dst.basis_ssh_user)
         # fmt: on
         hash_code = hashlib.sha256(str(key).encode("utf-8")).hexdigest()
-        return os.path.join(tempfile.gettempdir(), f"{prog_name}-lockfile-{hash_code}.lock")
+        return os.path.join(tempfile.gettempdir(), f"{PROG_NAME}-lockfile-{hash_code}.lock")
 
     def dry(self, msg: str) -> str:
         """Prefix ``msg`` with 'Dry' when running in dry-run mode."""
@@ -2028,7 +2028,7 @@ class Remote:
 
         # dataset is on remote host
         p = self.params
-        if p.ssh_program == disable_prg:
+        if p.ssh_program == DISABLE_PRG:
             die("Cannot talk to remote host because ssh CLI is disabled.")
         ssh_cmd = [p.ssh_program] + self.ssh_extra_opts
         if self.ssh_config_file:
@@ -2257,8 +2257,8 @@ class MonitorSnapshotsConfig:
                             duration_milliseconds = duration_amount * xperiods.suffix_milliseconds.get(duration_unit, 0)
                             warning_millis += 0 if warning_millis <= 0 else cycles * duration_milliseconds
                             critical_millis += 0 if critical_millis <= 0 else cycles * duration_milliseconds
-                            warning_millis = unixtime_infinity_secs if warning_millis <= 0 else warning_millis
-                            critical_millis = unixtime_infinity_secs if critical_millis <= 0 else critical_millis
+                            warning_millis = UNIX_TIME_INFINITY_SECS if warning_millis <= 0 else warning_millis
+                            critical_millis = UNIX_TIME_INFINITY_SECS if critical_millis <= 0 else critical_millis
                             capitalized_alert_type = cast(Literal["Latest", "Oldest"], sys.intern(alert_type.capitalize()))
                             alert_config = AlertConfig(capitalized_alert_type, warning_millis, critical_millis)
                             if alert_type == "latest":
@@ -2368,7 +2368,7 @@ class Job:
                 log = bzfs_main.loggers.get_logger(log_params=log_params, args=args, log=log)
                 log.info("%s", f"Log file is: {log_params.log_file}")
             except BaseException as e:
-                get_simple_logger(prog_name).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
+                get_simple_logger(PROG_NAME).error("Log init: %s", e, exc_info=False if isinstance(e, SystemExit) else True)
                 raise
 
             aux_args: list[str] = []
@@ -2381,12 +2381,12 @@ class Job:
                 args = argument_parser().parse_args(xappend(aux_args, "--", args.root_dataset_pairs), namespace=args)
 
             def log_error_on_exit(error: Any, status_code: Any, exc_info: bool = False) -> None:
-                log.error("%s%s", f"Exiting {prog_name} with status code {status_code}. Cause: ", error, exc_info=exc_info)
+                log.error("%s%s", f"Exiting {PROG_NAME} with status code {status_code}. Cause: ", error, exc_info=exc_info)
 
             try:
                 log.info("CLI arguments: %s %s", " ".join(sys_argv or []), f"[euid: {os.geteuid()}]")
                 if self.is_test_mode:
-                    log.log(log_trace, "Parsed CLI arguments: %s", args)
+                    log.log(LOG_TRACE, "Parsed CLI arguments: %s", args)
                 self.params = p = Params(args, sys_argv or [], log_params, log, self.inject_params)
                 log_params.params = p
                 with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
@@ -2400,7 +2400,7 @@ class Job:
                                 fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # LOCK_NB ... non-blocking
                             except BlockingIOError:
                                 msg = "Exiting as same previous periodic job is still running without completion yet per "
-                                die(msg + lock_file, still_running_status)
+                                die(msg + lock_file, STILL_RUNNING_STATUS)
                             with xfinally(lambda: Path(lock_file).unlink(missing_ok=True)):  # don't accumulate stale files
                                 # On CTRL-C and SIGTERM, send signal to descendant processes to also terminate descendants
                                 old_term_handler = signal.getsignal(signal.SIGTERM)
@@ -2425,14 +2425,14 @@ class Job:
                 log_error_on_exit(e, e.code)
                 raise
             except (subprocess.TimeoutExpired, UnicodeDecodeError) as e:
-                log_error_on_exit(e, die_status)
-                raise SystemExit(die_status) from e
+                log_error_on_exit(e, DIE_STATUS)
+                raise SystemExit(DIE_STATUS) from e
             except re.error as e:
-                log_error_on_exit(f"{e} within regex {e.pattern!r}", die_status)
-                raise SystemExit(die_status) from e
+                log_error_on_exit(f"{e} within regex {e.pattern!r}", DIE_STATUS)
+                raise SystemExit(DIE_STATUS) from e
             except BaseException as e:
-                log_error_on_exit(e, die_status, exc_info=True)
-                raise SystemExit(die_status) from e
+                log_error_on_exit(e, DIE_STATUS, exc_info=True)
+                raise SystemExit(DIE_STATUS) from e
             finally:
                 log.info("%s", f"Log file was: {log_params.log_file}")
             log.info("Success. Goodbye!")
@@ -2542,12 +2542,12 @@ class Job:
         p.zfs_recv_ox_names = self.recv_option_property_names(p.zfs_recv_program_opts)
         for snapshot_filter in p.snapshot_filters:
             for _filter in snapshot_filter:
-                if _filter.name == snapshot_regex_filter_name:
+                if _filter.name == SNAPSHOT_REGEX_FILTER_NAME:
                     exclude_snapshot_regexes = compile_regexes(_filter.options[0])
                     include_snapshot_regexes = compile_regexes(_filter.options[1] or [".*"])
                     _filter.options = (exclude_snapshot_regexes, include_snapshot_regexes)
 
-        exclude_regexes = [exclude_dataset_regexes_default]
+        exclude_regexes = [EXCLUDE_DATASET_REGEXES_DEFAULT]
         if len(p.args.exclude_dataset_regex) > 0:  # some patterns don't exclude anything
             exclude_regexes = [regex for regex in p.args.exclude_dataset_regex if regex != "" and regex != "!.*"]
         include_regexes = p.args.include_dataset_regex
@@ -2562,13 +2562,13 @@ class Job:
 
         p.abs_exclude_datasets, rel_exclude_datasets = separate_abs_vs_rel_datasets(p.args.exclude_dataset)
         p.abs_include_datasets, rel_include_datasets = separate_abs_vs_rel_datasets(p.args.include_dataset)
-        suffix = descendants_re_suffix
+        suffix = DESCENDANTS_RE_SUFFIX
         p.tmp_exclude_dataset_regexes, p.tmp_include_dataset_regexes = (
             compile_regexes(exclude_regexes + dataset_regexes(p.src, p.dst, rel_exclude_datasets), suffix=suffix),
             compile_regexes(include_regexes + dataset_regexes(p.src, p.dst, rel_include_datasets), suffix=suffix),
         )
 
-        if p.pv_program != disable_prg:
+        if p.pv_program != DISABLE_PRG:
             pv_program_opts_set = set(p.pv_program_opts)
             if pv_program_opts_set.isdisjoint({"--bytes", "-b", "--bits", "-8"}):
                 die("--pv-program-opts must contain one of --bytes or --bits for progress metrics to function.")
@@ -2608,7 +2608,7 @@ class Job:
             ):
                 die(f"Source and destination dataset trees must not overlap! {msg}")
 
-        suffx = descendants_re_suffix  # also match descendants of a matching dataset
+        suffx = DESCENDANTS_RE_SUFFIX  # also match descendants of a matching dataset
         p.exclude_dataset_regexes, p.include_dataset_regexes = (
             p.tmp_exclude_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_exclude_datasets), suffix=suffx),
             p.tmp_include_dataset_regexes + compile_regexes(dataset_regexes(src, dst, p.abs_include_datasets), suffix=suffx),
@@ -2643,7 +2643,7 @@ class Job:
             max_datasets_per_minibatch = min(bs, max_datasets_per_minibatch)
             self.max_datasets_per_minibatch_on_list_snaps[r.location] = max_datasets_per_minibatch
             log.log(
-                log_trace,
+                LOG_TRACE,
                 "%s",
                 f"max_datasets_per_batch_on_list_snaps: {p.max_datasets_per_batch_on_list_snaps}, "
                 f"max_datasets_per_minibatch_on_list_snaps: {max_datasets_per_minibatch}, "
@@ -2651,7 +2651,7 @@ class Job:
                 f"location: {r.location}",
             )
         if self.is_test_mode:
-            log.log(log_trace, "Validated Param values: %s", pretty_print_formatter(self.params))
+            log.log(LOG_TRACE, "Validated Param values: %s", pretty_print_formatter(self.params))
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> tuple[str, bool]:
         """Returns sudo command prefix and whether root privileges are required."""
@@ -2676,7 +2676,7 @@ class Job:
             use_zfs_delegation = False  # or instead using 'zfs allow' delegation?
             return sudo, use_zfs_delegation
         elif p.enable_privilege_elevation:
-            if p.sudo_program == disable_prg:
+            if p.sudo_program == DISABLE_PRG:
                 die(f"sudo CLI is not available on host: {ssh_user_host or 'localhost'}")
             # The '-n' option makes 'sudo' safer and more fail-fast. It avoids having sudo prompt the user for input of any
             # kind. If a password is required for the sudo command to run, sudo will display an error message and exit.
@@ -2707,7 +2707,7 @@ class Job:
             cmd = p.split_args(
                 f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
             )
-            for line in (try_ssh_command(self, src, log_debug, cmd=cmd) or "").splitlines():
+            for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
                 cols = line.split("\t")
                 snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
                 self.src_properties[src_dataset] = {
@@ -2783,7 +2783,7 @@ class Job:
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props}", p.recursive_flag, dst.root_dataset
         )
         basis_dst_datasets = []
-        basis_dst_datasets_str = try_ssh_command(self, dst, log_trace, cmd=cmd)
+        basis_dst_datasets_str = try_ssh_command(self, dst, LOG_TRACE, cmd=cmd)
         if basis_dst_datasets_str is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
         else:
@@ -2841,8 +2841,8 @@ class Job:
                 dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
                 self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
                 src_snaps_with_guids, dst_snaps_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
-                    lambda: set(run_ssh_command(self, src, log_trace, cmd=src_cmd).splitlines() if src_cmd else []),
-                    lambda: try_ssh_command(self, dst, log_trace, cmd=dst_cmd),
+                    lambda: set(run_ssh_command(self, src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
+                    lambda: try_ssh_command(self, dst, LOG_TRACE, cmd=dst_cmd),
                 )
                 if dst_snaps_with_guids is None:
                     log.warning("Third party deleted destination: %s", dst_dataset)
@@ -3014,7 +3014,7 @@ class Job:
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
         labels: list[SnapshotLabel] = [alert.label for alert in alerts]
         current_unixtime_millis: float = p.create_src_snapshots_config.current_datetime.timestamp() * 1000
-        is_debug: bool = log.isEnabledFor(log_debug)
+        is_debug: bool = log.isEnabledFor(LOG_DEBUG)
         if is_caching_snapshots(p, remote):
             props = self.dst_properties if remote is p.dst else self.src_properties
             snapshots_changed_dict: dict[str, int] = {
@@ -3062,12 +3062,12 @@ class Job:
                 msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, critical_millis)
                 log.critical("%s", msg)
                 if not p.monitor_snapshots_config.dont_crit:
-                    die(msg, exit_code=critical_status)
+                    die(msg, exit_code=CRITICAL_STATUS)
             elif snapshot_age_millis > warning_millis:
                 msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, warning_millis)
                 log.warning("%s", msg)
                 if not p.monitor_snapshots_config.dont_warn:
-                    die(msg, exit_code=warning_status)
+                    die(msg, exit_code=WARNING_STATUS)
             elif is_debug:
                 msg = m + "OK. " + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, delta_millis=-1)
                 log.debug("%s", msg)
@@ -3087,7 +3087,7 @@ class Job:
             property with the local cache - https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
             """
             stale_datasets = []
-            time_threshold = time.time() - time_threshold_secs
+            time_threshold = time.time() - TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
                 is_stale_dataset = False
                 snapshots_changed: int = snapshots_changed_dict.get(dataset, 0)
@@ -3178,7 +3178,7 @@ class Job:
                 snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])  # get prop "for free"
                 if (
                     snapshots_changed != 0
-                    and time.time() > snapshots_changed + time_threshold_secs
+                    and time.time() > snapshots_changed + TIME_THRESHOLD_SECS
                     and snapshots_changed == self.cache_get_snapshots_changed(cache_file)
                 ):
                     maybe_stale_dst_datasets.append(dst_dataset)
@@ -3193,7 +3193,7 @@ class Job:
                 cache_file = self.last_modified_cache_file(dst, dst_dataset)
                 if (
                     snapshots_changed != 0
-                    and time.time() > snapshots_changed + time_threshold_secs
+                    and time.time() > snapshots_changed + TIME_THRESHOLD_SECS
                     and snapshots_changed == self.cache_get_snapshots_changed(cache_file)
                 ):
                     log.info("Already up-to-date [cached]: %s", dst_dataset)
@@ -3281,8 +3281,8 @@ class Job:
         src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
         self.maybe_inject_delete(src, dataset=src_dataset, delete_trigger="zfs_list_snapshot_src")
         src_snapshots_and_bookmarks, dst_snapshots_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
-            lambda: try_ssh_command(self, src, log_trace, cmd=src_cmd),
-            lambda: try_ssh_command(self, dst, log_trace, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
+            lambda: try_ssh_command(self, src, LOG_TRACE, cmd=src_cmd),
+            lambda: try_ssh_command(self, dst, LOG_TRACE, cmd=dst_cmd, error_trigger="zfs_list_snapshot_dst"),
         )
         self.dst_dataset_exists[dst_dataset] = dst_snapshots_with_guids is not None
         dst_snapshots_with_guids = dst_snapshots_with_guids.splitlines() if dst_snapshots_with_guids is not None else []
@@ -3340,7 +3340,7 @@ class Job:
                     # rollback just in case the dst dataset was modified since its most recent snapshot
                     done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
                     cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-                    try_ssh_command(self, dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
+                    try_ssh_command(self, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
             elif latest_src_snapshot == "":
                 log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
                 return True
@@ -3361,7 +3361,7 @@ class Job:
                 src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids))
             )
             log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
-            log.log(log_trace, "latest_dst_snapshot: %s", latest_dst_snapshot)
+            log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
 
             if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
                 # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
@@ -3384,7 +3384,7 @@ class Job:
                     f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}", latest_common_dst_snapshot
                 )
                 try:
-                    run_ssh_command(self, dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                    run_ssh_command(self, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
                 except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
                     stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
                     no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
@@ -3397,7 +3397,7 @@ class Job:
 
         # endif self.dst_dataset_exists[dst_dataset]
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
-        log.log(log_trace, "latest_dst_snapshot: %s", latest_dst_snapshot)
+        log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
         dry_run_no_send = False
         right_just = 7
 
@@ -3518,7 +3518,7 @@ class Job:
                 steps_todo = self.incremental_send_steps_wrapper(
                     cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
                 )
-            log.log(log_trace, "steps_todo: %s", list_formatter(steps_todo, "; "))
+            log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
             estimate_send_sizes = [
                 self.estimate_send_size(
                     src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
@@ -3651,7 +3651,7 @@ class Job:
             dst_pipe = f"{dst_pipe} | {pv_dst_cmd}"
         if self.inject_params.get("inject_dst_pipe_fail", False):
             # interrupt zfs receive for testing retry/resume; initially forward some bytes and then stop forwarding
-            dst_pipe = f"{dst_pipe} | dd bs=1024 count={inject_dst_pipe_fail_kbytes} 2>/dev/null"
+            dst_pipe = f"{dst_pipe} | dd bs=1024 count={INJECT_DST_PIPE_FAIL_KBYTES} 2>/dev/null"
         if self.inject_params.get("inject_dst_pipe_garble", False):
             dst_pipe = f"{dst_pipe} | base64"  # for testing; forward garbled bytes
         if dst_pipe.startswith(" |"):
@@ -3735,8 +3735,8 @@ class Job:
         def clear_resumable_recv_state() -> bool:
             log.warning(p.dry("Aborting an interrupted zfs receive -s, deleting partially received state: %s"), dst_dataset)
             cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} receive -A", dst_dataset)
-            try_ssh_command(self, p.dst, log_trace, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-            log.log(log_trace, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
+            try_ssh_command(self, p.dst, LOG_TRACE, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            log.log(LOG_TRACE, p.dry("Done Aborting an interrupted zfs receive -s: %s"), dst_dataset)
             return True
 
         p, log = self.params, self.params.log
@@ -3800,7 +3800,7 @@ class Job:
         warning = None
         if not is_zpool_feature_enabled_or_active(p, p.dst, "feature@extensible_dataset"):
             warning = "not available on destination dataset"
-        elif not p.is_program_available(zfs_version_is_at_least_2_1_0, "dst"):
+        elif not p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_1_0, "dst"):
             warning = "unreliable as zfs version is too old"  # e.g. zfs-0.8.3 "internal error: Unknown error 1040"
         if warning:
             log.warning(f"ZFS receive resume feature is {warning}. Falling back to --no-resume-recv: %s", dst_dataset)
@@ -3809,7 +3809,7 @@ class Job:
         send_resume_opts = []
         if self.dst_dataset_exists[dst_dataset]:
             cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
-            recv_resume_token = run_ssh_command(self, p.dst, log_trace, cmd=cmd).rstrip()
+            recv_resume_token = run_ssh_command(self, p.dst, LOG_TRACE, cmd=cmd).rstrip()
             if recv_resume_token == "-" or not recv_resume_token:  # noqa: S105
                 recv_resume_token = None
             else:
@@ -3879,7 +3879,7 @@ class Job:
             if match := Job.worker_thread_number_regex.fullmatch(thread_name):
                 worker = int(match.group(1))
                 if worker > 0:
-                    pv_log_file += pv_file_thread_separator + f"{worker:04}"
+                    pv_log_file += PV_FILE_THREAD_SEPARATOR + f"{worker:04}"
             if self.is_first_replication_task.get_and_set(False):
                 if self.isatty and not p.quiet:
                     self.progress_reporter.start()
@@ -3902,7 +3902,7 @@ class Job:
         if counter and decrement_injection_counter(self, counter, delete_trigger):
             p = self.params
             cmd = p.split_args(f"{remote.sudo} {p.zfs_program} destroy -r", p.force_unmount, p.force_hard, dataset or "")
-            run_ssh_command(self, remote, log_debug, print_stdout=True, cmd=cmd)
+            run_ssh_command(self, remote, LOG_DEBUG, print_stdout=True, cmd=cmd)
 
     def maybe_inject_params(self, error_trigger: str) -> None:
         """For testing only; for unit tests to simulate errors during replication and test correct handling of them."""
@@ -3946,7 +3946,7 @@ class Job:
         is_dry = p.dry_run and is_solaris_zfs(p, r)  # solaris-11.4 knows no 'zfs destroy -n' flag
         try:
             maybe_inject_error(self, cmd=cmd, error_trigger="zfs_delete_snapshot")
-            run_ssh_command(self, r, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+            run_ssh_command(self, r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
             stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             no_sleep = self.clear_resumable_recv_state_if_necessary(dataset, stderr)
@@ -3974,7 +3974,7 @@ class Job:
             remote,
             [(cmd, [f"{dataset}#{snapshot_tag}" for snapshot_tag in snapshot_tags])],
             lambda _cmd, batch: try_ssh_command(
-                self, remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
+                self, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=_cmd + batch, exists=False
             ),
             max_batch_items=1,
         )
@@ -3995,7 +3995,7 @@ class Job:
                 dataset,
             )
             is_dry = p.dry_run and is_solaris_zfs(p, remote)  # solaris-11.4 knows no 'zfs destroy -n' flag
-            run_ssh_command(self, remote, log_debug, is_dry=is_dry, print_stdout=True, cmd=cmd)
+            run_ssh_command(self, remote, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
             last_deleted_dataset = dataset
 
     def create_zfs_filesystem(self, filesystem: str) -> None:
@@ -4006,13 +4006,13 @@ class Job:
         # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
         p = self.params
         parent = ""
-        no_mount = "-u" if p.is_program_available(zfs_version_is_at_least_2_1_0, "dst") else ""
+        no_mount = "-u" if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_1_0, "dst") else ""
         for component in filesystem.split("/"):
             parent += component
             if not self.dst_dataset_exists[parent]:
                 cmd = p.split_args(f"{p.dst.sudo} {p.zfs_program} create -p", no_mount, parent)
                 try:
-                    run_ssh_command(self, p.dst, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+                    run_ssh_command(self, p.dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
                 except subprocess.CalledProcessError as e:
                     # ignore harmless error caused by 'zfs create' without the -u flag, or by dataset already existing
                     if (
@@ -4036,7 +4036,7 @@ class Job:
             assert "@" in snapshot
             bookmark_cmd = cmd + [replace_prefix(snapshot, old_prefix=f"{dataset}@", new_prefix=f"{dataset}#")]
             try:
-                run_ssh_command(self, remote, log_debug, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
+                run_ssh_command(self, remote, LOG_DEBUG, is_dry=p.dry_run, print_stderr=False, cmd=bookmark_cmd)
             except subprocess.CalledProcessError as e:
                 # ignore harmless zfs error caused by bookmark with the same name already existing
                 if ": bookmark exists" not in e.stderr:
@@ -4061,7 +4061,7 @@ class Job:
             items = ()
         cmd = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
         try:
-            lines = try_ssh_command(self, remote, log_trace, cmd=cmd)
+            lines = try_ssh_command(self, remote, LOG_TRACE, cmd=cmd)
         except RetryableError as retryable_error:
             assert retryable_error.__cause__ is not None
             if recv_resume_token:
@@ -4088,7 +4088,7 @@ class Job:
             cmd,
             properties,
             lambda batch: run_ssh_command(
-                self, remote, log_debug, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
+                self, remote, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch + [dataset]
             ),
             max_batch_items=1 if is_solaris_zfs(p, remote) else 2**29,  # solaris-11.4 CLI doesn't accept multiple props
         )
@@ -4111,7 +4111,7 @@ class Job:
         props = props_cache.get(cache_key)
         if props is None:
             cmd = p.split_args(f"{p.zfs_program} get -Hp -o {output_columns} -s {sources} {propnames}", dataset)
-            lines = run_ssh_command(self, remote, log_trace, cmd=cmd)
+            lines = run_ssh_command(self, remote, LOG_TRACE, cmd=cmd)
             is_name_value_pair = "," in output_columns
             props = {}
             # if not splitlines: omit single trailing newline that was appended by 'zfs get' CLI
@@ -4146,7 +4146,7 @@ class Job:
         x_names = p.zfs_recv_x_names
         x_names_set = set(x_names)
         ox_names = p.zfs_recv_ox_names.copy()
-        if p.is_program_available(zfs_version_is_at_least_2_2_0, p.dst.location):
+        if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_2_0, p.dst.location):
             # workaround for https://github.com/openzfs/zfs/commit/b0269cd8ced242e66afc4fa856d62be29bb5a4ff
             # 'zfs recv -x foo' on zfs < 2.2 errors out if the 'foo' property isn't contained in the send stream
             for propname in x_names:
@@ -4276,7 +4276,7 @@ class Job:
         ) -> None:
             """Schedules creation of a snapshot for the given label if the label's existing latest snapshot is too old."""
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
-            log.log(log_trace, "Latest snapshot creation: %s for %s", creation_dt, label)
+            log.log(LOG_TRACE, "Latest snapshot creation: %s for %s", creation_dt, label)
             duration_amount, duration_unit = config.suffix_durations[label.suffix]
             next_event_dt = round_datetime_up_to_duration_multiple(
                 creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.anchors
@@ -4384,7 +4384,7 @@ class Job:
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
                 snapshot_names = [snapshot[-1] for snapshot in snapshots]
-                year_with_4_digits_regex = year_with_four_digits_regex
+                year_with_4_digits_regex = YEAR_WITH_FOUR_DIGITS_REGEX
                 fns = ((fn_latest, True),) if fn_oldest is None else ((fn_latest, True), (fn_oldest, False))
                 for i, label in enumerate(labels):
                     infix = label.infix
@@ -4532,7 +4532,7 @@ class Job:
         tsv_file = os.path.join(tsv_dir, (src.root_dataset + "%" + dst.root_dataset).replace("/", "~") + ".tsv")
         tmp_tsv_file = tsv_file + ".tmp"
         compare_snapshot_lists = set(p.compare_snapshot_lists.split("+"))
-        is_src_dst_all = all(choice in compare_snapshot_lists for choice in cmp_choices_items)
+        is_src_dst_all = all(choice in compare_snapshot_lists for choice in CMP_CHOICES_ITEMS)
         all_src_dst = [loc for loc in ("all", "src", "dst") if loc in compare_snapshot_lists]
         is_first_row = True
         now = None
@@ -4611,7 +4611,7 @@ class Job:
             for i, entry in enumerate(entries):
                 loc = location = entry[0]
                 creation, guid, createtxg, written, name = entry[1].cols
-                root_dataset = dst.root_dataset if location == cmp_choices_items[1] else src.root_dataset
+                root_dataset = dst.root_dataset if location == CMP_CHOICES_ITEMS[1] else src.root_dataset
                 rel_name = relativize_dataset(name, root_dataset)
                 creation_iso = isotime_from_unixtime(int(creation))
                 row = loc, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name, creation, written
@@ -4688,7 +4688,7 @@ class Job:
         # setup streaming pipeline
         src_snap_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
         dst_snap_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
-        merge_itr = self.merge_sorted_iterators(cmp_choices_items, p.compare_snapshot_lists, src_snap_itr, dst_snap_itr)
+        merge_itr = self.merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snap_itr, dst_snap_itr)
 
         rel_datasets: dict[str, set[str]] = defaultdict(set)
         for datasets, remote in (src_datasets, src), (dst_datasets, dst):
@@ -4798,7 +4798,7 @@ class Job:
         if not p.is_program_available("ps", remote.location):
             return True
         cmd = p.split_args(f"{p.ps_program} -Ao args")
-        procs = (try_ssh_command(self, remote, log_trace, cmd=cmd) or "").splitlines()
+        procs = (try_ssh_command(self, remote, LOG_TRACE, cmd=cmd) or "").splitlines()
         if self.inject_params.get("is_zfs_dataset_busy", False):
             procs += ["sudo -n zfs receive -u -o foo:bar=/baz " + dataset]  # for unit testing only
         if not self.is_zfs_dataset_busy(procs, dataset, busy_if_send=busy_if_send):
@@ -4916,7 +4916,7 @@ class Job:
         return self.itr_ssh_cmd_parallel(
             r,
             [(cmd, datasets)],
-            fn=lambda cmd, batch: (try_ssh_command(self, r, log_trace, cmd=cmd + batch) or "").splitlines(),
+            fn=lambda cmd, batch: (try_ssh_command(self, r, LOG_TRACE, cmd=cmd + batch) or "").splitlines(),
             max_batch_items=min(
                 self.max_datasets_per_minibatch_on_list_snaps[r.location],
                 max(
@@ -5216,7 +5216,7 @@ def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
     if path_to_default_shell.endswith(("/csh", "/tcsh")):
         # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
         die(
-            f"Cowardly refusing to proceed because {prog_name} is not compatible with csh-style quoting of special "
+            f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "
             f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
             f"the default shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
             "chsh -s /bin/sh YOURUSERNAME"

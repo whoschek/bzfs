@@ -44,12 +44,12 @@ from bzfs_main.connection import (
     ConnectionPools,
 )
 from bzfs_main.detect import (
+    ZFS_VERSION_IS_AT_LEAST_2_2_0,
     RemoteConfCacheItem,
     detect_available_programs,
-    zfs_version_is_at_least_2_2_0,
 )
 from bzfs_main.utils import (
-    die_status,
+    DIE_STATUS,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.zfs_util import (
@@ -870,7 +870,7 @@ class TestHelperFunctions(AbstractTestCase):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(100 + 2, bzfs_main.utils.unixtime_infinity_secs)],
+            [(100 + 2, bzfs_main.utils.UNIX_TIME_INFINITY_SECS)],
             [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -881,7 +881,7 @@ class TestHelperFunctions(AbstractTestCase):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(str(config))
         self.assertListEqual(
-            [(bzfs_main.utils.unixtime_infinity_secs, 100 + 2)],
+            [(bzfs_main.utils.UNIX_TIME_INFINITY_SECS, 100 + 2)],
             [(alert.latest.warning_millis, alert.latest.critical_millis) for alert in config.alerts],  # type: ignore
         )
         self.assertListEqual(["z_onsite__100millisecondly"], [str(alert.label) for alert in config.alerts])
@@ -1408,14 +1408,14 @@ class TestPreservePropertiesValidation(AbstractTestCase):
         with patch.object(self.p, "is_program_available") as mock_is_available:
             # Make the mock specific to the zfs>=2.2.0 check on dst
             def side_effect(program: str, location: str) -> bool:
-                if program == zfs_version_is_at_least_2_2_0 and location == "dst":
+                if program == ZFS_VERSION_IS_AT_LEAST_2_2_0 and location == "dst":
                     return False
                 return True  # Assume other programs are available
 
             mock_is_available.side_effect = side_effect
             with self.assertRaises(SystemExit) as cm:
                 detect_available_programs(self.job)
-            self.assertEqual(cm.exception.code, die_status)
+            self.assertEqual(cm.exception.code, DIE_STATUS)
             self.assertIn("--preserve-properties is unreliable on destination ZFS < 2.2.0", str(cm.exception))
 
     @patch.object(bzfs_main.detect, "detect_zpool_features")
@@ -1439,7 +1439,7 @@ class TestPreservePropertiesValidation(AbstractTestCase):
 
             def side_effect(program: str, location: str) -> bool:
                 # Simulate old ZFS by returning False for version checks, but True for other programs like ssh.
-                if program == zfs_version_is_at_least_2_2_0:
+                if program == ZFS_VERSION_IS_AT_LEAST_2_2_0:
                     return False
                 return True
 
@@ -1468,7 +1468,7 @@ class TestPythonVersionCheck(AbstractTestCase):
             from bzfs_main import bzfs
 
             importlib.reload(bzfs)  # Reload module to apply version patch
-            mock_exit.assert_called_with(die_status)
+            mock_exit.assert_called_with(DIE_STATUS)
 
     @patch("sys.exit")
     @patch("sys.version_info", new=(3, 8))
