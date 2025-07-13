@@ -61,7 +61,8 @@ checks still pass.
 
 6. **Commit:**
 - Use `git commit -s` to sign off on your work.
-- Use conventional commit messages for all commits, e.g. 'feat(bzfs_jobrunner): add --foo CLI option'
+- Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g.
+  'feat(bzfs_jobrunner): add --foo CLI option', using the following Type and Scope categories:
   - **Types:** `feat`, `fix`, `docs`, `ci`, `build`, `perf`, `refactor`, `chore`, `dx` (developer experience)
   - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`, `all`
 
@@ -73,10 +74,10 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 
 ## How to Find and Fix Bugs
 
-- **Analyze:** If you are tasked to identify a bug, perform a thorough root cause analysis. Think harder to understand
-    *why* the bug occurs, not just *what* it does. Before claiming a bug, meticulously cross-check it against the
-     existing unit tests (`test_*.py`) and integration tests (`test_integrations.py`), which are known to pass. A "bug"
-     covered by a passing test indicates a flawed analysis.
+- **Analyze:** If you are tasked to identify a bug, explore multiple possible approaches, and perform a thorough root
+    cause analysis. Think harder to understand *why* the bug occurs, not just *what* it does. Before claiming a bug,
+    meticulously cross-check it against the existing unit tests (`test_*.py`) and integration tests
+    (`test_integrations.py`), which are known to pass. A "bug" covered by a passing test indicates a flawed analysis.
 - **Test First, Then Fix:** For any real bug, explain its root cause, write a new test case that fails with the current
     code, and then implement the fix that makes the new test pass.
 
@@ -102,8 +103,8 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 
 Your goal is to improve quality with zero functional regressions.
 
-- **Plan First:** Think harder and write a plan (≤ 200 words) summarizing the intended changes, chosen tool, and
-    validation steps.
+- **Plan First:** Think harder, explore multiple possible approaches, and write a plan (≤ 200 words) summarizing the
+    intended changes, chosen tool, and validation steps.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
