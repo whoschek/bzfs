@@ -61,7 +61,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly autotype
         language: python
-        additional_dependencies: ['pyrefly==0.23.0']
+        additional_dependencies: ['pyrefly==0.24.2']
         pass_filenames: false
   - repo: local
     hooks:
