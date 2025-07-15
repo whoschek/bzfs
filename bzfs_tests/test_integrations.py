@@ -48,6 +48,7 @@ from unittest.mock import patch
 
 import bzfs_main.utils
 from bzfs_main import (
+    argparse_cli,
     bzfs,
     bzfs_jobrunner,
     utils,
@@ -332,7 +333,7 @@ class IntegrationTestCase(ParametrizedTestCase):
 
     @staticmethod
     def log_dir_opt() -> list[str]:
-        return ["--log-dir", os.path.join(bzfs_main.utils.get_home_directory(), bzfs.LOG_DIR_DEFAULT + "-test")]
+        return ["--log-dir", os.path.join(bzfs_main.utils.get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-test")]
 
     def run_bzfs_internal(
         self,
@@ -3753,8 +3754,8 @@ class LocalTestCase(IntegrationTestCase):
 
                     self.setup_basic()
                     cmp_choices: list[str] = []
-                    for w in range(len(bzfs.CMP_CHOICES_ITEMS)):
-                        cmp_choices += ["+".join(c) for c in itertools.combinations(bzfs.CMP_CHOICES_ITEMS, w + 1)]
+                    for w in range(len(argparse_cli.CMP_CHOICES_ITEMS)):
+                        cmp_choices += ["+".join(c) for c in itertools.combinations(argparse_cli.CMP_CHOICES_ITEMS, w + 1)]
                     for cmp in cmp_choices:
                         job = self.run_bzfs(
                             src_root_dataset, dst_root_dataset, "--skip-replication", f"--compare-snapshot-lists={cmp}"

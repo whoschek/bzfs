@@ -48,6 +48,7 @@ from typing import Any, Iterable, TypeVar, Union
 
 import bzfs_main.utils
 from bzfs_main import argparse_actions, bzfs
+from bzfs_main.argparse_cli import PROG_AUTHOR
 from bzfs_main.check_range import CheckRange
 from bzfs_main.detect import DUMMY_DATASET
 from bzfs_main.loggers import get_simple_logger
@@ -381,7 +382,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         "--jobrunner-log-level", choices=["CRITICAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"], default="INFO",
         help="Only emit jobrunner messages with equal or higher priority than this log level. Default is '%(default)s'.\n\n")
     parser.add_argument(
-        "--version", action="version", version=f"{PROG_NAME}-{bzfs.__version__}, by {bzfs.PROG_AUTHOR}",
+        "--version", action="version", version=f"{PROG_NAME}-{bzfs_main.argparse_cli.__version__}, by {PROG_AUTHOR}",
         help="Display version information and exit.\n\n")
     parser.add_argument(
         "--help, -h", action="help",

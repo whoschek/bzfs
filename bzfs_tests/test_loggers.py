@@ -29,7 +29,7 @@ from unittest.mock import (
     patch,
 )
 
-from bzfs_main import bzfs
+from bzfs_main import argparse_cli, bzfs
 from bzfs_main.bzfs import (
     LogParams,
 )
@@ -68,7 +68,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_logdir_basename_prefix(self) -> None:
         """Basename of --log-dir must start with prefix 'bzfs-logs'."""
-        logdir = os.path.join(get_home_directory(), bzfs.LOG_DIR_DEFAULT + "-tmp")
+        logdir = os.path.join(get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-tmp")
         try:
             LogParams(bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + logdir]))
             self.assertTrue(os.path.exists(logdir))
@@ -85,7 +85,7 @@ class TestHelperFunctions(AbstractTestCase):
         with tempfile.TemporaryDirectory(prefix="logdir_symlink_test") as tmpdir:
             target = os.path.join(tmpdir, "target")
             os.mkdir(target)
-            link_path = os.path.join(tmpdir, bzfs.LOG_DIR_DEFAULT + "-link")
+            link_path = os.path.join(tmpdir, argparse_cli.LOG_DIR_DEFAULT + "-link")
             os.symlink(target, link_path)
             args = bzfs.argument_parser().parse_args(args=["src", "dst", "--log-dir=" + link_path])
             with self.assertRaises(SystemExit) as cm:

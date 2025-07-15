@@ -25,16 +25,7 @@ import os
 import unittest
 from unittest.mock import MagicMock
 
-from bzfs_main.bzfs import (
-    LOG_DIR_DEFAULT,
-    LogParams,
-    Params,
-    argument_parser,
-)
-from bzfs_main.utils import (
-    get_home_directory,
-    getenv_any,
-)
+from bzfs_main import argparse_cli, bzfs, utils
 
 
 #############################################################################
@@ -43,7 +34,7 @@ class AbstractTestCase(unittest.TestCase):
     def __init__(self, methodName: str = "runTest") -> None:  # noqa: N803
         super().__init__(methodName)
         # immutable variables:
-        self.test_mode: str = getenv_any("test_mode", "") or ""  # Consider toggling this when testing
+        self.test_mode: str = utils.getenv_any("test_mode", "") or ""  # Consider toggling this when testing
         self.is_unit_test: bool = self.test_mode == "unit"  # run only unit tests aka skip integration tests
         self.is_smoke_test: bool = self.test_mode == "smoke"  # run only a small subset of tests
         self.is_functional_test: bool = self.test_mode == "functional"  # most tests but only in a single local config combo
@@ -51,17 +42,17 @@ class AbstractTestCase(unittest.TestCase):
 
     @staticmethod
     def argparser_parse_args(args: list[str]) -> argparse.Namespace:
-        return argument_parser().parse_args(
-            args + ["--log-dir", os.path.join(get_home_directory(), LOG_DIR_DEFAULT + "-test")]
+        return bzfs.argument_parser().parse_args(
+            args + ["--log-dir", os.path.join(utils.get_home_directory(), argparse_cli.LOG_DIR_DEFAULT + "-test")]
         )
 
     @staticmethod
     def make_params(
         args: argparse.Namespace,
-        log_params: LogParams | None = None,
+        log_params: bzfs.LogParams | None = None,
         log: logging.Logger | None = None,
         inject_params: dict[str, bool] | None = None,
-    ) -> Params:
-        log_params = log_params if log_params is not None else MagicMock(spec=LogParams)
+    ) -> bzfs.Params:
+        log_params = log_params if log_params is not None else MagicMock(spec=bzfs.LogParams)
         log = log if log is not None else MagicMock(spec=logging.Logger)
-        return Params(args=args, sys_argv=[], log_params=log_params, log=log, inject_params=inject_params)
+        return bzfs.Params(args=args, sys_argv=[], log_params=log_params, log=log, inject_params=inject_params)

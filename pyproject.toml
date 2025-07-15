@@ -98,13 +98,13 @@ exclude = ["bzfs_docs", "bash_completion_d"]
 bzfs_tests = ["*.json"]
 
 [tool.setuptools.dynamic]
-version = {attr = "bzfs_main.bzfs.__version__"}
+version = {attr = "bzfs_main.argparse_cli.__version__"}
 
 [tool.hatch.build]
 include = ["bzfs_main/**", "bzfs_tests/**"]
 
 [tool.hatch.version]
-path = "bzfs_main/bzfs.py"
+path = "bzfs_main/argparse_cli.py"
 pattern = "^__version__ = ['\"](?P<version>[^'\"]+)['\"]$"
 
 [tool.coverage.run]  # see https://coverage.readthedocs.io/
@@ -259,6 +259,7 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 warn_return_any = true
 warn_unused_ignores = true
+no_implicit_reexport = true
 #ignore_errors = true  #  big toggle to exclude all `mypy` checks in development mode
 disable_error_code = [  # toggles to exclude overly strict `mypy` checks in development mode:
 #    see https://mypy.readthedocs.io/en/stable/error_code_list.html#error-code-list
