@@ -81,6 +81,7 @@ from typing import (
     Literal,
     NamedTuple,
     Sequence,
+    Tuple,
     TypeVar,
     cast,
 )
@@ -1295,60 +1296,12 @@ class Job:
         self.src_properties = {}
         self.dst_properties = {}
         if not is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
-            is_caching = is_caching_snapshots(p, src)
-            props = "volblocksize,recordsize,name"
-            props = "snapshots_changed," + props if is_caching else props
-            cmd = p.split_args(
-                f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
-            )
-            for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
-                cols = line.split("\t")
-                snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
-                self.src_properties[src_dataset] = {
-                    "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
-                    SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
-                }
-                basis_src_datasets.append(src_dataset)
-            assert not self.is_test_mode or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
+            basis_src_datasets = self.list_src_datasets_task()
 
-        # Optionally, atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
-        # The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
-        # using lexicographical sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
-        # --{include|exclude}-dataset* pruning policy. The snapshots of all datasets that fit within the same single
-        # 'zfs snapshot' CLI invocation will be taken within the same ZFS transaction group, and correspondingly have
-        # identical 'createtxg' ZFS property (but not necessarily identical 'creation' ZFS time property as ZFS actually
-        # provides no such guarantee), and thus be consistent. Dataset names that can't fit into a single command line are
-        # spread over multiple command line invocations, respecting the limits that the operating system places on the
-        # maximum length of a single command line, per `getconf ARG_MAX`.
         if not p.create_src_snapshots_config.skip_create_src_snapshots:
             log.info(p.dry("--create-src-snapshots: %s"), f"{src.basis_root_dataset} {p.recursive_flag}{recursive_sep}...")
-            if len(basis_src_datasets) == 0:
-                die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
-            datasets_to_snapshot: dict[SnapshotLabel, list[str]] = self.find_datasets_to_snapshot(src_datasets)
-            datasets_to_snapshot = {label: datasets for label, datasets in datasets_to_snapshot.items() if len(datasets) > 0}
-            basis_datasets_to_snapshot = datasets_to_snapshot.copy()  # shallow copy
-            commands = {}
-            for label, datasets in datasets_to_snapshot.items():
-                cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
-                if p.recursive:
-                    # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to non-recursive CLI flavor
-                    root_datasets = self.root_datasets_if_recursive_zfs_snapshot_is_possible(datasets, basis_src_datasets)
-                    if root_datasets is not None:
-                        cmd.append("-r")  # recursive; takes a snapshot of all datasets in the subtree(s)
-                        datasets_to_snapshot[label] = root_datasets
-                commands[label] = cmd
-            creation_msg = f"Creating {sum(len(datasets) for datasets in basis_datasets_to_snapshot.values())} snapshots"
-            log.info(p.dry("--create-src-snapshots: %s"), f"{creation_msg} within {len(src_datasets)} datasets ...")
-            # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
-            self.run_ssh_cmd_parallel(
-                src,
-                [(commands[lbl], [f"{ds}@{lbl}" for ds in datasets]) for lbl, datasets in datasets_to_snapshot.items()],
-                fn=lambda cmd, batch: run_ssh_command(self, src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
-                max_batch_items=1 if is_solaris_zfs(p, src) else 2**29,  # solaris CLI doesn't accept multiple datasets
-            )
-            # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
-            self.update_last_modified_cache(basis_datasets_to_snapshot)
+            self.create_src_snapshots_task(basis_src_datasets, src_datasets)
 
         # Optionally, replicate src.root_dataset (optionally including its descendants) to dst.root_dataset
         if not p.skip_replication:
@@ -1370,11 +1323,66 @@ class Job:
         log.info("Listing dst datasets: %s", task_description)
         if is_dummy(dst):
             die("Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
+        basis_dst_datasets = self.list_dst_datasets_task()
+        dst_datasets = filter_datasets(self, dst, basis_dst_datasets)  # apply include/exclude policy
+
+        if p.delete_dst_datasets and not failed:
+            log.info(p.dry("--delete-dst-datasets: %s"), task_description)
+            basis_dst_datasets, dst_datasets = self.delete_dst_datasets_task(
+                basis_src_datasets, basis_dst_datasets, dst_datasets
+            )
+
+        if p.delete_dst_snapshots and not failed:
+            log.info(p.dry("--delete-dst-snapshots: %s"), task_description + f" [{len(dst_datasets)} datasets]")
+            failed = self.delete_destination_snapshots_task(basis_src_datasets, dst_datasets, max_workers, task_description)
+
+        if p.delete_empty_dst_datasets and p.recursive and not failed:
+            log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
+            dst_datasets = self.delete_empty_dst_datasets_task(basis_dst_datasets, dst_datasets)
+
+        if p.compare_snapshot_lists and not failed:
+            log.info("--compare-snapshot-lists: %s", task_description)
+            if len(basis_src_datasets) == 0 and not is_dummy(src):
+                die(f"Source dataset does not exist: {src.basis_root_dataset}")
+            src_datasets = filter_src_datasets()  # apply include/exclude policy
+            self.run_compare_snapshot_lists(src_datasets, dst_datasets)
+
+        if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
+            log.info("--monitor-snapshots: %s", task_description)
+            src_datasets = filter_src_datasets()  # apply include/exclude policy
+            self.monitor_snapshots_task(src_datasets, dst_datasets, task_description)
+
+    def list_src_datasets_task(self) -> list[str]:
+        """Lists datasets on the source host."""
+        p = self.params
+        src = p.src
+        basis_src_datasets = []
+        is_caching = is_caching_snapshots(p, src)
+        props = "volblocksize,recordsize,name"
+        props = "snapshots_changed," + props if is_caching else props
+        cmd = p.split_args(
+            f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
+        )
+        for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
+            cols = line.split("\t")
+            snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
+            self.src_properties[src_dataset] = {
+                "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
+                SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
+            }
+            basis_src_datasets.append(src_dataset)
+        assert not self.is_test_mode or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
+        return basis_src_datasets
+
+    def list_dst_datasets_task(self) -> list[str]:
+        """Lists datasets on the destination host."""
+        p, log = self.params, self.params.log
+        dst = p.dst
         is_caching = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
         props = "name"
         props = "snapshots_changed," + props if is_caching else props
         cmd = p.split_args(
-            f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props}", p.recursive_flag, dst.root_dataset
+            f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
         )
         basis_dst_datasets = []
         basis_dst_datasets_str = try_ssh_command(self, dst, LOG_TRACE, cmd=cmd)
@@ -1388,222 +1396,270 @@ class Job:
                     SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 }
                 basis_dst_datasets.append(dst_dataset)
-
         assert not self.is_test_mode or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
-        dst_datasets = filter_datasets(self, dst, basis_dst_datasets)  # apply include/exclude policy
+        return basis_dst_datasets
 
-        # Optionally, delete existing destination datasets that do not exist within the source dataset if they are
-        # included via --{include|exclude}-dataset* policy. Do not recurse without --recursive. With --recursive,
-        # never delete non-selected dataset subtrees or their ancestors.
-        if p.delete_dst_datasets and not failed:
-            log.info(p.dry("--delete-dst-datasets: %s"), task_description)
-            children = defaultdict(set)
-            for dst_dataset in basis_dst_datasets:  # Compute the direct children of each NON-FILTERED dataset
-                parent = os.path.dirname(dst_dataset)
-                children[parent].add(dst_dataset)
-            to_delete: set[str] = set()
-            for dst_dataset in reversed(dst_datasets):
-                if children[dst_dataset].issubset(to_delete):
-                    to_delete.add(dst_dataset)  # all children are deletable, thus the dataset itself is deletable too
-            to_delete = to_delete.difference(
-                {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
-            )
-            self.delete_datasets(dst, to_delete)
-            dst_datasets = sorted(set(dst_datasets).difference(to_delete))
-            basis_dst_datasets = sorted(set(basis_dst_datasets).difference(to_delete))
+    def create_src_snapshots_task(self, basis_src_datasets: list[str], src_datasets: list[str]) -> None:
+        """Atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
 
-        # Optionally, delete existing destination snapshots that do not exist within the source dataset if they
-        # are included by the --{include|exclude}-snapshot-* policy, and the destination dataset is included
-        # via --{include|exclude}-dataset* policy.
-        if p.delete_dst_snapshots and not failed:
-            log.info(p.dry("--delete-dst-snapshots: %s"), task_description + f" [{len(dst_datasets)} datasets]")
-            kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
-            filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
-            props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-            basis_src_datasets_set = set(basis_src_datasets)
-            num_snapshots_found, num_snapshots_deleted = 0, 0
+        The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
+        using lexicographical sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
+        --{include|exclude}-dataset* pruning policy. The snapshots of all datasets that fit within the same single 'zfs
+        snapshot' CLI invocation will be taken within the same ZFS transaction group, and correspondingly have identical
+        'createtxg' ZFS property (but not necessarily identical 'creation' ZFS time property as ZFS actually provides no such
+        guarantee), and thus be consistent. Dataset names that can't fit into a single command line are spread over multiple
+        command line invocations, respecting the limits that the operating system places on the maximum length of a single
+        command line, per `getconf ARG_MAX`.
+        """
+        p, log = self.params, self.params.log
+        src = p.src
+        if len(basis_src_datasets) == 0:
+            die(f"Source dataset does not exist: {src.basis_root_dataset}")
+        datasets_to_snapshot: dict[SnapshotLabel, list[str]] = self.find_datasets_to_snapshot(src_datasets)
+        datasets_to_snapshot = {label: datasets for label, datasets in datasets_to_snapshot.items() if len(datasets) > 0}
+        basis_datasets_to_snapshot = datasets_to_snapshot.copy()  # shallow copy
+        commands = {}
+        for label, datasets in datasets_to_snapshot.items():
+            cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
+            if p.recursive:
+                # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to non-recursive CLI flavor
+                root_datasets = self.root_datasets_if_recursive_zfs_snapshot_is_possible(datasets, basis_src_datasets)
+                if root_datasets is not None:
+                    cmd.append("-r")  # recursive; takes a snapshot of all datasets in the subtree(s)
+                    datasets_to_snapshot[label] = root_datasets
+            commands[label] = cmd
+        creation_msg = f"Creating {sum(len(datasets) for datasets in basis_datasets_to_snapshot.values())} snapshots"
+        log.info(p.dry("--create-src-snapshots: %s"), f"{creation_msg} within {len(src_datasets)} datasets ...")
+        # create snapshots in large (parallel) batches, without using a command line that's too big for the OS to handle
+        self.run_ssh_cmd_parallel(
+            src,
+            [(commands[lbl], [f"{ds}@{lbl}" for ds in datasets]) for lbl, datasets in datasets_to_snapshot.items()],
+            fn=lambda cmd, batch: run_ssh_command(self, src, is_dry=p.dry_run, print_stdout=True, cmd=cmd + batch),
+            max_batch_items=1 if is_solaris_zfs(p, src) else 2**29,  # solaris CLI doesn't accept multiple datasets
+        )
+        # perf: copy lastmodified time of source dataset into local cache to reduce future 'zfs list -t snapshot' calls
+        self.update_last_modified_cache(basis_datasets_to_snapshot)
 
-            def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
-                src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
-                if src_dataset in basis_src_datasets_set and (are_bookmarks_enabled(p, src) or not p.delete_dst_bookmarks):
-                    src_kind = kind
-                    if not p.delete_dst_snapshots_no_crosscheck:
-                        src_kind = "snapshot,bookmark" if are_bookmarks_enabled(p, src) else "snapshot"
-                    src_cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
-                else:
-                    src_cmd = None
-                dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
-                self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
-                src_snaps_with_guids, dst_snaps_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
-                    lambda: set(run_ssh_command(self, src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
-                    lambda: try_ssh_command(self, dst, LOG_TRACE, cmd=dst_cmd),
-                )
-                if dst_snaps_with_guids is None:
-                    log.warning("Third party deleted destination: %s", dst_dataset)
-                    return False
-                dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
-                num_dst_snaps_with_guids = len(dst_snaps_with_guids)
-                basis_dst_snaps_with_guids = dst_snaps_with_guids.copy()
-                if p.delete_dst_bookmarks:
-                    replace_in_lines(dst_snaps_with_guids, old="#", new="@", count=1)  # treat bookmarks as snapshots
-                #  The check against the source dataset happens *after* filtering the dst snapshots with filter_snapshots().
-                # `p.delete_dst_snapshots_except` means the user wants to specify snapshots to *retain* aka *keep*
-                all_except = p.delete_dst_snapshots_except
-                if p.delete_dst_snapshots_except and not is_dummy(src):
-                    # However, as here we are in "except" mode AND the source is NOT a dummy, we first filter to get what
-                    # the policy says to *keep* (so all_except=False for the filter_snapshots() call), then from that "keep"
-                    # list, we later further refine by checking what's on the source dataset.
-                    all_except = False
-                dst_snaps_with_guids = filter_snapshots(self, dst_snaps_with_guids, all_except=all_except)
-                if p.delete_dst_bookmarks:
-                    replace_in_lines(dst_snaps_with_guids, old="@", new="#", count=1)  # restore pre-filtering bookmark state
-                if filter_needs_creation_time:
-                    dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
-                    basis_dst_snaps_with_guids = cut(field=2, lines=basis_dst_snaps_with_guids)
-                if p.delete_dst_snapshots_except and not is_dummy(src):  # Non-dummy Source + "Except" (Keep) Mode
-                    # Retain dst snapshots that match snapshot filter policy AND are on src dataset, aka
-                    # Delete dst snapshots except snapshots that match snapshot filter policy AND are on src dataset.
-                    # Concretely, `dst_snaps_with_guids` contains GUIDs of DST snapshots that the filter policy says to KEEP.
-                    # We only actually keep them if they are ALSO on the SRC.
-                    # So, snapshots to DELETE (`dst_tags_to_delete`) are ALL snapshots on DST (`basis_dst_snaps_with_guids`)
-                    # EXCEPT those whose GUIDs are in `dst_snaps_with_guids` AND ALSO in `src_snaps_with_guids`.
-                    except_dst_guids = set(cut(field=1, lines=dst_snaps_with_guids)).intersection(src_snaps_with_guids)
-                    dst_tags_to_delete = filter_lines_except(basis_dst_snaps_with_guids, except_dst_guids)
-                else:  # Standard Delete Mode OR Dummy Source + "Except" (Keep) Mode
-                    # In standard delete mode:
-                    #   `dst_snaps_with_guids` contains GUIDs of policy-selected snapshots on DST.
-                    #   We delete those that are NOT on SRC.
-                    #   `dst_tags_to_delete` = `dst_snaps_with_guids` - `src_snaps_with_guids`.
-                    # In dummy source + "except" (keep) mode:
-                    #   `all_except` was True.
-                    #   `dst_snaps_with_guids` contains snaps NOT matching the "keep" policy -- these are the ones to delete.
-                    #   `src_snaps_with_guids` is empty.
-                    #   `dst_tags_to_delete` = `dst_snaps_with_guids` - {} = `dst_snaps_with_guids`.
-                    dst_guids_to_delete = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
-                    dst_tags_to_delete = filter_lines(dst_snaps_with_guids, dst_guids_to_delete)
-                separator = "#" if p.delete_dst_bookmarks else "@"
-                dst_tags_to_delete = cut(field=2, separator=separator, lines=dst_tags_to_delete)
-                if p.delete_dst_bookmarks:
-                    self.delete_bookmarks(dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
-                else:
-                    self.delete_snapshots(dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
-                with self.stats_lock:
-                    nonlocal num_snapshots_found
-                    num_snapshots_found += num_dst_snaps_with_guids
-                    nonlocal num_snapshots_deleted
-                    num_snapshots_deleted += len(dst_tags_to_delete)
-                    if len(dst_tags_to_delete) > 0 and not p.delete_dst_bookmarks:
-                        self.dst_properties[dst_dataset][SNAPSHOTS_CHANGED] = 0  # invalidate cache
-                return True
+    def delete_destination_snapshots_task(
+        self, basis_src_datasets: list[str], dst_datasets: list[str], max_workers: int, task_description: str
+    ) -> bool:
+        """Delete existing destination snapshots that do not exist within the source dataset if they are included by the
+        --{include|exclude}-snapshot-* policy, and the destination dataset is included via --{include|exclude}-dataset*
+        policy."""
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+        kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
+        filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
+        props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+        basis_src_datasets_set = set(basis_src_datasets)
+        num_snapshots_found, num_snapshots_deleted = 0, 0
 
-            # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
-            if are_bookmarks_enabled(p, dst) or not p.delete_dst_bookmarks:
-                start_time_nanos = time.monotonic_ns()
-                failed = process_datasets_in_parallel_and_fault_tolerant(
-                    log=p.log,
-                    datasets=dst_datasets,
-                    process_dataset=delete_destination_snapshots,  # lambda
-                    skip_tree_on_error=lambda dataset: False,
-                    skip_on_error=p.skip_on_error,
-                    max_workers=max_workers,
-                    enable_barriers=False,
-                    task_name="--delete-dst-snapshots",
-                    append_exception=self.append_exception,
-                    retry_policy=p.retry_policy,
-                    dry_run=p.dry_run,
-                    is_test_mode=self.is_test_mode,
-                )
-                elapsed_nanos = time.monotonic_ns() - start_time_nanos
-                log.info(
-                    p.dry("--delete-dst-snapshots: %s"),
-                    task_description + f" [Deleted {num_snapshots_deleted} out of {num_snapshots_found} {kind}s "
-                    f"within {len(dst_datasets)} datasets; took {human_readable_duration(elapsed_nanos)}]",
-                )
-
-        # Optionally, delete any existing destination dataset that has no snapshot and no bookmark if all descendants
-        # of that dataset do not have a snapshot or bookmark either. To do so, we walk the dataset list (conceptually,
-        # a tree) depth-first (i.e. sorted descending). If a dst dataset has zero snapshots and zero bookmarks and all
-        # its children are already marked as orphans, then it is itself an orphan, and we mark it as such. Walking in
-        # a reverse sorted way means that we efficiently check for zero snapshots/bookmarks not just over the direct
-        # children but the entire tree. Finally, delete all orphan datasets in an efficient batched way.
-        if p.delete_empty_dst_datasets and p.recursive and not failed:
-            log.info(p.dry("--delete-empty-dst-datasets: %s"), task_description)
-            delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
-                p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and are_bookmarks_enabled(p, dst)
-            )
-
-            # Compute the direct children of each NON-FILTERED dataset. Thus, no non-selected dataset and no ancestor of a
-            # non-selected dataset will ever be added to the "orphan" set. In other words, this treats non-selected dataset
-            # subtrees as if they all had snapshots, so non-selected dataset subtrees and their ancestors are guaranteed
-            # to not get deleted.
-            children = defaultdict(set)
-            for dst_dataset in basis_dst_datasets:
-                parent = os.path.dirname(dst_dataset)
-                children[parent].add(dst_dataset)
-
-            # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of one
-            # filter run is an optimization. The first run only computes candidate orphans, without incurring I/O, to reduce
-            # the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from dst_datasets to a subset
-            # of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this eliminates the I/O to list
-            # snapshots for ancestors of excluded datasets. The second run computes the real orphans.
-            btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
-            dst_datasets_having_snapshots: set[str] = set()
-            for run in range(2):
-                orphans: set[str] = set()
-                for dst_dataset in reversed(dst_datasets):
-                    if children[dst_dataset].issubset(orphans):
-                        # all children turned out to be orphans, thus the dataset itself could be an orphan
-                        if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
-                            orphans.add(dst_dataset)
-                if run == 0:
-                    # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
-                    cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
-                    for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(
-                        dst, cmd, sorted(orphans), ordered=False
-                    ):
-                        if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
-                            replace_in_lines(datasets_having_snapshots, old="#", new="@", count=1)  # treat bookmarks as snap
-                        datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
-                        dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
-                else:
-                    self.delete_datasets(dst, orphans)
-                    dst_datasets = sorted(set(dst_datasets).difference(orphans))
-
-        # Optionally, compare source and destination dataset trees recursively wrt. snapshots, for example to check if all
-        # recently taken snapshots have been successfully replicated by a periodic job.
-        if p.compare_snapshot_lists and not failed:
-            log.info("--compare-snapshot-lists: %s", task_description)
-            if len(basis_src_datasets) == 0 and not is_dummy(src):
-                die(f"Source dataset does not exist: {src.basis_root_dataset}")
-            src_datasets = filter_src_datasets()  # apply include/exclude policy
-            self.run_compare_snapshot_lists(src_datasets, dst_datasets)
-
-        # Optionally, alert the user if the ZFS 'creation' time property of the latest or oldest snapshot for any specified
-        # snapshot name pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to
-        # check if snapshots are successfully taken on schedule, successfully replicated on schedule, and successfully
-        # pruned on schedule. Process exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
-        if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
-            log.info("--monitor-snapshots: %s", task_description)
-            src_datasets = filter_src_datasets()  # apply include/exclude policy
-            num_cache_hits = self.num_cache_hits
-            num_cache_misses = self.num_cache_misses
-            start_time_nanos = time.monotonic_ns()
-            run_in_parallel(
-                lambda: self.monitor_snapshots(dst, dst_datasets), lambda: self.monitor_snapshots(src, src_datasets)
-            )
-            elapsed = human_readable_duration(time.monotonic_ns() - start_time_nanos)
-            if num_cache_hits != self.num_cache_hits or num_cache_misses != self.num_cache_misses:
-                total = self.num_cache_hits + self.num_cache_misses
-                msg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
+        def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
+            src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
+            if src_dataset in basis_src_datasets_set and (are_bookmarks_enabled(p, src) or not p.delete_dst_bookmarks):
+                src_kind = kind
+                if not p.delete_dst_snapshots_no_crosscheck:
+                    src_kind = "snapshot,bookmark" if are_bookmarks_enabled(p, src) else "snapshot"
+                src_cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
             else:
-                msg = ""
-            log.info(
-                "--monitor-snapshots done: %s",
-                f"{task_description} [{len(src_datasets) + len(dst_datasets)} datasets; took {elapsed}{msg}]",
+                src_cmd = None
+            dst_cmd = p.split_args(f"{p.zfs_program} list -t {kind} -d 1 -s createtxg -Hp -o {props}", dst_dataset)
+            self.maybe_inject_delete(dst, dataset=dst_dataset, delete_trigger="zfs_list_delete_dst_snapshots")
+            src_snaps_with_guids, dst_snaps_with_guids = run_in_parallel(  # list src+dst snapshots in parallel
+                lambda: set(run_ssh_command(self, src, LOG_TRACE, cmd=src_cmd).splitlines() if src_cmd else []),
+                lambda: try_ssh_command(self, dst, LOG_TRACE, cmd=dst_cmd),
             )
+            if dst_snaps_with_guids is None:
+                log.warning("Third party deleted destination: %s", dst_dataset)
+                return False
+            dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
+            num_dst_snaps_with_guids = len(dst_snaps_with_guids)
+            basis_dst_snaps_with_guids = dst_snaps_with_guids.copy()
+            if p.delete_dst_bookmarks:
+                replace_in_lines(dst_snaps_with_guids, old="#", new="@", count=1)  # treat bookmarks as snapshots
+            #  The check against the source dataset happens *after* filtering the dst snapshots with filter_snapshots().
+            # `p.delete_dst_snapshots_except` means the user wants to specify snapshots to *retain* aka *keep*
+            all_except = p.delete_dst_snapshots_except
+            if p.delete_dst_snapshots_except and not is_dummy(src):
+                # However, as here we are in "except" mode AND the source is NOT a dummy, we first filter to get what
+                # the policy says to *keep* (so all_except=False for the filter_snapshots() call), then from that "keep"
+                # list, we later further refine by checking what's on the source dataset.
+                all_except = False
+            dst_snaps_with_guids = filter_snapshots(self, dst_snaps_with_guids, all_except=all_except)
+            if p.delete_dst_bookmarks:
+                replace_in_lines(dst_snaps_with_guids, old="@", new="#", count=1)  # restore pre-filtering bookmark state
+            if filter_needs_creation_time:
+                dst_snaps_with_guids = cut(field=2, lines=dst_snaps_with_guids)
+                basis_dst_snaps_with_guids = cut(field=2, lines=basis_dst_snaps_with_guids)
+            if p.delete_dst_snapshots_except and not is_dummy(src):  # Non-dummy Source + "Except" (Keep) Mode
+                # Retain dst snapshots that match snapshot filter policy AND are on src dataset, aka
+                # Delete dst snapshots except snapshots that match snapshot filter policy AND are on src dataset.
+                # Concretely, `dst_snaps_with_guids` contains GUIDs of DST snapshots that the filter policy says to KEEP.
+                # We only actually keep them if they are ALSO on the SRC.
+                # So, snapshots to DELETE (`dst_tags_to_delete`) are ALL snapshots on DST (`basis_dst_snaps_with_guids`)
+                # EXCEPT those whose GUIDs are in `dst_snaps_with_guids` AND ALSO in `src_snaps_with_guids`.
+                except_dst_guids = set(cut(field=1, lines=dst_snaps_with_guids)).intersection(src_snaps_with_guids)
+                dst_tags_to_delete = filter_lines_except(basis_dst_snaps_with_guids, except_dst_guids)
+            else:  # Standard Delete Mode OR Dummy Source + "Except" (Keep) Mode
+                # In standard delete mode:
+                #   `dst_snaps_with_guids` contains GUIDs of policy-selected snapshots on DST.
+                #   We delete those that are NOT on SRC.
+                #   `dst_tags_to_delete` = `dst_snaps_with_guids` - `src_snaps_with_guids`.
+                # In dummy source + "except" (keep) mode:
+                #   `all_except` was True.
+                #   `dst_snaps_with_guids` contains snaps NOT matching the "keep" policy -- these are the ones to delete.
+                #   `src_snaps_with_guids` is empty.
+                #   `dst_tags_to_delete` = `dst_snaps_with_guids` - {} = `dst_snaps_with_guids`.
+                dst_guids_to_delete = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
+                dst_tags_to_delete = filter_lines(dst_snaps_with_guids, dst_guids_to_delete)
+            separator = "#" if p.delete_dst_bookmarks else "@"
+            dst_tags_to_delete = cut(field=2, separator=separator, lines=dst_tags_to_delete)
+            if p.delete_dst_bookmarks:
+                self.delete_bookmarks(dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
+            else:
+                self.delete_snapshots(dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
+            with self.stats_lock:
+                nonlocal num_snapshots_found
+                num_snapshots_found += num_dst_snaps_with_guids
+                nonlocal num_snapshots_deleted
+                num_snapshots_deleted += len(dst_tags_to_delete)
+                if len(dst_tags_to_delete) > 0 and not p.delete_dst_bookmarks:
+                    self.dst_properties[dst_dataset][SNAPSHOTS_CHANGED] = 0  # invalidate cache
+            return True
+
+        # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
+        failed = False
+        if are_bookmarks_enabled(p, dst) or not p.delete_dst_bookmarks:
+            start_time_nanos = time.monotonic_ns()
+            failed = process_datasets_in_parallel_and_fault_tolerant(
+                log=p.log,
+                datasets=dst_datasets,
+                process_dataset=delete_destination_snapshots,  # lambda
+                skip_tree_on_error=lambda dataset: False,
+                skip_on_error=p.skip_on_error,
+                max_workers=max_workers,
+                enable_barriers=False,
+                task_name="--delete-dst-snapshots",
+                append_exception=self.append_exception,
+                retry_policy=p.retry_policy,
+                dry_run=p.dry_run,
+                is_test_mode=self.is_test_mode,
+            )
+            elapsed_nanos = time.monotonic_ns() - start_time_nanos
+            log.info(
+                p.dry("--delete-dst-snapshots: %s"),
+                task_description + f" [Deleted {num_snapshots_deleted} out of {num_snapshots_found} {kind}s "
+                f"within {len(dst_datasets)} datasets; took {human_readable_duration(elapsed_nanos)}]",
+            )
+        return failed
+
+    def delete_dst_datasets_task(
+        self, basis_src_datasets: list[str], basis_dst_datasets: list[str], dst_datasets: list[str]
+    ) -> Tuple[list[str], list[str]]:
+        """Delete existing destination datasets that do not exist within the source dataset if they are included via
+        --{include|exclude}-dataset* policy.
+
+        Do not recurse without --recursive. With --recursive, never delete non-selected dataset subtrees or their ancestors.
+        """
+        p = self.params
+        src, dst = p.src, p.dst
+        children = defaultdict(set)
+        for dst_dataset in basis_dst_datasets:  # Compute the direct children of each NON-FILTERED dataset
+            parent = os.path.dirname(dst_dataset)
+            children[parent].add(dst_dataset)
+        to_delete: set[str] = set()
+        for dst_dataset in reversed(dst_datasets):
+            if children[dst_dataset].issubset(to_delete):
+                to_delete.add(dst_dataset)  # all children are deletable, thus the dataset itself is deletable too
+        to_delete = to_delete.difference(
+            {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
+        )
+        self.delete_datasets(dst, to_delete)
+        dst_datasets = sorted(set(dst_datasets).difference(to_delete))
+        basis_dst_datasets = sorted(set(basis_dst_datasets).difference(to_delete))
+        return basis_dst_datasets, dst_datasets
+
+    def delete_empty_dst_datasets_task(self, basis_dst_datasets: list[str], dst_datasets: list[str]) -> list[str]:
+        """Delete any existing destination dataset that has no snapshot and no bookmark if all descendants of that dataset do
+        not have a snapshot or bookmark either.
+
+        To do so, we walk the dataset list (conceptually, a tree) depth-first (i.e. sorted descending). If a dst dataset has
+        zero snapshots and zero bookmarks and all its children are already marked as orphans, then it is itself an orphan,
+        and we mark it as such. Walking in a reverse sorted way means that we efficiently check for zero snapshots/bookmarks
+        not just over the direct children but the entire tree. Finally, delete all orphan datasets in an efficient batched
+        way.
+        """
+        p = self.params
+        dst = p.dst
+        delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots = (
+            p.delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots and are_bookmarks_enabled(p, dst)
+        )
+
+        # Compute the direct children of each NON-FILTERED dataset. Thus, no non-selected dataset and no ancestor of a
+        # non-selected dataset will ever be added to the "orphan" set. In other words, this treats non-selected dataset
+        # subtrees as if they all had snapshots, so non-selected dataset subtrees and their ancestors are guaranteed
+        # to not get deleted.
+        children = defaultdict(set)
+        for dst_dataset in basis_dst_datasets:
+            parent = os.path.dirname(dst_dataset)
+            children[parent].add(dst_dataset)
+
+        # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of one
+        # filter run is an optimization. The first run only computes candidate orphans, without incurring I/O, to reduce
+        # the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from dst_datasets to a subset
+        # of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this eliminates the I/O to list
+        # snapshots for ancestors of excluded datasets. The second run computes the real orphans.
+        btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
+        dst_datasets_having_snapshots: set[str] = set()
+        for run in range(2):
+            orphans: set[str] = set()
+            for dst_dataset in reversed(dst_datasets):
+                if children[dst_dataset].issubset(orphans):
+                    # all children turned out to be orphans, thus the dataset itself could be an orphan
+                    if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
+                        orphans.add(dst_dataset)
+            if run == 0:
+                # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
+                cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
+                for datasets_having_snapshots in self.zfs_list_snapshots_in_parallel(
+                    dst, cmd, sorted(orphans), ordered=False
+                ):
+                    if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots:
+                        replace_in_lines(datasets_having_snapshots, old="#", new="@", count=1)  # treat bookmarks as snap
+                    datasets_having_snapshots = set(cut(field=1, separator="@", lines=datasets_having_snapshots))
+                    dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
+            else:
+                self.delete_datasets(dst, orphans)
+                dst_datasets = sorted(set(dst_datasets).difference(orphans))
+        return dst_datasets
+
+    def monitor_snapshots_task(self, src_datasets: list[str], dst_datasets: list[str], task_description: str) -> None:
+        """Monitors src and dst snapshots."""
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+        num_cache_hits = self.num_cache_hits
+        num_cache_misses = self.num_cache_misses
+        start_time_nanos = time.monotonic_ns()
+        run_in_parallel(lambda: self.monitor_snapshots(dst, dst_datasets), lambda: self.monitor_snapshots(src, src_datasets))
+        elapsed = human_readable_duration(time.monotonic_ns() - start_time_nanos)
+        if num_cache_hits != self.num_cache_hits or num_cache_misses != self.num_cache_misses:
+            total = self.num_cache_hits + self.num_cache_misses
+            msg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
+        else:
+            msg = ""
+        log.info(
+            "--monitor-snapshots done: %s",
+            f"{task_description} [{len(src_datasets) + len(dst_datasets)} datasets; took {elapsed}{msg}]",
+        )
 
     def monitor_snapshots(self, remote: Remote, sorted_datasets: list[str]) -> None:
-        """Check snapshots freshness and warns or errors out when limits are exceeded."""
+        """Checks snapshot freshness and warns or errors out when limits are exceeded.
+
+        Alerts the user if the ZFS 'creation' time property of the latest or oldest snapshot for any specified snapshot name
+        pattern within the selected datasets is too old wrt. the specified age limit. The purpose is to check if snapshots
+        are successfully taken on schedule, successfully replicated on schedule, and successfully pruned on schedule. Process
+        exit code is 0, 1, 2 on OK, WARNING, CRITICAL, respectively.
+        """
         p, log = self.params, self.params.log
         alerts: list[MonitorSnapshotAlert] = p.monitor_snapshots_config.alerts
         labels: list[SnapshotLabel] = [alert.label for alert in alerts]
@@ -1676,9 +1732,10 @@ class Job:
 
         def find_stale_datasets_and_check_alerts() -> list[str]:
             """If the cache is enabled, check which datasets have changed to determine which datasets can be skipped cheaply,
+            that is, without incurring 'zfs list -t snapshots'.
 
-            that is, without incurring 'zfs list -t snapshots'. This is done by comparing the "snapshots_changed" ZFS dataset
-            property with the local cache - https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
+            This is done by comparing the "snapshots_changed" ZFS dataset property with the local cache. See
+            https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
             """
             stale_datasets = []
             time_threshold = time.time() - TIME_THRESHOLD_SECS
