@@ -1932,7 +1932,7 @@ class Job:
         done_checking = False
 
         if self.dst_dataset_exists[dst_dataset]:
-            rollback_result = self._rollback_dst_if_necessary(
+            rollback_result = self._rollback_dst_dataset_if_necessary(
                 dst_dataset, latest_src_snapshot, src_snapshots_with_guids, dst_snapshots_with_guids, done_checking, tid
             )
             if isinstance(rollback_result, bool):
@@ -1945,7 +1945,7 @@ class Job:
         dry_run_no_send = False
         if not latest_common_src_snapshot:
             # no common snapshot exists; delete all dst snapshots and perform a full send of the oldest selected src snapshot
-            latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count = self._full_send(
+            latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count = self._replicate_dataset_fully(
                 src_dataset,
                 dst_dataset,
                 oldest_src_snapshot,
@@ -1960,7 +1960,7 @@ class Job:
             )  # we have now created a common snapshot
         if latest_common_src_snapshot:
             # finally, incrementally replicate all selected snapshots from latest common snapshot until latest src snapshot
-            self._incremental_sends(
+            self._replicate_dataset_incrementally(
                 src_dataset,
                 dst_dataset,
                 latest_common_src_snapshot,
@@ -2052,7 +2052,7 @@ class Job:
             oldest_src_snapshot,
         )
 
-    def _rollback_dst_if_necessary(
+    def _rollback_dst_dataset_if_necessary(
         self,
         dst_dataset: str,
         latest_src_snapshot: str,
@@ -2127,7 +2127,7 @@ class Job:
             return True
         return latest_dst_snapshot, latest_common_src_snapshot, done_checking
 
-    def _full_send(
+    def _replicate_dataset_fully(
         self,
         src_dataset: str,
         dst_dataset: str,
@@ -2210,7 +2210,7 @@ class Job:
 
         return latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count
 
-    def _incremental_sends(
+    def _replicate_dataset_incrementally(
         self,
         src_dataset: str,
         dst_dataset: str,
