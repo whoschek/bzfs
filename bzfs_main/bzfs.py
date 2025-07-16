@@ -229,6 +229,7 @@ INJECT_DST_PIPE_FAIL_KBYTES = 400
 FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
 DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
+RIGHT_JUST = 7
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -1914,6 +1915,73 @@ class Job:
         dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
         log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
+        list_result = self._list_and_filter_src_and_dst_snapshots(src_dataset, dst_dataset)
+        if isinstance(list_result, bool):
+            return list_result
+        (
+            basis_src_snapshots_with_guids,
+            src_snapshots_with_guids,
+            dst_snapshots_with_guids,
+            included_src_guids,
+            latest_src_snapshot,
+            oldest_src_snapshot,
+        ) = list_result
+        log.debug("latest_src_snapshot: %s", latest_src_snapshot)
+        latest_dst_snapshot = ""
+        latest_common_src_snapshot = ""
+        done_checking = False
+
+        if self.dst_dataset_exists[dst_dataset]:
+            rollback_result = self._rollback_dst_if_necessary(
+                dst_dataset, latest_src_snapshot, src_snapshots_with_guids, dst_snapshots_with_guids, done_checking, tid
+            )
+            if isinstance(rollback_result, bool):
+                return rollback_result
+            latest_dst_snapshot, latest_common_src_snapshot, done_checking = rollback_result
+
+        log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
+        log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
+        props_cache: dict[tuple[str, str, str], dict[str, str | None]] = {}
+        dry_run_no_send = False
+        if not latest_common_src_snapshot:
+            # no common snapshot exists; delete all dst snapshots and perform a full send of the oldest selected src snapshot
+            latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count = self._full_send(
+                src_dataset,
+                dst_dataset,
+                oldest_src_snapshot,
+                latest_src_snapshot,
+                latest_dst_snapshot,
+                dst_snapshots_with_guids,
+                props_cache,
+                dry_run_no_send,
+                done_checking,
+                retry_count,
+                tid,
+            )  # we have now created a common snapshot
+        if latest_common_src_snapshot:
+            # finally, incrementally replicate all selected snapshots from latest common snapshot until latest src snapshot
+            self._incremental_sends(
+                src_dataset,
+                dst_dataset,
+                latest_common_src_snapshot,
+                latest_src_snapshot,
+                basis_src_snapshots_with_guids,
+                included_src_guids,
+                props_cache,
+                dry_run_no_send,
+                done_checking,
+                retry_count,
+                tid,
+            )
+        return True
+
+    def _list_and_filter_src_and_dst_snapshots(
+        self, src_dataset: str, dst_dataset: str
+    ) -> bool | Tuple[list[str], list[str], list[str], set[str], str, str]:
+        """On replication, list and filter src and dst snapshots."""
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+
         # list GUID and name for dst snapshots, sorted ascending by createtxg (more precise than creation time)
         dst_cmd = p.split_args(f"{p.zfs_program} list -t snapshot -d 1 -s createtxg -Hp -o guid,name", dst_dataset)
 
@@ -1975,252 +2043,290 @@ class Job:
                 if p.recursive and not self.dst_dataset_exists[dst_dataset]:
                     log.warning("Also skipping descendant datasets as dst dataset does not exist for %s", src_dataset)
                 return self.dst_dataset_exists[dst_dataset]
+        return (
+            basis_src_snapshots_with_guids,
+            src_snapshots_with_guids,
+            dst_snapshots_with_guids,
+            included_src_guids,
+            latest_src_snapshot,
+            oldest_src_snapshot,
+        )
 
-        log.debug("latest_src_snapshot: %s", latest_src_snapshot)
+    def _rollback_dst_if_necessary(
+        self,
+        dst_dataset: str,
+        latest_src_snapshot: str,
+        src_snapshots_with_guids: list[str],
+        dst_snapshots_with_guids: list[str],
+        done_checking: bool,
+        tid: str,
+    ) -> bool | Tuple[str, str, bool]:
+        """On replication, rollback dst if necessary."""
+        p, log = self.params, self.params.log
+        dst = p.dst
         latest_dst_snapshot = ""
         latest_dst_guid = ""
-        latest_common_src_snapshot = ""
-        props_cache: dict[tuple[str, str, str], dict[str, str | None]] = {}
-        done_checking = False
-
-        if self.dst_dataset_exists[dst_dataset]:
-            if len(dst_snapshots_with_guids) > 0:
-                latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
-                if p.force_rollback_to_latest_snapshot:
-                    log.info(p.dry(f"{tid} Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
-                    # rollback just in case the dst dataset was modified since its most recent snapshot
-                    done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
-                    cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
-                    try_ssh_command(self, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
-            elif latest_src_snapshot == "":
-                log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
-                return True
-
-            # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
-            # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
-            # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
-            def latest_common_snapshot(snapshots_with_guids: list[str], intersect_guids: set[str]) -> tuple[str | None, str]:
-                """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously used for
-                'zfs list -s ...'."""
-                for _line in reversed(snapshots_with_guids):
-                    guid_, snapshot_ = _line.split("\t", 1)
-                    if guid_ in intersect_guids:
-                        return guid_, snapshot_  # can be a snapshot or bookmark
-                return None, ""
-
-            latest_common_guid, latest_common_src_snapshot = latest_common_snapshot(
-                src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids))
-            )
-            log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
-            log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
-
-            if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
-                # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
-                assert latest_common_guid
-                _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
-                if not (p.force_rollback_to_latest_common_snapshot or p.force):
-                    die(
-                        f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
-                        f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
-                        "for example via --force-rollback-to-latest-common-snapshot (or --force) option."
-                    )
-                if p.force_once:
-                    p.force.value = False
-                    p.force_rollback_to_latest_common_snapshot.value = False
-                log.info(
-                    p.dry(f"{tid} Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot
-                )
+        if len(dst_snapshots_with_guids) > 0:
+            latest_dst_guid, latest_dst_snapshot = dst_snapshots_with_guids[-1].split("\t", 1)
+            if p.force_rollback_to_latest_snapshot:
+                log.info(p.dry(f"{tid} Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
+                # rollback just in case the dst dataset was modified since its most recent snapshot
                 done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
-                cmd = p.split_args(
-                    f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}", latest_common_dst_snapshot
-                )
-                try:
-                    run_ssh_command(self, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
-                except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-                    stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-                    no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
-                    # op isn't idempotent so retries regather current state from the start of replicate_dataset()
-                    raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+                cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
+                try_ssh_command(self, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
+        elif latest_src_snapshot == "":
+            log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
+            return True
 
-            if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
-                log.info(f"{tid} Already up-to-date: %s", dst_dataset)
-                return True
+        # find most recent snapshot (or bookmark) that src and dst have in common - we'll start to replicate
+        # from there up to the most recent src snapshot. any two snapshots are "common" iff their ZFS GUIDs (i.e.
+        # contents) are equal. See https://github.com/openzfs/zfs/commit/305bc4b370b20de81eaf10a1cf724374258b74d1
+        def latest_common_snapshot(snapshots_with_guids: list[str], intersect_guids: set[str]) -> tuple[str | None, str]:
+            """Returns a true snapshot instead of its bookmark with the same GUID, per the sort order previously used for
+            'zfs list -s ...'."""
+            for _line in reversed(snapshots_with_guids):
+                guid_, snapshot_ = _line.split("\t", 1)
+                if guid_ in intersect_guids:
+                    return guid_, snapshot_  # can be a snapshot or bookmark
+            return None, ""
 
-        # endif self.dst_dataset_exists[dst_dataset]
+        latest_common_guid, latest_common_src_snapshot = latest_common_snapshot(
+            src_snapshots_with_guids, set(cut(field=1, lines=dst_snapshots_with_guids))
+        )
         log.debug("latest_common_src_snapshot: %s", latest_common_src_snapshot)  # is a snapshot or bookmark
         log.log(LOG_TRACE, "latest_dst_snapshot: %s", latest_dst_snapshot)
-        dry_run_no_send = False
-        right_just = 7
 
-        def format_size(num_bytes: int) -> str:
-            return human_readable_bytes(num_bytes, separator="").rjust(right_just)
-
-        if not latest_common_src_snapshot:
-            # no common snapshot was found. delete all dst snapshots, if any
-            if latest_dst_snapshot:
-                if not p.force:
-                    die(
-                        f"Conflict: No common snapshot found between {src_dataset} and {dst_dataset} even though "
-                        "destination has at least one snapshot. Aborting. Consider using --force option to first "
-                        "delete all existing destination snapshots in order to be able to proceed with replication."
-                    )
-                if p.force_once:
-                    p.force.value = False
-                done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
-                self.delete_snapshots(dst, dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids))
-                if p.dry_run:
-                    # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really executed:
-                    # "no common snapshot was found. delete all dst snapshots". In turn, this would cause the subsequent
-                    # 'zfs receive -n' to fail with "cannot receive new filesystem stream: destination has snapshots; must
-                    # destroy them to overwrite it". So we skip the zfs send/receive step and keep on trucking.
-                    dry_run_no_send = True
-
-            # to start with, fully replicate oldest snapshot, which in turn creates a common snapshot
-            if p.no_stream:
-                oldest_src_snapshot = latest_src_snapshot
-            if oldest_src_snapshot:
-                if not self.dst_dataset_exists[dst_dataset]:
-                    # on destination, create parent filesystem and ancestors if they do not yet exist
-                    dst_dataset_parent = os.path.dirname(dst_dataset)
-                    if not self.dst_dataset_exists[dst_dataset_parent]:
-                        if p.dry_run:
-                            dry_run_no_send = True
-                        if dst_dataset_parent != "":
-                            self.create_zfs_filesystem(dst_dataset_parent)
-
-                recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
-                curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
-                humansize = format_size(curr_size)
-                if recv_resume_token:
-                    send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
-                else:
-                    send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
-                send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
-                recv_opts = p.zfs_full_recv_opts.copy() + recv_resume_opts
-                recv_opts, set_opts = self.add_recv_property_options(True, recv_opts, src_dataset, props_cache)
-                recv_cmd = p.split_args(
-                    f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
+        if latest_common_src_snapshot and latest_common_guid != latest_dst_guid:
+            # found latest common snapshot but dst has an even newer snapshot. rollback dst to that common snapshot.
+            assert latest_common_guid
+            _, latest_common_dst_snapshot = latest_common_snapshot(dst_snapshots_with_guids, {latest_common_guid})
+            if not (p.force_rollback_to_latest_common_snapshot or p.force):
+                die(
+                    f"Conflict: Most recent destination snapshot {latest_dst_snapshot} is more recent than "
+                    f"most recent common snapshot {latest_common_dst_snapshot}. Rollback destination first, "
+                    "for example via --force-rollback-to-latest-common-snapshot (or --force) option."
                 )
-                log.info(p.dry(f"{tid} Full send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({humansize.strip()}) ...")
-                done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
-                dry_run_no_send = dry_run_no_send or p.dry_run_no_send
-                self.maybe_inject_params(error_trigger="full_zfs_send_params")
-                humansize = humansize.rjust(right_just * 3 + 2)
-                self.run_zfs_send_receive(
-                    src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
+            if p.force_once:
+                p.force.value = False
+                p.force_rollback_to_latest_common_snapshot.value = False
+            log.info(p.dry(f"{tid} Rolling back destination to most recent common snapshot: %s"), latest_common_dst_snapshot)
+            done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
+            cmd = p.split_args(
+                f"{dst.sudo} {p.zfs_program} rollback -r {p.force_unmount} {p.force_hard}", latest_common_dst_snapshot
+            )
+            try:
+                run_ssh_command(self, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
+            except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
+                stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+                no_sleep = self.clear_resumable_recv_state_if_necessary(dst_dataset, stderr)
+                # op isn't idempotent so retries regather current state from the start of replicate_dataset()
+                raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
+
+        if latest_src_snapshot and latest_src_snapshot == latest_common_src_snapshot:
+            log.info(f"{tid} Already up-to-date: %s", dst_dataset)
+            return True
+        return latest_dst_snapshot, latest_common_src_snapshot, done_checking
+
+    def _full_send(
+        self,
+        src_dataset: str,
+        dst_dataset: str,
+        oldest_src_snapshot: str,
+        latest_src_snapshot: str,
+        latest_dst_snapshot: str,
+        dst_snapshots_with_guids: list[str],
+        props_cache: dict[tuple[str, str, str], dict[str, str | None]],
+        dry_run_no_send: bool,
+        done_checking: bool,
+        retry_count: int,
+        tid: str,
+    ) -> tuple[str, bool, bool, int]:
+        """On replication, deletes all dst snapshots and performs a full send of the oldest selected src snapshot, which in
+        turn creates a common snapshot."""
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+        latest_common_src_snapshot = ""
+        if latest_dst_snapshot:
+            if not p.force:
+                die(
+                    f"Conflict: No common snapshot found between {src_dataset} and {dst_dataset} even though "
+                    "destination has at least one snapshot. Aborting. Consider using --force option to first "
+                    "delete all existing destination snapshots in order to be able to proceed with replication."
                 )
-                latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
-                if not dry_run_no_send and not p.dry_run:
-                    self.dst_dataset_exists[dst_dataset] = True
-                with self.stats_lock:
-                    self.num_snapshots_replicated += 1
-                self.create_zfs_bookmarks(src, src_dataset, [oldest_src_snapshot])
-                self.zfs_set(set_opts, dst, dst_dataset)
-                dry_run_no_send = dry_run_no_send or p.dry_run
-                retry_count = 0
+            if p.force_once:
+                p.force.value = False
+            done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
+            self.delete_snapshots(dst, dst_dataset, snapshot_tags=cut(2, separator="@", lines=dst_snapshots_with_guids))
+            if p.dry_run:
+                # As we're in --dryrun (--force) mode this conflict resolution step (see above) wasn't really executed:
+                # "no common snapshot was found. delete all dst snapshots". In turn, this would cause the subsequent
+                # 'zfs receive -n' to fail with "cannot receive new filesystem stream: destination has snapshots; must
+                # destroy them to overwrite it". So we skip the zfs send/receive step and keep on trucking.
+                dry_run_no_send = True
 
-        # endif not latest_common_src_snapshot
-        # finally, incrementally replicate all snapshots from most recent common snapshot until most recent src snapshot
-        if latest_common_src_snapshot:
-
-            def replication_candidates() -> tuple[list[str], list[str]]:
-                assert len(basis_src_snapshots_with_guids) > 0
-                result_snapshots = []
-                result_guids = []
-                last_appended_guid = ""
-                snapshot_itr = reversed(basis_src_snapshots_with_guids)
-                while True:
-                    guid, snapshot = snapshot_itr.__next__().split("\t", 1)
-                    if "@" in snapshot:
-                        result_snapshots.append(snapshot)
-                        result_guids.append(guid)
-                        last_appended_guid = guid
-                    if snapshot == latest_common_src_snapshot:  # latest_common_src_snapshot is a snapshot or bookmark
-                        if guid != last_appended_guid and "@" not in snapshot:
-                            # only appends the src bookmark if it has no snapshot. If the bookmark has a snapshot then that
-                            # snapshot has already been appended, per the sort order previously used for 'zfs list -s ...'
-                            result_snapshots.append(snapshot)
-                            result_guids.append(guid)
-                        break
-                result_snapshots.reverse()
-                result_guids.reverse()
-                assert len(result_snapshots) > 0
-                assert len(result_snapshots) == len(result_guids)
-                return result_guids, result_snapshots
-
-            # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
-            # (that are not a bookmark) that are more recent than that.
-            cand_guids, cand_snapshots = replication_candidates()
-            if len(cand_snapshots) == 1:
-                # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
-                # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
-                # bookmark whose snapshot has been deleted on src.
-                return True  # nothing more tbd
+        # to start with, fully replicate oldest snapshot, which in turn creates a common snapshot
+        if p.no_stream:
+            oldest_src_snapshot = latest_src_snapshot
+        if oldest_src_snapshot:
+            if not self.dst_dataset_exists[dst_dataset]:
+                # on destination, create parent filesystem and ancestors if they do not yet exist
+                dst_dataset_parent = os.path.dirname(dst_dataset)
+                if not self.dst_dataset_exists[dst_dataset_parent]:
+                    if p.dry_run:
+                        dry_run_no_send = True
+                    if dst_dataset_parent != "":
+                        self.create_zfs_filesystem(dst_dataset_parent)
 
             recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
-            recv_opts = p.zfs_recv_program_opts.copy() + recv_resume_opts
-            recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
-            if p.no_stream:
-                # skip intermediate snapshots
-                steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, [latest_src_snapshot])]
+            curr_size = self.estimate_send_size(src, dst_dataset, recv_resume_token, oldest_src_snapshot)
+            humansize = self.format_size(curr_size)
+            if recv_resume_token:
+                send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
             else:
-                # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
-                # a series of -i/-I send/receive steps that skip excluded src snapshots.
-                steps_todo = self.incremental_send_steps_wrapper(
-                    cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
-                )
-            log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
-            estimate_send_sizes = [
-                self.estimate_send_size(
-                    src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap
-                )
-                for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo)
-            ]
-            total_size = sum(estimate_send_sizes)
-            total_num = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
-            done_size = 0
-            done_num = 0
-            for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo):
-                assert len(to_snapshots) >= 1
-                curr_num_snapshots = len(to_snapshots)
-                curr_size = estimate_send_sizes[i]
-                humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
-                human_num = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
-                if recv_resume_token:
-                    send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
-                else:
-                    send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
-                send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
-                recv_cmd = p.split_args(
-                    f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
-                )
-                dense_size = p.two_or_more_spaces_regex.sub("", humansize.strip())
-                log.info(
-                    p.dry(f"{tid} Incremental send {incr_flag}: %s"),
-                    f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
-                )
-                done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
-                if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
-                    dry_run_no_send = True
-                dry_run_no_send = dry_run_no_send or p.dry_run_no_send
-                self.maybe_inject_params(error_trigger="incr_zfs_send_params")
-                self.run_zfs_send_receive(
-                    src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
-                )
-                done_size += curr_size
-                done_num += curr_num_snapshots
-                recv_resume_token = None
-                with self.stats_lock:
-                    self.num_snapshots_replicated += curr_num_snapshots
-                if p.create_bookmarks == "all":
-                    self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
-                elif p.create_bookmarks == "many":
-                    to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= 60 * 60 * 1000]
-                    if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
-                        to_snapshots.append(to_snap)
-                    self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
+                send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
+            send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
+            recv_opts = p.zfs_full_recv_opts.copy() + recv_resume_opts
+            recv_opts, set_opts = self.add_recv_property_options(True, recv_opts, src_dataset, props_cache)
+            recv_cmd = p.split_args(
+                f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
+            )
+            log.info(p.dry(f"{tid} Full send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({humansize.strip()}) ...")
+            done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset)
+            dry_run_no_send = dry_run_no_send or p.dry_run_no_send
+            self.maybe_inject_params(error_trigger="full_zfs_send_params")
+            humansize = humansize.rjust(RIGHT_JUST * 3 + 2)
+            self.run_zfs_send_receive(
+                src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "full_zfs_send"
+            )
+            latest_common_src_snapshot = oldest_src_snapshot  # we have now created a common snapshot
+            if not dry_run_no_send and not p.dry_run:
+                self.dst_dataset_exists[dst_dataset] = True
+            with self.stats_lock:
+                self.num_snapshots_replicated += 1
+            self.create_zfs_bookmarks(src, src_dataset, [oldest_src_snapshot])
             self.zfs_set(set_opts, dst, dst_dataset)
-        return True
+            dry_run_no_send = dry_run_no_send or p.dry_run
+            retry_count = 0
+
+        return latest_common_src_snapshot, dry_run_no_send, done_checking, retry_count
+
+    def _incremental_sends(
+        self,
+        src_dataset: str,
+        dst_dataset: str,
+        latest_common_src_snapshot: str,
+        latest_src_snapshot: str,
+        basis_src_snapshots_with_guids: list[str],
+        included_src_guids: set[str],
+        props_cache: dict[tuple[str, str, str], dict[str, str | None]],
+        dry_run_no_send: bool,
+        done_checking: bool,
+        retry_count: int,
+        tid: str,
+    ) -> None:
+        """Incrementally replicates all selected snapshots from latest common snapshot until latest src snapshot."""
+        p, log = self.params, self.params.log
+        src, dst = p.src, p.dst
+
+        def replication_candidates() -> tuple[list[str], list[str]]:
+            assert len(basis_src_snapshots_with_guids) > 0
+            result_snapshots: list[str] = []
+            result_guids: list[str] = []
+            last_appended_guid = ""
+            snapshot_itr = reversed(basis_src_snapshots_with_guids)
+            while True:
+                guid, snapshot = snapshot_itr.__next__().split("\t", 1)
+                if "@" in snapshot:
+                    result_snapshots.append(snapshot)
+                    result_guids.append(guid)
+                    last_appended_guid = guid
+                if snapshot == latest_common_src_snapshot:  # latest_common_src_snapshot is a snapshot or bookmark
+                    if guid != last_appended_guid and "@" not in snapshot:
+                        # only appends the src bookmark if it has no snapshot. If the bookmark has a snapshot then that
+                        # snapshot has already been appended, per the sort order previously used for 'zfs list -s ...'
+                        result_snapshots.append(snapshot)
+                        result_guids.append(guid)
+                    break
+            result_snapshots.reverse()
+            result_guids.reverse()
+            assert len(result_snapshots) > 0
+            assert len(result_snapshots) == len(result_guids)
+            return result_guids, result_snapshots
+
+        # collect the most recent common snapshot (which may be a bookmark) followed by all src snapshots
+        # (that are not a bookmark) that are more recent than that.
+        cand_guids, cand_snapshots = replication_candidates()
+        if len(cand_snapshots) == 1:
+            # latest_src_snapshot is a (true) snapshot that is equal to latest_common_src_snapshot or LESS recent
+            # than latest_common_src_snapshot. The latter case can happen if latest_common_src_snapshot is a
+            # bookmark whose snapshot has been deleted on src.
+            return  # nothing more tbd
+
+        recv_resume_token, send_resume_opts, recv_resume_opts = self._recv_resume_token(dst_dataset, retry_count)
+        recv_opts = p.zfs_recv_program_opts.copy() + recv_resume_opts
+        recv_opts, set_opts = self.add_recv_property_options(False, recv_opts, src_dataset, props_cache)
+        if p.no_stream:
+            # skip intermediate snapshots
+            steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, [latest_src_snapshot])]
+        else:
+            # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
+            # a series of -i/-I send/receive steps that skip excluded src snapshots.
+            steps_todo = self.incremental_send_steps_wrapper(
+                cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
+            )
+        log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
+        estimate_send_sizes = [
+            self.estimate_send_size(src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap)
+            for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo)
+        ]
+        total_size = sum(estimate_send_sizes)
+        total_num = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
+        done_size = 0
+        done_num = 0
+        for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo):
+            curr_num_snapshots = len(to_snapshots)
+            curr_size = estimate_send_sizes[i]
+            humansize = self.format_size(total_size) + "/" + self.format_size(done_size) + "/" + self.format_size(curr_size)
+            human_num = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
+            if recv_resume_token:
+                send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
+            else:
+                send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
+            send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
+            recv_cmd = p.split_args(
+                f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
+            )
+            dense_size = p.two_or_more_spaces_regex.sub("", humansize.strip())
+            log.info(
+                p.dry(f"{tid} Incremental send {incr_flag}: %s"),
+                f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
+            )
+            done_checking = done_checking or self.check_zfs_dataset_busy(dst, dst_dataset, busy_if_send=False)
+            if p.dry_run and not self.dst_dataset_exists[dst_dataset]:
+                dry_run_no_send = True
+            dry_run_no_send = dry_run_no_send or p.dry_run_no_send
+            self.maybe_inject_params(error_trigger="incr_zfs_send_params")
+            self.run_zfs_send_receive(
+                src_dataset, dst_dataset, send_cmd, recv_cmd, curr_size, humansize, dry_run_no_send, "incr_zfs_send"
+            )
+            done_size += curr_size
+            done_num += curr_num_snapshots
+            recv_resume_token = None
+            with self.stats_lock:
+                self.num_snapshots_replicated += curr_num_snapshots
+            if p.create_bookmarks == "all":
+                self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
+            elif p.create_bookmarks == "many":
+                to_snapshots = [snap for snap in to_snapshots if p.xperiods.label_milliseconds(snap) >= 60 * 60 * 1000]
+                if i == len(steps_todo) - 1 and (len(to_snapshots) == 0 or to_snapshots[-1] != to_snap):
+                    to_snapshots.append(to_snap)
+                self.create_zfs_bookmarks(src, src_dataset, to_snapshots)
+        self.zfs_set(set_opts, dst, dst_dataset)
+
+    @staticmethod
+    def format_size(num_bytes: int) -> str:
+        """Formats a byte count for human-readable logs."""
+        return human_readable_bytes(num_bytes, separator="").rjust(RIGHT_JUST)
 
     def prepare_zfs_send_receive(
         self, src_dataset: str, send_cmd: list[str], recv_cmd: list[str], size_estimate_bytes: int, size_estimate_human: str
