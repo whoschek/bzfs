@@ -184,7 +184,7 @@ class TestHelperFunctions(CommonTest):
         props: dict[str, str | None] = {"p1": "v1", "skip": "v", "p3": "v3"}
         include_regexes = compile_regexes(["p.*"])
         exclude_regexes = compile_regexes([".*3"])
-        self.assertEqual({"p1": "v1"}, filter_properties(job, props, include_regexes, exclude_regexes))
+        self.assertEqual({"p1": "v1"}, filter_properties(job.params, props, include_regexes, exclude_regexes))
 
     def test_filter_properties_debug(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
@@ -197,7 +197,7 @@ class TestHelperFunctions(CommonTest):
         props: dict[str, str | None] = {"a1": "v1", "a2": "v2", "skip": "v"}
         include_regexes = compile_regexes(["a.*"])
         exclude_regexes = compile_regexes(["a2"])
-        result = filter_properties(job, props, include_regexes, exclude_regexes)
+        result = filter_properties(job.params, props, include_regexes, exclude_regexes)
         self.assertEqual({"a1": "v1"}, result)
         log_output = stream.getvalue()
         self.assertIn("Including b/c property regex", log_output)

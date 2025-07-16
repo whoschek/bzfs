@@ -2921,7 +2921,7 @@ class Job:
                 # TODO: perf: on zfs >= 2.3 use json via zfs get -j to safely merge all zfs gets into one 'zfs get' call
                 try:
                     props_any = self.zfs_get(p.src, dataset, config.sources, "property", "all", True, cache)
-                    props_filtered = filter_properties(self, props_any, config.include_regexes, config.exclude_regexes)
+                    props_filtered = filter_properties(p, props_any, config.include_regexes, config.exclude_regexes)
                     user_propnames = [name for name in props_filtered.keys() if ":" in name]
                     sys_propnames = ",".join([name for name in props_filtered.keys() if ":" not in name])
                     props = self.zfs_get(p.src, dataset, config.sources, "property,value", sys_propnames, True, cache)

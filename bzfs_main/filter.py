@@ -43,7 +43,7 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
-    from bzfs_main.bzfs import Job, Remote
+    from bzfs_main.bzfs import Job, Params, Remote
 
 # constants:
 SNAPSHOT_REGEX_FILTER_NAME = "snapshot_regex"
@@ -269,10 +269,10 @@ def filter_snapshots_by_creation_time_and_rank(
 
 
 def filter_properties(
-    job: Job, props: dict[str, str | None], include_regexes: RegexList, exclude_regexes: RegexList
+    p: Params, props: dict[str, str | None], include_regexes: RegexList, exclude_regexes: RegexList
 ) -> dict[str, str | None]:
     """Returns ZFS props whose name matches at least one of the include regexes but none of the exclude regexes."""
-    log = job.params.log
+    log = p.log
     is_debug = log.isEnabledFor(LOG_DEBUG)
     results: dict[str, str | None] = {}
     for propname, propvalue in props.items():
