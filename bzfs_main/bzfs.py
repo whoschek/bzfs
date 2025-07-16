@@ -3968,18 +3968,6 @@ def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentPars
         die(f"{msg}must not be a symlink: {path}", parser=parser)
 
 
-def validate_default_shell(path_to_default_shell: str, r: Remote) -> None:
-    """Disallows csh-style quoting."""
-    if path_to_default_shell.endswith(("/csh", "/tcsh")):
-        # On some old FreeBSD systems the default shell is still csh. Also see https://www.grymoire.com/unix/CshTop10.txt
-        die(
-            f"Cowardly refusing to proceed because {PROG_NAME} is not compatible with csh-style quoting of special "
-            f"characters. The safe workaround is to first manually set 'sh' instead of '{path_to_default_shell}' as "
-            f"the default shell of the Unix user on {r.location} host: {r.ssh_user_host or 'localhost'}, like so: "
-            "chsh -s /bin/sh YOURUSERNAME"
-        )
-
-
 #############################################################################
 if __name__ == "__main__":
     main()

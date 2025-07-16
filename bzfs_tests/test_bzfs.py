@@ -442,17 +442,6 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c", "a/b/d"]))
         self.assertTrue(bzfs.has_siblings(["a", "a/b/c/d", "a/b/c/e"]))
 
-    def test_validate_default_shell(self) -> None:
-        args = self.argparser_parse_args(args=["src", "dst"])
-        p = self.make_params(args=args)
-        remote = bzfs.Remote("src", args, p)
-        bzfs.validate_default_shell("/bin/sh", remote)
-        bzfs.validate_default_shell("/bin/bash", remote)
-        with self.assertRaises(SystemExit):
-            bzfs.validate_default_shell("/bin/csh", remote)
-        with self.assertRaises(SystemExit):
-            bzfs.validate_default_shell("/bin/tcsh", remote)
-
     def test_custom_ssh_config_file_must_match_file_name_pattern(self) -> None:
         args = self.argparser_parse_args(["src", "dst", "--ssh-src-config-file", "bzfs_ssh_config.cfg"])
         self.make_params(args=args)

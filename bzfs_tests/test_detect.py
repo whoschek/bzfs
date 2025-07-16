@@ -33,6 +33,7 @@ from bzfs_main.connection import (
 from bzfs_main.detect import (
     RemoteConfCacheItem,
     detect_available_programs,
+    validate_default_shell,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 from bzfs_tests.test_utils import stop_on_failure_subtest
@@ -135,6 +136,17 @@ class TestDisableAndHelpers(AbstractTestCase):
         self.assertTrue(bzfs_main.detect.is_dummy(r))
         r.root_dataset = "nondummy"
         self.assertFalse(bzfs_main.detect.is_dummy(r))
+
+    def test_validate_default_shell(self) -> None:
+        args = self.argparser_parse_args(args=["src", "dst"])
+        p = self.make_params(args=args)
+        remote = bzfs.Remote("src", args, p)
+        validate_default_shell("/bin/sh", remote)
+        validate_default_shell("/bin/bash", remote)
+        with self.assertRaises(SystemExit):
+            validate_default_shell("/bin/csh", remote)
+        with self.assertRaises(SystemExit):
+            validate_default_shell("/bin/tcsh", remote)
 
 
 #############################################################################
