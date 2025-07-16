@@ -357,6 +357,17 @@ def replace_in_lines(lines: list[str], old: str, new: str, count: int = -1) -> N
         lines[i] = lines[i].replace(old, new, count)
 
 
+TAPPEND = TypeVar("TAPPEND")
+
+
+def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:
+    """Appends items to list if they are not already present."""
+    for item in items:
+        if item not in lst:
+            lst.append(item)
+    return lst
+
+
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
     """Returns True if the name matches at least one of the include regexes but none of the exclude regexes; else False.
 

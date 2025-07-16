@@ -179,6 +179,7 @@ from bzfs_main.utils import (
     SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
+    append_if_absent,
     compile_regexes,
     current_datetime,
     cut,
@@ -3830,14 +3831,6 @@ def create_symlink(src: str, dst_dir: str, dst: str) -> None:
     """Creates dst symlink pointing to src using a relative path."""
     rel_path = os.path.relpath(src, start=dst_dir)
     os.symlink(src=rel_path, dst=os.path.join(dst_dir, dst))
-
-
-def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:
-    """Appends items to list if they are not already present."""
-    for item in items:
-        if item not in lst:
-            lst.append(item)
-    return lst
 
 
 def set_last_modification_time_safe(

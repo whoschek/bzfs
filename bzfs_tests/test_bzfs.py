@@ -113,11 +113,6 @@ class TestHelperFunctions(AbstractTestCase):
         self.assert_merge_sorted_iterators([], ["x"], ["x", "z"], s, invert=False)
         self.assert_merge_sorted_iterators([], ["y"], ["x", "z"], a)
 
-    def test_append_if_absent(self) -> None:
-        self.assertListEqual([], bzfs.append_if_absent([]))
-        self.assertListEqual(["a"], bzfs.append_if_absent([], "a"))
-        self.assertListEqual(["a"], bzfs.append_if_absent([], "a", "a"))
-
     def test_validate_port(self) -> None:
         bzfs.validate_port(47, "msg")
         bzfs.validate_port("47", "msg")

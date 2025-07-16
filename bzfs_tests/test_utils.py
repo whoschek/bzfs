@@ -50,6 +50,7 @@ from bzfs_main.utils import (
     SnapshotPeriods,
     SynchronizedBool,
     SynchronizedDict,
+    append_if_absent,
     compile_regexes,
     current_datetime,
     cut,
@@ -134,6 +135,11 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertTrue(is_descendant("", ""))
         self.assertFalse(is_descendant("pool/fs-backup", "pool/fs"))
         self.assertTrue(is_descendant("pool/fs", "pool"))
+
+    def test_append_if_absent(self) -> None:
+        self.assertListEqual([], append_if_absent([]))
+        self.assertListEqual(["a"], append_if_absent([], "a"))
+        self.assertListEqual(["a"], append_if_absent([], "a", "a"))
 
     def test_compile_regexes(self) -> None:
         def _assert_full_match(text: str, regex: str, re_suffix: str = "", expected: bool = True) -> None:
