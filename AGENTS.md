@@ -108,8 +108,9 @@ Your goal is to improve quality with zero functional regressions.
 
 - **Preserve Public APIs:** Do not change CLI options without a deprecation plan.
 
-- **Retain names, docstrings and code comments:** Never remove or change existing docstrings or code comments or names
-    unless the user explicitly requests it.
+- **Retain names, docstrings and code comments:** Unless the user explicitly requests it, never remove or rename
+    existing modules, classes, methods, functions or variables, and never remove or change existing docstrings or code
+    comments.
 
 - **Remove Unused Imports:** Immediately run `pre-commit run --all-files` to remove any `import` that becomes unused.
     This is always safe because bzfs has no public python API.
