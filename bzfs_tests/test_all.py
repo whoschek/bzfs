@@ -23,6 +23,7 @@ import bzfs_main.utils
 import bzfs_tests.test_argparse_actions
 import bzfs_tests.test_bzfs
 import bzfs_tests.test_compare_snapshot_lists
+import bzfs_tests.test_configuration
 import bzfs_tests.test_connection
 import bzfs_tests.test_detect
 import bzfs_tests.test_filter
@@ -54,6 +55,7 @@ def main() -> None:
         bzfs_tests.test_detect.suite(),
         bzfs_tests.test_incremental_send_steps.suite(),
         bzfs_tests.test_argparse_actions.suite(),
+        bzfs_tests.test_configuration.suite(),
         bzfs_tests.test_bzfs.suite(),
         bzfs_tests.test_compare_snapshot_lists.suite(),
         bzfs_tests.test_snapshot_cache.suite(),

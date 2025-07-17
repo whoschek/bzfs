@@ -43,14 +43,12 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
-    from bzfs_main.bzfs import LogParams
+    from bzfs_main.configuration import LogParams
 
 
 def get_logger_name() -> str:
     """Returns the canonical logger name used throughout bzfs."""
-    from bzfs_main import bzfs
-
-    return bzfs.__name__
+    return "bzfs_main.bzfs"
 
 
 def get_logger_subname() -> str:

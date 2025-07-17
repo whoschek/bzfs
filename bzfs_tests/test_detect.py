@@ -25,6 +25,7 @@ from unittest.mock import (
 
 import bzfs_main.detect
 from bzfs_main import bzfs
+from bzfs_main.configuration import Remote
 from bzfs_main.connection import (
     DEDICATED,
     SHARED,
@@ -58,8 +59,8 @@ class TestRemoteConfCache(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        p.dst = bzfs.Remote("dst", args, p)
+        p.src = Remote("src", args, p)
+        p.dst = Remote("dst", args, p)
         p.src.ssh_host = "host"
         p.src.ssh_user_host = "host"
         p.dst.ssh_host = "host2"
@@ -81,8 +82,8 @@ class TestRemoteConfCache(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        p.dst = bzfs.Remote("dst", args, p)
+        p.src = Remote("src", args, p)
+        p.dst = Remote("dst", args, p)
         p.src.ssh_host = "host"
         p.src.ssh_user_host = "host"
         p.dst.ssh_host = "host2"
@@ -131,7 +132,7 @@ class TestDisableAndHelpers(AbstractTestCase):
     def test_is_dummy(self) -> None:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
-        r = bzfs.Remote("src", args, p)
+        r = Remote("src", args, p)
         r.root_dataset = bzfs_main.detect.DUMMY_DATASET
         self.assertTrue(bzfs_main.detect.is_dummy(r))
         r.root_dataset = "nondummy"
@@ -140,7 +141,7 @@ class TestDisableAndHelpers(AbstractTestCase):
     def test_validate_default_shell(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         p = self.make_params(args=args)
-        remote = bzfs.Remote("src", args, p)
+        remote = Remote("src", args, p)
         validate_default_shell("/bin/sh", remote)
         validate_default_shell("/bin/bash", remote)
         with self.assertRaises(SystemExit):
@@ -156,8 +157,8 @@ class TestDetectAvailablePrograms(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = bzfs.Remote("src", args, p)
-        p.dst = bzfs.Remote("dst", args, p)
+        p.src = Remote("src", args, p)
+        p.dst = Remote("dst", args, p)
         job.params.available_programs = {"local": {"sh": ""}, "src": {}, "dst": {}}
         job.params.zpool_features = {"src": {}, "dst": {}}
         return job
@@ -243,12 +244,12 @@ class TestDetectAvailablePrograms(AbstractTestCase):
 
 #############################################################################
 class TestDetectAvailableProgramsRemote(AbstractTestCase):
-    def _setup(self) -> tuple[bzfs.Job, bzfs.Remote]:
+    def _setup(self) -> tuple[bzfs.Job, Remote]:
         args = self.argparser_parse_args(["src", "dst"])
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = bzfs.Remote("src", args, p)
+        p.src = Remote("src", args, p)
         return job, p.src
 
     def test_zfs_version_parsing_and_shell(self) -> None:

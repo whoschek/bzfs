@@ -15,6 +15,7 @@
 """Unit tests for various small utility helpers."""
 
 from __future__ import annotations
+import argparse
 import contextlib
 import errno
 import os
@@ -29,6 +30,7 @@ import threading
 import time
 import unittest
 from datetime import datetime, timedelta, timezone, tzinfo
+from logging import Logger
 from subprocess import PIPE
 from typing import (
     Any,
@@ -54,8 +56,10 @@ from bzfs_main.utils import (
     compile_regexes,
     current_datetime,
     cut,
+    die,
     drain,
     find_match,
+    format_dict,
     get_descendant_processes,
     get_home_directory,
     get_timezone,
@@ -69,6 +73,7 @@ from bzfs_main.utils import (
     parse_duration_to_milliseconds,
     percent,
     pid_exists,
+    pretty_print_formatter,
     replace_capturing_groups_with_non_capturing_groups,
     shuffle_dict,
     sorted_dict,
@@ -77,6 +82,7 @@ from bzfs_main.utils import (
     terminate_process_subtree,
     unixtime_fromisoformat,
     xfinally,
+    xprint,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
@@ -109,6 +115,11 @@ def suite() -> unittest.TestSuite:
 
 #############################################################################
 class TestHelperFunctions(AbstractTestCase):
+    def test_die_with_parser(self) -> None:
+        parser = argparse.ArgumentParser()
+        with self.assertRaises(SystemExit):
+            die("boom", parser=parser)
+
     def test_has_duplicates(self) -> None:
         self.assertFalse(has_duplicates([]))
         self.assertFalse(has_duplicates([42]))
@@ -185,6 +196,25 @@ class TestHelperFunctions(AbstractTestCase):
             parse_duration_to_milliseconds("foo")
         with self.assertRaises(SystemExit):
             parse_duration_to_milliseconds("foo", context="ctx")
+
+    def test_format_dict(self) -> None:
+        self.assertEqual("\"{'a': 1}\"", format_dict({"a": 1}))
+
+    def test_pretty_print_formatter(self) -> None:
+        args = self.argparser_parse_args(["src", "dst"])
+        params = self.make_params(args=args)
+        self.assertIsNotNone(str(pretty_print_formatter(params)))
+
+    def test_xprint(self) -> None:
+        log = MagicMock(spec=Logger)
+        xprint(log, "foo")
+        xprint(log, "foo", run=True)
+        xprint(log, "foo", run=False)
+        xprint(log, "foo", file=sys.stdout)
+        xprint(log, "")
+        xprint(log, "", run=True)
+        xprint(log, "", run=False)
+        xprint(log, None)
 
 
 ###############################################################################

@@ -32,7 +32,8 @@ from unittest import mock
 from unittest.mock import MagicMock
 
 from bzfs_main import bzfs, connection
-from bzfs_main.bzfs import (
+from bzfs_main.configuration import (
+    Params,
     Remote,
 )
 from bzfs_main.connection import (
@@ -102,8 +103,8 @@ class TestConnectionPool(AbstractTestCase):
         self.src = p.src
         self.dst = p.dst
         self.dst.ssh_user_host = "127.0.0.1"
-        self.remote = bzfs.Remote("src", args, p)
-        self.src2 = bzfs.Remote("src", args, p)
+        self.remote = Remote("src", args, p)
+        self.src2 = Remote("src", args, p)
 
     def assert_priority_queue(self, cpool: ConnectionPool, queuelen: int) -> None:
         self.assertEqual(queuelen, len(cpool.priority_queue))
@@ -334,8 +335,8 @@ class TestConnectionPool(AbstractTestCase):
         log.info("random_walk took %s secs", elapsed_secs)
 
 
-def make_fake_params() -> bzfs.Params:
-    mock = MagicMock(spec=bzfs.Params)
+def make_fake_params() -> Params:
+    mock = MagicMock(spec=Params)
     mock.log = logging.getLogger(__name__)
     mock.ssh_program = "ssh"
     mock.connection_pools = {}
@@ -358,7 +359,7 @@ class TestRunSshCommand(AbstractTestCase):
         self.job.control_persist_margin_secs = 2
         self.job.timeout_nanos = None
         self.remote = cast(
-            bzfs.Remote, _FakeRemote(location="dst", ssh_user_host="", reuse_ssh_connection=True, ssh_extra_opts=[])
+            Remote, _FakeRemote(location="dst", ssh_user_host="", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
         self.conn = mock.Mock()
         self.conn.ssh_cmd = ["ssh"]
@@ -429,7 +430,7 @@ class TestTrySshCommand(AbstractTestCase):
         self.job = bzfs.Job()
         self.job.params = make_fake_params()
         self.remote = cast(
-            bzfs.Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
+            Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
 
     @mock.patch("bzfs_main.connection.run_ssh_command", return_value="ok")
@@ -483,7 +484,7 @@ class TestRefreshSshConnection(AbstractTestCase):
         self.job.control_persist_margin_secs = 1
         self.job.timeout_nanos = None
         self.remote = cast(
-            bzfs.Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
+            Remote, _FakeRemote(location="dst", ssh_user_host="host", reuse_ssh_connection=True, ssh_extra_opts=[])
         )
         self.conn = connection.Connection(self.remote, 1, 0)
         self.conn.last_refresh_time = 0

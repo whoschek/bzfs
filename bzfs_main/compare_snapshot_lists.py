@@ -56,7 +56,8 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
-    from bzfs_main.bzfs import Job, Remote
+    from bzfs_main.bzfs import Job
+    from bzfs_main.configuration import Remote
 
 
 @dataclass(order=True, frozen=True)

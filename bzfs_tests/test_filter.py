@@ -38,6 +38,8 @@ from bzfs_main import bzfs
 from bzfs_main.argparse_actions import SnapshotFilter
 from bzfs_main.bzfs import (
     Job,
+)
+from bzfs_main.configuration import (
     Params,
     Remote,
 )
@@ -134,7 +136,7 @@ class TestHelperFunctions(CommonTest):
         args = self.argparser_parse_args(args=["src", "dst"])
         job = bzfs.Job()
         job.params = self.make_params(args=args)
-        src = bzfs.Remote("src", args, job.params)
+        src = Remote("src", args, job.params)
         filter_datasets(job, src, ["dataset1"])
 
     def test_dataset_regexes(self) -> None:

@@ -24,6 +24,7 @@ from unittest.mock import (
 )
 
 from bzfs_main import bzfs
+from bzfs_main.configuration import Remote
 from bzfs_main.snapshot_cache import (
     set_last_modification_time,
     set_last_modification_time_safe,
@@ -69,7 +70,7 @@ class TestSnapshotCache(AbstractTestCase):
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
         job = bzfs.Job()
         job.params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
-        self.mock_remote = MagicMock(spec=bzfs.Remote)  # spec helps catch calls to non-existent attrs
+        self.mock_remote = MagicMock(spec=Remote)  # spec helps catch calls to non-existent attrs
 
         mock_itr_parallel.return_value = [  # normal input
             [

@@ -25,7 +25,7 @@ import os
 import unittest
 from unittest.mock import MagicMock
 
-from bzfs_main import argparse_cli, bzfs, utils
+from bzfs_main import argparse_cli, bzfs, configuration, utils
 
 
 #############################################################################
@@ -49,10 +49,10 @@ class AbstractTestCase(unittest.TestCase):
     @staticmethod
     def make_params(
         args: argparse.Namespace,
-        log_params: bzfs.LogParams | None = None,
+        log_params: configuration.LogParams | None = None,
         log: logging.Logger | None = None,
         inject_params: dict[str, bool] | None = None,
-    ) -> bzfs.Params:
-        log_params = log_params if log_params is not None else MagicMock(spec=bzfs.LogParams)
+    ) -> configuration.Params:
+        log_params = log_params if log_params is not None else MagicMock(spec=configuration.LogParams)
         log = log if log is not None else MagicMock(spec=logging.Logger)
-        return bzfs.Params(args=args, sys_argv=[], log_params=log_params, log=log, inject_params=inject_params)
+        return configuration.Params(args=args, sys_argv=[], log_params=log_params, log=log, inject_params=inject_params)

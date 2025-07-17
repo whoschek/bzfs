@@ -54,6 +54,7 @@ from bzfs_main import (
     bzfs_jobrunner,
     utils,
 )
+from bzfs_main.configuration import LogParams
 from bzfs_main.detect import (
     DUMMY_DATASET,
     is_version_at_least,
@@ -899,7 +900,7 @@ class TestSSHLatency(IntegrationTestCase):
     def test_ssh_loopback_latency(self) -> None:
         self.setup_basic()
         args = bzfs.argument_parser().parse_args(args=["src", "dst"])
-        log_params = bzfs.LogParams(args)
+        log_params = LogParams(args)
         log = bzfs_main.loggers.get_logger(
             log_params=log_params, args=args, log=get_simple_logger("test_ssh_loopback_latency")
         )

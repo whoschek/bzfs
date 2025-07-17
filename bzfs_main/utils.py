@@ -21,6 +21,7 @@ on them without additional packages. Functions strive for simplicity and predict
 from __future__ import annotations
 import argparse
 import bisect
+import collections
 import contextlib
 import errno
 import logging
@@ -370,6 +371,18 @@ def append_if_absent(lst: list[TAPPEND], *items: TAPPEND) -> list[TAPPEND]:
     return lst
 
 
+def xappend(lst: list[TAPPEND], *items: TAPPEND | Iterable[TAPPEND]) -> list[TAPPEND]:
+    """Appends each of the items to the given list if the item is "truthy", for example not None and not an empty string; If
+    an item is an iterable does so recursively, flattening the output."""
+    for item in items:
+        if isinstance(item, str) or not isinstance(item, collections.abc.Iterable):
+            if item:
+                lst.append(cast(TAPPEND, item))
+        else:
+            xappend(lst, *item)
+    return lst
+
+
 def is_included(name: str, include_regexes: RegexList, exclude_regexes: RegexList) -> bool:
     """Returns True if the name matches at least one of the include regexes but none of the exclude regexes; else False.
 
@@ -563,6 +576,36 @@ def nsuffix(s: str) -> str:
 def format_dict(dictionary: dict[Any, Any]) -> str:
     """Returns a formatted dictionary using repr for consistent output."""
     return f'"{dictionary}"'
+
+
+def validate_dataset_name(dataset: str, input_text: str) -> None:
+    """'zfs create' CLI does not accept dataset names that are empty or start or end in a slash, etc."""
+    # Also see https://github.com/openzfs/zfs/issues/439#issuecomment-2784424
+    # and https://github.com/openzfs/zfs/issues/8798
+    # and (by now nomore accurate): https://docs.oracle.com/cd/E26505_01/html/E37384/gbcpt.html
+    if (
+        dataset in ("", ".", "..")
+        or any(dataset.startswith(prefix) for prefix in ("/", "./", "../"))
+        or any(dataset.endswith(suffix) for suffix in ("/", "/.", "/.."))
+        or any(substring in dataset for substring in ("//", "/./", "/../"))
+        or any(char in SHELL_CHARS or (char.isspace() and char != " ") for char in dataset)
+        or not dataset[0].isalpha()
+    ):
+        die(f"Invalid ZFS dataset name: '{dataset}' for: '{input_text}'")
+
+
+def validate_property_name(propname: str, input_text: str) -> str:
+    """Checks that the ZFS property name contains no spaces or shell chars."""
+    invalid_chars = SHELL_CHARS
+    if not propname or any(c.isspace() or c in invalid_chars for c in propname):
+        die(f"Invalid ZFS property name: '{propname}' for: '{input_text}'")
+    return propname
+
+
+def validate_is_not_a_symlink(msg: str, path: str, parser: argparse.ArgumentParser | None = None) -> None:
+    """Checks that the given path is not a symbolic link."""
+    if os.path.islink(path):
+        die(f"{msg}must not be a symlink: {path}", parser=parser)
 
 
 def parse_duration_to_milliseconds(duration: str, regex_suffix: str = "", context: str = "") -> int:

@@ -21,6 +21,7 @@ import unittest
 from typing import Iterable, List, Tuple
 
 from bzfs_main import bzfs
+from bzfs_main.configuration import Remote
 from bzfs_main.connection import (
     DEDICATED,
     SHARED,
@@ -72,7 +73,7 @@ class TestParallelIterator(AbstractTestCase):
         p = self.make_params(args=args)
         job = bzfs.Job()
         job.params = p
-        p.src = bzfs.Remote("src", args, p)
+        p.src = Remote("src", args, p)
         job.params.connection_pools["src"] = ConnectionPools(
             p.src, {SHARED: p.src.max_concurrent_ssh_sessions_per_tcp_connection, DEDICATED: 1}
         )

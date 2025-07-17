@@ -41,7 +41,8 @@ from bzfs_main.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
-    from bzfs_main.bzfs import Job, Params, Remote
+    from bzfs_main.bzfs import Job
+    from bzfs_main.configuration import Params, Remote
 
 # constants:
 DISABLE_PRG = "-"

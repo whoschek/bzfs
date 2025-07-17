@@ -30,7 +30,7 @@ from unittest.mock import (
 )
 
 from bzfs_main import argparse_cli, bzfs
-from bzfs_main.bzfs import (
+from bzfs_main.configuration import (
     LogParams,
 )
 from bzfs_main.loggers import (
