@@ -48,6 +48,11 @@ from bzfs_main.detect import (
     RemoteConfCacheItem,
     detect_available_programs,
 )
+from bzfs_main.replication import (
+    add_recv_property_options,
+    is_zfs_dataset_busy,
+    pv_cmd,
+)
 from bzfs_main.utils import (
     DIE_STATUS,
 )
@@ -447,7 +452,7 @@ class TestHelperFunctions(AbstractTestCase):
 
     def test_is_zfs_dataset_busy_match(self) -> None:
         def is_busy(proc: str, dataset: str, busy_if_send: bool = True) -> bool:
-            return bzfs.Job().is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
+            return is_zfs_dataset_busy([proc], dataset, busy_if_send=busy_if_send)
 
         ds = "tank/foo/bar"
         self.assertTrue(is_busy("zfs receive " + ds, ds))
@@ -474,7 +479,7 @@ class TestHelperFunctions(AbstractTestCase):
         job = bzfs.Job()
         job.params = self.make_params(args=args, log_params=bzfs.LogParams(args))
         job.params.available_programs = {"src": {"pv": "pv"}}
-        self.assertNotEqual("cat", job.pv_cmd("src", 1024 * 1024, "foo"))
+        self.assertNotEqual("cat", pv_cmd(job, "src", 1024 * 1024, "foo"))
 
     @staticmethod
     def root_datasets_if_recursive_zfs_snapshot_is_possible_slow_but_correct(  # compare faster algos to this baseline impl
@@ -929,7 +934,7 @@ class TestHelperFunctions(AbstractTestCase):
         self.assertTrue(config.dont_warn)
         self.assertTrue(config.dont_crit)
 
-    @patch("bzfs_main.bzfs.Job.itr_ssh_cmd_parallel")
+    @patch("bzfs_main.bzfs.itr_ssh_cmd_parallel")
     def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
         job = bzfs.Job()
         job.params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
@@ -1338,7 +1343,7 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
     def test_appends_x_options_when_supported(self) -> None:
         recv_opts: list[str] = []
         with patch.object(self.p, "is_program_available", return_value=True):
-            result_opts, set_opts = self.job.add_recv_property_options(True, recv_opts, "ds", {})
+            result_opts, set_opts = add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual(["-x", "xprop1", "-x", "xprop2"], result_opts)
         self.assertEqual([], set_opts)
         # original zfs_recv_ox_names remains unchanged
@@ -1347,13 +1352,12 @@ class TestAddRecvPropertyOptions(AbstractTestCase):
     def test_skips_x_options_when_not_supported(self) -> None:
         recv_opts: list[str] = []
         with patch.object(self.p, "is_program_available", return_value=False):
-            result_opts, set_opts = self.job.add_recv_property_options(True, recv_opts, "ds", {})
+            result_opts, set_opts = add_recv_property_options(self.job, True, recv_opts, "ds", {})
         self.assertEqual([], result_opts)
         self.assertEqual([], set_opts)
         self.assertEqual({"existing"}, self.p.zfs_recv_ox_names)
 
 
-#############################################################################
 #############################################################################
 class TestPreservePropertiesValidation(AbstractTestCase):
     def setUp(self) -> None:
@@ -1430,9 +1434,6 @@ class TestPreservePropertiesValidation(AbstractTestCase):
             mock_is_available.side_effect = side_effect
             # This should not raise an exception
             detect_available_programs(self.job)
-
-
-#############################################################################
 
 
 #############################################################################
