@@ -22,6 +22,7 @@ import unittest
 import bzfs_main.utils
 import bzfs_tests.test_argparse_actions
 import bzfs_tests.test_bzfs
+import bzfs_tests.test_compare_snapshot_lists
 import bzfs_tests.test_connection
 import bzfs_tests.test_detect
 import bzfs_tests.test_filter
@@ -52,6 +53,7 @@ def main() -> None:
     suite.addTests(bzfs_tests.test_incremental_send_steps.suite())
     suite.addTests(bzfs_tests.test_argparse_actions.suite())
     suite.addTests(bzfs_tests.test_bzfs.suite())
+    suite.addTests(bzfs_tests.test_compare_snapshot_lists.suite())
     suite.addTests(bzfs_tests.test_jobrunner.suite())
     test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)

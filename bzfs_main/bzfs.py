@@ -60,7 +60,7 @@ import tempfile
 import threading
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, tzinfo
 from logging import Logger
 from os import stat as os_stat
@@ -74,12 +74,9 @@ from typing import (
     Any,
     Callable,
     Counter,
-    Generator,
     Iterable,
-    Iterator,
     Literal,
     NamedTuple,
-    Sequence,
     Tuple,
     TypeVar,
     cast,
@@ -94,11 +91,11 @@ from bzfs_main.argparse_actions import (
     validate_no_argument_file,
 )
 from bzfs_main.argparse_cli import (
-    CMP_CHOICES_ITEMS,
     EXCLUDE_DATASET_REGEXES_DEFAULT,
     LOG_DIR_DEFAULT,
     ZFS_RECV_GROUPS,
 )
+from bzfs_main.compare_snapshot_lists import run_compare_snapshot_lists
 from bzfs_main.connection import (
     ConnectionPools,
     decrement_injection_counter,
@@ -163,7 +160,9 @@ from bzfs_main.retry import (
 from bzfs_main.utils import (
     DESCENDANTS_RE_SUFFIX,
     DIE_STATUS,
+    DIR_PERMISSIONS,
     DONT_SKIP_DATASET,
+    FILE_PERMISSIONS,
     LOG_DEBUG,
     LOG_TRACE,
     PROG_NAME,
@@ -189,7 +188,6 @@ from bzfs_main.utils import (
     human_readable_duration,
     is_descendant,
     is_included,
-    isotime_from_unixtime,
     ninfix,
     nprefix,
     nsuffix,
@@ -198,7 +196,6 @@ from bzfs_main.utils import (
     percent,
     pid_exists,
     pretty_print_formatter,
-    relativize_dataset,
     replace_in_lines,
     replace_prefix,
     stderr_to_str,
@@ -218,8 +215,6 @@ if sys.version_info < MIN_PYTHON_VERSION:
 CREATE_SRC_SNAPSHOTS_PREFIX_DFLT = PROG_NAME + "_"
 CREATE_SRC_SNAPSHOTS_SUFFIX_DFLT = "_adhoc"
 TIME_THRESHOLD_SECS = 1.1  # 1 second ZFS creation time resolution + NTP clock skew is typically < 10ms
-FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
-DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 SNAPSHOTS_CHANGED = "snapshots_changed"  # See https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
 
 
@@ -1337,7 +1332,7 @@ class Job:
             if len(basis_src_datasets) == 0 and not is_dummy(src):
                 die(f"Source dataset does not exist: {src.basis_root_dataset}")
             src_datasets = filter_src_datasets()  # apply include/exclude policy
-            self.run_compare_snapshot_lists(src_datasets, dst_datasets)
+            run_compare_snapshot_lists(self, src_datasets, dst_datasets)
 
         if p.monitor_snapshots_config.enable_monitor_snapshots and not failed:
             log.info("--monitor-snapshots: %s", task_description)
@@ -2238,275 +2233,6 @@ class Job:
                 results[dataset] = int(snapshots_changed)
         return results
 
-    @dataclass(order=True, frozen=True)
-    class ComparableSnapshot:
-        """Snapshot entry comparable by dataset and GUID for stable sorting."""
-
-        key: tuple[str, str]  # rel_dataset, guid
-        cols: list[str] = field(compare=False)
-
-    def run_compare_snapshot_lists(self, src_datasets: list[str], dst_datasets: list[str]) -> None:
-        """Compares source and destination dataset trees recursively with respect to snapshots, for example to check if all
-        recently taken snapshots have been successfully replicated by a periodic job.
-
-        Lists snapshots only contained in source (tagged with 'src'), only contained in destination (tagged with 'dst'), and
-        contained in both source and destination (tagged with 'all'), in the form of a TSV file, along with other snapshot
-        metadata. Implemented with a time and space efficient streaming algorithm; easily scales to millions of datasets and
-        any number of snapshots. Assumes that both src_datasets and dst_datasets are sorted.
-        """
-        p, log = self.params, self.params.log
-        src, dst = p.src, p.dst
-        task = src.root_dataset + " vs. " + dst.root_dataset
-        tsv_dir = p.log_params.log_file[0 : -len(".log")] + ".cmp"
-        os.makedirs(tsv_dir, exist_ok=True)
-        tsv_file = os.path.join(tsv_dir, (src.root_dataset + "%" + dst.root_dataset).replace("/", "~") + ".tsv")
-        tmp_tsv_file = tsv_file + ".tmp"
-        compare_snapshot_lists = set(p.compare_snapshot_lists.split("+"))
-        is_src_dst_all = all(choice in compare_snapshot_lists for choice in CMP_CHOICES_ITEMS)
-        all_src_dst = [loc for loc in ("all", "src", "dst") if loc in compare_snapshot_lists]
-        is_first_row = True
-        now = None
-
-        def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Generator[str, None, None]:
-            """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
-            assert not self.is_test_mode or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
-            written_zfs_prop = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
-            if is_solaris_zfs(p, r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
-                written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"
-            props = self.creation_prefix + f"creation,guid,createtxg,{written_zfs_prop},name"
-            types = "snapshot"
-            if p.use_bookmark and r.location == "src" and are_bookmarks_enabled(p, r):
-                types = "snapshot,bookmark"  # output list ordering: intentionally makes bookmarks appear *after* snapshots
-            cmd = p.split_args(f"{p.zfs_program} list -t {types} -d 1 -Hp -o {props}")  # sorted by dataset, createtxg
-            for lines in zfs_list_snapshots_in_parallel(self, r, cmd, sorted_datasets):
-                yield from lines
-
-        def snapshot_iterator(
-            root_dataset: str, sorted_itr: Generator[str, None, None]
-        ) -> Generator[Job.ComparableSnapshot, None, None]:
-            """Splits/groups snapshot stream into distinct datasets, sorts by GUID within a dataset such that any two
-            snapshots with the same GUID will lie adjacent to each other during the upcoming phase that merges src snapshots
-            and dst snapshots."""
-            # streaming group by dataset name (consumes constant memory only)
-            for dataset, group in itertools.groupby(
-                sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.replace("#", "@").index("@")]
-            ):
-                snapshots = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
-                snapshots = filter_snapshots(self, snapshots)  # apply include/exclude policy
-                snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # stable sort by GUID (2nd remains createtxg)
-                rel_dataset = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
-                last_guid = ""
-                for line in snapshots:
-                    cols = line.split("\t")
-                    creation, guid, createtxg, written, snapshot_name = cols
-                    if guid == last_guid:
-                        assert "#" in snapshot_name
-                        continue  # ignore bookmarks whose snapshot still exists. also ignore dupes of bookmarks
-                    last_guid = guid
-                    if written == "snapshot":
-                        written = "-"  # sanitize solaris-11.4 work-around (solaris-11.4 also has no bookmark feature)
-                        cols = [creation, guid, createtxg, written, snapshot_name]
-                    key = (rel_dataset, guid)  # ensures src snapshots and dst snapshots with the same GUID will be adjacent
-                    yield Job.ComparableSnapshot(key, cols)
-
-        def print_dataset(rel_dataset: str, entries: Iterable[tuple[str, Job.ComparableSnapshot]]) -> None:
-            entries = sorted(  # fetch all snapshots of current dataset and sort em by creation, createtxg, snapshot_tag
-                entries,
-                key=lambda entry: (
-                    int((cols := entry[1].cols)[0]),
-                    int(cols[2]),
-                    (snapshot_name := cols[-1])[snapshot_name.replace("#", "@").index("@") + 1 :],
-                ),
-            )
-
-            @dataclass
-            class SnapshotStats:
-                snapshot_count: int = field(default=0)
-                sum_written: int = field(default=0)
-                snapshot_count_since: int = field(default=0)
-                sum_written_since: int = field(default=0)
-                latest_snapshot_idx: int | None = field(default=None)
-                latest_snapshot_row_str: str | None = field(default=None)
-                latest_snapshot_creation: str | None = field(default=None)
-                oldest_snapshot_row_str: str | None = field(default=None)
-                oldest_snapshot_creation: str | None = field(default=None)
-
-            # print metadata of snapshots of current dataset to TSV file; custom stats can later be computed from there
-            stats: defaultdict[str, SnapshotStats] = defaultdict(SnapshotStats)
-            header = "location creation_iso createtxg rel_name guid root_dataset rel_dataset name creation written"
-            nonlocal is_first_row
-            if is_first_row:
-                fd.write(header.replace(" ", "\t") + "\n")
-                is_first_row = False
-            for i, entry in enumerate(entries):
-                loc = location = entry[0]
-                creation, guid, createtxg, written, name = entry[1].cols
-                root_dataset = dst.root_dataset if location == CMP_CHOICES_ITEMS[1] else src.root_dataset
-                rel_name = relativize_dataset(name, root_dataset)
-                creation_iso = isotime_from_unixtime(int(creation))
-                row = loc, creation_iso, createtxg, rel_name, guid, root_dataset, rel_dataset, name, creation, written
-                # Example: src 2024-11-06_08:30:05 17435050 /foo@test_2024-11-06_08:30:05_daily 2406491805272097867 tank1/src /foo tank1/src/foo@test_2024-10-06_08:30:04_daily 1730878205 24576
-                row_str = "\t".join(row)
-                if not p.dry_run:
-                    fd.write(row_str + "\n")
-                s = stats[location]
-                s.snapshot_count += 1
-                s.sum_written += int(written) if written != "-" else 0
-                s.latest_snapshot_idx = i
-                s.latest_snapshot_row_str = row_str
-                s.latest_snapshot_creation = creation
-                if not s.oldest_snapshot_row_str:
-                    s.oldest_snapshot_row_str = row_str
-                    s.oldest_snapshot_creation = creation
-
-            # for convenience, directly log basic summary stats of current dataset
-            k = stats["all"].latest_snapshot_idx  # defaults to None
-            k = k if k is not None else -1
-            for entry in entries[k + 1 :]:  # aggregate basic stats since latest common snapshot
-                location = entry[0]
-                creation, guid, createtxg, written, name = entry[1].cols
-                s = stats[location]
-                s.snapshot_count_since += 1
-                s.sum_written_since += int(written) if written != "-" else 0
-            prefix = f"Comparing {rel_dataset}~"
-            msgs = []
-            msgs.append(f"{prefix} of {task}")
-            msgs.append(
-                f"{prefix} Q: No src snapshots are missing on dst, and no dst snapshots are missing on src, "
-                "and there is a common snapshot? A: "
-                + (
-                    "n/a"
-                    if not is_src_dst_all
-                    else str(
-                        stats["src"].snapshot_count == 0
-                        and stats["dst"].snapshot_count == 0
-                        and stats["all"].snapshot_count > 0
-                    )
-                )
-            )
-            nonlocal now
-            now = now or round(time.time())  # uses the same timestamp across the entire dataset tree
-            latcom = "latest common snapshot"
-            for loc in all_src_dst:
-                s = stats[loc]
-                msgs.append(f"{prefix} Latest snapshot only in {loc}: {s.latest_snapshot_row_str or 'n/a'}")
-                msgs.append(f"{prefix} Oldest snapshot only in {loc}: {s.oldest_snapshot_row_str or 'n/a'}")
-                msgs.append(f"{prefix} Snapshots only in {loc}: {s.snapshot_count}")
-                msgs.append(f"{prefix} Snapshot data written only in {loc}: {human_readable_bytes(s.sum_written)}")
-                if loc != "all":
-                    na = None if k >= 0 else "n/a"
-                    msgs.append(f"{prefix} Snapshots only in {loc} since {latcom}: {na or s.snapshot_count_since}")
-                    msgs.append(
-                        f"{prefix} Snapshot data written only in {loc} since {latcom}: "
-                        f"{na or human_readable_bytes(s.sum_written_since)}"
-                    )
-                all_creation = stats["all"].latest_snapshot_creation
-                latest = ("latest", s.latest_snapshot_creation)
-                oldest = ("oldest", s.oldest_snapshot_creation)
-                for label, s_creation in latest, oldest:
-                    if loc != "all":
-                        hd = "n/a"
-                        if s_creation and k >= 0:
-                            assert all_creation is not None
-                            hd = human_readable_duration(int(all_creation) - int(s_creation), unit="s")
-                        msgs.append(f"{prefix} Time diff between {latcom} and {label} snapshot only in {loc}: {hd}")
-                for label, s_creation in latest, oldest:
-                    hd = "n/a" if not s_creation else human_readable_duration(now - int(s_creation), unit="s")
-                    msgs.append(f"{prefix} Time diff between now and {label} snapshot only in {loc}: {hd}")
-            log.info("%s", "\n".join(msgs))
-
-        # setup streaming pipeline
-        src_snap_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
-        dst_snap_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
-        merge_itr = self.merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snap_itr, dst_snap_itr)
-
-        rel_datasets: dict[str, set[str]] = defaultdict(set)
-        for datasets, remote in (src_datasets, src), (dst_datasets, dst):
-            for dataset in datasets:  # rel_dataset=/foo, root_dataset=tank1/src
-                rel_datasets[remote.location].add(relativize_dataset(dataset, remote.root_dataset))
-        rel_src_or_dst: list[str] = sorted(rel_datasets["src"].union(rel_datasets["dst"]))
-
-        log.debug("%s", f"Temporary TSV output file comparing {task} is: {tmp_tsv_file}")
-        with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
-            # streaming group by rel_dataset (consumes constant memory only); entry is a Tuple[str, ComparableSnapshot]
-            group = itertools.groupby(merge_itr, key=lambda entry: entry[1].key[0])
-            self.print_datasets(group, lambda rel_ds, entries: print_dataset(rel_ds, entries), rel_src_or_dst)
-        os.rename(tmp_tsv_file, tsv_file)
-        log.info("%s", f"Final TSV output file comparing {task} is: {tsv_file}")
-
-        tsv_file = tsv_file[0 : tsv_file.rindex(".")] + ".rel_datasets_tsv"
-        tmp_tsv_file = tsv_file + ".tmp"
-        with open_nofollow(tmp_tsv_file, "w", encoding="utf-8", perm=FILE_PERMISSIONS) as fd:
-            header = "location rel_dataset src_dataset dst_dataset"
-            fd.write(header.replace(" ", "\t") + "\n")
-            src_only: set[str] = rel_datasets["src"].difference(rel_datasets["dst"])
-            dst_only: set[str] = rel_datasets["dst"].difference(rel_datasets["src"])
-            for rel_dataset in rel_src_or_dst:
-                loc = "src" if rel_dataset in src_only else "dst" if rel_dataset in dst_only else "all"
-                src_dataset = src.root_dataset + rel_dataset if rel_dataset not in dst_only else ""
-                dst_dataset = dst.root_dataset + rel_dataset if rel_dataset not in src_only else ""
-                row = loc, rel_dataset, src_dataset, dst_dataset  # Example: all /foo/bar tank1/src/foo/bar tank2/dst/foo/bar
-                if not p.dry_run:
-                    fd.write("\t".join(row) + "\n")
-        os.rename(tmp_tsv_file, tsv_file)
-
-    @staticmethod
-    def print_datasets(group: itertools.groupby, fn: Callable[[str, Iterable], None], rel_datasets: Iterable[str]) -> None:
-        """Iterate over grouped datasets and apply fn, adding gaps for missing ones."""
-        rel_datasets = sorted(rel_datasets)
-        n = len(rel_datasets)
-        i = 0
-        for rel_dataset, entries in group:
-            while i < n and rel_datasets[i] < rel_dataset:
-                fn(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
-                i += 1
-            assert i >= n or rel_datasets[i] == rel_dataset
-            i += 1
-            fn(rel_dataset, entries)
-        while i < n:
-            fn(rel_datasets[i], [])  # Also print summary stats for datasets whose snapshot stream is empty
-            i += 1
-
-    def merge_sorted_iterators(
-        self,
-        choices: Sequence[str],  # ["src", "dst", "all"]
-        choice: str,  # Example: "src+dst+all"
-        src_itr: Iterator,
-        dst_itr: Iterator,
-    ) -> Generator[tuple[Any, ...], None, None]:
-        """The typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
-        assert len(choices) == 3
-        assert choice
-        flags = 0
-        for i, item in enumerate(choices):
-            if item in choice:
-                flags |= 1 << i
-        src_next, dst_next = run_in_parallel(lambda: next(src_itr, None), lambda: next(dst_itr, None))
-        while not (src_next is None and dst_next is None):
-            if src_next == dst_next:
-                n = 2
-                if (flags & (1 << n)) != 0:
-                    yield choices[n], src_next, dst_next
-                src_next = next(src_itr, None)
-                dst_next = next(dst_itr, None)
-            elif src_next is None or (dst_next is not None and dst_next < src_next):
-                n = 1
-                if (flags & (1 << n)) != 0:
-                    yield choices[n], dst_next
-                dst_next = next(dst_itr, None)
-            else:
-                n = 0
-                if (flags & (1 << n)) != 0:
-                    if isinstance(src_next, Job.ComparableSnapshot):
-                        name = src_next.cols[-1]
-                        if "@" in name:
-                            yield choices[n], src_next  # include snapshot
-                        else:  # ignore src bookmarks for which no snapshot exists in dst; those aren't useful
-                            assert "#" in name
-                    else:
-                        yield choices[n], src_next
-                src_next = next(src_itr, None)
-
 
 #############################################################################
 def fix_send_recv_opts(
@@ -2560,7 +2286,7 @@ def fix_solaris_raw_mode(lst: list[str]) -> list[str]:
     return lst
 
 
-ssh_master_domain_socket_file_pid_regex = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
+SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
 
 
 def delete_stale_files(
@@ -2584,7 +2310,7 @@ def delete_stale_files(
                     shutil.rmtree(entry.path, ignore_errors=True)
                 elif not (ssh and stat.S_ISSOCK(entry.stat().st_mode)):
                     os.remove(entry.path)
-                elif match := ssh_master_domain_socket_file_pid_regex.match(entry.name[len(prefix) :]):
+                elif match := SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX.match(entry.name[len(prefix) :]):
                     pid = int(match.group(0))
                     if pid_exists(pid) is False or now - entry.stat().st_mtime >= 31 * 24 * 60 * 60:
                         os.remove(entry.path)  # bzfs process is nomore alive hence its ssh master process isn't alive either

@@ -71,6 +71,8 @@ YEAR_WITH_FOUR_DIGITS_REGEX = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for e
 UNIX_TIME_INFINITY_SECS = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
 SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
+FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 
