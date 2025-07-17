@@ -41,26 +41,29 @@ import bzfs_tests.test_utils
 
 def main() -> None:
     suite = unittest.TestSuite()
-    suite.addTests(bzfs_tests.test_utils.suite())
-    suite.addTests(bzfs_tests.test_loggers.suite())
-    suite.addTests(bzfs_tests.test_retry.suite())
-    suite.addTests(bzfs_tests.test_period_anchors.suite())
-    suite.addTests(bzfs_tests.test_progress_reporter.suite())
-    suite.addTests(bzfs_tests.test_parallel_iterator.suite())
-    suite.addTests(bzfs_tests.test_parallel_engine.suite())
-    suite.addTests(bzfs_tests.test_filter.suite())
-    suite.addTests(bzfs_tests.test_connection.suite())
-    suite.addTests(bzfs_tests.test_detect.suite())
-    suite.addTests(bzfs_tests.test_incremental_send_steps.suite())
-    suite.addTests(bzfs_tests.test_argparse_actions.suite())
-    suite.addTests(bzfs_tests.test_bzfs.suite())
-    suite.addTests(bzfs_tests.test_compare_snapshot_lists.suite())
-    suite.addTests(bzfs_tests.test_snapshot_cache.suite())
-    suite.addTests(bzfs_tests.test_jobrunner.suite())
+    suites = [
+        bzfs_tests.test_utils.suite(),
+        bzfs_tests.test_loggers.suite(),
+        bzfs_tests.test_retry.suite(),
+        bzfs_tests.test_period_anchors.suite(),
+        bzfs_tests.test_progress_reporter.suite(),
+        bzfs_tests.test_parallel_iterator.suite(),
+        bzfs_tests.test_parallel_engine.suite(),
+        bzfs_tests.test_filter.suite(),
+        bzfs_tests.test_connection.suite(),
+        bzfs_tests.test_detect.suite(),
+        bzfs_tests.test_incremental_send_steps.suite(),
+        bzfs_tests.test_argparse_actions.suite(),
+        bzfs_tests.test_bzfs.suite(),
+        bzfs_tests.test_compare_snapshot_lists.suite(),
+        bzfs_tests.test_snapshot_cache.suite(),
+        bzfs_tests.test_jobrunner.suite(),
+    ]
+    suite.addTests(suites)
     test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)
     if not is_unit_test:
-        suite.addTests(bzfs_tests.test_integrations.suite())
+        suite.addTest(bzfs_tests.test_integrations.suite())
 
     failfast = False if os.getenv("CI") else True  # no need to fail fast when running within GitHub Action
     print(f"Running in failfast mode: {failfast} ...")

@@ -52,6 +52,7 @@ __version__ = "1.12.0-dev"
 PROG_AUTHOR = "Wolfgang Hoschek"
 EXCLUDE_DATASET_REGEXES_DEFAULT = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 LOG_DIR_DEFAULT = PROG_NAME + "-logs"
+SKIP_ON_ERROR_DEFAULT = "dataset"
 ZFS_RECV_GROUPS = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
 CMP_CHOICES_ITEMS = ("src", "dst", "all")
 
@@ -786,7 +787,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "The timer resets after each operation completes or retries exhaust, such that subsequently failing "
              "operations can again be retried.\n\n")
     parser.add_argument(
-        "--skip-on-error", choices=["fail", "tree", "dataset"], default="dataset",
+        "--skip-on-error", choices=["fail", "tree", "dataset"], default=SKIP_ON_ERROR_DEFAULT,
         help="During replication and deletion, if an error is not retryable, or --retries has been exhausted, "
              "or --skip-missing-snapshots raises an error, proceed as follows:\n\n"
              "a) 'fail': Abort the program with an error. This mode is ideal for testing, clear "

@@ -48,7 +48,7 @@ from typing import Any, Iterable, TypeVar, Union
 
 import bzfs_main.utils
 from bzfs_main import argparse_actions, bzfs, check_range
-from bzfs_main.argparse_cli import PROG_AUTHOR
+from bzfs_main.argparse_cli import PROG_AUTHOR, SKIP_ON_ERROR_DEFAULT
 from bzfs_main.detect import DUMMY_DATASET
 from bzfs_main.loggers import get_simple_logger
 from bzfs_main.parallel_engine import (
@@ -869,22 +869,20 @@ class Job:
         has_barrier = any(BARRIER_CHAR in subjob.split("/") for subjob in sorted_subjobs)
         if self.spawn_process_per_job or has_barrier or bzfs.has_siblings(sorted_subjobs):  # siblings can run in parallel
             log.log(LOG_TRACE, "%s", "spawn_process_per_job: True")
-            args = self.bzfs_argument_parser.parse_args(args=["src", "dst", "--retries=0"])
-            params = bzfs.Params(args=args, sys_argv=[], log_params=bzfs.LogParams(args), log=log)
             process_datasets_in_parallel_and_fault_tolerant(
-                log=params.log,
+                log=log,
                 datasets=sorted_subjobs,
                 process_dataset=lambda subjob, tid, retry: self.run_subjob(
                     subjobs[subjob], name=subjob, timeout_secs=timeout_secs, spawn_process_per_job=True
                 )
                 == 0,
                 skip_tree_on_error=lambda subjob: True,
-                skip_on_error=params.skip_on_error,
+                skip_on_error=SKIP_ON_ERROR_DEFAULT,
                 max_workers=max_workers,
                 interval_nanos=lambda subjob: interval_nanos,
                 task_name="Subjob",
-                retry_policy=params.retry_policy,
-                dry_run=params.dry_run,
+                retry_policy=None,  # no retries
+                dry_run=False,
                 is_test_mode=self.is_test_mode,
             )
         else:
