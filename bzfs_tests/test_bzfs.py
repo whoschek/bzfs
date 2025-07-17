@@ -309,29 +309,6 @@ class TestHelperFunctions(AbstractTestCase):
             bzfs.delete_stale_files(tmpdir, "s", millis=0, ssh=True)
             self.assertFalse(os.path.exists(regular_file))
 
-    def test_set_last_modification_time(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            file = os.path.join(tmpdir, "foo")
-            bzfs.set_last_modification_time(file, unixtime_in_secs=0)
-            self.assertEqual(0, round(os.stat(file).st_mtime))
-            bzfs.set_last_modification_time(file, unixtime_in_secs=0)
-            self.assertEqual(0, round(os.stat(file).st_mtime))
-            bzfs.set_last_modification_time(file, unixtime_in_secs=1000, if_more_recent=True)
-            self.assertEqual(1000, round(os.stat(file).st_mtime))
-            bzfs.set_last_modification_time(file, unixtime_in_secs=0, if_more_recent=True)
-            self.assertEqual(1000, round(os.stat(file).st_mtime))
-            bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=True)
-            self.assertEqual(1001, round(os.stat(file).st_mtime))
-
-    def test_set_last_modification_time_with_file_not_found_error(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            file = os.path.join(tmpdir, "foo")
-            with patch("bzfs_main.bzfs.os_utime", side_effect=FileNotFoundError):
-                with self.assertRaises(FileNotFoundError):
-                    bzfs.set_last_modification_time(file + "nonexisting", unixtime_in_secs=1001, if_more_recent=False)
-                file = os.path.join(file, "x", "nonexisting2")
-                bzfs.set_last_modification_time_safe(file, unixtime_in_secs=1001, if_more_recent=False)
-
     def test_run_main_with_unexpected_exception(self) -> None:
         args = self.argparser_parse_args(args=["src", "dst"])
         job = bzfs.Job()
@@ -894,53 +871,6 @@ class TestHelperFunctions(AbstractTestCase):
         config = bzfs.MonitorSnapshotsConfig(args, params)
         self.assertTrue(config.dont_warn)
         self.assertTrue(config.dont_crit)
-
-    @patch("bzfs_main.bzfs.itr_ssh_cmd_parallel")
-    def test_zfs_get_snapshots_changed_parsing(self, mock_itr_parallel: MagicMock) -> None:
-        job = bzfs.Job()
-        job.params = self.make_params(args=self.argparser_parse_args(args=["src", "dst"]))
-        self.mock_remote = MagicMock(spec=bzfs.Remote)  # spec helps catch calls to non-existent attrs
-
-        mock_itr_parallel.return_value = [  # normal input
-            [
-                "12345\tdataset/valid1",
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345, "dataset/valid2": 789}, results)
-
-        # Simulate output from a failing 'zfs list' command captured on its stdout.
-        # This could be partial output, or error messages if zfs wrote them to stdout.
-        mock_itr_parallel.return_value = [
-            [
-                "12345\tdataset/valid1",
-                "ERROR: zfs command failed for dataset/invalid2",  # Line without tab, from stdout
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345}, results)
-
-        mock_itr_parallel.return_value = [
-            [
-                "12345\tdataset/valid1",
-                "123\t",  # empty dataset
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345}, results)
-
-        mock_itr_parallel.return_value = [
-            [
-                "12345\tdataset/valid1",
-                "\tfoo",  # missing timestamp
-                "789\tdataset/valid2",
-            ]
-        ]
-        results = job.zfs_get_snapshots_changed(self.mock_remote, ["d1", "d2", "d3", "d4"])
-        self.assertDictEqual({"dataset/valid1": 12345, "foo": 0, "dataset/valid2": 789}, results)
 
     def test_die_with_parser(self) -> None:
         parser = argparse.ArgumentParser()

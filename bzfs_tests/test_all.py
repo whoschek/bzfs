@@ -35,6 +35,7 @@ import bzfs_tests.test_parallel_iterator
 import bzfs_tests.test_period_anchors
 import bzfs_tests.test_progress_reporter
 import bzfs_tests.test_retry
+import bzfs_tests.test_snapshot_cache
 import bzfs_tests.test_utils
 
 
@@ -54,6 +55,7 @@ def main() -> None:
     suite.addTests(bzfs_tests.test_argparse_actions.suite())
     suite.addTests(bzfs_tests.test_bzfs.suite())
     suite.addTests(bzfs_tests.test_compare_snapshot_lists.suite())
+    suite.addTests(bzfs_tests.test_snapshot_cache.suite())
     suite.addTests(bzfs_tests.test_jobrunner.suite())
     test_mode = bzfs_main.utils.getenv_any("test_mode", "")  # Consider toggling this when testing
     is_unit_test = test_mode == "unit"  # run only unit tests (skip integration tests)
