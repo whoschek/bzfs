@@ -47,9 +47,8 @@ from subprocess import DEVNULL, PIPE
 from typing import Any, Iterable, TypeVar, Union
 
 import bzfs_main.utils
-from bzfs_main import argparse_actions, bzfs
+from bzfs_main import argparse_actions, bzfs, check_range
 from bzfs_main.argparse_cli import PROG_AUTHOR
-from bzfs_main.check_range import CheckRange
 from bzfs_main.detect import DUMMY_DATASET
 from bzfs_main.loggers import get_simple_logger
 from bzfs_main.parallel_engine import (
@@ -359,7 +358,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
              "are relative to the number of CPU cores on the machine. Example: 200%% uses twice as many parallel jobs as "
              "there are cores on the machine; 75%% uses num_procs = num_cores * 0.75. Examples: 1, 4, 75%%, 150%%\n\n")
     parser.add_argument(
-        "--work-period-seconds", type=float, min=0, default=0, action=CheckRange, metavar="FLOAT",
+        "--work-period-seconds", type=float, min=0, default=0, action=check_range.CheckRange, metavar="FLOAT",
         help="Reduces bandwidth spikes by spreading out the start of worker jobs over this much time; "
              "0 disables this feature (default: %(default)s). Examples: 0, 60, 86400\n\n")
     parser.add_argument(
@@ -367,7 +366,7 @@ auto-restarted by 'cron', or earlier if they fail. While the daemons are running
         help="Randomize job start time and host order to avoid potential thundering herd problems in large distributed "
              "systems (optional). Randomizing job start time is only relevant if --work-period-seconds > 0.\n\n")
     parser.add_argument(
-        "--worker-timeout-seconds", type=float, min=0, default=None, action=CheckRange, metavar="FLOAT",
+        "--worker-timeout-seconds", type=float, min=0, default=None, action=check_range.CheckRange, metavar="FLOAT",
         help="If this much time has passed after a worker process has started executing, kill the straggling worker "
              "(optional). Other workers remain unaffected. Examples: 60, 3600\n\n")
     parser.add_argument(

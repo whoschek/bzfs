@@ -241,13 +241,13 @@ class LogParams:
         if self.log_config_file:
             validate_no_argument_file(self.log_config_file, args, err_prefix="--log-config-file: ")
         self.log_config_vars: dict[str, str] = dict(var.split(":", 1) for var in args.log_config_var)
-        timestamp = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
-        self.timestamp: str = timestamp
+        self.timestamp: str = datetime.now().isoformat(sep="_", timespec="seconds")  # 2024-09-03_12:26:15
         self.home_dir: str = get_home_directory()
         log_parent_dir: str = args.log_dir if args.log_dir else os.path.join(self.home_dir, LOG_DIR_DEFAULT)
         if LOG_DIR_DEFAULT not in os.path.basename(log_parent_dir):
             die(f"Basename of --log-dir must contain the substring '{LOG_DIR_DEFAULT}', but got: {log_parent_dir}")
         sep = "_" if args.log_subdir == "daily" else ":"
+        timestamp = self.timestamp
         subdir = timestamp[0 : timestamp.rindex(sep) if args.log_subdir == "minutely" else timestamp.index(sep)]
         self.log_dir: str = os.path.join(log_parent_dir, subdir)  # 2024-09-03 (d), 2024-09-03_12 (h), 2024-09-03_12:26 (m)
         os.makedirs(log_parent_dir, mode=DIR_PERMISSIONS, exist_ok=True)
@@ -884,7 +884,6 @@ class Job:
     """Executes one bzfs run, coordinating snapshot replication tasks."""
 
     def __init__(self) -> None:
-        """Initialize caches and result tracking structures."""
         self.params: Params
         self.all_dst_dataset_exists: dict[str, dict[str, bool]] = defaultdict(lambda: defaultdict(bool))
         self.dst_dataset_exists: SynchronizedDict[str, bool] = SynchronizedDict({})
@@ -1387,7 +1386,8 @@ class Job:
         return basis_dst_datasets
 
     def create_src_snapshots_task(self, basis_src_datasets: list[str], src_datasets: list[str]) -> None:
-        """Atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy.
+        """Atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy; implements
+        --create-src-snapshots.
 
         The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
         using lexicographical sort order, and using 'zfs snapshot -r' to the extent that this is compatible with the
@@ -1433,7 +1433,7 @@ class Job:
     ) -> bool:
         """Delete existing destination snapshots that do not exist within the source dataset if they are included by the
         --{include|exclude}-snapshot-* policy, and the destination dataset is included via --{include|exclude}-dataset*
-        policy."""
+        policy; implements --delete-dst-snapshots."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
@@ -1545,7 +1545,7 @@ class Job:
         self, basis_src_datasets: list[str], basis_dst_datasets: list[str], dst_datasets: list[str]
     ) -> Tuple[list[str], list[str]]:
         """Delete existing destination datasets that do not exist within the source dataset if they are included via
-        --{include|exclude}-dataset* policy.
+        --{include|exclude}-dataset* policy; implements --delete-dst-datasets.
 
         Do not recurse without --recursive. With --recursive, never delete non-selected dataset subtrees or their ancestors.
         """
@@ -1569,7 +1569,7 @@ class Job:
 
     def delete_empty_dst_datasets_task(self, basis_dst_datasets: list[str], dst_datasets: list[str]) -> list[str]:
         """Delete any existing destination dataset that has no snapshot and no bookmark if all descendants of that dataset do
-        not have a snapshot or bookmark either.
+        not have a snapshot or bookmark either; implements --delete-empty-dst-datasets.
 
         To do so, we walk the dataset list (conceptually, a tree) depth-first (i.e. sorted descending). If a dst dataset has
         zero snapshots and zero bookmarks and all its children are already marked as orphans, then it is itself an orphan,
@@ -1622,7 +1622,7 @@ class Job:
         return dst_datasets
 
     def monitor_snapshots_task(self, src_datasets: list[str], dst_datasets: list[str], task_description: str) -> None:
-        """Monitors src and dst snapshots."""
+        """Monitors src and dst snapshots; implements --monitor-snapshots."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         num_cache_hits = self.num_cache_hits
@@ -1773,7 +1773,7 @@ class Job:
                 alert_oldest_snapshot(i, creation_unixtime_secs=0, dataset=dataset, snapshot="")
 
     def replicate_datasets(self, src_datasets: list[str], task_description: str, max_workers: int) -> bool:
-        """Replicates a list of datasets in parallel according to configuration."""
+        """Replicates a list of datasets."""
         assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst

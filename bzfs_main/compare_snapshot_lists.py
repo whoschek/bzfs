@@ -69,7 +69,7 @@ class ComparableSnapshot:
 
 def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: list[str]) -> None:
     """Compares source and destination dataset trees recursively with respect to snapshots, for example to check if all
-    recently taken snapshots have been successfully replicated by a periodic job.
+    recently taken snapshots have been successfully replicated by a periodic job; implements --compare-snapshot-lists.
 
     Lists snapshots only contained in source (tagged with 'src'), only contained in destination (tagged with 'dst'), and
     contained in both source and destination (tagged with 'all'), in the form of a TSV file, along with other snapshot
