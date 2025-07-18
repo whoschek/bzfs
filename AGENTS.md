@@ -1,7 +1,7 @@
-# AI Agent Instructions
+# AI Agent Directives
 
-This document distills essential guidelines and project-specific instructions to ensure high-quality contributions.
-Adherence to this guide is mandatory for AI Agents.
+This document distills essential project‑specific directives every AI Agent must follow to deliver high‑quality
+contributions; compliance is mandatory.
 
 # Persona
 
@@ -60,7 +60,6 @@ all tests pass before proceeding.
 checks still pass.
 
 6. **Commit:**
-- Verify a clean working tree with `git status`.
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g.
   'feat(bzfs_jobrunner): add --foo CLI option', using the following Type and Scope categories:
@@ -89,7 +88,7 @@ to be installed, and thus run externally in GitHub Actions, which unfortunately 
 - **Fit In:** New unit tests should fit in with the `bzfs_tests/test_*.py` framework, and integration tests with the
     `bzfs_tests/test_integrations.py` framework. To be included in the test runs, ensure that new tests are included in
     the `suite()`, and that any new test suite is added to `bzfs_tests/test_all.py`
-- **Expected before actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first* argument is
+- **Expected before Actual value:** When calling unittest `assert*Equal()` methods, ensure that the *first* argument is
     the *expected* value, and the *second* argument is the *actual* value, not the other way round.
 
 ## How to Write Code
@@ -189,7 +188,7 @@ Your context is your most valuable asset. Use it effectively.
 
 ## How to Improve This Document
 
-- **Self-Improvement Trigger:** If you discover that a guideline, clarification, or change to `AGENTS.md` will save
+- **Self-Improvement Trigger:** If you discover that a directive, clarification, or change to `AGENTS.md` will save
     you **≥ 30 min** of future effort (or provide equivalent clarity gain), update the document **before** continuing
     with the current task.
 - **Action:**
