@@ -38,7 +38,7 @@ from bzfs_main.utils import (
     drain,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Remote
 
@@ -122,9 +122,9 @@ def itr_ssh_cmd_parallel(
 ) -> Generator[Any, None, Any]:
     """Returns output datasets in the same order as the input datasets (not in random order) if ordered == True."""
     return parallel_iterator(
-        iterator_builder=lambda exectr: [
+        iterator_builder=lambda executr: [
             itr_ssh_cmd_batched(
-                job, r, cmd, cmd_args, lambda batch, cmd=cmd: exectr.submit(fn, cmd, batch), max_batch_items=max_batch_items  # type: ignore[misc]
+                job, r, cmd, cmd_args, lambda batch, cmd=cmd: executr.submit(fn, cmd, batch), max_batch_items=max_batch_items  # type: ignore[misc]
             )
             for cmd, cmd_args in cmd_args_list
         ],

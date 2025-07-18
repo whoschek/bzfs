@@ -17,8 +17,6 @@
 from __future__ import annotations
 import copy
 import logging
-import logging.config
-import logging.handlers
 import shlex
 import subprocess
 import threading
@@ -44,7 +42,7 @@ from bzfs_main.utils import (
     xprint,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Params, Remote
 

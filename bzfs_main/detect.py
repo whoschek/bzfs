@@ -40,7 +40,7 @@ from bzfs_main.utils import (
     list_formatter,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Params, Remote
 

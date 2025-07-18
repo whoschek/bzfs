@@ -58,7 +58,10 @@ from bzfs_main.filter import (
 from bzfs_main.incremental_send_steps import (
     incremental_send_steps,
 )
-from bzfs_main.parallel_batch_cmd import run_ssh_cmd_batched, run_ssh_cmd_parallel
+from bzfs_main.parallel_batch_cmd import (
+    run_ssh_cmd_batched,
+    run_ssh_cmd_parallel,
+)
 from bzfs_main.parallel_iterator import (
     run_in_parallel,
 )
@@ -86,7 +89,7 @@ from bzfs_main.utils import (
     xprint,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.bzfs import Job
     from bzfs_main.configuration import Params, Remote
 

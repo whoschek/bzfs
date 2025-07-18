@@ -24,9 +24,15 @@ from os.path import join as os_path_join
 from subprocess import CalledProcessError
 from typing import TYPE_CHECKING
 
-from bzfs_main.connection import run_ssh_command
-from bzfs_main.detect import is_caching_snapshots
-from bzfs_main.parallel_batch_cmd import itr_ssh_cmd_parallel
+from bzfs_main.connection import (
+    run_ssh_command,
+)
+from bzfs_main.detect import (
+    is_caching_snapshots,
+)
+from bzfs_main.parallel_batch_cmd import (
+    itr_ssh_cmd_parallel,
+)
 from bzfs_main.utils import (
     stderr_to_str,
 )

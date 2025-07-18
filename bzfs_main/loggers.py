@@ -42,7 +42,7 @@ from bzfs_main.utils import (
     open_nofollow,
 )
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
     from bzfs_main.configuration import LogParams
 
 
