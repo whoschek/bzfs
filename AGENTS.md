@@ -1,7 +1,7 @@
 # AI Agent Instructions
 
-This document provides essential guidelines and project-specific instructions to ensure high-quality contributions from
-AI Agents. Adherence to this guide is mandatory.
+This document distills essential guidelines and project-specific instructions to ensure high-quality contributions.
+Adherence to this guide is mandatory for AI Agents.
 
 # Persona
 
@@ -60,6 +60,7 @@ all tests pass before proceeding.
 checks still pass.
 
 6. **Commit:**
+- Verify a clean working tree with `git status`.
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g.
   'feat(bzfs_jobrunner): add --foo CLI option', using the following Type and Scope categories:
@@ -123,7 +124,7 @@ Your goal is to improve quality with zero functional regressions.
     ```
 
 - **Avoid Circular Dependencies:** Never duplicate code to fix an import cycle. Instead, think harder and extract the
-    shared logic into a new utility module - or an existing one that keeps the dependency graph acyclic - rather than
+    shared logic into a new utility module - or an existing module that keeps the dependency graph acyclic - rather than
     adding deep import chains.
 
 ## How to Improve Code Coverage
