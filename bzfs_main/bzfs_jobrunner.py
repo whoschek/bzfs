@@ -453,10 +453,7 @@ class Job:
         self.first_exception = None
         log = self.log
         log.info("CLI arguments: %s", " ".join(sys_argv))
-
-        # disable --root-dataset-pairs='+path/to/file' option in DatasetPairsAction
-        nsp = argparse.Namespace(no_argument_file=True)
-
+        nsp = argparse.Namespace(no_argument_file=True)  # disable --root-dataset-pairs='+file' option in DatasetPairsAction
         args, unknown_args = self.argument_parser.parse_known_args(sys_argv[1:], nsp)  # forward all unknown args to `bzfs`
         log.setLevel(args.jobrunner_log_level)
         self.jobrunner_dryrun = args.jobrunner_dryrun
@@ -527,7 +524,7 @@ class Job:
         job_run = args.job_run if args.job_run is not None else args.jobid  # --jobid is deprecated; was renamed to --job-run
         job_run = sanitize(job_run) if job_run else uuid.uuid1().hex
         workers, workers_is_percent = args.workers
-        max_workers = max(1, round(os.cpu_count() * workers / 100.0) if workers_is_percent else round(workers))
+        max_workers = max(1, round((os.cpu_count() or 1) * workers / 100.0) if workers_is_percent else round(workers))
         worker_timeout_seconds = args.worker_timeout_seconds
         self.spawn_process_per_job = args.spawn_process_per_job
         username: str = pwd.getpwuid(os.geteuid()).pw_name
