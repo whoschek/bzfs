@@ -94,7 +94,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 
 # constants:
-INJECT_DST_PIPE_FAIL_KBYTES = 400
+INJECT_DST_PIPE_FAIL_KBYTES = 400  # for testing only
 RIGHT_JUST = 7
 
 

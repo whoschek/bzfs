@@ -92,7 +92,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
 
     def zfs_list_snapshot_iterator(r: Remote, sorted_datasets: list[str]) -> Generator[str, None, None]:
         """Lists snapshots sorted by dataset name; All snapshots of a given dataset will be adjacent."""
-        assert not job.is_test_mode or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
+        assert (not job.is_test_mode) or sorted_datasets == sorted(sorted_datasets), "List is not sorted"
         written_zfs_prop = "written"  # https://openzfs.github.io/openzfs-docs/man/master/7/zfsprops.7.html#written
         if is_solaris_zfs(p, r):  # solaris-11.4 zfs does not know the "written" ZFS snapshot property
             written_zfs_prop = "type"  # for simplicity, fill in the non-integer dummy constant type="snapshot"

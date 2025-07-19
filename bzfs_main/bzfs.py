@@ -689,7 +689,7 @@ class Job:
                 SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
             }
             basis_src_datasets.append(src_dataset)
-        assert not self.is_test_mode or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
+        assert (not self.is_test_mode) or basis_src_datasets == sorted(basis_src_datasets), "List is not sorted"
         return basis_src_datasets
 
     def list_dst_datasets_task(self) -> list[str]:
@@ -714,7 +714,7 @@ class Job:
                     SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
                 }
                 basis_dst_datasets.append(dst_dataset)
-        assert not self.is_test_mode or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
+        assert (not self.is_test_mode) or basis_dst_datasets == sorted(basis_dst_datasets), "List is not sorted"
         return basis_dst_datasets
 
     def create_src_snapshots_task(self, basis_src_datasets: list[str], src_datasets: list[str]) -> None:
@@ -1106,7 +1106,7 @@ class Job:
 
     def replicate_datasets(self, src_datasets: list[str], task_description: str, max_workers: int) -> bool:
         """Replicates a list of datasets."""
-        assert not self.is_test_mode or src_datasets == sorted(src_datasets), "List is not sorted"
+        assert (not self.is_test_mode) or src_datasets == sorted(src_datasets), "List is not sorted"
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         self.num_snapshots_found = 0
@@ -1170,10 +1170,10 @@ class Job:
                     log.info("Already up-to-date [cached]: %s", dst_dataset)
                 else:
                     stale_src_datasets2.append(dst2src(dst_dataset))
-            assert not self.is_test_mode or stale_src_datasets1 == sorted(stale_src_datasets1), "List is not sorted"
-            assert not self.is_test_mode or stale_src_datasets2 == sorted(stale_src_datasets2), "List is not sorted"
+            assert (not self.is_test_mode) or stale_src_datasets1 == sorted(stale_src_datasets1), "List is not sorted"
+            assert (not self.is_test_mode) or stale_src_datasets2 == sorted(stale_src_datasets2), "List is not sorted"
             stale_src_datasets = list(heapq.merge(stale_src_datasets1, stale_src_datasets2))  # merge two sorted lists
-            assert not self.is_test_mode or not has_duplicates(stale_src_datasets), "List contains duplicates"
+            assert (not self.is_test_mode) or not has_duplicates(stale_src_datasets), "List contains duplicates"
             return stale_src_datasets, cache_files
 
         if is_caching_snapshots(p, src):

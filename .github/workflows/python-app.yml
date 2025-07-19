@@ -149,7 +149,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Show iteration info ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}
-      run: echo "Now running  iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
+      run: echo "Now running iteration ${{ matrix.iteration }} of ${{ env.NUM_RUNS }}"
     - name: Upgrade zfs kernel + userland to specific upstream zfs version
       run: |
         # see https://launchpad.net/~satadru-umich/+archive/ubuntu/zfs-experimental/+packages

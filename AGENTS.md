@@ -1,6 +1,6 @@
 # AI Agent Directives
 
-This document distills essential project‑specific directives every AI Agent must follow to deliver high‑quality
+This document distills essential project‑specific directives that AI Agents must follow to deliver high‑quality
 contributions; compliance is mandatory.
 
 # Persona

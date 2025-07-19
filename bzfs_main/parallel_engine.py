@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Thread pool engine ensuring ancestor datasets finish before descendants start."""
+"""Schedules and executes parallel tasks while ensuring that ancestor datasets finish before descendants start."""
 
 from __future__ import annotations
 import argparse
@@ -73,7 +73,6 @@ class TreeNodeMutableAttributes:
     __slots__ = ("barrier", "pending")  # uses more compact memory layout than __dict__
 
     def __init__(self) -> None:
-        """Initialize empty barrier pointer and pending counter."""
         self.barrier: "TreeNode" | None = None  # zero or one barrier TreeNode waiting for this node to complete
         self.pending: int = 0  # number of children added to priority queue that haven't completed their work yet
 
@@ -104,10 +103,10 @@ def process_datasets_in_parallel_and_fault_tolerant(
     skip_tree_on_error: Callable[[str], bool],
     skip_on_error: str = "fail",
     max_workers: int = os.cpu_count() or 1,
-    interval_nanos: Callable[[str], int] = lambda dataset: 0,
+    interval_nanos: Callable[[str], int] = lambda dataset: 0,  # optionally, spread tasks out over time; e.g. for jitter
     task_name: str = "Task",
     enable_barriers: bool | None = None,  # for testing only; None means 'auto-detect'
-    append_exception: Callable[[BaseException, str, str], None] = lambda e, task_name, task_description: None,
+    append_exception: Callable[[BaseException, str, str], None] = lambda ex, task_name, task_description: None,
     retry_policy: RetryPolicy | None = None,
     dry_run: bool = False,
     is_test_mode: bool = False,
@@ -122,8 +121,8 @@ def process_datasets_in_parallel_and_fault_tolerant(
     for start of processing. Initially, only the roots of the selected dataset subtrees are available for start of
     processing.
     """
-    assert not is_test_mode or datasets == sorted(datasets), "List is not sorted"
-    assert not is_test_mode or not has_duplicates(datasets), "List contains duplicates"
+    assert (not is_test_mode) or datasets == sorted(datasets), "List is not sorted"
+    assert (not is_test_mode) or not has_duplicates(datasets), "List contains duplicates"
     assert callable(process_dataset)
     assert callable(skip_tree_on_error)
     assert max_workers > 0
@@ -179,7 +178,7 @@ def process_datasets_in_parallel_and_fault_tolerant(
         fw_timeout: float | None = None
 
         def submit_datasets() -> bool:
-            """Enqueues available datasets and return True if any were queued."""
+            """Submits available datasets to worker threads and returns False if all tasks have been completed."""
             nonlocal fw_timeout
             fw_timeout = None  # indicates to use blocking flavor of concurrent.futures.wait()
             while len(priority_queue) > 0 and len(todo_futures) < max_workers:
