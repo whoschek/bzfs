@@ -56,7 +56,9 @@ from bzfs_main.filter import (
 )
 from bzfs_main.utils import (
     LOG_DEBUG,
+    UNIX_TIME_INFINITY_SECS,
     compile_regexes,
+    unixtime_fromisoformat,
 )
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
@@ -67,6 +69,7 @@ def suite() -> unittest.TestSuite:
         TestHelperFunctions,
         TestTimeRangeAction,
         TestRankRangeAction,
+        TestFilterSnapshotsWithBookmarks,
         TestFilterDatasets,
         TestFilterDatasetsByExcludeProperty,
     ]
@@ -215,7 +218,7 @@ class TestHelperFunctions(CommonTest):
         snapshots = ["0\tds@keep", "0\tds@other"]
         with patch("bzfs_main.filter.filter_snapshots_by_regex", return_value=[snapshots[0]]) as mock_f:
             result = filter_snapshots(job, snapshots)
-            mock_f.assert_called_once_with(job, snapshots, regexes=regexes)
+            mock_f.assert_called_once_with(job, snapshots, regexes=regexes, filter_bookmarks=False)
         self.assertEqual([snapshots[0]], result)
 
 
@@ -678,6 +681,115 @@ class TestRankRangeAction(CommonTest):
         self.assertEqual("include_snapshot_times_and_ranks", ranks_filter.name)
         self.assertEqual((("oldest", 0, False), ("oldest", 1, False)), ranks_filter.options[0])
         self.assertEqual((0, 0), ranks_filter.timerange)
+
+
+#############################################################################
+class TestFilterSnapshotsWithBookmarks(CommonTest):
+
+    def setUp(self) -> None:
+        args = self.argparser_parse_args(args=["src", "dst"])
+        self.job = bzfs.Job()
+        self.job.params = self.make_params(args=args)
+        self.job.params.log.setLevel(logging.INFO)  # Set to INFO to avoid verbose output during tests
+
+        self.basis_snapshots = [
+            f"{int(unixtime_fromisoformat('2024-01-01'))}\tguid1\tds@daily_2024-01-01",
+            f"{int(unixtime_fromisoformat('2024-01-02'))}\tguid2\tds#daily_2024-01-02",  # Bookmark
+            f"{int(unixtime_fromisoformat('2024-01-03'))}\tguid3\tds@hourly_2024-01-03",
+            f"{int(unixtime_fromisoformat('2024-01-04'))}\tguid4\tds#hourly_2024-01-04",  # Bookmark
+            f"{int(unixtime_fromisoformat('2024-01-05'))}\tguid5\tds@keep_this_one",
+        ]
+        self.daily_snap = self.basis_snapshots[0]
+        self.daily_bookmark = self.basis_snapshots[1]
+        self.hourly_snap = self.basis_snapshots[2]
+        self.hourly_bookmark = self.basis_snapshots[3]
+        self.keep_snap = self.basis_snapshots[4]
+
+    def test_filter_bookmarks_false_preserves_all_bookmarks(self) -> None:
+        """Verify default behavior (filter_bookmarks=False): all bookmarks are unconditionally preserved, while snapshots are
+        correctly filtered."""
+        # A filter that should match only the 'keep_this_one' snapshot.
+        regexes = (compile_regexes([]), compile_regexes([".*keep_this_one"]))
+        self.job.params.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, regexes)]]
+
+        result = filter_snapshots(self.job, self.basis_snapshots, filter_bookmarks=False)
+
+        # The final list must contain ALL original bookmarks plus ONLY the filtered snapshots.
+        self.assertIn(self.daily_bookmark, result, "Bookmarks must be preserved by default")
+        self.assertIn(self.hourly_bookmark, result, "Bookmarks must be preserved by default")
+        self.assertIn(self.keep_snap, result, "Matching snapshot should be present")
+
+        # Snapshots that did not match the filter must be excluded.
+        self.assertNotIn(self.daily_snap, result, "Non-matching snapshots should be filtered out")
+        self.assertNotIn(self.hourly_snap, result, "Non-matching snapshots should be filtered out")
+        self.assertEqual(3, len(result))
+
+    def test_filter_bookmarks_true_with_regex(self) -> None:
+        """Verify filter_bookmarks=True: regex filters apply to both bookmarks and snapshots."""
+        # Filter for items containing 'daily'.
+        regexes = (compile_regexes([]), compile_regexes([".*daily.*"]))
+        self.job.params.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, regexes)]]
+
+        result = filter_snapshots(self.job, self.basis_snapshots, filter_bookmarks=True)
+
+        self.assertIn(self.daily_snap, result)
+        self.assertIn(self.daily_bookmark, result)
+        self.assertNotIn(self.hourly_snap, result)
+        self.assertNotIn(self.hourly_bookmark, result)
+        self.assertNotIn(self.keep_snap, result)
+        self.assertEqual(2, len(result))
+
+    def test_filter_bookmarks_true_with_time_range(self) -> None:
+        """Verify filter_bookmarks=True: time filters apply to both bookmarks and snapshots."""
+        # Filter for everything on or after 2024-01-03.
+        timerange = (int(unixtime_fromisoformat("2024-01-03")), UNIX_TIME_INFINITY_SECS)
+        self.job.params.snapshot_filters = [[SnapshotFilter("include_snapshot_times", timerange, None)]]
+
+        result = filter_snapshots(self.job, self.basis_snapshots, filter_bookmarks=True)
+
+        self.assertNotIn(self.daily_snap, result)
+        self.assertNotIn(self.daily_bookmark, result)
+        self.assertIn(self.hourly_snap, result)
+        self.assertIn(self.hourly_bookmark, result)
+        self.assertIn(self.keep_snap, result)
+        self.assertEqual(3, len(result))
+
+    def test_filter_bookmarks_true_with_rank(self) -> None:
+        """Verify filter_bookmarks=True: rank and time filters are correctly unioned; The rank filter applies only to
+        snapshots, while the time filter applies to all items."""
+        # Rank filter for the latest 2 snapshots. Time range includes everything.
+        ranks = [(("latest", 0, False), ("latest", 2, False))]
+        timerange = (0, UNIX_TIME_INFINITY_SECS)
+        self.job.params.snapshot_filters = [[SnapshotFilter("include_snapshot_times_and_ranks", timerange, ranks)]]
+
+        result = filter_snapshots(self.job, self.basis_snapshots, filter_bookmarks=True)
+
+        # The filter logic is a UNION:
+        # 1. Rank filter selects the latest 2 snapshots: `hourly_snap` and `keep_snap`.
+        # 2. Time filter selects all items (snapshots and bookmarks).
+        # The union of these two sets is all items.
+        self.assertIn(self.hourly_snap, result)
+        self.assertIn(self.keep_snap, result)
+        self.assertIn(self.daily_bookmark, result)
+        self.assertIn(self.hourly_bookmark, result)
+        self.assertIn(self.daily_snap, result)
+        self.assertEqual(5, len(result), "The union of 'latest 2' and 'all time' should be all items")
+
+    def test_filter_bookmarks_true_with_all_except(self) -> None:
+        """Verify interaction with all_except=True when filtering bookmarks."""
+        # This filter selects daily snapshots and bookmarks to be RETAINED.
+        regexes = (compile_regexes([]), compile_regexes([".*daily.*"]))
+        self.job.params.snapshot_filters = [[SnapshotFilter(SNAPSHOT_REGEX_FILTER_NAME, None, regexes)]]
+
+        # `all_except=True` inverts the selection, so we get everything EXCEPT the daily items.
+        result = filter_snapshots(self.job, self.basis_snapshots, all_except=True, filter_bookmarks=True)
+
+        self.assertNotIn(self.daily_snap, result)
+        self.assertNotIn(self.daily_bookmark, result)
+        self.assertIn(self.hourly_snap, result)
+        self.assertIn(self.hourly_bookmark, result)
+        self.assertIn(self.keep_snap, result)
+        self.assertEqual(3, len(result))
 
 
 #############################################################################

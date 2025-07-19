@@ -62,7 +62,7 @@ if TYPE_CHECKING:  # pragma: no cover - for type hints only
 
 @dataclass(order=True, frozen=True)
 class ComparableSnapshot:
-    """Snapshot entry comparable by dataset and GUID for stable sorting."""
+    """Snapshot entry comparable by rel_dataset and GUID for sorting and merging."""
 
     key: tuple[str, str]  # rel_dataset, guid
     cols: list[str] = field(compare=False)
@@ -115,7 +115,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
             sorted_itr, key=lambda line: line[line.rindex("\t") + 1 : line.replace("#", "@").index("@")]
         ):
             snapshots = list(group)  # fetch all snapshots of current dataset, e.g. dataset=tank1/src/foo
-            snapshots = filter_snapshots(job, snapshots)  # apply include/exclude policy
+            snapshots = filter_snapshots(job, snapshots, filter_bookmarks=True)  # apply include/exclude policy
             snapshots.sort(key=lambda line: line.split("\t", 2)[1])  # stable sort by GUID (2nd remains createtxg)
             rel_dataset = relativize_dataset(dataset, root_dataset)  # rel_dataset=/foo, root_dataset=tank1/src
             last_guid = ""
@@ -161,7 +161,7 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         if is_first_row:
             fd.write(header.replace(" ", "\t") + "\n")
             is_first_row = False
-        for i, entry in enumerate(entries):
+        for i, entry in enumerate(entries):  # entry is tuple[location:str, ComparableSnapshot]
             loc = location = entry[0]
             creation, guid, createtxg, written, name = entry[1].cols
             root_dataset = dst.root_dataset if location == CMP_CHOICES_ITEMS[1] else src.root_dataset
@@ -237,9 +237,9 @@ def run_compare_snapshot_lists(job: Job, src_datasets: list[str], dst_datasets: 
         log.info("%s", "\n".join(msgs))
 
     # setup streaming pipeline
-    src_snap_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
-    dst_snap_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
-    merge_itr = merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snap_itr, dst_snap_itr)
+    src_snapshot_itr = snapshot_iterator(src.root_dataset, zfs_list_snapshot_iterator(src, src_datasets))
+    dst_snapshot_itr = snapshot_iterator(dst.root_dataset, zfs_list_snapshot_iterator(dst, dst_datasets))
+    merge_itr = merge_sorted_iterators(CMP_CHOICES_ITEMS, p.compare_snapshot_lists, src_snapshot_itr, dst_snapshot_itr)
 
     rel_datasets: dict[str, set[str]] = defaultdict(set)
     for datasets, remote in (src_datasets, src), (dst_datasets, dst):
@@ -295,7 +295,7 @@ def merge_sorted_iterators(
     src_itr: Iterator,
     dst_itr: Iterator,
 ) -> Generator[tuple[Any, ...], None, None]:
-    """The typical merge algorithm of a merge sort, slightly adapted to our specific use case."""
+    """The typical pipelined merge algorithm of a merge sort, slightly adapted to our specific use case."""
     assert len(choices) == 3
     assert choice
     flags = 0
@@ -318,12 +318,5 @@ def merge_sorted_iterators(
         else:
             n = 0
             if (flags & (1 << n)) != 0:
-                if isinstance(src_next, ComparableSnapshot):
-                    name = src_next.cols[-1]
-                    if "@" in name:
-                        yield choices[n], src_next  # include snapshot
-                    else:  # ignore src bookmarks for which no snapshot exists in dst; those aren't useful
-                        assert "#" in name
-                else:
-                    yield choices[n], src_next
+                yield choices[n], src_next
             src_next = next(src_itr, None)

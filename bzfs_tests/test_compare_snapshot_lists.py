@@ -21,6 +21,7 @@ from typing import (
 )
 
 import bzfs_main.compare_snapshot_lists
+from bzfs_main.compare_snapshot_lists import ComparableSnapshot
 from bzfs_tests.abstract_testcase import AbstractTestCase
 
 
@@ -72,3 +73,32 @@ class TestCompareSnapshotLists(AbstractTestCase):
         self.assert_merge_sorted_iterators([(s, "y")], ["y"], ["x", "z"], s, invert=False)
         self.assert_merge_sorted_iterators([], ["x"], ["x", "z"], s, invert=False)
         self.assert_merge_sorted_iterators([], ["y"], ["x", "z"], a)
+
+    def test_merge_sorted_iterators_with_comparable_snapshots(self) -> None:
+        """Tests the merge logic with actual ComparableSnapshot objects, specifically covering the case where a source-only
+        bookmark is correctly reported after the fix."""
+
+        src_snap = ComparableSnapshot(key=("ds1", "guid1"), cols=["1", "guid1", "1", "1024", "tank/src/ds1@snap1"])
+        self.assert_merge_sorted_iterators(expected=[(self.s, src_snap)], src=[src_snap], dst=[], choice="src", invert=False)
+
+        src_bookmark = ComparableSnapshot(key=("ds1", "guid2"), cols=["2", "guid2", "2", "-", "tank/src/ds1#snap2"])
+        self.assert_merge_sorted_iterators(
+            expected=[(self.s, src_bookmark)],
+            src=[src_bookmark],
+            dst=[],
+            choice="src",
+            invert=False,
+        )
+
+        # Test mixed case: src has a bookmark, dst has a different snapshot.
+        dst_snap = ComparableSnapshot(key=("ds1", "guid3"), cols=["3", "guid3", "3", "1024", "tank/dst/ds1@snap3"])
+        self.assert_merge_sorted_iterators(
+            expected=[(self.s, src_bookmark), (self.d, dst_snap)], src=[src_bookmark], dst=[dst_snap], choice="src+dst"
+        )
+
+        # Test common snapshot: both src and dst have the same snapshot.
+        common_snap_src = ComparableSnapshot(key=("ds1", "guid4"), cols=["4", "guid4", "4", "1024", "tank/src/ds1@snap4"])
+        common_snap_dst = ComparableSnapshot(key=("ds1", "guid4"), cols=["4", "guid4", "4", "2048", "tank/dst/ds1@snap4"])
+        self.assert_merge_sorted_iterators(
+            expected=[(self.a, common_snap_src, common_snap_dst)], src=[common_snap_src], dst=[common_snap_dst], choice="all"
+        )

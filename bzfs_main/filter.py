@@ -131,7 +131,9 @@ def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_dataset
     return results
 
 
-def filter_snapshots(job: Job, basis_snapshots: list[str], all_except: bool = False) -> list[str]:
+def filter_snapshots(
+    job: Job, basis_snapshots: list[str], all_except: bool = False, filter_bookmarks: bool = False
+) -> list[str]:
     """Returns all snapshots that pass all include/exclude policies.
 
     `all_except=False` returns snapshots *matching* the filters, for example those that should be deleted if we are in
@@ -161,18 +163,28 @@ def filter_snapshots(job: Job, basis_snapshots: list[str], all_except: bool = Fa
         for _filter in snapshot_filter:
             name = _filter.name
             if name == SNAPSHOT_REGEX_FILTER_NAME:
-                snapshots = filter_snapshots_by_regex(job, snapshots, regexes=_filter.options)
+                snapshots = filter_snapshots_by_regex(
+                    job, snapshots, regexes=_filter.options, filter_bookmarks=filter_bookmarks
+                )
             elif name == "include_snapshot_times":
                 timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
-                snapshots = filter_snapshots_by_creation_time(job, snapshots, include_snapshot_times=timerange)
+                snapshots = filter_snapshots_by_creation_time(
+                    job, snapshots, include_snapshot_times=timerange, filter_bookmarks=filter_bookmarks
+                )
             else:
                 assert name == "include_snapshot_times_and_ranks"
                 timerange = resolve_timerange(_filter.timerange) if _filter.timerange is not None else _filter.timerange
                 snapshots = filter_snapshots_by_creation_time_and_rank(
-                    job, snapshots, include_snapshot_times=timerange, include_snapshot_ranks=_filter.options
+                    job,
+                    snapshots,
+                    include_snapshot_times=timerange,
+                    include_snapshot_ranks=_filter.options,
+                    filter_bookmarks=filter_bookmarks,
                 )
         resultset.update(snapshots)  # union
-    snapshots = [line for line in basis_snapshots if "#" in line or ((line in resultset) != all_except)]
+
+    no_f_bookmarks = not filter_bookmarks
+    snapshots = [line for line in basis_snapshots if (no_f_bookmarks and "#" in line) or ((line in resultset) != all_except)]
     is_debug = log.isEnabledFor(LOG_DEBUG)
     for snapshot in snapshots:
         if is_debug:
@@ -180,7 +192,9 @@ def filter_snapshots(job: Job, basis_snapshots: list[str], all_except: bool = Fa
     return snapshots
 
 
-def filter_snapshots_by_regex(job: Job, snapshots: list[str], regexes: tuple[RegexList, RegexList]) -> list[str]:
+def filter_snapshots_by_regex(
+    job: Job, snapshots: list[str], regexes: tuple[RegexList, RegexList], filter_bookmarks: bool = False
+) -> list[str]:
     """Returns all snapshots that match at least one of the include regexes but none of the exclude regexes."""
     exclude_snapshot_regexes, include_snapshot_regexes = regexes
     log = job.params.log
@@ -188,6 +202,8 @@ def filter_snapshots_by_regex(job: Job, snapshots: list[str], regexes: tuple[Reg
     results = []
     for snapshot in snapshots:
         i = snapshot.find("@")  # snapshot separator
+        if i < 0 and filter_bookmarks:
+            i = snapshot.index("#")  # bookmark separator
         if i < 0:
             continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
         elif is_included(snapshot[i + 1 :], include_snapshot_regexes, exclude_snapshot_regexes):
@@ -200,7 +216,9 @@ def filter_snapshots_by_regex(job: Job, snapshots: list[str], regexes: tuple[Reg
     return results
 
 
-def filter_snapshots_by_creation_time(job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange) -> list[str]:
+def filter_snapshots_by_creation_time(
+    job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange, filter_bookmarks: bool = False
+) -> list[str]:
     """Filters snapshots to those created within the specified time window."""
     log = job.params.log
     is_debug = log.isEnabledFor(LOG_DEBUG)
@@ -209,7 +227,7 @@ def filter_snapshots_by_creation_time(job: Job, snapshots: list[str], include_sn
     assert isinstance(hi_snaptime, int)
     results = []
     for snapshot in snapshots:
-        if "@" not in snapshot:
+        if (not filter_bookmarks) and "@" not in snapshot:
             continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
         elif lo_snaptime <= int(snapshot[0 : snapshot.index("\t")]) < hi_snaptime:
             results.append(snapshot)
@@ -222,7 +240,11 @@ def filter_snapshots_by_creation_time(job: Job, snapshots: list[str], include_sn
 
 
 def filter_snapshots_by_creation_time_and_rank(
-    job: Job, snapshots: list[str], include_snapshot_times: UnixTimeRange, include_snapshot_ranks: list[RankRange]
+    job: Job,
+    snapshots: list[str],
+    include_snapshot_times: UnixTimeRange,
+    include_snapshot_ranks: list[RankRange],
+    filter_bookmarks: bool = False,
 ) -> list[str]:
     """Filters by creation time and rank within the snapshot list."""
 
@@ -249,11 +271,12 @@ def filter_snapshots_by_creation_time_and_rank(
         i = 0
         results = []
         for snapshot in snapshots:
-            if "@" not in snapshot:
+            is_snapshot = "@" in snapshot
+            if (not filter_bookmarks) and not is_snapshot:
                 continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
             else:
                 msg = None
-                if lo <= i < hi:
+                if is_snapshot and lo <= i < hi:
                     msg = "Including b/c snapshot rank: %s"
                 elif lo_time <= int(snapshot[0 : snapshot.index("\t")]) < hi_time:
                     msg = "Including b/c creation time: %s"
@@ -263,7 +286,7 @@ def filter_snapshots_by_creation_time_and_rank(
                     msg = "Excluding b/c snapshot rank: %s"
                 if is_debug:
                     log.debug(msg, snapshot[snapshot.rindex("\t") + 1 :])
-                i += 1
+                i += 1 if is_snapshot else 0
         snapshots = results
         n = hi - lo
     return snapshots
