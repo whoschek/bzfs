@@ -15,6 +15,7 @@
 """Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool."""
 
 from __future__ import annotations
+import contextlib
 import copy
 import logging
 import shlex
@@ -26,6 +27,7 @@ from subprocess import DEVNULL, PIPE, CalledProcessError
 from typing import (
     TYPE_CHECKING,
     Counter,
+    Iterator,
 )
 
 from bzfs_main.retry import (
@@ -71,8 +73,7 @@ def run_ssh_command(
     p, log = job.params, job.params.log
     quoted_cmd = [shlex.quote(arg) for arg in cmd]
     conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
-    conn: Connection = conn_pool.get_connection()
-    try:
+    with conn_pool.connection() as conn:
         ssh_cmd: list[str] = conn.ssh_cmd
         if remote.ssh_user_host != "":
             refresh_ssh_connection_if_necessary(job, remote, conn)
@@ -94,8 +95,6 @@ def run_ssh_command(
             xprint(log, process.stdout, run=print_stdout, end="")
             xprint(log, process.stderr, run=print_stderr, end="")
             return process.stdout  # type: ignore[no-any-return]  # need to ignore on python <= 3.8
-    finally:
-        conn_pool.return_connection(conn)
 
 
 def try_ssh_command(
@@ -267,6 +266,15 @@ class ConnectionPool:
         self.last_modified: int = 0  # monotonically increasing sequence number
         self.cid: int = 0  # monotonically increasing connection number
         self._lock: threading.Lock = threading.Lock()
+
+    @contextlib.contextmanager
+    def connection(self) -> Iterator[Connection]:
+        """Context manager that yields a connection from the pool and automatically returns it on __exit__."""
+        conn = self.get_connection()
+        try:
+            yield conn
+        finally:
+            self.return_connection(conn)
 
     def get_connection(self) -> Connection:
         """Any Connection object returned on get_connection() also remains intentionally contained in the priority queue, and

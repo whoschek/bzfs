@@ -26,7 +26,6 @@ from typing import (
 
 from bzfs_main.connection import (
     SHARED,
-    Connection,
     ConnectionPool,
     try_ssh_command,
 )
@@ -73,9 +72,8 @@ def itr_ssh_cmd_batched(
     fsenc = sys.getfilesystemencoding()
     seplen = len(sep.encode(fsenc))
     conn_pool: ConnectionPool = job.params.connection_pools[r.location].pool(SHARED)
-    conn: Connection = conn_pool.get_connection()
-    cmd = conn.ssh_cmd + cmd
-    conn_pool.return_connection(conn)
+    with conn_pool.connection() as conn:
+        cmd = conn.ssh_cmd + cmd
     header_bytes: int = len(" ".join(cmd).encode(fsenc))
     batch: list[str] = []
     total_bytes: int = header_bytes

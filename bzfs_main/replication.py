@@ -35,7 +35,6 @@ from bzfs_main.argparse_actions import (
 from bzfs_main.connection import (
     DEDICATED,
     SHARED,
-    Connection,
     ConnectionPool,
     maybe_inject_error,
     refresh_ssh_connection_if_necessary,
@@ -653,10 +652,8 @@ def run_zfs_send_receive(
     )
     conn_pool_name = DEDICATED if job.dedicated_tcp_connection_per_zfs_send else SHARED
     src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
-    src_conn: Connection = src_conn_pool.get_connection()
     dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
-    dst_conn: Connection = dst_conn_pool.get_connection()
-    try:
+    with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
         refresh_ssh_connection_if_necessary(job, p.src, src_conn)
         refresh_ssh_connection_if_necessary(job, p.dst, dst_conn)
         src_ssh_cmd = " ".join(src_conn.ssh_cmd_quoted)
@@ -682,9 +679,6 @@ def run_zfs_send_receive(
             else:
                 xprint(log, process.stdout, file=sys.stdout)
                 xprint(log, process.stderr, file=sys.stderr)
-    finally:
-        dst_conn_pool.return_connection(dst_conn)
-        src_conn_pool.return_connection(src_conn)
 
 
 def clear_resumable_recv_state_if_necessary(job: Job, dst_dataset: str, stderr: str) -> bool:

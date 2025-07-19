@@ -15,6 +15,7 @@
 """Unit tests for SSH connection management utilities."""
 
 from __future__ import annotations
+import contextlib
 import itertools
 import logging
 import random
@@ -26,6 +27,7 @@ from collections import Counter
 from types import SimpleNamespace
 from typing import (
     Any,
+    Iterator,
     cast,
 )
 from unittest import mock
@@ -366,6 +368,14 @@ class TestRunSshCommand(AbstractTestCase):
         self.conn.ssh_cmd_quoted = ["ssh"]
         self.conn_pool = mock.Mock()
         self.conn_pool.get_connection.return_value = self.conn
+        self.conn_pool.return_connection = mock.Mock()
+
+        @contextlib.contextmanager
+        def _connection_cm() -> Iterator[Connection]:
+            yield self.conn
+            self.conn_pool.return_connection(self.conn)
+
+        self.conn_pool.connection.side_effect = lambda: _connection_cm()
         pool_wrapper = mock.Mock(pool=mock.Mock(return_value=self.conn_pool))
         self.job.params.connection_pools = {"dst": pool_wrapper}
 
@@ -374,7 +384,7 @@ class TestRunSshCommand(AbstractTestCase):
         result = connection.run_ssh_command(self.job, self.remote, cmd=["ls"], is_dry=True)
         self.assertEqual("", result)
         mock_run.assert_not_called()
-        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+        self.conn_pool.connection.assert_called_once()
 
     @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
     @mock.patch("bzfs_main.connection.subprocess_run")
@@ -385,7 +395,7 @@ class TestRunSshCommand(AbstractTestCase):
         self.assertEqual("out", result)
         mock_refresh.assert_called_once_with(self.job, self.remote, self.conn)
         mock_run.assert_called_once()
-        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+        self.conn_pool.connection.assert_called_once()
 
     @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
     @mock.patch(
@@ -397,7 +407,7 @@ class TestRunSshCommand(AbstractTestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             connection.run_ssh_command(self.job, self.remote, cmd=["boom"], print_stdout=True)
         mock_run.assert_called_once()
-        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+        self.conn_pool.connection.assert_called_once()
 
     @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
     @mock.patch(
@@ -409,7 +419,7 @@ class TestRunSshCommand(AbstractTestCase):
         with self.assertRaises(subprocess.TimeoutExpired):
             connection.run_ssh_command(self.job, self.remote, cmd=["sleep"], print_stdout=True)
         mock_run.assert_called_once()
-        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+        self.conn_pool.connection.assert_called_once()
 
     @mock.patch("bzfs_main.connection.refresh_ssh_connection_if_necessary")
     @mock.patch(
@@ -421,7 +431,7 @@ class TestRunSshCommand(AbstractTestCase):
         with self.assertRaises(UnicodeDecodeError):
             connection.run_ssh_command(self.job, self.remote, cmd=["foo"])
         mock_run.assert_called_once()
-        self.conn_pool.return_connection.assert_called_once_with(self.conn)
+        self.conn_pool.connection.assert_called_once()
 
 
 #############################################################################
