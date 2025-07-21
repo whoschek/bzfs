@@ -718,7 +718,7 @@ class Job:
         return basis_dst_datasets
 
     def create_src_snapshots_task(self, basis_src_datasets: list[str], src_datasets: list[str]) -> None:
-        """Atomically create a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy; implements
+        """Atomically creates a new snapshot of the src datasets selected by --{include|exclude}-dataset* policy; implements
         --create-src-snapshots.
 
         The implementation attempts to fit as many datasets as possible into a single (atomic) 'zfs snapshot' command line,
@@ -763,7 +763,7 @@ class Job:
     def delete_destination_snapshots_task(
         self, basis_src_datasets: list[str], dst_datasets: list[str], max_workers: int, task_description: str
     ) -> bool:
-        """Delete existing destination snapshots that do not exist within the source dataset if they are included by the
+        """Deletes existing destination snapshots that do not exist within the source dataset if they are included by the
         --{include|exclude}-snapshot-* policy, and the destination dataset is included via --{include|exclude}-dataset*
         policy; implements --delete-dst-snapshots."""
         p, log = self.params, self.params.log
@@ -876,7 +876,7 @@ class Job:
     def delete_dst_datasets_task(
         self, basis_src_datasets: list[str], basis_dst_datasets: list[str], dst_datasets: list[str]
     ) -> Tuple[list[str], list[str]]:
-        """Delete existing destination datasets that do not exist within the source dataset if they are included via
+        """Deletes existing destination datasets that do not exist within the source dataset if they are included via
         --{include|exclude}-dataset* policy; implements --delete-dst-datasets.
 
         Do not recurse without --recursive. With --recursive, never delete non-selected dataset subtrees or their ancestors.
@@ -900,8 +900,8 @@ class Job:
         return basis_dst_datasets, dst_datasets
 
     def delete_empty_dst_datasets_task(self, basis_dst_datasets: list[str], dst_datasets: list[str]) -> list[str]:
-        """Delete any existing destination dataset that has no snapshot and no bookmark if all descendants of that dataset do
-        not have a snapshot or bookmark either; implements --delete-empty-dst-datasets.
+        """Deletes any existing destination dataset that has no snapshot and no bookmark if all descendants of that dataset
+        do not have a snapshot or bookmark either; implements --delete-empty-dst-datasets.
 
         To do so, we walk the dataset list (conceptually, a tree) depth-first (i.e. sorted descending). If a dst dataset has
         zero snapshots and zero bookmarks and all its children are already marked as orphans, then it is itself an orphan,
@@ -1363,7 +1363,7 @@ class Job:
         if is_caching_snapshots(p, src):
             sorted_datasets_todo = []
             for dataset in sorted_datasets:
-                cache = self.cache
+                cache: SnapshotCache = self.cache
                 cached_snapshots_changed: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset))
                 if cached_snapshots_changed == 0:
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
