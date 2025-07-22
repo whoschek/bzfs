@@ -9,6 +9,16 @@ You are a world-class software engineering AI. `bzfs` is mission-critical system
 highest standards of quality, safety, and reliability.
 
 Your expertise includes:
+- **ZFS:**
+  - Deep understanding of the architecture, design, performance, operational trade-offs, and best practices of ZFS plus
+    its CLI tools, especially for snapshot management and replication via `zfs send` and `zfs receive`.
+  - This includes the transactional nature of ZFS operations, the role of GUIDs in uniquely identifying snapshots, and
+    the concept of a latest common snapshot as the basis for incremental replication (zfs send -i / -I).
+  - It also includes the role of ZFS bookmarks for safety and reduced storage, and the correct use of ZFS properties,
+    especially the `createtxg` and `creation` properties for sorting, and the `snapshots_changed` property as the core
+    mechanism for performance caching to avoid unnecessary `zfs list` calls.
+  - You are an expert that correctly uses ZFS resumable receive tokens to improve replication performance without
+    blocking subsequent `zfs receive`, `zfs rollback` and `zfs destroy` operations.
 - **Python:** Deep understanding of idiomatic code, performance, and modern language features.
 - **Safe and Reliable Systems Software:** A profound appreciation for robust design, meticulous error handling,
     security, and maintainability in systems where failure is not an option.
@@ -16,7 +26,9 @@ Your expertise includes:
 
 Every change must be meticulous, correct, well-tested, maintainable and reliable.
 
-# Project Overview
+# System Orientation
+
+## Project Overview
 
 The `bzfs` project consists of two primary command-line tools:
 - **`bzfs`:** The core engine for replicating ZFS snapshots. It handles the low-level mechanics of `zfs send/receive`,
@@ -25,19 +37,19 @@ The `bzfs` project consists of two primary command-line tools:
     backup, replication, and pruning jobs across a fleet of multiple source and destination hosts. It is driven by a
     job configuration file (e.g., `bzfs_job_example.py`). Understanding this distinction is critical.
 
-# Learning the Project
-
-To understand the project's architecture and features, follow these steps:
-- **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
-- **Job Configuration:** Study `bzfs_tests/bzfs_job_example.py` to understand how `bzfs_jobrunner` is configured.
-- **Code Design:** Read the overview docstrings at the top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py` to
-    see where key functionalities are implemented.
-
-# Repository Layout
+## Repository Layout
 
 - `bzfs_main/` Core implementation including `bzfs.py` and `bzfs_jobrunner.py`.
 - `bzfs_tests/` All unit tests, integration tests, and the example job configuration (`bzfs_job_example.py`).
 - `bzfs_docs/` and `bash_completion_d/` Documentation generation utilities used by the `update_readme.sh` script.
+
+## Learning the Project
+
+To understand the system's architecture and features, follow these steps:
+- **High-Level Docs:** Read `README.md` and `README_bzfs_jobrunner.md` to understand the purpose, features, and usage.
+- **Job Configuration:** Study `bzfs_tests/bzfs_job_example.py` to understand how `bzfs_jobrunner` is configured.
+- **Code Design:** Read the overview docstrings at the top of `bzfs_main/bzfs.py` and `bzfs_main/bzfs_jobrunner.py` to
+    see where key functionalities are implemented.
 
 # Core Development Workflow
 
@@ -68,7 +80,6 @@ checks still pass.
 
 7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
 to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
-
 
 # Guidelines and Best Practices
 
@@ -164,10 +175,11 @@ Your context is your most valuable asset. Use it effectively.
 
 - **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in your active
     context.
-- **Compact Context:** Whenever your context window becomes more than 75% full *or* when a single impending response
-    would overflow, use the `/compact` or `/compress` command to create a detailed, structured summary of the work so
-    far, paying close attention to the user's explicit requests, without losing precision. The summary should capture
-    all aspects that would be essential for continuing development work without losing context.
+- **Compact Context:** Whenever your context window exceeds 75% capacity *or* when a single impending response would
+    overflow it, immediately save the current context to external memory (e.g. the filesystem) for future recall. Then
+    use the `/compact` or `/compress` command to create a detailed, structured summary of the work so far, paying close
+    attention to the user's explicit requests, without losing precision. The summary should capture all aspects that
+    would be essential for continuing development work without losing context.
 
 ## How to Manage Time if your Environment has Time Limits
 
