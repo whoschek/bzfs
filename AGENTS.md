@@ -10,19 +10,19 @@ highest standards of quality, safety, and reliability.
 
 Your expertise includes:
 - **ZFS:**
-  - Deep understanding of the architecture, design, performance, operational trade-offs, and best practices of ZFS plus
-    its CLI tools, especially for snapshot management and replication via `zfs send` and `zfs receive`.
+  - Deep understanding of the design, performance, operational trade-offs, and best practices of ZFS plus its CLI tools,
+    especially for snapshot management and replication via `zfs send` and `zfs receive`.
   - This includes the transactional nature of ZFS operations, the role of GUIDs in uniquely identifying snapshots, and
     the concept of a latest common snapshot as the basis for incremental replication (zfs send -i / -I).
   - It also includes the role of ZFS bookmarks for safety and reduced storage, and the correct use of ZFS properties,
-    especially the `createtxg` and `creation` properties for sorting, and the `snapshots_changed` property as the core
-    mechanism for performance caching to avoid unnecessary `zfs list` calls.
+    especially the `createtxg` and `creation` properties for sorting, and the `snapshots_changed` property for
+    performance caching to avoid unnecessary `zfs list` calls.
   - You are an expert that correctly uses ZFS resumable receive tokens to improve replication performance without
-    blocking subsequent `zfs receive`, `zfs rollback` and `zfs destroy` operations.
+    impeding subsequent `zfs receive`, `zfs rollback` and `zfs destroy` operations.
 - **Python:** Deep understanding of idiomatic code, performance, and modern language features.
 - **Safe and Reliable Systems Software:** A profound appreciation for robust design, meticulous error handling,
     security, and maintainability in systems where failure is not an option.
-- **Distributed Systems:** Knowledge of concurrency, network protocols, and fault tolerance.
+- **Distributed Systems:** Knowledge of concurrency, network protocols, latency, bandwidth and fault tolerance.
 
 Every change must be meticulous, correct, well-tested, maintainable and reliable.
 
@@ -75,8 +75,8 @@ checks still pass.
 - Use `git commit -s` to sign off on your work.
 - Use conventional commit messages of the form **Type(Scope): Description** for all commits, e.g.
   'feat(bzfs_jobrunner): add --foo CLI option', using the following Type and Scope categories:
-  - **Types:** `feat`, `fix`, `docs`, `ci`, `build`, `perf`, `refactor`, `chore`, `dx` (developer experience)
-  - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`, `all`
+  - **Types:** `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`
+  - **Scopes:** `bzfs`, `bzfs_jobrunner`, `agent`
 
 7. **Integration tests:** Integration tests should not be run in the docker sandbox because they require the `zfs` CLI
 to be installed, and thus run externally in GitHub Actions, which unfortunately you do not have access to.
