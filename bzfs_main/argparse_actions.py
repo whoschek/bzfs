@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Argparse action classes used by :mod:`bzfs_main.bzfs` and ``bzfs_jobrunner``."""
+"""Custom argparse actions shared by the 'bzfs' and 'bzfs_jobrunner' CLIs; These helpers validate and expand complex command
+line syntax such as +file references, dataset pairs, and snapshot filters."""
 
 from __future__ import annotations
 import argparse

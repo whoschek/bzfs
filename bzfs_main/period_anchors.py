@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Utility for computing snap points aligned to calendar periods.
+"""Utility that snaps datetimes to calendar periods.
 
 Anchors specify offsets within yearly, monthly and smaller cycles. These values are used by
 ``round_datetime_up_to_duration_multiple`` to snap datetimes to the next boundary. Keeping anchors in a dataclass simplifies

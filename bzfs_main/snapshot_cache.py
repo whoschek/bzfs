@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Snapshot caching helpers for bzfs."""
+"""Stores snapshot metadata in fast disk inodes to avoid repeated 'zfs list' calls, without adding external dependencies or
+complex databases."""
 
 from __future__ import annotations
 import os

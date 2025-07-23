@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Docs, definition of input data and associated argument parsing for the ``bzfs`` CLI."""
+"""Documentation, definition of input data and ArgumentParser used by the 'bzfs' CLI."""
 
 from __future__ import annotations
 import argparse

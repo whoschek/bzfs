@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Schedules and executes parallel tasks while ensuring that ancestor datasets finish before descendants start."""
-
+"""Fault-tolerant, dependency-aware execution of parallel operations, ensuring that ancestor datasets finish before
+descendants start; The design maximizes throughput while preventing deadlocks or inconsistent dataset states during
+replication."""
 from __future__ import annotations
 import argparse
 import concurrent

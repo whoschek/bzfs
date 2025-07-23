@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Detection of runtime features and properties on local and remote hosts."""
+"""Detection of ZFS features and system capabilities on local and remote hosts."""
 
 from __future__ import annotations
 import platform

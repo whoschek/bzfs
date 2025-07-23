@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Shared utility functions and small concurrency primitives for bzfs.
+"""Collection of helper functions used across bzfs; includes environment variable parsing, process management and lightweight
+concurrency primitives.
 
-Helpers range from environment variable parsing to process management. They are dependency free so that core modules can rely
-on them without additional packages. Functions strive for simplicity and predictable behavior across platforms.
+Everything in this module relies only on the standard library so other modules remain dependency free. Each utility favors
+simple, predictable behavior on all supported platforms.
 """
 
 from __future__ import annotations
@@ -346,10 +347,7 @@ def relativize_dataset(dataset: str, root_dataset: str) -> str:
 
 
 def replace_prefix(s: str, old_prefix: str, new_prefix: str) -> str:
-    """In a string s, replaces a leading old_prefix string with new_prefix.
-
-    Assumes the leading string is present.
-    """
+    """In a string s, replaces a leading old_prefix string with new_prefix; assumes the leading string is present."""
     assert s.startswith(old_prefix)
     return new_prefix + s[len(old_prefix) :]
 
@@ -721,7 +719,7 @@ class SnapshotPeriods:  # thread-safe
 
     @staticmethod
     def _suffix_to_duration(suffix: str, regex: re.Pattern) -> tuple[int, str]:
-        """Ex: Converts '2 hourly' to (2, 'hourly') and 'hourly' to (1, 'hourly')."""
+        """Example: Converts '2 hourly' to (2, 'hourly') and 'hourly' to (1, 'hourly')."""
         if match := regex.fullmatch(suffix):
             duration_amount = int(match.group(1)) if match.group(1) else 1
             assert duration_amount > 0

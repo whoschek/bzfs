@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool."""
+"""Network connection management is in refresh_ssh_connection_if_necessary() and class ConnectionPool; They reuse multiplexed
+ssh connections for low latency."""
 
 from __future__ import annotations
 import contextlib

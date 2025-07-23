@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""The core replication algorithm is in replicate_dataset()."""
+"""The core replication algorithm is in replicate_dataset(), which performs reliable full and/or incremental 'zfs send' and
+'zfs receive' operations on snapshots, using resumable ZFS sends when possible."""
 
 from __future__ import annotations
 import os

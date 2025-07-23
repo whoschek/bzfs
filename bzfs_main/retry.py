@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Generic retry support using jitter and exponential backoff with cap.
+"""Generic retry support using jittered exponential backoff with cap.
 
 This module retries failing operations according to a configurable policy. It assumes transient errors may eventually succeed
 and centralizes retry logic for consistency across callers.

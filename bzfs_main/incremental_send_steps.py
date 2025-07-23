@@ -14,9 +14,8 @@
 #
 """Computes efficient incremental ZFS send/receive steps.
 
-This helper derives a minimal sequence of ``zfs send`` commands from a list of
-snapshots and GUIDs to include. It favors fewer send steps for performance and
-works around resume and bookmark limitations.
+This helper derives a minimal sequence of 'zfs send' commands from a list of snapshots and GUIDs to include. It favors fewer
+send steps for performance and works around resume and bookmark limitations.
 """
 
 from __future__ import annotations

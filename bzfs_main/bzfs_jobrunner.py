@@ -19,6 +19,8 @@
 # ///
 #
 """
+* High-level orchestrator that calls `bzfs` as part of complex, periodic workflows to manage backup, replication, and pruning
+  jobs across a fleet of multiple source and destination hosts; driven by a job config file (e.g., `bzfs_job_example.py`).
 * Overview of the bzfs_jobrunner.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing of CLI options/parameters.
 * Control flow starts in main(), far below ..., which kicks off a "Job".

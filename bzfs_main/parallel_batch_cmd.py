@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Utilities for parallel batched CLI usage."""
+"""Helpers for running shell commands in parallel batches within worker processes."""
 
 from __future__ import annotations
 import sys

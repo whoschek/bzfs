@@ -19,6 +19,8 @@
 # ///
 #
 """
+* Main CLI entry point for replicating and managing ZFS snapshots. It handles the low-level mechanics of `zfs send/receive`,
+  data transfer, and snapshot management between two hosts.
 * Overview of the bzfs.py codebase:
 * The codebase starts with docs, definition of input data and associated argument parsing into a "Params" class.
 * All CLI option/parameter values are reachable from the "Params" class.
