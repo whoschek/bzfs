@@ -21,7 +21,7 @@
 fail_fast: true  # abort on first failing hook
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.27.2
+    rev: v8.28.0
     hooks:  # Prevent the accidental inclusion of passwords, API keys, and tokens in your commits
       - id: gitleaks  # defaults to: gitleaks git --pre-commit --redact --staged --verbose
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -61,7 +61,7 @@ repos:
         exclude: '.*'  # Skip this hook. Comment out this line to enable this hook.
         entry: pyrefly autotype
         language: python
-        additional_dependencies: ['pyrefly==0.24.2']
+        additional_dependencies: ['pyrefly==0.25.0']
         pass_filenames: false
   - repo: local
     hooks:

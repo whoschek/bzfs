@@ -69,10 +69,10 @@ dev = [  # for development only
   "docformatter==1.7.7",            # see https://github.com/PyCQA/docformatter
   "pylint==3.3.7",                  # see https://github.com/pylint-dev/pylint
   "pyre-check==0.9.25",             # see https://github.com/facebook/pyre-check
-  "pyrefly==0.24.2",                # see https://github.com/facebook/pyrefly
+  "pyrefly==0.25.0",                # see https://github.com/facebook/pyrefly
   "pytype==2024.10.11",             # see https://github.com/google/pytype
   "autotyping==24.9.0",             # see https://github.com/JelleZijlstra/autotyping
-  "ast-grep-cli==0.38.7",           # see https://github.com/ast-grep/ast-grep
+  "ast-grep-cli==0.39.1",           # see https://github.com/ast-grep/ast-grep
   "libcst==1.8.2",                  # see https://github.com/Instagram/LibCST
   "rope==1.14.0",                   # see https://github.com/python-rope/rope
 ]
@@ -246,6 +246,9 @@ known-first-party = ["bzfs_*"]
 no-lines-before = ["standard-library"]  # no blank line before std-lib
 lines-between-types = 0  # keep `import ...` and `from ...` tight
 split-on-trailing-comma = true  # retain multi-line blocks when a trailing comma is present
+
+[tool.ruff.lint.pydocstyle]
+ignore-decorators = ["typing.overload"]  # ignore docstrings for functions or methods decorated w/ the specified decorators.
 
 [tool.pylint."MESSAGES CONTROL"]  # see https://pylint.readthedocs.io/en/latest/user_guide/messages/messages_overview.html
 disable = ["all"]        # turn all checks off ...
