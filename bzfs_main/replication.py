@@ -1173,8 +1173,8 @@ def check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send:
 
 
 ZFS_DATASET_BUSY_PREFIX = r"(([^ ]*?/)?(sudo|doas)( +-n)? +)?([^ ]*?/)?zfs (receive|recv"
-ZFS_DATASET_BUSY_IF_MODS = re.compile((ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
-ZFS_DATASET_BUSY_IF_SEND = re.compile((ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
+ZFS_DATASET_BUSY_IF_MODS: re.Pattern[str] = re.compile((ZFS_DATASET_BUSY_PREFIX + ") .*").replace("(", "(?:"))
+ZFS_DATASET_BUSY_IF_SEND: re.Pattern[str] = re.compile((ZFS_DATASET_BUSY_PREFIX + "|send) .*").replace("(", "(?:"))
 
 
 def is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:

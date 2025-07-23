@@ -185,7 +185,7 @@ __version__ = bzfs_main.argparse_cli.__version__
 CRITICAL_STATUS = 2
 WARNING_STATUS = 1
 STILL_RUNNING_STATUS = 4
-MIN_PYTHON_VERSION = (3, 8)
+MIN_PYTHON_VERSION: tuple[int, int] = (3, 8)
 if sys.version_info < MIN_PYTHON_VERSION:
     print(f"ERROR: {PROG_NAME} requires Python version >= {'.'.join(map(str, MIN_PYTHON_VERSION))}!")
     sys.exit(DIE_STATUS)

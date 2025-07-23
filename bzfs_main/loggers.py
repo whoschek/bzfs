@@ -128,7 +128,7 @@ def get_default_logger(log_params: LogParams, args: argparse.Namespace) -> Logge
     return log
 
 
-log_level_prefixes = {
+log_level_prefixes: dict[int, str] = {
     logging.CRITICAL: "[C] CRITICAL:",
     logging.ERROR: "[E] ERROR:",
     logging.WARNING: "[W]",

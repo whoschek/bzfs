@@ -53,8 +53,8 @@ PROG_AUTHOR = "Wolfgang Hoschek"
 EXCLUDE_DATASET_REGEXES_DEFAULT = r"(.*/)?[Tt][Ee]?[Mm][Pp][-_]?[0-9]*"  # skip tmp datasets by default
 LOG_DIR_DEFAULT = PROG_NAME + "-logs"
 SKIP_ON_ERROR_DEFAULT = "dataset"
-ZFS_RECV_GROUPS = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
-CMP_CHOICES_ITEMS = ("src", "dst", "all")
+ZFS_RECV_GROUPS: dict[str, str] = {"zfs_recv_o": "-o", "zfs_recv_x": "-x", "zfs_set": ""}
+CMP_CHOICES_ITEMS: tuple[str, str, str] = ("src", "dst", "all")
 
 
 def argument_parser() -> argparse.ArgumentParser:

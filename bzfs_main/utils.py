@@ -69,7 +69,7 @@ LOG_STDOUT = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in 
 LOG_DEBUG = logging.DEBUG
 LOG_TRACE = logging.DEBUG // 2  # custom log level is halfway in between
 SNAPSHOT_FILTERS_VAR = "snapshot_filters_var"
-YEAR_WITH_FOUR_DIGITS_REGEX = re.compile(r"[1-9][0-9][0-9][0-9]")  # regex for empty target shall not match non-empty target
+YEAR_WITH_FOUR_DIGITS_REGEX: re.Pattern[str] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match non-empty target
 UNIX_TIME_INFINITY_SECS = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
 SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"

@@ -773,7 +773,7 @@ def fix_send_recv_opts(
     return results, sorted(x_names)
 
 
-SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
+SSH_MASTER_DOMAIN_SOCKET_FILE_PID_REGEX: re.Pattern[str] = re.compile(r"^[0-9]+")  # see socket_name in local_ssh_command()
 
 
 def delete_stale_files(
