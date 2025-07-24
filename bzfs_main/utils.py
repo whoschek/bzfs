@@ -61,20 +61,20 @@ from typing import (
 
 # constants:
 PROG_NAME = "bzfs"
-ENV_VAR_PREFIX = PROG_NAME + "_"
+ENV_VAR_PREFIX: str = PROG_NAME + "_"
 DIE_STATUS = 3
 DESCENDANTS_RE_SUFFIX = r"(?:/.*)?"  # also match descendants of a matching dataset
-LOG_STDERR = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
-LOG_STDOUT = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
-LOG_DEBUG = logging.DEBUG
-LOG_TRACE = logging.DEBUG // 2  # custom log level is halfway in between
+LOG_STDERR: int = (logging.INFO + logging.WARNING) // 2  # custom log level is halfway in between
+LOG_STDOUT: int = (LOG_STDERR + logging.INFO) // 2  # custom log level is halfway in between
+LOG_DEBUG: int = logging.DEBUG
+LOG_TRACE: int = logging.DEBUG // 2  # custom log level is halfway in between
 SNAPSHOT_FILTERS_VAR = "snapshot_filters_var"
 YEAR_WITH_FOUR_DIGITS_REGEX: re.Pattern[str] = re.compile(r"[1-9][0-9][0-9][0-9]")  # empty shall not match non-empty target
 UNIX_TIME_INFINITY_SECS = 2**64  # billions of years in the future and to be extra safe, larger than the largest ZFS GUID
 DONT_SKIP_DATASET = ""
-SHELL_CHARS = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
-FILE_PERMISSIONS = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
-DIR_PERMISSIONS = stat.S_IRWXU  # rwx------ (owner read + write + execute)
+SHELL_CHARS: str = '"' + "'`~!@#$%^&*()+={}[]|;<>?,\\"
+FILE_PERMISSIONS: int = stat.S_IRUSR | stat.S_IWUSR  # rw------- (owner read + write)
+DIR_PERMISSIONS: int = stat.S_IRWXU  # rwx------ (owner read + write + execute)
 
 RegexList = List[Tuple[re.Pattern, bool]]  # Type alias
 

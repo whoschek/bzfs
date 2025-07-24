@@ -106,7 +106,7 @@ from bzfs_tests.zfs_util import (
 # constants:
 SRC_POOL_NAME = "wb_src"
 DST_POOL_NAME = "wb_dest"
-POOL_SIZE_BYTES_DEFAULT = 100 * 1024 * 1024
+POOL_SIZE_BYTES_DEFAULT: int = 100 * 1024 * 1024
 ENCRYPTION_ALGO = "aes-256-gcm"
 AFIX = ""
 zpool_features: dict[str, dict[str, str]] | None = None
@@ -123,12 +123,12 @@ os.write(zfs_encryption_key_fd, "mypasswd".encode("utf-8"))
 os.close(zfs_encryption_key_fd)
 KEYLOCATION = f"file://{zfs_encryption_key}"
 
-SSH_CONFIG_FILE = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "test_bzfs_ssh_config")
+SSH_CONFIG_FILE: str = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".ssh", "test_bzfs_ssh_config")
 RNG = random.Random(12345)
-HAS_NETCAT_PROG = shutil.which("nc") is not None
+HAS_NETCAT_PROG: bool = shutil.which("nc") is not None
 
 
-ssh_program = cast(str, getenv_any("test_ssh_program", "ssh"))  # also works with "hpnssh"
+ssh_program: str = cast(str, getenv_any("test_ssh_program", "ssh"))  # also works with "hpnssh"
 sudo_cmd = []
 if getenv_bool("test_enable_sudo", True) and (os.geteuid() != 0 or platform.system() == "SunOS"):
     sudo_cmd = ["sudo", "-n"]
