@@ -44,7 +44,7 @@ repos:
         additional_dependencies: [tomli]
         # config options like `wrap-summaries` live in pyproject.toml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.4
+    rev: v0.12.5
     hooks:
       - id: ruff-check  # Run linter to check if there are problems in the Python source code
       # config options like `target-version` live in pyproject.toml
@@ -127,7 +127,7 @@ repos:
       - id: forbid-dunder-all
         name: "forbid __all__ definitions"
         language: pygrep
-        entry: '^__all__\s*='                # any assignment to __all__ must NOT appear
+        entry: '^__all__\s*='                # forbids any assignment to __all__
         types: [python]
       - id: forbid-aliased-import-of-modules
         name: "forbid aliased import of modules"    # e.g. forbids 'import bzfs_main.bzfs as foo'
@@ -141,7 +141,7 @@ repos:
         entry: '^\s*from\s+bzfs_\w+(\.\w+)*\s+import\s+(\(\n\s*)?(?!PROG_NAME)\w+(\.\w+)*\s+as\s+\w+\s*'
         types: [python]
   - repo: https://github.com/psf/black
-    rev: 25.1.0  # bump version number occasionally with autoupdate
+    rev: 25.1.0
     hooks:
       - id: black  # Run Python code formatter
       # style options like `line_length` live in pyproject.toml
