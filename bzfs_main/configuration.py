@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from logging import Logger
 from typing import (
+    TYPE_CHECKING,
     Iterable,
     Literal,
     NamedTuple,
@@ -47,9 +48,6 @@ from bzfs_main.argparse_cli import (
     LOG_DIR_DEFAULT,
     ZFS_RECV_GROUPS,
     __version__,
-)
-from bzfs_main.connection import (
-    ConnectionPools,
 )
 from bzfs_main.detect import (
     DISABLE_PRG,
@@ -88,6 +86,9 @@ from bzfs_main.utils import (
     validate_property_name,
     xappend,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
+    from bzfs_main.connection import ConnectionPools
 
 
 #############################################################################

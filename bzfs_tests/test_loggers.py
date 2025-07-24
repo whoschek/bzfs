@@ -244,9 +244,9 @@ class TestLogging(AbstractTestCase):
 
     def test_remove_json_comments(self) -> None:
         config_str = (
-            "#c1\n" "line_without_comment\n" "line_with_trailing_hash_only #\n" "line_with_trailing_comment##tail#\n"
+            "#c1\n" + "line_without_comment\n" + "line_with_trailing_hash_only #\n" + "line_with_trailing_comment##tail#\n"
         )
-        expected = "\nline_without_comment\nline_with_trailing_hash_only #\n" "line_with_trailing_comment#"
+        expected = "\nline_without_comment\nline_with_trailing_hash_only #\n" + "line_with_trailing_comment#"
         self.assertEqual(expected, remove_json_comments(config_str))
 
     def test_get_dict_config_logger(self) -> None:

@@ -42,6 +42,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+keywords = ["ZFS", "snapshot", "replication", "backup", "synchronization"]
 license = {text = "Apache License (2.0)"}
 requires-python = ">= 3.8"
 dependencies = [
@@ -135,8 +136,9 @@ exclude = [   # toggles to exclude overly strict `ruff` checks of these Python s
 ]
 
 [tool.ruff.lint]
-select = [  # see https://docs.astral.sh/ruff/rules/
+select = [      # see https://docs.astral.sh/ruff/rules/
     "A",        # builtins
+    "ASYNC",    # flake8-async
     "B",        # bugbear
     "C4",       # flake8-comprehensions
     "D100", "D101", "D102", "D103", "D106", "D200", "D206", "D403", "D404", "D414", "D418", "D419",  # pydocstyle
@@ -144,35 +146,38 @@ select = [  # see https://docs.astral.sh/ruff/rules/
     "EXE",      # shebang
     "F",        # pyflakes
     "FA",       # forward annotations
+    "FAST",     # fastAPI
     "G",        # flake8-logging-format
     "I",        # sort imports
     "ICN",      # flake8-import-conventions
     "INP",      # flake8-no-pep420
+    "ISC",      # flake8-implicit-str-concat
     "LOG",      # flake8-logging
     "N",        # pep8-naming, snake_case
     "PERF402",  # use list or list.copy to create a copy of a list
     "PGH",      # pygrep-hooks
     "PIE",      # flake8-pie
-    "PLC",      # convention
-    "PLE0704",  # bare raise statement is not inside an exception handler
-    "PLE",      # error
-    "PLR0402",  # use from {module} import {name} in lieu of alias
-    "PLR1711",  # useless return statement at end of function
-    "PLR1722",  # use sys.exit() instead of exit()
-    "PLR1730",  # replace if statement with min() or max() if possible
-    "PLR1733",  # unnecessary lookup of dictionary value by key
-    "PLR1736",  # list index lookup in enumerate() loop
-    "PLR2044",  # line with empty comment
-    "PLW",      # warning
+    "PLC",      # pylint-convention
+    "PLE",      # pylint-error
+    "PLR0402",  # pylint-refactor: use from {module} import {name} in lieu of alias
+    "PLR1711",  # pylint-refactor: useless return statement at end of function
+    "PLR1722",  # pylint-refactor: use sys.exit() instead of exit()
+    "PLR1730",  # pylint-refactor: replace if statement with min() or max() if possible
+    "PLR1733",  # pylint-refactor: unnecessary lookup of dictionary value by key
+    "PLR1736",  # pylint-refactor: list index lookup in enumerate() loop
+    "PLR2044",  # pylint-refactor: line with empty comment
+    "PLW",      # pylint-warning
+    "RET501", "RET502", "RET503",  # flake8-return
     "RUF",      # ruff-specifc rules
     "S",        # bandit
     "SIM115",   # flake8-simplify: Use a context manager for opening files
-    "SIM300",   # yoda condition detected
-    "SIM401",   # use dict.get(x, default) instead of if statement
-    "SIM910",   # dict.get(x, None)
-    "SIM911",   # use dict.items() instead of zip()
+    "SIM300",   # flake8-simplify: yoda condition detected
+    "SIM401",   # flake8-simplify: use dict.get(x, default) instead of if statement
+    "SIM910",   # flake8-simplify: dict.get(x, None)
+    "SIM911",   # flake8-simplify: use dict.items() instead of zip()
     "SLF",      # private member accessed
     "T100",     # check for debugger imports and breakpoint() calls
+    "TC001", "TC004", "TC005", "TC007","TC008", "TC010",  # flake8-type-checking conditions
     "TID",      # flake8-tidy-imports
     "TRY",      # tryceratops raises
     "TRY201",   # use `raise` without specifying exception name

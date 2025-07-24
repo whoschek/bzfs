@@ -642,7 +642,7 @@ as how many src snapshots and how many GB of data are missing on dst, etc.
              "seconds, or every 10 minutes, or every 100 milliseconds, respectively.\n\n")
 
     def argparser_escape(text: str) -> str:
-        return text.replace('%', '%%')
+        return text.replace("%", "%%")
 
     parser.add_argument(
         "--create-src-snapshots-timeformat", default="%Y-%m-%d_%H:%M:%S", metavar="STRFTIME_SPEC",
