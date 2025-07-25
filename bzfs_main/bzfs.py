@@ -611,8 +611,8 @@ class Job:
         recursive_sep = " " if p.recursive_flag else ""
         task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recursive_sep}--> {dst.basis_root_dataset} ..."
         failed = False
-        src_datasets = None
-        basis_src_datasets = []
+        src_datasets: list[str] | None = None
+        basis_src_datasets: list[str] = []
         self.src_properties = {}
         self.dst_properties = {}
         if not is_dummy(src):  # find src dataset or all datasets in src dataset tree (with --recursive)
@@ -643,8 +643,8 @@ class Job:
         log.info("Listing dst datasets: %s", task_description)
         if is_dummy(dst):
             die("Destination may be a dummy dataset only if exclusively creating snapshots on the source!")
-        basis_dst_datasets = self.list_dst_datasets_task()
-        dst_datasets = filter_datasets(self, dst, basis_dst_datasets)  # apply include/exclude policy
+        basis_dst_datasets: list[str] = self.list_dst_datasets_task()
+        dst_datasets: list[str] = filter_datasets(self, dst, basis_dst_datasets)  # apply include/exclude policy
 
         if p.delete_dst_datasets and not failed:
             log.info(p.dry("--delete-dst-datasets: %s"), task_description)
@@ -676,7 +676,7 @@ class Job:
         """Lists datasets on the source host."""
         p = self.params
         src = p.src
-        basis_src_datasets = []
+        basis_src_datasets: list[str] = []
         is_caching = is_caching_snapshots(p, src)
         props = "volblocksize,recordsize,name"
         props = "snapshots_changed," + props if is_caching else props
@@ -704,7 +704,7 @@ class Job:
         cmd = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
         )
-        basis_dst_datasets = []
+        basis_dst_datasets: list[str] = []
         basis_dst_datasets_str = try_ssh_command(self, dst, LOG_TRACE, cmd=cmd)
         if basis_dst_datasets_str is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
@@ -738,8 +738,8 @@ class Job:
             die(f"Source dataset does not exist: {src.basis_root_dataset}")
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = self.find_datasets_to_snapshot(src_datasets)
         datasets_to_snapshot = {label: datasets for label, datasets in datasets_to_snapshot.items() if len(datasets) > 0}
-        basis_datasets_to_snapshot = datasets_to_snapshot.copy()  # shallow copy
-        commands = {}
+        basis_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = datasets_to_snapshot.copy()  # shallow copy
+        commands: dict[SnapshotLabel, list[str]] = {}
         for label, datasets in datasets_to_snapshot.items():
             cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
             if p.recursive:
@@ -771,13 +771,13 @@ class Job:
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
-        filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
+        filter_needs_creation_time: bool = has_timerange_filter(p.snapshot_filters)
         props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
-        basis_src_datasets_set = set(basis_src_datasets)
+        basis_src_datasets_set: set[str] = set(basis_src_datasets)
         num_snapshots_found, num_snapshots_deleted = 0, 0
 
         def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
-            src_dataset = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
+            src_dataset: str = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
             if src_dataset in basis_src_datasets_set and (are_bookmarks_enabled(p, src) or not p.delete_dst_bookmarks):
                 src_kind = kind
                 if not p.delete_dst_snapshots_no_crosscheck:
@@ -796,12 +796,12 @@ class Job:
                 return False
             dst_snaps_with_guids = dst_snaps_with_guids.splitlines()
             num_dst_snaps_with_guids = len(dst_snaps_with_guids)
-            basis_dst_snaps_with_guids = dst_snaps_with_guids.copy()
+            basis_dst_snaps_with_guids: list[str] = dst_snaps_with_guids.copy()
             if p.delete_dst_bookmarks:
                 replace_in_lines(dst_snaps_with_guids, old="#", new="@", count=1)  # treat bookmarks as snapshots
             #  The check against the source dataset happens *after* filtering the dst snapshots with filter_snapshots().
             # `p.delete_dst_snapshots_except` means the user wants to specify snapshots to *retain* aka *keep*
-            all_except = p.delete_dst_snapshots_except
+            all_except: bool = p.delete_dst_snapshots_except
             if p.delete_dst_snapshots_except and not is_dummy(src):
                 # However, as here we are in "except" mode AND the source is NOT a dummy, we first filter to get what
                 # the policy says to *keep* (so all_except=False for the filter_snapshots() call), then from that "keep"
@@ -885,7 +885,7 @@ class Job:
         """
         p = self.params
         src, dst = p.src, p.dst
-        children = defaultdict(set)
+        children: dict[str, set[str]] = defaultdict(set)
         for dst_dataset in basis_dst_datasets:  # Compute the direct children of each NON-FILTERED dataset
             parent = os.path.dirname(dst_dataset)
             children[parent].add(dst_dataset)
@@ -921,7 +921,7 @@ class Job:
         # non-selected dataset will ever be added to the "orphan" set. In other words, this treats non-selected dataset
         # subtrees as if they all had snapshots, so non-selected dataset subtrees and their ancestors are guaranteed
         # to not get deleted.
-        children = defaultdict(set)
+        children: dict[str, set[str]] = defaultdict(set)
         for dst_dataset in basis_dst_datasets:
             parent = os.path.dirname(dst_dataset)
             children[parent].add(dst_dataset)
@@ -1098,7 +1098,7 @@ class Job:
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         is_caching = is_caching_snapshots(p, remote)
-        datasets_without_snapshots = self.handle_minmax_snapshots(
+        datasets_without_snapshots: list[str] = self.handle_minmax_snapshots(
             remote, stale_datasets, labels, fn_latest=alert_latest_snapshot, fn_oldest=alert_oldest_snapshot
         )
         for dataset in datasets_without_snapshots:
@@ -1136,7 +1136,7 @@ class Job:
             https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
             """
             # First, check which src datasets have changed since the last replication to that destination
-            cache_files = {}
+            cache_files: dict[str, str] = {}
             stale_src_datasets1 = []
             maybe_stale_dst_datasets = []
             userhost_dir = p.dst.ssh_user_host  # cache is only valid for identical destination username+host
@@ -1146,7 +1146,7 @@ class Job:
             for src_dataset in src_datasets:
                 dst_dataset = src2dst(src_dataset)  # cache is only valid for identical destination dataset
                 cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
-                cache_file = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
+                cache_file: str = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
                 snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])  # get prop "for free"
                 if (
@@ -1328,7 +1328,7 @@ class Job:
         src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         is_caching = False
-        msgs = []
+        msgs: list[tuple[datetime, str, SnapshotLabel, str]] = []
 
         def create_snapshot_if_latest_is_too_old(
             datasets_to_snapshot: dict[SnapshotLabel, list[str]], dataset: str, label: SnapshotLabel, creation_unixtime: int
@@ -1337,7 +1337,7 @@ class Job:
             creation_dt = datetime.fromtimestamp(creation_unixtime, tz=config.tz)
             log.log(LOG_TRACE, "Latest snapshot creation: %s for %s", creation_dt, label)
             duration_amount, duration_unit = config.suffix_durations[label.suffix]
-            next_event_dt = round_datetime_up_to_duration_multiple(
+            next_event_dt: datetime = round_datetime_up_to_duration_multiple(
                 creation_dt + timedelta(microseconds=1), duration_amount, duration_unit, config.anchors
             )
             msg = ""
@@ -1346,10 +1346,10 @@ class Job:
                 msg = " has passed"
             msgs.append((next_event_dt, dataset, label, msg))
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
-                cache_file = self.cache.last_modified_cache_file(src, dataset, label)
+                cache_file: str = self.cache.last_modified_cache_file(src, dataset, label)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=creation_unixtime, if_more_recent=True)
 
-        labels = []
+        labels: list[SnapshotLabel] = []
         config_labels: list[SnapshotLabel] = config.snapshot_labels()
         for label in config_labels:
             duration_amount_, duration_unit_ = config.suffix_durations[label.suffix]
@@ -1363,7 +1363,7 @@ class Job:
         # satisfy request from local cache as much as possible
         cached_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
         if is_caching_snapshots(p, src):
-            sorted_datasets_todo = []
+            sorted_datasets_todo: list[str] = []
             for dataset in sorted_datasets:
                 cache: SnapshotCache = self.cache
                 cached_snapshots_changed: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset))
@@ -1374,9 +1374,9 @@ class Job:
                     cache.invalidate_last_modified_cache_dataset(dataset)
                     sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                     continue
-                creation_unixtimes = []
+                creation_unixtimes: list[int] = []
                 for label in labels:
-                    creation_unixtime = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset, label))
+                    creation_unixtime: int = cache.get_snapshots_changed(cache.last_modified_cache_file(src, dataset, label))
                     if creation_unixtime == 0:
                         sorted_datasets_todo.append(dataset)  # request cannot be answered from cache
                         break
@@ -1401,7 +1401,7 @@ class Job:
 
         # fallback to 'zfs list -t snapshot' for any remaining datasets, as these couldn't be satisfied from local cache
         is_caching = is_caching_snapshots(p, src)
-        datasets_without_snapshots = self.handle_minmax_snapshots(
+        datasets_without_snapshots: list[str] = self.handle_minmax_snapshots(
             src, sorted_datasets, labels, fn_latest=create_snapshot_fn, fn_on_finish_dataset=on_finish_dataset
         )
         for lbl in labels:  # merge (sorted) results from local cache + 'zfs list -t snapshot' into (sorted) combined result
@@ -1443,20 +1443,20 @@ class Job:
                 )
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
-                snapshot_names = [snapshot[-1] for snapshot in snapshots]
+                snapshot_names: list[str] = [snapshot[-1] for snapshot in snapshots]
                 year_with_4_digits_regex = YEAR_WITH_FOUR_DIGITS_REGEX
                 fns = ((fn_latest, True),) if fn_oldest is None else ((fn_latest, True), (fn_oldest, False))
                 for i, label in enumerate(labels):
-                    infix = label.infix
-                    start = label.prefix + infix
-                    end = label.suffix
-                    startlen = len(start)
-                    endlen = len(end)
-                    minlen = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
+                    infix: str = label.infix
+                    start: str = label.prefix + infix
+                    end: str = label.suffix
+                    startlen: int = len(start)
+                    endlen: int = len(end)
+                    minlen: int = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
                     year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
-                        minmax_snapshot = ""
+                        minmax_snapshot: str = ""
                         for j, s in enumerate(reversed(snapshot_names) if is_reverse else snapshot_names):
                             if (
                                 s.endswith(end)

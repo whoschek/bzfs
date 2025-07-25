@@ -39,7 +39,11 @@ from typing import (
     NamedTuple,
 )
 
-from bzfs_main.utils import InterruptibleSleep, human_readable_bytes, open_nofollow
+from bzfs_main.utils import (
+    InterruptibleSleep,
+    human_readable_bytes,
+    open_nofollow,
+)
 
 # constants
 PV_FILE_THREAD_SEPARATOR = "_"

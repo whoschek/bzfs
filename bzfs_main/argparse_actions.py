@@ -25,8 +25,15 @@ from datetime import timedelta
 from typing import Any
 
 from bzfs_main.check_range import CheckRange
-from bzfs_main.filter import SNAPSHOT_REGEX_FILTER_NAME, SNAPSHOT_REGEX_FILTER_NAMES, RankRange, UnixTimeRange
-from bzfs_main.loggers import validate_log_config_variable
+from bzfs_main.filter import (
+    SNAPSHOT_REGEX_FILTER_NAME,
+    SNAPSHOT_REGEX_FILTER_NAMES,
+    RankRange,
+    UnixTimeRange,
+)
+from bzfs_main.loggers import (
+    validate_log_config_variable,
+)
 from bzfs_main.utils import (
     SHELL_CHARS,
     SNAPSHOT_FILTERS_VAR,

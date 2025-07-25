@@ -103,8 +103,8 @@ def replicate_dataset(job: Job, src_dataset: str, tid: str, retry: Retry) -> boo
     """Replicates src_dataset (without handling descendants) to dst_dataset (thread-safe)."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
-    retry_count = retry.count
-    dst_dataset = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
+    retry_count: int = retry.count
+    dst_dataset: str = replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
     log.debug(p.dry(f"{tid} Replicating: %s"), f"{src_dataset} --> {dst_dataset} ...")
 
     list_result = _list_and_filter_src_and_dst_snapshots(job, src_dataset, dst_dataset)
@@ -189,7 +189,7 @@ def _list_and_filter_src_and_dst_snapshots(
     # Note that 'zfs create', 'zfs snapshot' and 'zfs bookmark' CLIs enforce that snapshot names must not contain a '#'
     # char, bookmark names must not contain a '@' char, and dataset names must not contain a '#' or '@' char.
     # GUID and creation time also do not contain a '#' or '@' char.
-    filter_needs_creation_time = has_timerange_filter(p.snapshot_filters)
+    filter_needs_creation_time: bool = has_timerange_filter(p.snapshot_filters)
     types = "snapshot,bookmark" if p.use_bookmark and are_bookmarks_enabled(p, src) else "snapshot"
     props = job.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
     src_cmd = p.split_args(f"{p.zfs_program} list -t {types} -s createtxg -s type -d 1 -Hp -o {props}", src_dataset)
@@ -532,8 +532,8 @@ def prepare_zfs_send_receive(
 ) -> tuple[str, str, str]:
     """Constructs zfs send/recv pipelines with optional compression and pv."""
     p = job.params
-    send_cmd_str = shlex.join(send_cmd)
-    recv_cmd_str = shlex.join(recv_cmd)
+    send_cmd_str: str = shlex.join(send_cmd)
+    recv_cmd_str: str = shlex.join(recv_cmd)
 
     if p.is_program_available("zstd", "src") and p.is_program_available("zstd", "dst"):
         compress_cmd_ = compress_cmd(p, "src", size_estimate_bytes)
@@ -541,14 +541,14 @@ def prepare_zfs_send_receive(
     else:  # no compression is used if source and destination do not both support compression
         compress_cmd_, decompress_cmd_ = "cat", "cat"
 
-    recordsize = abs(int(job.src_properties[src_dataset]["recordsize"]))
-    src_buffer = mbuffer_cmd(p, "src", size_estimate_bytes, recordsize)
-    dst_buffer = mbuffer_cmd(p, "dst", size_estimate_bytes, recordsize)
-    local_buffer = mbuffer_cmd(p, "local", size_estimate_bytes, recordsize)
+    recordsize: int = abs(int(job.src_properties[src_dataset]["recordsize"]))
+    src_buffer: str = mbuffer_cmd(p, "src", size_estimate_bytes, recordsize)
+    dst_buffer: str = mbuffer_cmd(p, "dst", size_estimate_bytes, recordsize)
+    local_buffer: str = mbuffer_cmd(p, "local", size_estimate_bytes, recordsize)
 
-    pv_src_cmd = ""
-    pv_dst_cmd = ""
-    pv_loc_cmd = ""
+    pv_src_cmd: str = ""
+    pv_dst_cmd: str = ""
+    pv_loc_cmd: str = ""
     if p.src.ssh_user_host == "":
         pv_src_cmd = pv_cmd(job, "local", size_estimate_bytes, size_estimate_human)
     elif p.dst.ssh_user_host == "":
@@ -561,7 +561,7 @@ def prepare_zfs_send_receive(
         pv_loc_cmd = pv_cmd(job, "local", size_estimate_bytes, size_estimate_human, disable_progress_bar=True)
 
     # assemble pipeline running on source leg
-    src_pipe = ""
+    src_pipe: str = ""
     if job.inject_params.get("inject_src_pipe_fail", False):
         # for testing; initially forward some bytes and then fail
         src_pipe = f"{src_pipe} | dd bs=64 count=1 2>/dev/null && false"
@@ -585,7 +585,7 @@ def prepare_zfs_send_receive(
         src_pipe = send_cmd_str
 
     # assemble pipeline running on middle leg between source and destination. only enabled for pull-push mode
-    local_pipe = ""
+    local_pipe: str = ""
     if local_buffer != "cat":
         local_pipe = f"{local_buffer}"
     if pv_loc_cmd != "" and pv_loc_cmd != "cat":
@@ -598,7 +598,7 @@ def prepare_zfs_send_receive(
         local_pipe = f"| {local_pipe}"
 
     # assemble pipeline running on destination leg
-    dst_pipe = ""
+    dst_pipe: str = ""
     if dst_buffer != "cat":
         dst_pipe = f"{dst_buffer}"
     if decompress_cmd_ != "cat":
@@ -657,8 +657,8 @@ def run_zfs_send_receive(
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
         refresh_ssh_connection_if_necessary(job, p.src, src_conn)
         refresh_ssh_connection_if_necessary(job, p.dst, dst_conn)
-        src_ssh_cmd = " ".join(src_conn.ssh_cmd_quoted)
-        dst_ssh_cmd = " ".join(dst_conn.ssh_cmd_quoted)
+        src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
+        dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
         cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
         msg = "Would execute: %s" if dry_run_no_send else "Executing: %s"
         log.debug(msg, cmd[2].lstrip())
@@ -759,8 +759,8 @@ def _recv_resume_token(job: Job, dst_dataset: str, retry_count: int) -> tuple[st
     if warning:
         log.warning(f"ZFS receive resume feature is {warning}. Falling back to --no-resume-recv: %s", dst_dataset)
         return None, [], []
-    recv_resume_token = None
-    send_resume_opts = []
+    recv_resume_token: str | None = None
+    send_resume_opts: list[str] = []
     if job.dst_dataset_exists[dst_dataset]:
         cmd = p.split_args(f"{p.zfs_program} get -Hp -o value -s none receive_resume_token", dst_dataset)
         recv_resume_token = run_ssh_command(job, p.dst, LOG_TRACE, cmd=cmd).rstrip()
@@ -1146,14 +1146,14 @@ def check_zfs_dataset_busy(job: Job, remote: Remote, dataset: str, busy_if_send:
     parallel with a 'zfs send' out of the very same dataset. This also helps daisy chain use cases where A replicates to B,
     and B replicates to C.
 
-    check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words,
-    even if the process check below passes there is no guarantee that the destination dataset won't be busy by the
-    time we actually execute the 'zfs send' operation. In such an event ZFS will reject the operation, we'll detect
-    that, and we'll simply retry, after some delay. check_zfs_dataset_busy() can be disabled via --ps-program=-.
+    check_zfs_dataset_busy() offers no guarantees, it merely proactively avoids likely collisions. In other words, even if
+    the process check below passes there is no guarantee that the destination dataset won't be busy by the time we actually
+    execute the 'zfs send' operation. In such an event ZFS will reject the operation, we'll detect that, and we'll simply
+    retry, after some delay. check_zfs_dataset_busy() can be disabled via --ps-program=-.
 
-    TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic
-    concurrency control where the parties simply retry on collision detection (rather than coordinate concurrency
-    via a remote lock server).
+    TLDR: As is common for long-running operations in distributed systems, we use coordination-free optimistic concurrency
+    control where the parties simply retry on collision detection (rather than coordinate concurrency via a remote lock
+    server).
     """
     p, log = job.params, job.params.log
     if not p.is_program_available("ps", remote.location):
@@ -1178,7 +1178,7 @@ ZFS_DATASET_BUSY_IF_SEND: re.Pattern[str] = re.compile((ZFS_DATASET_BUSY_PREFIX 
 
 
 def is_zfs_dataset_busy(procs: list[str], dataset: str, busy_if_send: bool) -> bool:
-    """Checks if any process list entry indicates zfs activity on dataset."""
+    """Checks if any process list entry indicates ZFS activity on dataset."""
     regex = ZFS_DATASET_BUSY_IF_SEND if busy_if_send else ZFS_DATASET_BUSY_IF_MODS
     suffix = " " + dataset
     infix = " " + dataset + "@"

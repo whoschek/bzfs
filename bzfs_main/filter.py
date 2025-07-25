@@ -62,7 +62,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
     Assumes the list of input datasets is sorted. The list of output datasets will be sorted too.
     """
     p, log = job.params, job.params.log
-    results = []
+    results: list[str] = []
     for i, dataset in enumerate(sorted_datasets):
         if i == 0 and p.skip_parent:
             continue
@@ -95,7 +95,7 @@ def filter_datasets(job: Job, remote: Remote, sorted_datasets: list[str]) -> lis
 def filter_datasets_by_exclude_property(job: Job, remote: Remote, sorted_datasets: list[str]) -> list[str]:
     """Excludes datasets that are marked with a ZFS user property value that, in effect, says 'skip me'."""
     p, log = job.params, job.params.log
-    results = []
+    results: list[str] = []
     localhostname = None
     skip_dataset = DONT_SKIP_DATASET
     for dataset in sorted_datasets:
@@ -157,11 +157,11 @@ def filter_snapshots(
 
     p, log = job.params, job.params.log
     current_unixtime_in_secs: float = p.create_src_snapshots_config.current_datetime.timestamp()
-    resultset = set()
+    resultset: set[str] = set()
     for snapshot_filter in p.snapshot_filters:
-        snapshots = basis_snapshots
+        snapshots: list[str] = basis_snapshots
         for _filter in snapshot_filter:
-            name = _filter.name
+            name: str = _filter.name
             if name == SNAPSHOT_REGEX_FILTER_NAME:
                 snapshots = filter_snapshots_by_regex(
                     job, snapshots, regexes=_filter.options, filter_bookmarks=filter_bookmarks
@@ -199,7 +199,7 @@ def filter_snapshots_by_regex(
     exclude_snapshot_regexes, include_snapshot_regexes = regexes
     log = job.params.log
     is_debug = log.isEnabledFor(LOG_DEBUG)
-    results = []
+    results: list[str] = []
     for snapshot in snapshots:
         i = snapshot.find("@")  # snapshot separator
         if i < 0 and filter_bookmarks:
@@ -225,7 +225,7 @@ def filter_snapshots_by_creation_time(
     lo_snaptime, hi_snaptime = include_snapshot_times or (0, UNIX_TIME_INFINITY_SECS)
     assert isinstance(lo_snaptime, int)
     assert isinstance(hi_snaptime, int)
-    results = []
+    results: list[str] = []
     for snapshot in snapshots:
         if (not filter_bookmarks) and "@" not in snapshot:
             continue  # retain bookmarks to help find common snapshots, apply filter only to snapshots
@@ -269,7 +269,7 @@ def filter_snapshots_by_creation_time_and_rank(
         hi = get_idx(hi_rank, n)
         lo, hi = (lo, hi) if lo <= hi else (hi, lo)
         i = 0
-        results = []
+        results: list[str] = []
         for snapshot in snapshots:
             is_snapshot = "@" in snapshot
             if (not filter_bookmarks) and not is_snapshot:
@@ -326,7 +326,7 @@ def filter_lines_except(input_list: list[str], input_set: set[str]) -> list[str]
 
 def dataset_regexes(src: Remote, dst: Remote, datasets: list[str]) -> list[str]:
     """Converts dataset paths to regex strings relative to src or dst roots."""
-    results = []
+    results: list[str] = []
     for dataset in datasets:
         if dataset.startswith("/"):
             # it's an absolute dataset - convert it to a relative dataset
