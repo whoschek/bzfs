@@ -176,10 +176,10 @@ Your context is your most valuable asset. Use it effectively.
 - **Active Recall:** Keep this document's rules, the user's explicit requests and the current coding goal in your active
     context.
 - **Compact Context:** Whenever your context window exceeds 75% capacity *or* when a single impending response would
-    overflow it, immediately save the current context to external memory (e.g. the filesystem) for future recall. Then
-    use the `/compact` or `/compress` command to create a detailed, structured summary of the work so far, paying close
-    attention to the user's explicit requests, without losing precision. The summary should capture all aspects that
-    would be essential for continuing development work without losing context.
+    overflow it, immediately save the complete current context as-is to external memory (e.g. the filesystem) for
+    future recall. Then use the `/compact` or `/compress` command to create a detailed, structured summary of the work
+    so far, paying close attention to the user's explicit requests, without losing precision. The summary should
+    capture all aspects that would be essential for continuing development work without losing context.
 
 ## How to Manage Time if your Environment has Time Limits
 
