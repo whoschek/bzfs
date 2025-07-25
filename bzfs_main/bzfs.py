@@ -36,7 +36,7 @@
 * Cache functionality can be found by searching for this regex: .*cach.*
 * The parallel processing engine is in itr_ssh_cmd_parallel() and process_datasets_in_parallel_and_fault_tolerant().
 * README.md is mostly auto-generated from the ArgumentParser help texts as the source of "truth", via update_readme.sh.
-Simply run that script whenever you change or add ArgumentParser help text.
+  Simply run that script whenever you change or add ArgumentParser help text.
 """
 
 from __future__ import annotations
@@ -306,7 +306,7 @@ class Job:
                 log_params.params = p
                 with open_nofollow(log_params.log_file, "a", encoding="utf-8", perm=FILE_PERMISSIONS) as log_file_fd:
                     with contextlib.redirect_stderr(cast(IO[Any], Tee(log_file_fd, sys.stderr))):  # stderr to logfile+stderr
-                        lock_file = p.lock_file_name()
+                        lock_file: str = p.lock_file_name()
                         lock_fd = os.open(lock_file, os.O_WRONLY | os.O_TRUNC | os.O_CREAT | os.O_NOFOLLOW, FILE_PERMISSIONS)
                         with xfinally(lambda: os.close(lock_fd)):
                             try:
@@ -446,7 +446,7 @@ class Job:
         elapsed_nanos = time.monotonic_ns() - start_time_nanos
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if p.is_program_available("pv", "local"):
-            sent_bytes = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
+            sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
             sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
         log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
@@ -462,10 +462,10 @@ class Job:
                     include_snapshot_regexes = compile_regexes(_filter.options[1] or [".*"])
                     _filter.options = (exclude_snapshot_regexes, include_snapshot_regexes)
 
-        exclude_regexes = [EXCLUDE_DATASET_REGEXES_DEFAULT]
+        exclude_regexes: list[str] = [EXCLUDE_DATASET_REGEXES_DEFAULT]
         if len(p.args.exclude_dataset_regex) > 0:  # some patterns don't exclude anything
             exclude_regexes = [regex for regex in p.args.exclude_dataset_regex if regex != "" and regex != "!.*"]
-        include_regexes = p.args.include_dataset_regex
+        include_regexes: list[str] = p.args.include_dataset_regex
 
         # relative datasets need not be compiled more than once as they don't change between tasks
         def separate_abs_vs_rel_datasets(datasets: list[str]) -> tuple[list[str], list[str]]:
@@ -533,7 +533,7 @@ class Job:
 
         detect_available_programs(self)
 
-        zfs_send_program_opts = p.curr_zfs_send_program_opts
+        zfs_send_program_opts: list[str] = p.curr_zfs_send_program_opts
         if is_zpool_feature_enabled_or_active(p, dst, "feature@large_blocks"):
             append_if_absent(zfs_send_program_opts, "--large-block")  # solaris-11.4 does not have this feature
         if is_solaris_zfs(p, dst):
@@ -576,7 +576,7 @@ class Job:
         assert isinstance(p.sudo_program, str)
         assert isinstance(p.enable_privilege_elevation, bool)
 
-        is_root = True
+        is_root: bool = True
         if ssh_user_host != "":
             if ssh_user == "":
                 if os.geteuid() != 0:
@@ -677,7 +677,7 @@ class Job:
         p = self.params
         src = p.src
         basis_src_datasets: list[str] = []
-        is_caching = is_caching_snapshots(p, src)
+        is_caching: bool = is_caching_snapshots(p, src)
         props = "volblocksize,recordsize,name"
         props = "snapshots_changed," + props if is_caching else props
         cmd = p.split_args(
@@ -698,7 +698,7 @@ class Job:
         """Lists datasets on the destination host."""
         p, log = self.params, self.params.log
         dst = p.dst
-        is_caching = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
+        is_caching: bool = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
         props = "name"
         props = "snapshots_changed," + props if is_caching else props
         cmd = p.split_args(
@@ -876,7 +876,7 @@ class Job:
         return failed
 
     def delete_dst_datasets_task(
-        self, basis_src_datasets: list[str], basis_dst_datasets: list[str], dst_datasets: list[str]
+        self, basis_src_datasets: list[str], basis_dst_datasets: list[str], sorted_dst_datasets: list[str]
     ) -> Tuple[list[str], list[str]]:
         """Deletes existing destination datasets that do not exist within the source dataset if they are included via
         --{include|exclude}-dataset* policy; implements --delete-dst-datasets.
@@ -890,18 +890,18 @@ class Job:
             parent = os.path.dirname(dst_dataset)
             children[parent].add(dst_dataset)
         to_delete: set[str] = set()
-        for dst_dataset in reversed(dst_datasets):
+        for dst_dataset in reversed(sorted_dst_datasets):
             if children[dst_dataset].issubset(to_delete):
                 to_delete.add(dst_dataset)  # all children are deletable, thus the dataset itself is deletable too
         to_delete = to_delete.difference(
             {replace_prefix(src_dataset, src.root_dataset, dst.root_dataset) for src_dataset in basis_src_datasets}
         )
         delete_datasets(self, dst, to_delete)
-        dst_datasets = sorted(set(dst_datasets).difference(to_delete))
+        sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(to_delete))
         basis_dst_datasets = sorted(set(basis_dst_datasets).difference(to_delete))
-        return basis_dst_datasets, dst_datasets
+        return basis_dst_datasets, sorted_dst_datasets
 
-    def delete_empty_dst_datasets_task(self, basis_dst_datasets: list[str], dst_datasets: list[str]) -> list[str]:
+    def delete_empty_dst_datasets_task(self, basis_dst_datasets: list[str], sorted_dst_datasets: list[str]) -> list[str]:
         """Deletes any existing destination dataset that has no snapshot and no bookmark if all descendants of that dataset
         do not have a snapshot or bookmark either; implements --delete-empty-dst-datasets.
 
@@ -935,7 +935,7 @@ class Job:
         dst_datasets_having_snapshots: set[str] = set()
         for run in range(2):
             orphans: set[str] = set()
-            for dst_dataset in reversed(dst_datasets):
+            for dst_dataset in reversed(sorted_dst_datasets):
                 if children[dst_dataset].issubset(orphans):
                     # all children turned out to be orphans, thus the dataset itself could be an orphan
                     if dst_dataset not in dst_datasets_having_snapshots:  # always True during first filter run
@@ -952,17 +952,22 @@ class Job:
                     dst_datasets_having_snapshots.update(datasets_having_snapshots)  # union
             else:
                 delete_datasets(self, dst, orphans)
-                dst_datasets = sorted(set(dst_datasets).difference(orphans))
-        return dst_datasets
+                sorted_dst_datasets = sorted(set(sorted_dst_datasets).difference(orphans))
+        return sorted_dst_datasets
 
-    def monitor_snapshots_task(self, src_datasets: list[str], dst_datasets: list[str], task_description: str) -> None:
+    def monitor_snapshots_task(
+        self, sorted_src_datasets: list[str], sorted_dst_datasets: list[str], task_description: str
+    ) -> None:
         """Monitors src and dst snapshots; implements --monitor-snapshots."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
         num_cache_hits = self.num_cache_hits
         num_cache_misses = self.num_cache_misses
         start_time_nanos = time.monotonic_ns()
-        run_in_parallel(lambda: self.monitor_snapshots(dst, dst_datasets), lambda: self.monitor_snapshots(src, src_datasets))
+        run_in_parallel(
+            lambda: self.monitor_snapshots(dst, sorted_dst_datasets),
+            lambda: self.monitor_snapshots(src, sorted_src_datasets),
+        )
         elapsed = human_readable_duration(time.monotonic_ns() - start_time_nanos)
         if num_cache_hits != self.num_cache_hits or num_cache_misses != self.num_cache_misses:
             total = self.num_cache_hits + self.num_cache_misses
@@ -971,7 +976,7 @@ class Job:
             msg = ""
         log.info(
             "--monitor-snapshots done: %s",
-            f"{task_description} [{len(src_datasets) + len(dst_datasets)} datasets; took {elapsed}{msg}]",
+            f"{task_description} [{len(sorted_src_datasets) + len(sorted_dst_datasets)} datasets; took {elapsed}{msg}]",
         )
 
     def monitor_snapshots(self, remote: Remote, sorted_datasets: list[str]) -> None:
@@ -993,7 +998,7 @@ class Job:
                 dataset: int(vals[SNAPSHOTS_CHANGED]) for dataset, vals in props.items()
             }
             hash_code: str = hashlib.sha256(str(tuple(alerts)).encode("utf-8")).hexdigest()
-        is_caching = False
+        is_caching: bool = False
 
         def monitor_last_modified_cache_file(r: Remote, dataset: str, label: SnapshotLabel, alert_cfg: AlertConfig) -> str:
             cache_label = SnapshotLabel(os_path_join("===", alert_cfg.kind, str(label), hash_code), "", "", "")
@@ -1137,14 +1142,14 @@ class Job:
             """
             # First, check which src datasets have changed since the last replication to that destination
             cache_files: dict[str, str] = {}
-            stale_src_datasets1 = []
-            maybe_stale_dst_datasets = []
-            userhost_dir = p.dst.ssh_user_host  # cache is only valid for identical destination username+host
+            stale_src_datasets1: list[str] = []
+            maybe_stale_dst_datasets: list[str] = []
+            userhost_dir: str = p.dst.ssh_user_host  # cache is only valid for identical destination username+host
             userhost_dir = userhost_dir if userhost_dir else "-"
             hash_key = tuple(tuple(f) for f in p.snapshot_filters)  # cache is only valid for same --include/excl-snapshot*
-            hash_code = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
+            hash_code: str = hashlib.sha256(str(hash_key).encode("utf-8")).hexdigest()
             for src_dataset in src_datasets:
-                dst_dataset = src2dst(src_dataset)  # cache is only valid for identical destination dataset
+                dst_dataset: str = src2dst(src_dataset)  # cache is only valid for identical destination dataset
                 cache_label = SnapshotLabel(os.path.join("==", userhost_dir, dst_dataset, hash_code), "", "", "")
                 cache_file: str = self.cache.last_modified_cache_file(src, src_dataset, cache_label)
                 cache_files[src_dataset] = cache_file
@@ -1159,8 +1164,8 @@ class Job:
                     stale_src_datasets1.append(src_dataset)
 
             # For each src dataset that hasn't changed, check if the corresponding dst dataset has changed
-            stale_src_datasets2 = []
-            dst_snapshots_changed_dict = self.cache.zfs_get_snapshots_changed(dst, maybe_stale_dst_datasets)
+            stale_src_datasets2: list[str] = []
+            dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, maybe_stale_dst_datasets)
             for dst_dataset in maybe_stale_dst_datasets:
                 snapshots_changed = dst_snapshots_changed_dict.get(dst_dataset, 0)
                 cache_file = self.cache.last_modified_cache_file(dst, dst_dataset)
@@ -1210,10 +1215,10 @@ class Job:
         if is_caching_snapshots(p, src) and not failed:
             # refresh "snapshots_changed" ZFS dataset property from dst
             stale_dst_datasets = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
-            dst_snapshots_changed_dict = self.cache.zfs_get_snapshots_changed(dst, stale_dst_datasets)
+            dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, stale_dst_datasets)
             for dst_dataset in stale_dst_datasets:  # update local cache
-                dst_snapshots_changed = dst_snapshots_changed_dict.get(dst_dataset, 0)
-                dst_cache_file = self.cache.last_modified_cache_file(dst, dst_dataset)
+                dst_snapshots_changed: int = dst_snapshots_changed_dict.get(dst_dataset, 0)
+                dst_cache_file: str = self.cache.last_modified_cache_file(dst, dst_dataset)
                 src_dataset = dst2src(dst_dataset)
                 src_snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])
                 if not p.dry_run:
@@ -1327,7 +1332,7 @@ class Job:
         p, log = self.params, self.params.log
         src, config = p.src, p.create_src_snapshots_config
         datasets_to_snapshot: dict[SnapshotLabel, list[str]] = defaultdict(list)
-        is_caching = False
+        is_caching: bool = False
         msgs: list[tuple[datetime, str, SnapshotLabel, str]] = []
 
         def create_snapshot_if_latest_is_too_old(
@@ -1416,7 +1421,7 @@ class Job:
         if len(text) > 0:
             log.info("Next scheduled snapshot times ...\n%s", text)
         # sort to ensure that we take snapshots for dailies before hourlies, and so on
-        label_indexes = {label: k for k, label in enumerate(config_labels)}
+        label_indexes: dict[SnapshotLabel, int] = {label: k for k, label in enumerate(config_labels)}
         datasets_to_snapshot = dict(sorted(datasets_to_snapshot.items(), key=lambda kv: label_indexes[kv[0]]))
         return datasets_to_snapshot
 
@@ -1470,7 +1475,6 @@ class Job:
                                 break
                         fn(i, creation_unixtime_secs, dataset, minmax_snapshot)
                 fn_on_finish_dataset(dataset)
-
         datasets_without_snapshots = [dataset for dataset in sorted_datasets if dataset not in datasets_with_snapshots]
         return datasets_without_snapshots
 

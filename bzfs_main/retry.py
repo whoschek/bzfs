@@ -99,7 +99,6 @@ class RetryableError(Exception):
     """Indicates that the task that caused the underlying exception can be retried and might eventually succeed."""
 
     def __init__(self, message: str, no_sleep: bool = False) -> None:
-        """Initialize with message and optional no_sleep flag."""
         super().__init__(message)
         self.no_sleep: bool = no_sleep
 

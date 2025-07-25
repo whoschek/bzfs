@@ -49,7 +49,8 @@ class SnapshotCache:
     """Handles last-modified cache operations for snapshot management."""
 
     def __init__(self, job: Job) -> None:
-        self.job = job
+        # immutable variables:
+        self.job: Job = job
 
     def get_snapshots_changed(self, path: str) -> int:
         """Returns numeric timestamp from cached snapshots-changed file."""
