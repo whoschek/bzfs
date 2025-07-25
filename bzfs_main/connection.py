@@ -24,7 +24,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from subprocess import DEVNULL, PIPE, CalledProcessError
+from subprocess import DEVNULL, PIPE, CalledProcessError, CompletedProcess
 from typing import (
     TYPE_CHECKING,
     Counter,
@@ -72,19 +72,19 @@ def run_ssh_command(
     level = level if level >= 0 else logging.INFO
     assert cmd is not None and isinstance(cmd, list) and len(cmd) > 0
     p, log = job.params, job.params.log
-    quoted_cmd = [shlex.quote(arg) for arg in cmd]
+    quoted_cmd: list[str] = [shlex.quote(arg) for arg in cmd]
     conn_pool: ConnectionPool = p.connection_pools[remote.location].pool(SHARED)
     with conn_pool.connection() as conn:
         ssh_cmd: list[str] = conn.ssh_cmd
         if remote.ssh_user_host != "":
             refresh_ssh_connection_if_necessary(job, remote, conn)
             cmd = quoted_cmd
-        msg = "Would execute: %s" if is_dry else "Executing: %s"
+        msg: str = "Would execute: %s" if is_dry else "Executing: %s"
         log.log(level, msg, list_formatter(conn.ssh_cmd_quoted + quoted_cmd, lstrip=True))
         if is_dry:
             return ""
         try:
-            process = subprocess_run(
+            process: CompletedProcess = subprocess_run(
                 ssh_cmd + cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=check
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, UnicodeDecodeError) as e:
@@ -116,7 +116,7 @@ def try_ssh_command(
         return run_ssh_command(job, remote, level=level, is_dry=is_dry, print_stdout=print_stdout, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
         if not isinstance(e, UnicodeDecodeError):
-            stderr = stderr_to_str(e.stderr)
+            stderr: str = stderr_to_str(e.stderr)
             if exists and (
                 ": dataset does not exist" in stderr
                 or ": filesystem does not exist" in stderr  # solaris 11.4.0
@@ -139,12 +139,12 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connect
         return
     # Performance: reuse ssh connection for low latency startup of frequent ssh invocations via the 'ssh -S' and
     # 'ssh -S -M -oControlPersist=60s' options. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Multiplexing
-    control_persist_limit_nanos = (job.control_persist_secs - job.control_persist_margin_secs) * 1_000_000_000
+    control_persist_limit_nanos: int = (job.control_persist_secs - job.control_persist_margin_secs) * 1_000_000_000
     with conn.lock:
         if time.monotonic_ns() - conn.last_refresh_time < control_persist_limit_nanos:
             return  # ssh master is alive, reuse its TCP connection (this is the common case & the ultra-fast path)
-        ssh_cmd = conn.ssh_cmd
-        ssh_socket_cmd = ssh_cmd[0:-1]  # omit trailing ssh_user_host
+        ssh_cmd: list[str] = conn.ssh_cmd
+        ssh_socket_cmd: list[str] = ssh_cmd[0:-1]  # omit trailing ssh_user_host
         ssh_socket_cmd += ["-O", "check", remote.ssh_user_host]
         # extend lifetime of ssh master by $control_persist_secs via 'ssh -O check' if master is still running.
         # 'ssh -S /path/to/socket -O check' doesn't talk over the network, hence is still a low latency fast path.
@@ -173,10 +173,10 @@ def refresh_ssh_connection_if_necessary(job: Job, remote: Remote, conn: "Connect
 
 def timeout(job: Job) -> float | None:
     """Raises TimeoutExpired if necessary, else returns the number of seconds left until timeout is to occur."""
-    timeout_nanos = job.timeout_nanos
+    timeout_nanos: int | None = job.timeout_nanos
     if timeout_nanos is None:
         return None  # never raise a timeout
-    delta_nanos = timeout_nanos - time.monotonic_ns()
+    delta_nanos: int = timeout_nanos - time.monotonic_ns()
     if delta_nanos <= 0:
         assert job.params.timeout_nanos is not None
         raise subprocess.TimeoutExpired(PROG_NAME + "_timeout", timeout=job.params.timeout_nanos / 1_000_000_000)
@@ -244,9 +244,9 @@ class Connection:
 
     def shutdown(self, msg_prefix: str, p: Params) -> None:
         """Closes the underlying SSH master connection."""
-        ssh_cmd = self.ssh_cmd
+        ssh_cmd: list[str] = self.ssh_cmd
         if ssh_cmd:
-            ssh_socket_cmd = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
+            ssh_socket_cmd: list[str] = ssh_cmd[0:-1] + ["-O", "exit", ssh_cmd[-1]]
             p.log.log(LOG_TRACE, f"Executing {msg_prefix}: %s", shlex.join(ssh_socket_cmd))
             process = subprocess.run(ssh_socket_cmd, stdin=DEVNULL, stderr=PIPE, text=True)
             if process.returncode != 0:
@@ -328,7 +328,9 @@ class ConnectionPools:
 
     def __init__(self, remote: Remote, capacities: dict[str, int]) -> None:
         """Creates one connection pool per name with the given capacities."""
-        self.pools = {name: ConnectionPool(remote, capacity) for name, capacity in capacities.items()}
+        self.pools: dict[str, ConnectionPool] = {
+            name: ConnectionPool(remote, capacity) for name, capacity in capacities.items()
+        }
 
     def __repr__(self) -> str:
         return str(self.pools)

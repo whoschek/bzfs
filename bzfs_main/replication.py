@@ -313,8 +313,8 @@ def _rollback_dst_dataset_if_necessary(
         try:
             run_ssh_command(job, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd)
         except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-            stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-            no_sleep = clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
+            stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+            no_sleep: bool = clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
             # op isn't idempotent so retries regather current state from the start of replicate_dataset()
             raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
@@ -342,7 +342,7 @@ def _replicate_dataset_fully(
     creates a common snapshot."""
     p, log = job.params, job.params.log
     src, dst = p.src, p.dst
-    latest_common_src_snapshot = ""
+    latest_common_src_snapshot: str = ""
     if latest_dst_snapshot:
         if not p.force:
             die(
@@ -375,16 +375,16 @@ def _replicate_dataset_fully(
                     create_zfs_filesystem(job, dst_dataset_parent)
 
         recv_resume_token, send_resume_opts, recv_resume_opts = _recv_resume_token(job, dst_dataset, retry_count)
-        curr_size = estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
-        humansize = format_size(curr_size)
+        curr_size: int = estimate_send_size(job, src, dst_dataset, recv_resume_token, oldest_src_snapshot)
+        humansize: str = format_size(curr_size)
         if recv_resume_token:
             send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [oldest_src_snapshot]
-        send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
-        recv_opts = p.zfs_full_recv_opts.copy() + recv_resume_opts
+        send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
+        recv_opts: list[str] = p.zfs_full_recv_opts.copy() + recv_resume_opts
         recv_opts, set_opts = add_recv_property_options(job, True, recv_opts, src_dataset, props_cache)
-        recv_cmd = p.split_args(
+        recv_cmd: list[str] = p.split_args(
             f"{dst.sudo} {p.zfs_program} receive -F", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
         )
         log.info(p.dry(f"{tid} Full send: %s"), f"{oldest_src_snapshot} --> {dst_dataset} ({humansize.strip()}) ...")
@@ -430,7 +430,7 @@ def _replicate_dataset_incrementally(
         assert len(basis_src_snapshots_with_guids) > 0
         result_snapshots: list[str] = []
         result_guids: list[str] = []
-        last_appended_guid = ""
+        last_appended_guid: str = ""
         snapshot_itr = reversed(basis_src_snapshots_with_guids)
         while True:
             guid, snapshot = snapshot_itr.__next__().split("\t", 1)
@@ -461,11 +461,13 @@ def _replicate_dataset_incrementally(
         return  # nothing more tbd
 
     recv_resume_token, send_resume_opts, recv_resume_opts = _recv_resume_token(job, dst_dataset, retry_count)
-    recv_opts = p.zfs_recv_program_opts.copy() + recv_resume_opts
+    recv_opts: list[str] = p.zfs_recv_program_opts.copy() + recv_resume_opts
     recv_opts, set_opts = add_recv_property_options(job, False, recv_opts, src_dataset, props_cache)
     if p.no_stream:
         # skip intermediate snapshots
-        steps_todo = [("-i", latest_common_src_snapshot, latest_src_snapshot, [latest_src_snapshot])]
+        steps_todo: list[tuple[str, str, str, list[str]]] = [
+            ("-i", latest_common_src_snapshot, latest_src_snapshot, [latest_src_snapshot])
+        ]
     else:
         # include intermediate src snapshots that pass --{include,exclude}-snapshot-* policy, using
         # a series of -i/-I send/receive steps that skip excluded src snapshots.
@@ -473,28 +475,28 @@ def _replicate_dataset_incrementally(
             p, cand_snapshots, cand_guids, included_src_guids, recv_resume_token is not None
         )
     log.log(LOG_TRACE, "steps_todo: %s", list_formatter(steps_todo, "; "))
-    estimate_send_sizes = [
+    estimate_send_sizes: list[int] = [
         estimate_send_size(job, src, dst_dataset, recv_resume_token if i == 0 else None, incr_flag, from_snap, to_snap)
         for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo)
     ]
-    total_size = sum(estimate_send_sizes)
-    total_num = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
-    done_size = 0
-    done_num = 0
+    total_size: int = sum(estimate_send_sizes)
+    total_num: int = sum(len(to_snapshots) for incr_flag, from_snap, to_snap, to_snapshots in steps_todo)
+    done_size: int = 0
+    done_num: int = 0
     for i, (incr_flag, from_snap, to_snap, to_snapshots) in enumerate(steps_todo):
-        curr_num_snapshots = len(to_snapshots)
-        curr_size = estimate_send_sizes[i]
-        humansize = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
-        human_num = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
+        curr_num_snapshots: int = len(to_snapshots)
+        curr_size: int = estimate_send_sizes[i]
+        humansize: str = format_size(total_size) + "/" + format_size(done_size) + "/" + format_size(curr_size)
+        human_num: str = f"{total_num}/{done_num}/{curr_num_snapshots} snapshots"
         if recv_resume_token:
             send_opts = send_resume_opts  # e.g. ["-t", "1-c740b4779-..."]
         else:
             send_opts = p.curr_zfs_send_program_opts + [incr_flag, from_snap, to_snap]
-        send_cmd = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
-        recv_cmd = p.split_args(
+        send_cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} send", send_opts)
+        recv_cmd: list[str] = p.split_args(
             f"{dst.sudo} {p.zfs_program} receive", p.dry_run_recv, recv_opts, dst_dataset, allow_all=True
         )
-        dense_size = p.two_or_more_spaces_regex.sub("", humansize.strip())
+        dense_size: str = p.two_or_more_spaces_regex.sub("", humansize.strip())
         log.info(
             p.dry(f"{tid} Incremental send {incr_flag}: %s"),
             f"{from_snap} .. {to_snap[to_snap.index('@'):]} --> {dst_dataset} ({dense_size}) ({human_num}) ...",
@@ -648,10 +650,11 @@ def run_zfs_send_receive(
 ) -> None:
     """Executes a zfs send/receive pipeline between source and destination."""
     p, log = job.params, job.params.log
-    src_pipe, local_pipe, dst_pipe = prepare_zfs_send_receive(
+    pipes: tuple[str, str, str] = prepare_zfs_send_receive(
         job, src_dataset, send_cmd, recv_cmd, size_estimate_bytes, size_estimate_human
     )
-    conn_pool_name = DEDICATED if job.dedicated_tcp_connection_per_zfs_send else SHARED
+    src_pipe, local_pipe, dst_pipe = pipes
+    conn_pool_name: str = DEDICATED if job.dedicated_tcp_connection_per_zfs_send else SHARED
     src_conn_pool: ConnectionPool = p.connection_pools["src"].pool(conn_pool_name)
     dst_conn_pool: ConnectionPool = p.connection_pools["dst"].pool(conn_pool_name)
     with src_conn_pool.connection() as src_conn, dst_conn_pool.connection() as dst_conn:
@@ -659,8 +662,8 @@ def run_zfs_send_receive(
         refresh_ssh_connection_if_necessary(job, p.dst, dst_conn)
         src_ssh_cmd: str = " ".join(src_conn.ssh_cmd_quoted)
         dst_ssh_cmd: str = " ".join(dst_conn.ssh_cmd_quoted)
-        cmd = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
-        msg = "Would execute: %s" if dry_run_no_send else "Executing: %s"
+        cmd: list[str] = [p.shell_program_local, "-c", f"{src_ssh_cmd} {src_pipe} {local_pipe} | {dst_ssh_cmd} {dst_pipe}"]
+        msg: str = "Would execute: %s" if dry_run_no_send else "Executing: %s"
         log.debug(msg, cmd[2].lstrip())
         if not dry_run_no_send:
             try:
@@ -669,7 +672,7 @@ def run_zfs_send_receive(
                     cmd, stdin=DEVNULL, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout(job), check=True
                 )
             except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-                no_sleep = False
+                no_sleep: bool = False
                 if not isinstance(e, UnicodeDecodeError):
                     xprint(log, stderr_to_str(e.stdout), file=sys.stdout)
                     log.warning("%s", stderr_to_str(e.stderr).rstrip())
@@ -889,8 +892,8 @@ def delete_snapshot(job: Job, r: Remote, dataset: str, snapshots_to_delete: str)
         maybe_inject_error(job, cmd=cmd, error_trigger="zfs_delete_snapshot")
         run_ssh_command(job, r, LOG_DEBUG, is_dry=is_dry, print_stdout=True, cmd=cmd)
     except (subprocess.CalledProcessError, UnicodeDecodeError) as e:
-        stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
-        no_sleep = clear_resumable_recv_state_if_necessary(job, dataset, stderr)
+        stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+        no_sleep: bool = clear_resumable_recv_state_if_necessary(job, dataset, stderr)
         # op isn't idempotent so retries regather current state from the start
         raise RetryableError("Subprocess failed", no_sleep=no_sleep) from e
 
@@ -950,7 +953,7 @@ def create_zfs_filesystem(job: Job, filesystem: str) -> None:
     # invocation for each non-existing ancestor. This is because a single 'zfs create -p -u' applies the '-u'
     # part only to the immediate filesystem, rather than to the not-yet existing ancestors.
     p = job.params
-    parent = ""
+    parent: str = ""
     no_mount = "-u" if p.is_program_available(ZFS_VERSION_IS_AT_LEAST_2_1_0, "dst") else ""
     for component in filesystem.split("/"):
         parent += component
@@ -1001,19 +1004,19 @@ def estimate_send_size(job: Job, remote: Remote, dst_dataset: str, recv_resume_t
     p = job.params
     if p.no_estimate_send_size or is_solaris_zfs(p, remote):
         return 0  # solaris-11.4 does not have a --parsable equivalent
-    zfs_send_program_opts = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
+    zfs_send_program_opts: list[str] = ["--parsable" if opt == "-P" else opt for opt in p.curr_zfs_send_program_opts]
     zfs_send_program_opts = append_if_absent(zfs_send_program_opts, "-v", "-n", "--parsable")
     if recv_resume_token:
         zfs_send_program_opts = ["-Pnv", "-t", recv_resume_token]
         items = ()
     cmd = p.split_args(f"{remote.sudo} {p.zfs_program} send", zfs_send_program_opts, items)
     try:
-        lines = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
+        lines: str | None = try_ssh_command(job, remote, LOG_TRACE, cmd=cmd)
     except RetryableError as retryable_error:
         assert retryable_error.__cause__ is not None
         if recv_resume_token:
             e = retryable_error.__cause__
-            stderr = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
+            stderr: str = stderr_to_str(e.stderr) if hasattr(e, "stderr") else ""
             retryable_error.no_sleep = clear_resumable_recv_state_if_necessary(job, dst_dataset, stderr)
         # op isn't idempotent so retries regather current state from the start of replicate_dataset()
         raise

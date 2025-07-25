@@ -418,14 +418,14 @@ class Job:
 
     def sleep_until_next_daemon_iteration(self, daemon_stoptime_nanos: int) -> bool:
         """Pauses until the next scheduled snapshot time or daemon stop."""
-        sleep_nanos = daemon_stoptime_nanos - time.monotonic_ns()
+        sleep_nanos: int = daemon_stoptime_nanos - time.monotonic_ns()
         if sleep_nanos <= 0:
             return False
         self.progress_reporter.pause()
         p, log = self.params, self.params.log
         config = p.create_src_snapshots_config
-        curr_datetime = config.current_datetime + timedelta(microseconds=1)
-        next_snapshotting_event_dt = min(
+        curr_datetime: datetime = config.current_datetime + timedelta(microseconds=1)
+        next_snapshotting_event_dt: datetime = min(
             (
                 round_datetime_up_to_duration_multiple(curr_datetime, duration_amount, duration_unit, config.anchors)
                 for duration_amount, duration_unit in config.suffix_durations.values()
@@ -433,7 +433,7 @@ class Job:
             default=curr_datetime + timedelta(days=10 * 365),  # infinity
         )
         offset: timedelta = next_snapshotting_event_dt - datetime.now(config.tz)
-        offset_nanos = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
+        offset_nanos: int = (offset.days * 86400 + offset.seconds) * 1_000_000_000 + offset.microseconds * 1_000
         sleep_nanos = min(sleep_nanos, max(0, offset_nanos))
         log.info("Daemon sleeping for: %s%s", human_readable_duration(sleep_nanos), f" ... [Log {p.log_params.log_file}]")
         time.sleep(sleep_nanos / 1_000_000_000)
@@ -447,7 +447,7 @@ class Job:
         msg = p.dry(f"Replicated {self.num_snapshots_replicated} snapshots in {human_readable_duration(elapsed_nanos)}.")
         if p.is_program_available("pv", "local"):
             sent_bytes: int = count_num_bytes_transferred_by_zfs_send(p.log_params.pv_log_file)
-            sent_bytes_per_sec = round(1_000_000_000 * sent_bytes / elapsed_nanos)
+            sent_bytes_per_sec: int = round(1_000_000_000 * sent_bytes / elapsed_nanos)
             msg += f" zfs sent {human_readable_bytes(sent_bytes)} [{human_readable_bytes(sent_bytes_per_sec)}/s]."
         log.info("%s", msg.ljust(p.terminal_columns - len("2024-01-01 23:58:45 [I] ")))
 
@@ -570,7 +570,7 @@ class Job:
 
     def sudo_cmd(self, ssh_user_host: str, ssh_user: str) -> tuple[str, bool]:
         """Returns sudo command prefix and whether root privileges are required."""
-        p = self.params
+        p: Params = self.params
         assert isinstance(ssh_user_host, str)
         assert isinstance(ssh_user, str)
         assert isinstance(p.sudo_program, str)
@@ -607,10 +607,10 @@ class Job:
 
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        max_workers = min(self.max_workers[src.location], self.max_workers[dst.location])
-        recursive_sep = " " if p.recursive_flag else ""
-        task_description = f"{src.basis_root_dataset} {p.recursive_flag}{recursive_sep}--> {dst.basis_root_dataset} ..."
-        failed = False
+        max_workers: int = min(self.max_workers[src.location], self.max_workers[dst.location])
+        recursive_sep: str = " " if p.recursive_flag else ""
+        task_description: str = f"{src.basis_root_dataset} {p.recursive_flag}{recursive_sep}--> {dst.basis_root_dataset} ..."
+        failed: bool = False
         src_datasets: list[str] | None = None
         basis_src_datasets: list[str] = []
         self.src_properties = {}
@@ -678,13 +678,13 @@ class Job:
         src = p.src
         basis_src_datasets: list[str] = []
         is_caching: bool = is_caching_snapshots(p, src)
-        props = "volblocksize,recordsize,name"
+        props: str = "volblocksize,recordsize,name"
         props = "snapshots_changed," + props if is_caching else props
-        cmd = p.split_args(
+        cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", src.root_dataset
         )
         for line in (try_ssh_command(self, src, LOG_DEBUG, cmd=cmd) or "").splitlines():
-            cols = line.split("\t")
+            cols: list[str] = line.split("\t")
             snapshots_changed, volblocksize, recordsize, src_dataset = cols if is_caching else ["-"] + cols
             self.src_properties[src_dataset] = {
                 "recordsize": int(recordsize) if recordsize != "-" else -int(volblocksize),
@@ -699,18 +699,18 @@ class Job:
         p, log = self.params, self.params.log
         dst = p.dst
         is_caching: bool = is_caching_snapshots(p, dst) and p.monitor_snapshots_config.enable_monitor_snapshots
-        props = "name"
+        props: str = "name"
         props = "snapshots_changed," + props if is_caching else props
-        cmd = p.split_args(
+        cmd: list[str] = p.split_args(
             f"{p.zfs_program} list -t filesystem,volume -s name -Hp -o {props} {p.recursive_flag}", dst.root_dataset
         )
         basis_dst_datasets: list[str] = []
-        basis_dst_datasets_str = try_ssh_command(self, dst, LOG_TRACE, cmd=cmd)
+        basis_dst_datasets_str: str | None = try_ssh_command(self, dst, LOG_TRACE, cmd=cmd)
         if basis_dst_datasets_str is None:
             log.warning("Destination dataset does not exist: %s", dst.root_dataset)
         else:
             for line in basis_dst_datasets_str.splitlines():
-                cols = line.split("\t")
+                cols: list[str] = line.split("\t")
                 snapshots_changed, dst_dataset = cols if is_caching else ["-"] + cols
                 self.dst_properties[dst_dataset] = {
                     SNAPSHOTS_CHANGED: int(snapshots_changed) if snapshots_changed and snapshots_changed != "-" else 0,
@@ -741,7 +741,7 @@ class Job:
         basis_datasets_to_snapshot: dict[SnapshotLabel, list[str]] = datasets_to_snapshot.copy()  # shallow copy
         commands: dict[SnapshotLabel, list[str]] = {}
         for label, datasets in datasets_to_snapshot.items():
-            cmd = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
+            cmd: list[str] = p.split_args(f"{src.sudo} {p.zfs_program} snapshot")
             if p.recursive:
                 # Run 'zfs snapshot -r' on the roots of subtrees if possible, else fallback to non-recursive CLI flavor
                 root_datasets = self.root_datasets_if_recursive_zfs_snapshot_is_possible(datasets, basis_src_datasets)
@@ -770,16 +770,16 @@ class Job:
         policy; implements --delete-dst-snapshots."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        kind = "bookmark" if p.delete_dst_bookmarks else "snapshot"
+        kind: str = "bookmark" if p.delete_dst_bookmarks else "snapshot"
         filter_needs_creation_time: bool = has_timerange_filter(p.snapshot_filters)
-        props = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
+        props: str = self.creation_prefix + "creation,guid,name" if filter_needs_creation_time else "guid,name"
         basis_src_datasets_set: set[str] = set(basis_src_datasets)
         num_snapshots_found, num_snapshots_deleted = 0, 0
 
         def delete_destination_snapshots(dst_dataset: str, tid: str, retry: Retry) -> bool:  # thread-safe
             src_dataset: str = replace_prefix(dst_dataset, old_prefix=dst.root_dataset, new_prefix=src.root_dataset)
             if src_dataset in basis_src_datasets_set and (are_bookmarks_enabled(p, src) or not p.delete_dst_bookmarks):
-                src_kind = kind
+                src_kind: str = kind
                 if not p.delete_dst_snapshots_no_crosscheck:
                     src_kind = "snapshot,bookmark" if are_bookmarks_enabled(p, src) else "snapshot"
                 src_cmd = p.split_args(f"{p.zfs_program} list -t {src_kind} -d 1 -s name -Hp -o guid", src_dataset)
@@ -820,8 +820,8 @@ class Job:
                 # We only actually keep them if they are ALSO on the SRC.
                 # So, snapshots to DELETE (`dst_tags_to_delete`) are ALL snapshots on DST (`basis_dst_snaps_with_guids`)
                 # EXCEPT those whose GUIDs are in `dst_snaps_with_guids` AND ALSO in `src_snaps_with_guids`.
-                except_dst_guids = set(cut(field=1, lines=dst_snaps_with_guids)).intersection(src_snaps_with_guids)
-                dst_tags_to_delete = filter_lines_except(basis_dst_snaps_with_guids, except_dst_guids)
+                except_dst_guids: set[str] = set(cut(field=1, lines=dst_snaps_with_guids)).intersection(src_snaps_with_guids)
+                dst_tags_to_delete: list[str] = filter_lines_except(basis_dst_snaps_with_guids, except_dst_guids)
             else:  # Standard Delete Mode OR Dummy Source + "Except" (Keep) Mode
                 # In standard delete mode:
                 #   `dst_snaps_with_guids` contains GUIDs of policy-selected snapshots on DST.
@@ -834,7 +834,7 @@ class Job:
                 #   `dst_tags_to_delete` = `dst_snaps_with_guids` - {} = `dst_snaps_with_guids`.
                 dst_guids_to_delete = set(cut(field=1, lines=dst_snaps_with_guids)).difference(src_snaps_with_guids)
                 dst_tags_to_delete = filter_lines(dst_snaps_with_guids, dst_guids_to_delete)
-            separator = "#" if p.delete_dst_bookmarks else "@"
+            separator: str = "#" if p.delete_dst_bookmarks else "@"
             dst_tags_to_delete = cut(field=2, separator=separator, lines=dst_tags_to_delete)
             if p.delete_dst_bookmarks:
                 delete_bookmarks(self, dst, dst_dataset, snapshot_tags=dst_tags_to_delete)
@@ -850,7 +850,7 @@ class Job:
             return True
 
         # Run delete_destination_snapshots(dataset) for each dataset, while handling errors, retries + parallel exec
-        failed = False
+        failed: bool = False
         if are_bookmarks_enabled(p, dst) or not p.delete_dst_bookmarks:
             start_time_nanos = time.monotonic_ns()
             failed = process_datasets_in_parallel_and_fault_tolerant(
@@ -887,7 +887,7 @@ class Job:
         src, dst = p.src, p.dst
         children: dict[str, set[str]] = defaultdict(set)
         for dst_dataset in basis_dst_datasets:  # Compute the direct children of each NON-FILTERED dataset
-            parent = os.path.dirname(dst_dataset)
+            parent: str = os.path.dirname(dst_dataset)
             children[parent].add(dst_dataset)
         to_delete: set[str] = set()
         for dst_dataset in reversed(sorted_dst_datasets):
@@ -923,7 +923,7 @@ class Job:
         # to not get deleted.
         children: dict[str, set[str]] = defaultdict(set)
         for dst_dataset in basis_dst_datasets:
-            parent = os.path.dirname(dst_dataset)
+            parent: str = os.path.dirname(dst_dataset)
             children[parent].add(dst_dataset)
 
         # Find and mark orphan datasets, finally delete them in an efficient way. Using two filter runs instead of one
@@ -931,7 +931,7 @@ class Job:
         # the list of datasets for which we list snapshots via 'zfs list -t snapshot ...' from dst_datasets to a subset
         # of dst_datasets, which in turn reduces I/O and improves perf. Essentially, this eliminates the I/O to list
         # snapshots for ancestors of excluded datasets. The second run computes the real orphans.
-        btype = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
+        btype: str = "bookmark,snapshot" if delete_empty_dst_datasets_if_no_bookmarks_and_no_snapshots else "snapshot"
         dst_datasets_having_snapshots: set[str] = set()
         for run in range(2):
             orphans: set[str] = set()
@@ -942,7 +942,7 @@ class Job:
                         orphans.add(dst_dataset)
             if run == 0:
                 # find datasets with >= 1 snapshot; update dst_datasets_having_snapshots for real use in the 2nd run
-                cmd = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
+                cmd: list[str] = p.split_args(f"{p.zfs_program} list -t {btype} -d 1 -S name -Hp -o name")
                 for datasets_having_snapshots in zfs_list_snapshots_in_parallel(
                     self, dst, cmd, sorted(orphans), ordered=False
                 ):
@@ -961,16 +961,16 @@ class Job:
         """Monitors src and dst snapshots; implements --monitor-snapshots."""
         p, log = self.params, self.params.log
         src, dst = p.src, p.dst
-        num_cache_hits = self.num_cache_hits
-        num_cache_misses = self.num_cache_misses
-        start_time_nanos = time.monotonic_ns()
+        num_cache_hits: int = self.num_cache_hits
+        num_cache_misses: int = self.num_cache_misses
+        start_time_nanos: int = time.monotonic_ns()
         run_in_parallel(
             lambda: self.monitor_snapshots(dst, sorted_dst_datasets),
             lambda: self.monitor_snapshots(src, sorted_src_datasets),
         )
-        elapsed = human_readable_duration(time.monotonic_ns() - start_time_nanos)
+        elapsed: str = human_readable_duration(time.monotonic_ns() - start_time_nanos)
         if num_cache_hits != self.num_cache_hits or num_cache_misses != self.num_cache_misses:
-            total = self.num_cache_hits + self.num_cache_misses
+            total: int = self.num_cache_hits + self.num_cache_misses
             msg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
         else:
             msg = ""
@@ -1027,13 +1027,13 @@ class Job:
             if alert_cfg is None:
                 return
             if is_caching and not p.dry_run:  # update cache with latest state from 'zfs list -t snapshot'
-                snapshots_changed = snapshots_changed_dict.get(dataset, 0)
-                cache_file = monitor_last_modified_cache_file(remote, dataset, label, alert_cfg)
+                snapshots_changed: int = snapshots_changed_dict.get(dataset, 0)
+                cache_file: str = monitor_last_modified_cache_file(remote, dataset, label, alert_cfg)
                 set_last_modification_time_safe(cache_file, unixtime_in_secs=(creation_unixtime_secs, snapshots_changed))
-            warning_millis = alert_cfg.warning_millis
-            critical_millis = alert_cfg.critical_millis
+            warning_millis: int = alert_cfg.warning_millis
+            critical_millis: int = alert_cfg.critical_millis
             alert_kind = alert_cfg.kind
-            snapshot_age_millis = current_unixtime_millis - creation_unixtime_secs * 1000
+            snapshot_age_millis: float = current_unixtime_millis - creation_unixtime_secs * 1000
             m = "--monitor_snapshots: "
             if snapshot_age_millis > critical_millis:
                 msg = m + alert_msg(alert_kind, dataset, snapshot, label, snapshot_age_millis, critical_millis)
@@ -1064,10 +1064,10 @@ class Job:
             This is done by comparing the "snapshots_changed" ZFS dataset property with the local cache. See
             https://openzfs.github.io/openzfs-docs/man/7/zfsprops.7.html#snapshots_changed
             """
-            stale_datasets = []
-            time_threshold = time.time() - TIME_THRESHOLD_SECS
+            stale_datasets: list[str] = []
+            time_threshold: float = time.time() - TIME_THRESHOLD_SECS
             for dataset in sorted_datasets:
-                is_stale_dataset = False
+                is_stale_dataset: bool = False
                 snapshots_changed: int = snapshots_changed_dict.get(dataset, 0)
                 for alert in alerts:
                     for cfg in (alert.latest, alert.oldest):
@@ -1094,7 +1094,7 @@ class Job:
 
         # satisfy request from local cache as much as possible
         if is_caching_snapshots(p, remote):
-            stale_datasets = find_stale_datasets_and_check_alerts()
+            stale_datasets: list[str] = find_stale_datasets_and_check_alerts()
             with self.stats_lock:
                 self.num_cache_misses += len(stale_datasets)
                 self.num_cache_hits += len(sorted_datasets) - len(stale_datasets)
@@ -1125,7 +1125,7 @@ class Job:
             and has_siblings(src_datasets)  # siblings can be replicated in parallel
         )
         log.info("Starting replication task: %s", task_description + f" [{len(src_datasets)} datasets]")
-        start_time_nanos = time.monotonic_ns()
+        start_time_nanos: int = time.monotonic_ns()
 
         def src2dst(src_dataset: str) -> str:
             return replace_prefix(src_dataset, old_prefix=src.root_dataset, new_prefix=dst.root_dataset)
@@ -1189,7 +1189,7 @@ class Job:
             num_cache_hits = len(src_datasets) - len(stale_src_datasets)
             self.num_cache_misses += num_cache_misses
             self.num_cache_hits += num_cache_hits
-            total = self.num_cache_hits + self.num_cache_misses
+            total: int = self.num_cache_hits + self.num_cache_misses
             cmsg = f", cache hits: {percent(self.num_cache_hits, total)}, misses: {percent(self.num_cache_misses, total)}"
         else:
             stale_src_datasets = src_datasets
@@ -1214,18 +1214,18 @@ class Job:
 
         if is_caching_snapshots(p, src) and not failed:
             # refresh "snapshots_changed" ZFS dataset property from dst
-            stale_dst_datasets = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
+            stale_dst_datasets: list[str] = [src2dst(src_dataset) for src_dataset in stale_src_datasets]
             dst_snapshots_changed_dict: dict[str, int] = self.cache.zfs_get_snapshots_changed(dst, stale_dst_datasets)
             for dst_dataset in stale_dst_datasets:  # update local cache
                 dst_snapshots_changed: int = dst_snapshots_changed_dict.get(dst_dataset, 0)
                 dst_cache_file: str = self.cache.last_modified_cache_file(dst, dst_dataset)
-                src_dataset = dst2src(dst_dataset)
+                src_dataset: str = dst2src(dst_dataset)
                 src_snapshots_changed: int = int(self.src_properties[src_dataset][SNAPSHOTS_CHANGED])
                 if not p.dry_run:
                     set_last_modification_time_safe(cache_files[src_dataset], unixtime_in_secs=src_snapshots_changed)
                     set_last_modification_time_safe(dst_cache_file, unixtime_in_secs=dst_snapshots_changed)
 
-        elapsed_nanos = time.monotonic_ns() - start_time_nanos
+        elapsed_nanos: int = time.monotonic_ns() - start_time_nanos
         log.info(
             p.dry("Replication done: %s"),
             f"{task_description} [Replicated {self.num_snapshots_replicated} out of {self.num_snapshots_found} snapshots"
@@ -1259,7 +1259,7 @@ class Job:
         i = 0
         n = len(recv_opts)
         while i < n:
-            stripped = recv_opts[i].strip()
+            stripped: str = recv_opts[i].strip()
             if stripped in ("-o", "-x"):
                 i += 1
                 if i == n or recv_opts[i].strip() in ("-o", "-x"):
@@ -1308,8 +1308,8 @@ class Job:
     def find_root_datasets(sorted_datasets: list[str]) -> list[str]:
         """Returns the roots of the subtrees in the (sorted) input datasets; The output root dataset list is sorted, too; A
         dataset is a root dataset if it has no parent, i.e. it is not a descendant of any dataset in the input datasets."""
-        root_datasets = []
-        skip_dataset = DONT_SKIP_DATASET
+        root_datasets: list[str] = []
+        skip_dataset: str = DONT_SKIP_DATASET
         for dataset in sorted_datasets:
             if is_descendant(dataset, of_root_dataset=skip_dataset):
                 continue
@@ -1449,7 +1449,7 @@ class Job:
                 assert len(snapshots) > 0
                 datasets_with_snapshots.add(dataset)
                 snapshot_names: list[str] = [snapshot[-1] for snapshot in snapshots]
-                year_with_4_digits_regex = YEAR_WITH_FOUR_DIGITS_REGEX
+                year_with_4_digits_regex: re.Pattern[str] = YEAR_WITH_FOUR_DIGITS_REGEX
                 fns = ((fn_latest, True),) if fn_oldest is None else ((fn_latest, True), (fn_oldest, False))
                 for i, label in enumerate(labels):
                     infix: str = label.infix
@@ -1458,7 +1458,7 @@ class Job:
                     startlen: int = len(start)
                     endlen: int = len(end)
                     minlen: int = startlen + endlen if infix else 4 + startlen + endlen  # year_with_four_digits_regex
-                    year_slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
+                    year_slice: slice = slice(startlen, startlen + 4)  # [startlen:startlen+4]  # year_with_four_digits_regex
                     for fn, is_reverse in fns:
                         creation_unixtime_secs: int = 0  # find creation time of latest or oldest snapshot matching the label
                         minmax_snapshot: str = ""

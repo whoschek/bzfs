@@ -65,19 +65,19 @@ def itr_ssh_cmd_batched(
     sep: str = " ",
 ) -> Generator[Any, None, None]:
     """Runs fn(cmd_args) in batches w/ cmd, without creating a command line that's too big for the OS to handle."""
-    max_bytes = min(get_max_command_line_bytes(job, "local"), get_max_command_line_bytes(job, r.location))
+    max_bytes: int = min(get_max_command_line_bytes(job, "local"), get_max_command_line_bytes(job, r.location))
     assert isinstance(sep, str)
     # Max size of a single argument is 128KB on Linux - https://lists.gnu.org/archive/html/bug-bash/2020-09/msg00095.html
     max_bytes = max_bytes if sep == " " else min(max_bytes, 131071)  # e.g. 'zfs destroy foo@s1,s2,...,sN'
-    fsenc = sys.getfilesystemencoding()
-    seplen = len(sep.encode(fsenc))
+    fsenc: str = sys.getfilesystemencoding()
+    seplen: int = len(sep.encode(fsenc))
     conn_pool: ConnectionPool = job.params.connection_pools[r.location].pool(SHARED)
     with conn_pool.connection() as conn:
         cmd = conn.ssh_cmd + cmd
     header_bytes: int = len(" ".join(cmd).encode(fsenc))
     batch: list[str] = []
     total_bytes: int = header_bytes
-    max_items = max_batch_items
+    max_items: int = max_batch_items
 
     def flush() -> Any:
         if len(batch) > 0:
@@ -85,7 +85,7 @@ def itr_ssh_cmd_batched(
         return None
 
     for cmd_arg in cmd_args:
-        curr_bytes = seplen + len(cmd_arg.encode(fsenc))
+        curr_bytes: int = seplen + len(cmd_arg.encode(fsenc))
         if total_bytes + curr_bytes > max_bytes or max_items <= 0:
             results = flush()
             if results is not None:
