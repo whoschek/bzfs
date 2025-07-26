@@ -280,13 +280,13 @@ class ProgressReporter:
     @staticmethod
     def format_sent_bytes(num_bytes: int, duration_nanos: int) -> tuple[str, str]:
         """Returns a human-readable byte count and rate."""
-        bytes_per_sec = round(1_000_000_000 * num_bytes / max(1, duration_nanos))
+        bytes_per_sec: int = round(1_000_000_000 * num_bytes / max(1, duration_nanos))
         return f"{human_readable_bytes(num_bytes, precision=2)}", f"[{human_readable_bytes(bytes_per_sec, precision=2)}/s]"
 
     @staticmethod
     def format_duration(duration_nanos: int) -> str:
         """Formats ``duration_nanos`` as HH:MM:SS string."""
-        total_seconds = round(duration_nanos / 1_000_000_000)
+        total_seconds: int = round(duration_nanos / 1_000_000_000)
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{hours}:{minutes:02d}:{seconds:02d}"
@@ -323,7 +323,7 @@ def count_num_bytes_transferred_by_zfs_send(basis_pv_log_file: str) -> int:
     def parse_pv_line(line: str) -> int:
         """Extracts byte count from a single pv log line."""
         if ":" in line:
-            col = line.split(":", 1)[1].strip()
+            col: str = line.split(":", 1)[1].strip()
             num_bytes, _ = pv_size_to_bytes(col)
             return num_bytes
         return 0

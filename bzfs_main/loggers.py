@@ -140,10 +140,10 @@ log_level_prefixes: dict[int, str] = {
 
 def get_default_log_formatter(prefix: str = "", log_params: LogParams | None = None) -> logging.Formatter:
     """Returns a formatter for bzfs logs with optional prefix and column padding."""
-    level_prefixes_ = log_level_prefixes
-    log_stderr_ = LOG_STDERR
-    log_stdout_ = LOG_STDOUT
-    terminal_cols = [0 if log_params is None else None]  # 'None' indicates "configure value later"
+    level_prefixes_: dict[int, str] = log_level_prefixes
+    log_stderr_: int = LOG_STDERR
+    log_stdout_: int = LOG_STDOUT
+    terminal_cols: list[int | None] = [0 if log_params is None else None]  # 'None' indicates "configure value later"
 
     class DefaultLogFormatter(logging.Formatter):
         """Formatter adding timestamps and padding for progress output."""

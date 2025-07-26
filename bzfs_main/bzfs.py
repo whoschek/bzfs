@@ -63,6 +63,7 @@ from typing import (
     IO,
     Any,
     Callable,
+    Collection,
     Counter,
     Tuple,
     cast,
@@ -258,7 +259,7 @@ class Job:
 
     def shutdown(self) -> None:
         """Exits any multiplexed ssh sessions that may be leftover."""
-        cache_items = self.remote_conf_cache.values()
+        cache_items: Collection[RemoteConfCacheItem] = self.remote_conf_cache.values()
         for i, cache_item in enumerate(cache_items):
             cache_item.connection_pools.shutdown(f"{i + 1}/{len(cache_items)}")
 
@@ -1518,10 +1519,10 @@ def parse_dataset_locator(
     def convert_ipv6(hostname: str) -> str:  # support IPv6 without getting confused by host:dataset colon separator ...
         return hostname.replace("|", ":")  # ... and any colons that may be part of a (valid) ZFS dataset name
 
-    user_undefined = user is None
+    user_undefined: bool = user is None
     if user is None:
         user = ""
-    host_undefined = host is None
+    host_undefined: bool = host is None
     if host is None:
         host = ""
     host = convert_ipv6(host)
@@ -1558,14 +1559,14 @@ def parse_dataset_locator(
 
 def validate_user_name(user: str, input_text: str) -> None:
     """Checks that the username is safe for ssh or local usage."""
-    invalid_chars = SHELL_CHARS + "/"
+    invalid_chars: str = SHELL_CHARS + "/"
     if user and (".." in user or any(c.isspace() or c in invalid_chars for c in user)):
         die(f"Invalid user name: '{user}' for: '{input_text}'")
 
 
 def validate_host_name(host: str, input_text: str, extra_invalid_chars: str = "") -> None:
     """Checks hostname for forbidden characters or patterns."""
-    invalid_chars = SHELL_CHARS + "/" + extra_invalid_chars
+    invalid_chars: str = SHELL_CHARS + "/" + extra_invalid_chars
     if host and (host.startswith("-") or ".." in host or any(c.isspace() or c in invalid_chars for c in host)):
         die(f"Invalid host name: '{host}' for: '{input_text}'")
 

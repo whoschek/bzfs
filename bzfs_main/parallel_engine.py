@@ -61,7 +61,7 @@ def build_dataset_tree(sorted_datasets: list[str]) -> Tree:
     for dataset in sorted_datasets:
         current: Tree = tree
         for component in dataset.split("/"):
-            child = current.get(component)
+            child: Tree | None = current.get(component)
             if child is None:
                 child = {}
                 current[component] = child

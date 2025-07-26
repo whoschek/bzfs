@@ -271,7 +271,7 @@ def _rollback_dst_dataset_if_necessary(
             log.info(p.dry(f"{tid} Rolling back destination to most recent snapshot: %s"), latest_dst_snapshot)
             # rollback just in case the dst dataset was modified since its most recent snapshot
             done_checking = done_checking or check_zfs_dataset_busy(job, dst, dst_dataset)
-            cmd = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
+            cmd: list[str] = p.split_args(f"{dst.sudo} {p.zfs_program} rollback", latest_dst_snapshot)
             try_ssh_command(job, dst, LOG_DEBUG, is_dry=p.dry_run, print_stdout=True, cmd=cmd, exists=False)
     elif latest_src_snapshot == "":
         log.info(f"{tid} Already-up-to-date: %s", dst_dataset)
